@@ -70,7 +70,6 @@ The release calendar pulls upcoming release dates and displays them day-by-day. 
 
 - [ ] Granular episode-level watch tracking
 - [ ] Filter dashboard by unwatched episodes
-- [ ] User authentication
 - [ ] Social features (share watchlists, see what friends are watching)
 
 ## License
