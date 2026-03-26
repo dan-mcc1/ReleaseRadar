@@ -14,6 +14,7 @@ import Watchlist from "./pages/Watchlist";
 import Trending from "./pages/Trending";
 import ProfilePage from "./pages/ProfilePage";
 import SearchGenres from "./pages/SearchGenres";
+import FriendProfilePage from "./pages/FriendProfilePage";
 
 function App() {
   return (
@@ -34,6 +35,7 @@ function App() {
           <Route path="/trending" element={<Trending />} />
           <Route path="/search-genres" element={<SearchGenres />} />
           <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/user/:username" element={<FriendProfilePage />} />
         </Routes>
       </div>
     </BrowserRouter>

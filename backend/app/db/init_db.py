@@ -13,6 +13,7 @@ from app.models.watched import Watched
 from app.models.genre import Genre, ShowGenre, MovieGenre
 from app.models.provider import Provider, ShowProvider, MovieProvider
 from app.models.season import Season
+from app.models.friendship import Friendship
 
 # add others as needed
 

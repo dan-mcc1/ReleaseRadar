@@ -1,10 +1,15 @@
 # app/services/user_service.py
 from sqlalchemy.orm import Session
+from sqlalchemy import and_
 from datetime import datetime
 from app.models.user import User
+from app.models.watchlist import Watchlist
+from app.models.watched import Watched
+from app.models.movie import Movie
+from app.models.show import Show
 
 
-def create_user(db: Session, user_id: str, email: str = None):
+def create_user(db: Session, user_id: str, email: str = None, username: str = None):
     """
     Create a user in the database if they don't exist.
     """
@@ -15,7 +20,8 @@ def create_user(db: Session, user_id: str, email: str = None):
     db_user = User(
         id=user_id,
         email=email,
-        created_at=datetime.utcnow(),  # optional, if you have a created_at field
+        username=username,
+        created_at=datetime.utcnow(),
     )
     db.add(db_user)
     db.commit()
@@ -42,3 +48,90 @@ def update_user_email(db: Session, user_id: str, new_email: str):
     db.commit()
     db.refresh(user)
     return user
+
+
+def update_username(db: Session, user_id: str, new_username: str):
+    """
+    Set or update the username of a user. Returns None if username is taken.
+    """
+    taken = db.query(User).filter(User.username == new_username, User.id != user_id).first()
+    if taken:
+        return None
+
+    user = db.query(User).filter_by(id=user_id).first()
+    if not user:
+        return None
+
+    user.username = new_username
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def is_username_available(db: Session, username: str) -> bool:
+    """
+    Check whether a username is available.
+    """
+    return db.query(User).filter(User.username == username).first() is None
+
+
+def get_profile_watchlist(db: Session, user_id: str) -> dict:
+    """
+    Return a user's watchlist sorted by most recently added.
+    Returns lightweight objects (id, title/name, poster_path, added_at) only.
+    """
+    movies = (
+        db.query(Movie.id, Movie.title, Movie.poster_path, Watchlist.added_at)
+        .join(Watchlist, and_(Watchlist.content_id == Movie.id, Watchlist.content_type == "movie", Watchlist.user_id == user_id))
+        .order_by(Watchlist.added_at.desc())
+        .all()
+    )
+    shows = (
+        db.query(Show.id, Show.name, Show.poster_path, Watchlist.added_at)
+        .join(Watchlist, and_(Watchlist.content_id == Show.id, Watchlist.content_type == "tv", Watchlist.user_id == user_id))
+        .order_by(Watchlist.added_at.desc())
+        .all()
+    )
+    return {
+        "movies": [{"id": r.id, "title": r.title, "poster_path": r.poster_path, "added_at": r.added_at} for r in movies],
+        "shows": [{"id": r.id, "name": r.name, "poster_path": r.poster_path, "added_at": r.added_at} for r in shows],
+    }
+
+
+def get_profile_watched(db: Session, user_id: str) -> dict:
+    """
+    Return a user's watched list sorted by most recently watched.
+    Returns lightweight objects (id, title/name, poster_path, watched_at) only.
+    """
+    movies = (
+        db.query(Movie.id, Movie.title, Movie.poster_path, Watched.watched_at)
+        .join(Watched, and_(Watched.content_id == Movie.id, Watched.content_type == "movie", Watched.user_id == user_id))
+        .order_by(Watched.watched_at.desc())
+        .all()
+    )
+    shows = (
+        db.query(Show.id, Show.name, Show.poster_path, Watched.watched_at)
+        .join(Watched, and_(Watched.content_id == Show.id, Watched.content_type == "tv", Watched.user_id == user_id))
+        .order_by(Watched.watched_at.desc())
+        .all()
+    )
+    return {
+        "movies": [{"id": r.id, "title": r.title, "poster_path": r.poster_path, "watched_at": r.watched_at} for r in movies],
+        "shows": [{"id": r.id, "name": r.name, "poster_path": r.poster_path, "watched_at": r.watched_at} for r in shows],
+    }
+
+
+def search_users_by_username(db: Session, query: str, current_user_id: str, limit: int = 10):
+    """
+    Search users by partial username match, excluding the current user.
+    """
+    return (
+        db.query(User)
+        .filter(
+            User.username.ilike(f"%{query}%"),
+            User.id != current_user_id,
+            User.username.isnot(None),
+        )
+        .limit(limit)
+        .all()
+    )

@@ -8,6 +8,7 @@ from app.routers import (
     watched,
     watched_episode,
     search,
+    friends,
 )
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -31,3 +32,4 @@ app.include_router(
     watched_episode.router, prefix="/watched-episode", tags=["movie-episode"]
 )
 app.include_router(search.router, prefix="/search", tags=["search"])
+app.include_router(friends.router, prefix="/friends", tags=["friends"])
