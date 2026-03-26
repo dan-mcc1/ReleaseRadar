@@ -6,6 +6,18 @@ import { getAuth } from "firebase/auth";
 import MediaCard from "../components/MediaCard";
 
 type TabType = "all" | "movies" | "tv";
+type SortType = "default" | "rating_desc" | "rating_asc";
+
+function sortByRating<T extends { user_rating?: number | null }>(items: T[], dir: "asc" | "desc"): T[] {
+  return [...items].sort((a, b) => {
+    const ra = a.user_rating ?? null;
+    const rb = b.user_rating ?? null;
+    if (ra === null && rb === null) return 0;
+    if (ra === null) return 1;
+    if (rb === null) return -1;
+    return dir === "desc" ? rb - ra : ra - rb;
+  });
+}
 
 export default function Watched() {
   const [results, setResults] = useState<{ movies: Movie[]; shows: Show[] }>({
@@ -13,6 +25,7 @@ export default function Watched() {
     shows: [],
   });
   const [activeTab, setActiveTab] = useState<TabType>("all");
+  const [sort, setSort] = useState<SortType>("default");
   const auth = getAuth(firebaseApp);
 
   async function onRemove(type: "tv" | "movie", content_id: number) {
@@ -69,15 +82,40 @@ export default function Watched() {
   const showMovies = activeTab === "all" || activeTab === "movies";
   const showTV = activeTab === "all" || activeTab === "tv";
 
+  const sortedMovies = sort === "rating_desc"
+    ? sortByRating(results.movies, "desc")
+    : sort === "rating_asc"
+    ? sortByRating(results.movies, "asc")
+    : results.movies;
+
+  const sortedShows = sort === "rating_desc"
+    ? sortByRating(results.shows, "desc")
+    : sort === "rating_asc"
+    ? sortByRating(results.shows, "asc")
+    : results.shows;
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 pb-16">
       {/* Page header */}
       <div className="mb-8">
-        <div className="flex items-center gap-3 mb-1">
-          <h1 className="text-3xl font-bold text-white">Watched</h1>
-          <span className="bg-green-600/20 text-green-400 border border-green-600/30 text-sm font-medium px-2.5 py-0.5 rounded-full">
-            {totalCount}
-          </span>
+        <div className="flex items-center justify-between gap-3 mb-1">
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-bold text-white">Watched</h1>
+            <span className="bg-green-600/20 text-green-400 border border-green-600/30 text-sm font-medium px-2.5 py-0.5 rounded-full">
+              {totalCount}
+            </span>
+          </div>
+          {totalCount > 0 && (
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as SortType)}
+              className="text-sm bg-slate-800 border border-slate-700 text-slate-300 rounded-lg px-3 py-1.5 focus:outline-none focus:border-slate-500"
+            >
+              <option value="default">Sort: Default</option>
+              <option value="rating_desc">Rating: High to Low</option>
+              <option value="rating_asc">Rating: Low to High</option>
+            </select>
+          )}
         </div>
         <p className="text-slate-400">Everything you've already seen</p>
       </div>
@@ -131,7 +169,7 @@ export default function Watched() {
             </h2>
           )}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {results.movies.map((item) => (
+            {sortedMovies.map((item) => (
               <MediaCard key={`movie-${item.id}`} type="movie" item={item} onRemove={onRemove} />
             ))}
           </div>
@@ -150,7 +188,7 @@ export default function Watched() {
             </h2>
           )}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {results.shows.map((item) => (
+            {sortedShows.map((item) => (
               <MediaCard key={`tv-${item.id}`} type="tv" item={item} onRemove={onRemove} />
             ))}
           </div>

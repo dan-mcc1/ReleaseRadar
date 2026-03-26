@@ -27,6 +27,7 @@ export type Show = {
 
   bg_color?: string;
   popularity?: number;
+  user_rating?: number | null;
 }
 
 export type Season = {
@@ -84,6 +85,7 @@ export type Movie = {
   bg_color?: string;
   popularity?: number;
   isWatched?: boolean;
+  user_rating?: number | null;
 }
 
 export type Genre = {

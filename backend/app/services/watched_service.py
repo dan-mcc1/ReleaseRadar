@@ -168,6 +168,22 @@ def sync_watched_episodes_bg(user_id: str, content_id: int):
         db.close()
 
 
+def update_watched_rating(
+    db: Session, user_id: str, content_type: str, content_id: int, rating: float = None
+):
+    entry = (
+        db.query(Watched)
+        .filter_by(user_id=user_id, content_type=content_type, content_id=content_id)
+        .first()
+    )
+    if not entry:
+        return None
+    entry.rating = rating
+    db.commit()
+    db.refresh(entry)
+    return entry
+
+
 def remove_from_watched(db: Session, user_id: str, content_type: str, content_id: int):
     """
     Remove a movie or show from the watched list.
@@ -196,8 +212,8 @@ def get_watched(db: Session, user_id: str):
 
 
 def get_watched_movies_info(db: Session, user_id: str):
-    items = (
-        db.query(Movie)
+    rows = (
+        db.query(Movie, Watched.rating)
         .options(*_movie_query_options())
         .select_from(Watched)
         .join(
@@ -210,12 +226,12 @@ def get_watched_movies_info(db: Session, user_id: str):
         )
         .all()
     )
-    return [serialize_movie(movie) for movie in items]
+    return [{**serialize_movie(movie), "user_rating": rating} for movie, rating in rows]
 
 
 def get_watched_tv_info(db: Session, user_id: str):
-    items = (
-        db.query(Show)
+    rows = (
+        db.query(Show, Watched.rating)
         .options(*_show_query_options())
         .select_from(Watched)
         .join(
@@ -228,4 +244,4 @@ def get_watched_tv_info(db: Session, user_id: str):
         )
         .all()
     )
-    return [serialize_show(show) for show in items]
+    return [{**serialize_show(show), "user_rating": rating} for show, rating in rows]

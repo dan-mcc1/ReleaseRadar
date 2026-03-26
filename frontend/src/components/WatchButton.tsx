@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { getAuth, User } from "firebase/auth";
 import { firebaseApp } from "../firebase";
 import { API_URL } from "../constants";
+import StarRating from "./StarRating";
 
 export type WatchStatus = "none" | "Want To Watch" | "Watched";
 
@@ -63,6 +64,8 @@ export default function WatchButton({ contentType, contentId }: WatchButtonProps
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [saving, setSaving] = useState(false);
   const [statusLoading, setStatusLoading] = useState(true);
+  const [rating, setRating] = useState<number | null>(null);
+  const [ratingSaving, setRatingSaving] = useState(false);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -95,6 +98,7 @@ export default function WatchButton({ contentType, contentId }: WatchButtonProps
       if (!res.ok) throw new Error("Failed to fetch watch status");
       const data = await res.json();
       setWatchStatus(data.status);
+      setRating(data.rating ?? null);
     } catch (err) {
       console.error(err);
     } finally {
@@ -147,12 +151,31 @@ export default function WatchButton({ contentType, contentId }: WatchButtonProps
       }
 
       setWatchStatus(targetStatus);
+      if (targetStatus !== "Watched") setRating(null);
       setMenuOpen(false);
     } catch (err) {
       console.error(err);
       alert("Failed to update status");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function saveRating(newRating: number | null) {
+    const user = auth.currentUser;
+    if (!user) return;
+    try {
+      setRatingSaving(true);
+      await fetch(`${API_URL}/watched/rate`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${await user.getIdToken()}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ content_type: contentType, content_id: contentId, rating: newRating }),
+      });
+      setRating(newRating);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setRatingSaving(false);
     }
   }
 
@@ -182,6 +205,7 @@ export default function WatchButton({ contentType, contentId }: WatchButtonProps
   const { mainClass, chevronClass, icon, label } = config[watchStatus];
 
   return (
+    <div className="flex flex-col gap-2">
     <div className="relative inline-flex" ref={dropdownRef}>
       {/* Main button */}
       <button
@@ -248,6 +272,10 @@ export default function WatchButton({ contentType, contentId }: WatchButtonProps
           )}
         </div>
       )}
+    </div>
+    {watchStatus === "Watched" && (
+      <StarRating rating={rating} onRate={saveRating} saving={ratingSaving} />
+    )}
     </div>
   );
 }

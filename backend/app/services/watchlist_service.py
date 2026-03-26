@@ -494,7 +494,7 @@ def get_movie_watchlist_status(id: int, db: Session, user_id: str):
     )
 
     if entry:
-        return {"status": "Watched"}
+        return {"status": "Watched", "rating": entry.rating}
 
     return {"status": "none"}
 
@@ -517,6 +517,6 @@ def get_show_watchlist_status(id: int, db: Session, user_id: str):
     )
 
     if entry:
-        return {"status": "Watched"}
+        return {"status": "Watched", "rating": entry.rating}
 
     return {"status": "none"}
