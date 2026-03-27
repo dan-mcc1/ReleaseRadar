@@ -4,8 +4,12 @@ from firebase_admin import auth, initialize_app
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import firebase_admin
 from firebase_admin import credentials
+import os
+from dotenv import load_dotenv
 
-cred = credentials.Certificate("./firebase-service.json")
+load_dotenv()
+
+cred = credentials.Certificate(os.getenv("FIREBASE_SERVICE_ACCOUNT"))
 firebase_admin.initialize_app(cred)
 
 bearer_scheme = HTTPBearer()
