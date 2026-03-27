@@ -4,3 +4,4 @@ pydantic_settings
 sqlalchemy
 requests
 firebase_admin
+psycopg2-binary
