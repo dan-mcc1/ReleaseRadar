@@ -23,6 +23,6 @@ class Show(Base):
     type = Column(String)
     tracking_count = Column(Integer)
 
-    genres = relationship("Genre", secondary="show_genre", back_populates="shows")
-    show_providers = relationship("ShowProvider", back_populates="show")
-    seasons = relationship("Season", back_populates="show", cascade="all, delete-orphan", order_by="Season.season_number")
+    genres = relationship("Genre", secondary="show_genre", back_populates="shows", passive_deletes=True)
+    show_providers = relationship("ShowProvider", back_populates="show", cascade="all, delete-orphan", passive_deletes=True)
+    seasons = relationship("Season", back_populates="show", cascade="all, delete-orphan", passive_deletes=True, order_by="Season.season_number")

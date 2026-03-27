@@ -11,7 +11,7 @@ import type {
 import { API_URL } from "../constants";
 import { getAuth, onAuthStateChanged, User } from "firebase/auth";
 import { firebaseApp } from "../firebase";
-import WatchlistModal from "../components/WatchlistModal";
+import CurrentlyWatchingStrip from "../components/CurrentlyWatchingStrip";
 import { Link } from "react-router-dom";
 
 export default function Dashboard() {
@@ -24,6 +24,8 @@ export default function Dashboard() {
   });
   const [watchedEpisodeKeys, setWatchedEpisodeKeys] = useState<Set<string>>(new Set());
   const [showWatchlist, setShowWatchlist] = useState(false);
+  const [currentlyWatchingShows, setCurrentlyWatchingShows] = useState<Show[]>([]);
+  const [currentlyWatchingMovies, setCurrentlyWatchingMovies] = useState<Movie[]>([]);
 
   // Guest view data
   const [trendingResults, setTrendingResults] = useState<{
@@ -86,6 +88,16 @@ export default function Dashboard() {
     }
   );
 
+  async function fetchCurrentlyWatching(): Promise<{ shows: Show[]; movies: Movie[] }> {
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) return { shows: [], movies: [] };
+    const res = await fetch(`${API_URL}/currently-watching/`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return { shows: [], movies: [] };
+    return res.json();
+  }
+
   async function fetchMovieCalendar(): Promise<Movie[]> {
     const token = await auth.currentUser?.getIdToken();
     if (!token) return [];
@@ -133,20 +145,34 @@ export default function Dashboard() {
     async function fetchAllCalendarDataFromUser() {
       setLoading(true);
       try {
-        const [tvWatchlist, watchlistMovies, watchedMovies, episodeKeys] =
+        const [tvWatchlist, watchlistMovies, watchedMovies, episodeKeys, currentlyWatching] =
           await Promise.all([
             fetchUserTVWatchlist(),
             fetchMovieCalendar(),
             fetchWatchedMovies(),
             fetchWatchedEpisodeKeys(),
+            fetchCurrentlyWatching(),
           ]);
+
+        setCurrentlyWatchingShows(currentlyWatching.shows);
+        setCurrentlyWatchingMovies(currentlyWatching.movies);
 
         const movieMap = new Map<number, Movie>();
         for (const m of watchlistMovies) movieMap.set(m.id, { ...m, isWatched: false });
         for (const m of watchedMovies) movieMap.set(m.id, { ...m, isWatched: true });
+        // Also include currently watching movies in calendar
+        for (const m of currentlyWatching.movies) {
+          if (!movieMap.has(m.id)) movieMap.set(m.id, { ...m, isWatched: false });
+        }
+
+        // Merge currently watching shows with watchlist shows (deduplicated)
+        const allTvShows = [...tvWatchlist];
+        for (const s of currentlyWatching.shows) {
+          if (!allTvShows.find((x) => x.id === s.id)) allTvShows.push(s);
+        }
 
         const showResults = await Promise.all(
-          tvWatchlist.map((item) => fetchShowCalendarCached(item))
+          allTvShows.map((item) => fetchShowCalendarCached(item))
         );
 
         setWatchedEpisodeKeys(episodeKeys);
@@ -298,6 +324,10 @@ export default function Dashboard() {
 
   return (
     <div>
+      <CurrentlyWatchingStrip
+        shows={currentlyWatchingShows}
+        movies={currentlyWatchingMovies}
+      />
       <Calendar
         calendarData={CalendarData}
         setCalendarData={setCalendarData}

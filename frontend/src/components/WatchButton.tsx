@@ -4,7 +4,7 @@ import { firebaseApp } from "../firebase";
 import { API_URL } from "../constants";
 import StarRating from "./StarRating";
 
-export type WatchStatus = "none" | "Want To Watch" | "Watched";
+export type WatchStatus = "none" | "Want To Watch" | "Currently Watching" | "Watched";
 
 interface WatchButtonProps {
   contentType: "movie" | "tv";
@@ -42,6 +42,14 @@ function IconChevronDown() {
   return (
     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+    </svg>
+  );
+}
+
+function IconPlay() {
+  return (
+    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M8 5v14l11-7z" />
     </svg>
   );
 }
@@ -110,44 +118,38 @@ export default function WatchButton({ contentType, contentId }: WatchButtonProps
     const user = auth.currentUser;
     if (!user) { alert("You must be signed in."); return; }
 
+    const token = await user.getIdToken();
+    const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+    const body = JSON.stringify({ content_type: contentType, content_id: contentId });
+
+    const removeEndpoints: Record<WatchStatus, string | null> = {
+      "none": null,
+      "Want To Watch": "watchlist/remove",
+      "Currently Watching": "currently-watching/remove",
+      "Watched": "watched/remove",
+    };
+    const addEndpoints: Record<WatchStatus, string | null> = {
+      "none": null,
+      "Want To Watch": "watchlist/add",
+      "Currently Watching": "currently-watching/add",
+      "Watched": "watched/add",
+    };
+
     try {
       setSaving(true);
 
-      if (watchStatus === "Want To Watch") {
-        if (targetStatus === "Want To Watch") return;
-        await fetch(`${API_URL}/watchlist/remove`, {
-          method: "DELETE",
-          headers: { Authorization: `Bearer ${await user.getIdToken()}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ content_type: contentType, content_id: contentId }),
-        });
-        if (targetStatus === "Watched") {
-          await fetch(`${API_URL}/watched/add`, {
-            method: "POST",
-            headers: { Authorization: `Bearer ${await user.getIdToken()}`, "Content-Type": "application/json" },
-            body: JSON.stringify({ content_type: contentType, content_id: contentId }),
-          });
-        }
-      } else if (watchStatus === "Watched") {
-        if (targetStatus === "Watched") return;
-        await fetch(`${API_URL}/watched/remove`, {
-          method: "DELETE",
-          headers: { Authorization: `Bearer ${await user.getIdToken()}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ content_type: contentType, content_id: contentId }),
-        });
-        if (targetStatus === "Want To Watch") {
-          await fetch(`${API_URL}/watchlist/add`, {
-            method: "POST",
-            headers: { Authorization: `Bearer ${await user.getIdToken()}`, "Content-Type": "application/json" },
-            body: JSON.stringify({ content_type: contentType, content_id: contentId }),
-          });
-        }
-      } else {
-        const endpoint = targetStatus === "Want To Watch" ? "watchlist/add" : "watched/add";
-        await fetch(`${API_URL}/${endpoint}`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${await user.getIdToken()}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ content_type: contentType, content_id: contentId }),
-        });
+      if (watchStatus === targetStatus) return;
+
+      // Remove from current state
+      const removeUrl = removeEndpoints[watchStatus];
+      if (removeUrl) {
+        await fetch(`${API_URL}/${removeUrl}`, { method: "DELETE", headers, body });
+      }
+
+      // Add to target state
+      const addUrl = addEndpoints[targetStatus];
+      if (addUrl) {
+        await fetch(`${API_URL}/${addUrl}`, { method: "POST", headers, body });
       }
 
       setWatchStatus(targetStatus);
@@ -193,6 +195,12 @@ export default function WatchButton({ contentType, contentId }: WatchButtonProps
       chevronClass: "bg-slate-700 hover:bg-slate-600 border-l border-blue-500/40 text-blue-400",
       icon: <IconBookmarkFilled />,
       label: "On Watchlist",
+    },
+    "Currently Watching": {
+      mainClass: "bg-purple-900/40 hover:bg-purple-900/60 text-purple-300 border border-purple-600/60",
+      chevronClass: "bg-purple-900/40 hover:bg-purple-900/60 border-l border-purple-600/40 text-purple-400",
+      icon: <IconPlay />,
+      label: "Watching",
     },
     Watched: {
       mainClass: "bg-green-900/40 hover:bg-green-900/60 text-green-300 border border-green-600/60",
@@ -246,6 +254,16 @@ export default function WatchButton({ contentType, contentId }: WatchButtonProps
             </button>
           )}
 
+          {watchStatus !== "Currently Watching" && (
+            <button
+              onClick={() => updateWatchStatus("Currently Watching")}
+              className="flex items-center gap-3 w-full text-left px-4 py-3 text-sm text-slate-200 hover:bg-slate-700 transition-colors"
+            >
+              <span className="text-purple-400"><IconPlay /></span>
+              Currently Watching
+            </button>
+          )}
+
           {watchStatus !== "Watched" && (
             <button
               onClick={() => updateWatchStatus("Watched")}
@@ -266,7 +284,7 @@ export default function WatchButton({ contentType, contentId }: WatchButtonProps
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
-                {watchStatus === "Watched" ? "Remove from Watched" : "Remove from Watchlist"}
+                {watchStatus === "Watched" ? "Remove from Watched" : watchStatus === "Currently Watching" ? "Remove from Watching" : "Remove from Watchlist"}
               </button>
             </>
           )}

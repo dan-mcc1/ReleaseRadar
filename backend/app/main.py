@@ -1,3 +1,5 @@
+import asyncio
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from app.config import settings
 from app.routers import (
@@ -10,10 +12,37 @@ from app.routers import (
     watched_episode,
     search,
     friends,
+    currently_watching,
+    notifications,
 )
 from fastapi.middleware.cors import CORSMiddleware
+from app.db.session import SessionLocal
+from app.services.activity_service import delete_old_activity
 
-app = FastAPI(title="Show Tracker API")
+
+async def _activity_cleanup_loop():
+    """Delete activity older than 7 days, runs every hour."""
+    while True:
+        try:
+            db = SessionLocal()
+            deleted = delete_old_activity(db)
+            if deleted:
+                print(f"[activity cleanup] Removed {deleted} old activity entries")
+        except Exception as e:
+            print(f"[activity cleanup] Error: {e}")
+        finally:
+            db.close()
+        await asyncio.sleep(3600)  # 1 hour
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    task = asyncio.create_task(_activity_cleanup_loop())
+    yield
+    task.cancel()
+
+
+app = FastAPI(title="Show Tracker API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -34,3 +63,5 @@ app.include_router(
 )
 app.include_router(search.router, prefix="/search", tags=["search"])
 app.include_router(friends.router, prefix="/friends", tags=["friends"])
+app.include_router(currently_watching.router, prefix="/currently-watching", tags=["currently-watching"])
+app.include_router(notifications.router, prefix="/notifications", tags=["notifications"])

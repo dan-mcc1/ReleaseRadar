@@ -15,6 +15,7 @@ import Trending from "./pages/Trending";
 import ProfilePage from "./pages/ProfilePage";
 import SearchGenres from "./pages/SearchGenres";
 import FriendProfilePage from "./pages/FriendProfilePage";
+import ActivityFeedPage from "./pages/ActivityFeedPage";
 
 function App() {
   return (
@@ -36,6 +37,7 @@ function App() {
           <Route path="/search-genres" element={<SearchGenres />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/user/:username" element={<FriendProfilePage />} />
+          <Route path="/activity" element={<ActivityFeedPage />} />
         </Routes>
       </div>
     </BrowserRouter>

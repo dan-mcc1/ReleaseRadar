@@ -20,6 +20,7 @@ from app.services.watchlist_service import (
     _movie_query_options,
 )
 from app.services.episode_service import sync_show_episodes
+from app.services.activity_service import log_activity
 from app.models.episode import Episode
 from app.models.episode_watched import EpisodeWatched
 from app.db.session import SessionLocal
@@ -125,6 +126,16 @@ def add_to_watched(
             _upsert_providers_for_show(db, show, us_providers)
             _upsert_seasons_for_show(db, show, show_data.get("seasons", []))
 
+    # Log activity
+    if content_type == "movie":
+        item = db.query(Movie).filter_by(id=content_id).first()
+        log_activity(db, user_id, "watched", content_type, content_id,
+                     item.title if item else None, item.poster_path if item else None)
+    elif content_type == "tv":
+        item = db.query(Show).filter_by(id=content_id).first()
+        log_activity(db, user_id, "watched", content_type, content_id,
+                     item.name if item else None, item.poster_path if item else None)
+
     db.commit()
     db.refresh(entry)
 
@@ -179,6 +190,19 @@ def update_watched_rating(
     if not entry:
         return None
     entry.rating = rating
+
+    if rating is not None:
+        if content_type == "movie":
+            item = db.query(Movie).filter_by(id=content_id).first()
+            log_activity(db, user_id, "rated", content_type, content_id,
+                         item.title if item else None, item.poster_path if item else None,
+                         rating=rating)
+        elif content_type == "tv":
+            item = db.query(Show).filter_by(id=content_id).first()
+            log_activity(db, user_id, "rated", content_type, content_id,
+                         item.name if item else None, item.poster_path if item else None,
+                         rating=rating)
+
     db.commit()
     db.refresh(entry)
     return entry

@@ -4,6 +4,7 @@ from sqlalchemy import and_
 from datetime import datetime
 from app.models.watchlist import Watchlist
 from app.models.watched import Watched
+from app.models.currently_watching import CurrentlyWatching
 from app.models.movie import Movie
 from app.models.show import Show
 from app.models.episode import Episode
@@ -14,6 +15,7 @@ from app.models.season import Season
 from app.services.tmdb_movies import fetch_movie_from_tmdb
 from app.services.tmdb_tv import fetch_show_from_tmdb
 from app.services.episode_service import maybe_sync_show_episodes
+from app.services.activity_service import log_activity
 from functools import lru_cache
 
 
@@ -357,6 +359,16 @@ def add_to_watchlist(db: Session, user_id: str, content_type: str, content_id: i
             _upsert_providers_for_show(db, show, us_providers)
             _upsert_seasons_for_show(db, show, show_data.get("seasons", []))
 
+    # Log activity before committing
+    if content_type == "movie":
+        item = db.query(Movie).filter_by(id=content_id).first()
+        log_activity(db, user_id, "want_to_watch", content_type, content_id,
+                     item.title if item else None, item.poster_path if item else None)
+    elif content_type == "tv":
+        item = db.query(Show).filter_by(id=content_id).first()
+        log_activity(db, user_id, "want_to_watch", content_type, content_id,
+                     item.name if item else None, item.poster_path if item else None)
+
     db.commit()
     db.refresh(entry)
 
@@ -479,11 +491,18 @@ def get_movie_watchlist_info(db: Session, user_id: str):
 @lru_cache(maxsize=1024)
 def get_movie_watchlist_status(id: int, db: Session, user_id: str):
     entry = (
+        db.query(CurrentlyWatching)
+        .filter_by(content_id=id, user_id=user_id, content_type="movie")
+        .first()
+    )
+    if entry:
+        return {"status": "Currently Watching"}
+
+    entry = (
         db.query(Watchlist)
         .filter_by(content_id=id, user_id=user_id, content_type="movie")
         .first()
     )
-
     if entry:
         return {"status": "Want To Watch"}
 
@@ -492,7 +511,6 @@ def get_movie_watchlist_status(id: int, db: Session, user_id: str):
         .filter_by(content_id=id, user_id=user_id, content_type="movie")
         .first()
     )
-
     if entry:
         return {"status": "Watched", "rating": entry.rating}
 
@@ -502,11 +520,18 @@ def get_movie_watchlist_status(id: int, db: Session, user_id: str):
 @lru_cache(maxsize=1024)
 def get_show_watchlist_status(id: int, db: Session, user_id: str):
     entry = (
+        db.query(CurrentlyWatching)
+        .filter_by(content_id=id, user_id=user_id, content_type="tv")
+        .first()
+    )
+    if entry:
+        return {"status": "Currently Watching"}
+
+    entry = (
         db.query(Watchlist)
         .filter_by(content_id=id, user_id=user_id, content_type="tv")
         .first()
     )
-
     if entry:
         return {"status": "Want To Watch"}
 
@@ -515,7 +540,6 @@ def get_show_watchlist_status(id: int, db: Session, user_id: str):
         .filter_by(content_id=id, user_id=user_id, content_type="tv")
         .first()
     )
-
     if entry:
         return {"status": "Watched", "rating": entry.rating}
 

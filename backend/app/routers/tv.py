@@ -64,7 +64,7 @@ def get_show_info(
 @router.get("/{id}/full")
 def get_full_show_info(id: int):
     append = ",".join(
-        ["watch/providers", "credits", "external_ids", "recommendations", "images"]
+        ["watch/providers", "credits", "external_ids", "recommendations", "images", "videos"]
     )
     show_data = fetch_show_from_tmdb(id, append)
     if not show_data:

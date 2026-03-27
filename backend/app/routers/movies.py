@@ -53,7 +53,7 @@ def get_movie_info(
 @router.get("/{id}/info")
 def full_movie_info(id: int):
     append = ",".join(
-        ["watch/providers", "credits", "external_ids", "recommendations", "images"]
+        ["watch/providers", "credits", "external_ids", "recommendations", "images", "videos"]
     )
     movie_data = fetch_movie_from_tmdb(id, append)
     if not movie_data:

@@ -22,5 +22,5 @@ class Movie(Base):
     title = Column(String)
     tracking_count = Column(Integer)
 
-    genres = relationship("Genre", secondary="movie_genre", back_populates="movies")
-    movie_providers = relationship("MovieProvider", back_populates="movie")
+    genres = relationship("Genre", secondary="movie_genre", back_populates="movies", passive_deletes=True)
+    movie_providers = relationship("MovieProvider", back_populates="movie", cascade="all, delete-orphan", passive_deletes=True)

@@ -34,6 +34,7 @@ type FullShowData = Show & {
     twitter_id: string;
   };
   recommendations: { results: Show[] };
+  videos: { results: { id: string; key: string; site: string; type: string; official: boolean }[] };
 };
 
 function StatBox({ label, value }: { label: string; value: string | number | null | undefined }) {
@@ -110,6 +111,9 @@ export default function ShowInfo() {
   if (!show) return <p className="text-slate-400 p-6">Show not found.</p>;
 
   const year = show.first_air_date ? new Date(show.first_air_date).getFullYear() : null;
+  const trailer = show.videos?.results?.find(
+    (v) => v.type === "Trailer" && v.site === "YouTube"
+  ) ?? show.videos?.results?.find((v) => v.site === "YouTube");
 
   return (
     <div className="max-w-5xl mx-auto pb-16">
@@ -160,9 +164,22 @@ export default function ShowInfo() {
       {/* ── CONTENT ── */}
       <div className="px-4 sm:px-6 mt-6 space-y-8">
 
-        {/* Top meta row: genres + watch button */}
+        {/* Top meta row: genres + watch button + trailer */}
         <div className="flex flex-wrap items-center gap-3">
           {user && <WatchButton contentType="tv" contentId={show.id} />}
+          {trailer && (
+            <a
+              href={`https://www.youtube.com/watch?v=${trailer.key}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm font-semibold transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+              Watch Trailer
+            </a>
+          )}
           {show.genres?.map((genre) => (
             <span key={genre.id} className="px-3 py-1 text-sm rounded-full bg-slate-700/60 border border-slate-600 text-slate-300">
               {genre.name}

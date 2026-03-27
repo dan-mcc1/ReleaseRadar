@@ -5,6 +5,7 @@ from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.services import friends_service
 from app.services.user_service import search_users_by_username
+from app.services.activity_service import get_friends_activity, get_activity_feed
 
 router = APIRouter()
 
@@ -88,3 +89,21 @@ def get_outgoing(
 ):
     """Get all pending outgoing friend requests."""
     return friends_service.get_outgoing_requests(db, uid)
+
+
+@router.get("/activity")
+def friends_activity(
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    """Get recent activity from accepted friends."""
+    return get_friends_activity(db, uid)
+
+
+@router.get("/feed")
+def activity_feed(
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    """Get own activity + friends' activity combined, newest first."""
+    return get_activity_feed(db, uid)
