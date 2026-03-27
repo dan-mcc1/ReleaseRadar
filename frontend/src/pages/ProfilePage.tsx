@@ -7,6 +7,7 @@ import { Link } from "react-router-dom";
 import FriendSearch from "../components/FriendSearch";
 import FriendRequests from "../components/FriendRequests";
 import FriendsList from "../components/FriendsList";
+import StatsSection from "../components/StatsSection";
 
 const USERNAME_RE = /^[a-zA-Z0-9_]{3,30}$/;
 
@@ -347,6 +348,9 @@ export default function ProfilePage() {
           )}
         </div>
       </div>
+
+      {/* Stats Section */}
+      {token && <StatsSection token={token} />}
 
       {/* Friends Section */}
       <div className="bg-slate-800 rounded-lg p-4">

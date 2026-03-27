@@ -12,6 +12,7 @@ from app.services.user_service import (
 )
 from app.services.friends_service import are_friends
 from app.services.user_service import get_profile_watchlist, get_profile_watched
+from app.services.stats_service import get_user_stats
 from app.dependencies.auth import get_current_user
 from app.models.user import User  # needed for the profile lookup by username
 
@@ -83,6 +84,15 @@ def check_username_route(
     """Public endpoint — returns whether a username is available."""
     _validate_username(username)
     return {"available": is_username_available(db, username)}
+
+
+@router.get("/stats")
+def get_stats_route(
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    """Return aggregated stats for the current user."""
+    return get_user_stats(db, uid)
 
 
 @router.get("/profile/{username}")
