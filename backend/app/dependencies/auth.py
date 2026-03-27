@@ -5,7 +5,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import firebase_admin
 from firebase_admin import credentials
 
-cred = credentials.Certificate("./firebase-service.json")
+cred = credentials.Certificate("/etc/secrets/firebase-service.json")
 firebase_admin.initialize_app(cred)
 
 bearer_scheme = HTTPBearer()
