@@ -1,12 +1,14 @@
 # app/dependencies/auth.py
 from fastapi import Depends, HTTPException
-from firebase_admin import auth, initialize_app
+from firebase_admin import auth
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import firebase_admin
 from firebase_admin import credentials
+from app.config import settings
 
-cred = credentials.Certificate("/etc/secrets/firebase-service.json")
-firebase_admin.initialize_app(cred)
+if not firebase_admin._apps:
+    cred = credentials.Certificate(settings.FIREBASE_CREDS_PATH)
+    firebase_admin.initialize_app(cred)
 
 bearer_scheme = HTTPBearer()
 
