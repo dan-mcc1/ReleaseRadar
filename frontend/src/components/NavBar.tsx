@@ -13,13 +13,16 @@ import { useLocation, Link, useNavigate } from "react-router-dom";
 import { onAuthStateChanged, getAuth, signOut } from "firebase/auth";
 import { firebaseApp } from "../firebase";
 
-const navigation = [
+const publicNavigation = [
   { name: "Dashboard", href: "/" },
   { name: "Upcoming", href: "/upcoming" },
-  { name: "Watchlist", href: "/watchlist" },
-  { name: "Watched", href: "/watched" },
   { name: "Trending", href: "/trending" },
   { name: "Browse Genres", href: "/search-genres" },
+];
+
+const authNavigation = [
+  { name: "Watchlist", href: "/watchlist" },
+  { name: "Watched", href: "/watched" },
 ];
 
 function classNames(...classes: string[]) {
@@ -93,7 +96,7 @@ export default function NavBar() {
             </div>
             <div className="hidden sm:ml-6 sm:block">
               <div className="flex space-x-4">
-                {navigation.map((item) => {
+                {[...publicNavigation, ...(user ? authNavigation : [])].map((item) => {
                   const isCurrent = location.pathname === item.href;
                   return (
                     <Link
@@ -208,7 +211,7 @@ export default function NavBar() {
 
       <DisclosurePanel className="sm:hidden">
         <div className="space-y-1 px-2 pt-2 pb-3">
-          {navigation.map((item) => {
+          {[...publicNavigation, ...(user ? authNavigation : [])].map((item) => {
             const isCurrent = location.pathname === item.href;
             return (
               <DisclosureButton

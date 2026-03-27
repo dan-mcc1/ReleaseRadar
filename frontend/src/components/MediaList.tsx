@@ -10,6 +10,7 @@ interface MediaListProps {
     shows?: Show[];
     people?: Person[];
   };
+  showWatchButton?: boolean;
 }
 
 const INITIAL_COUNT = 6;
@@ -31,7 +32,7 @@ function getYear(item: Movie | Show): string | null {
 
 // ── Media row card (movie / show) ──────────────────────────────────────────
 
-function MediaRow({ item, type }: { item: Movie | Show; type: "movie" | "tv" }) {
+function MediaRow({ item, type, showWatchButton = true }: { item: Movie | Show; type: "movie" | "tv"; showWatchButton?: boolean }) {
   const title = "title" in item ? item.title : item.name;
   const year = getYear(item);
   const genres: { id: number; name: string }[] = item.genres ?? [];
@@ -89,9 +90,11 @@ function MediaRow({ item, type }: { item: Movie | Show; type: "movie" | "tv" }) 
               ))}
             </div>
           </div>
-          <div className="flex-shrink-0 hidden sm:block">
-            <WatchButton contentType={type} contentId={item.id} />
-          </div>
+          {showWatchButton && (
+            <div className="flex-shrink-0 hidden sm:block">
+              <WatchButton contentType={type} contentId={item.id} />
+            </div>
+          )}
         </div>
 
         {item.overview && (
@@ -101,9 +104,11 @@ function MediaRow({ item, type }: { item: Movie | Show; type: "movie" | "tv" }) 
         )}
 
         {/* WatchButton on mobile (below overview) */}
-        <div className="sm:hidden mt-1">
-          <WatchButton contentType={type} contentId={item.id} />
-        </div>
+        {showWatchButton && (
+          <div className="sm:hidden mt-1">
+            <WatchButton contentType={type} contentId={item.id} />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -198,7 +203,7 @@ function Section({
 
 // ── Main export ────────────────────────────────────────────────────────────
 
-export default function MediaList({ results }: MediaListProps) {
+export default function MediaList({ results, showWatchButton = true }: MediaListProps) {
   const [visibleCounts, setVisibleCounts] = useState<Record<string, number>>({});
 
   const movies = results.movies ?? [];
@@ -234,7 +239,7 @@ export default function MediaList({ results }: MediaListProps) {
             onToggle={() => toggle(section.key, section.items.length)}
           >
             {section.items.slice(0, visible).map((item) => (
-              <MediaRow key={item.id} item={item as Movie | Show} type={section.type} />
+              <MediaRow key={item.id} item={item as Movie | Show} type={section.type} showWatchButton={showWatchButton} />
             ))}
           </Section>
         );
