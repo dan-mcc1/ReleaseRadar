@@ -46,7 +46,8 @@ export default function Search() {
     fetchResults();
   }, [query, searchType]);
 
-  const total = results.movies.length + results.shows.length + results.people.length;
+  const total =
+    results.movies.length + results.shows.length + results.people.length;
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 pb-16">
@@ -58,7 +59,9 @@ export default function Search() {
               Results for <span className="text-blue-400">"{query}"</span>
             </h1>
             {!loading && total > 0 && (
-              <p className="text-slate-400 text-sm mt-1">{total} result{total !== 1 ? "s" : ""} found</p>
+              <p className="text-slate-400 text-sm mt-1">
+                {total} result{total !== 1 ? "s" : ""} found
+              </p>
             )}
           </>
         ) : (
@@ -78,8 +81,18 @@ export default function Search() {
       {!loading && query && total === 0 && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <div className="w-16 h-16 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center mb-4">
-            <svg className="w-8 h-8 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            <svg
+              className="w-8 h-8 text-slate-500"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+              />
             </svg>
           </div>
           <h3 className="text-slate-300 font-medium mb-1">No results found</h3>
@@ -87,7 +100,7 @@ export default function Search() {
         </div>
       )}
 
-      {!loading && <MediaList results={results} showFullDate />}
+      {!loading && <MediaList results={results} />}
     </div>
   );
 }
