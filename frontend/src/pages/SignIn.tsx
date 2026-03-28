@@ -8,10 +8,12 @@ import {
 import { auth } from "../firebase";
 import { useNavigate } from "react-router-dom";
 import { API_URL } from "../constants";
+import { usePageTitle } from "../hooks/usePageTitle";
 
 const USERNAME_RE = /^[a-zA-Z0-9_]{3,30}$/;
 
 const SignIn: React.FC = () => {
+  usePageTitle("Sign In");
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

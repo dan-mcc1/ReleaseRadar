@@ -2,8 +2,10 @@ import { useEffect, useState } from "react";
 import type { Show, Movie, Person } from "../types/calendar";
 import { API_URL } from "../constants";
 import MediaList from "../components/MediaList";
+import { usePageTitle } from "../hooks/usePageTitle";
 
 export default function Trending() {
+  usePageTitle("Trending");
   const [results, setResults] = useState<{
     movies: Movie[];
     shows: Show[];

@@ -3,6 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import { BASE_IMAGE_URL, API_URL } from "../constants";
 import type { Movie, Show } from "../types/calendar";
 import { formatLocalDate } from "../utils/date";
+import { usePageTitle } from "../hooks/usePageTitle";
 
 type FullPersonData = {
   id: number;
@@ -104,6 +105,7 @@ export default function PersonInfo() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [person, setPerson] = useState<FullPersonData | null>(null);
+  usePageTitle(person?.name);
   const [bioExpanded, setBioExpanded] = useState(false);
 
   useEffect(() => {

@@ -8,8 +8,10 @@ import {
 import { firebaseApp } from "../firebase";
 import { useNavigate } from "react-router-dom";
 import { API_URL } from "../constants";
+import { usePageTitle } from "../hooks/usePageTitle";
 
 export default function Settings() {
+  usePageTitle("Settings");
   const auth = getAuth(firebaseApp);
   const [user, setUser] = useState(auth.currentUser);
   const [error, setError] = useState<string | null>(null);

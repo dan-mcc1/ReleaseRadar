@@ -4,6 +4,7 @@ import { API_URL } from "../constants";
 import { firebaseApp } from "../firebase";
 import { getAuth } from "firebase/auth";
 import MediaCard from "../components/MediaCard";
+import { usePageTitle } from "../hooks/usePageTitle";
 
 type TabType = "all" | "movies" | "tv";
 type SortType = "default" | "title_asc" | "title_desc" | "date_desc" | "date_asc" | "popularity_desc" | "rating_desc" | "rating_asc";
@@ -53,6 +54,7 @@ function applySort<T extends Movie | Show>(items: T[], sort: SortType): T[] {
 }
 
 export default function Watched() {
+  usePageTitle("Watched");
   const [results, setResults] = useState<{ movies: Movie[]; shows: Show[] }>({
     movies: [],
     shows: [],

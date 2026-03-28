@@ -3,6 +3,7 @@ import { getAuth } from "firebase/auth";
 import { firebaseApp } from "../firebase";
 import { API_URL, BASE_IMAGE_URL } from "../constants";
 import { Link, useNavigate } from "react-router-dom";
+import { usePageTitle } from "../hooks/usePageTitle";
 
 interface ActivityItem {
   id: number;
@@ -110,6 +111,7 @@ function ActivityRow({ item, currentUserId }: { item: ActivityItem; currentUserI
 }
 
 export default function ActivityFeedPage() {
+  usePageTitle("Activity");
   const auth = getAuth(firebaseApp);
   const navigate = useNavigate();
   const [items, setItems] = useState<ActivityItem[]>([]);

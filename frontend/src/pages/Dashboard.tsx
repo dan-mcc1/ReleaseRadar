@@ -13,10 +13,12 @@ import { getAuth, onAuthStateChanged, User } from "firebase/auth";
 import { firebaseApp } from "../firebase";
 import CurrentlyWatchingStrip from "../components/CurrentlyWatchingStrip";
 import CalendarSyncModal from "../components/CalendarSyncModal";
+import { usePageTitle } from "../hooks/usePageTitle";
 import { Link } from "react-router-dom";
 import { getDashboardCache, setDashboardCache } from "../utils/dashboardCache";
 
 export default function Dashboard() {
+  usePageTitle();
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [loading, setLoading] = useState(false);

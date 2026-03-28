@@ -8,6 +8,7 @@ import FriendSearch from "../components/FriendSearch";
 import FriendRequests from "../components/FriendRequests";
 import FriendsList from "../components/FriendsList";
 import StatsSection from "../components/StatsSection";
+import { usePageTitle } from "../hooks/usePageTitle";
 
 const USERNAME_RE = /^[a-zA-Z0-9_]{3,30}$/;
 
@@ -37,6 +38,7 @@ interface OutgoingRequest {
 type FriendsTab = "friends" | "requests" | "add";
 
 export default function ProfilePage() {
+  usePageTitle("My Profile");
   const auth = getAuth(firebaseApp);
   const [user, setUser] = useState(auth.currentUser);
   const [dbUser, setDbUser] = useState<DBUser | null>(null);

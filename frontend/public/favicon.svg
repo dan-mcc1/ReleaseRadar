@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Dark background -->
+  <rect width="32" height="32" rx="7" fill="#0f172a"/>
+  <!-- Calendar body -->
+  <rect x="3" y="9" width="26" height="20" rx="3.5" fill="#1e3a8a"/>
+  <!-- Calendar header bar -->
+  <rect x="3" y="9" width="26" height="7" rx="3.5" fill="#2563eb"/>
+  <rect x="3" y="13" width="26" height="3" fill="#2563eb"/>
+  <!-- Binder tabs -->
+  <rect x="10" y="5.5" width="3" height="7" rx="1.5" fill="#93c5fd"/>
+  <rect x="19" y="5.5" width="3" height="7" rx="1.5" fill="#93c5fd"/>
+  <!-- Play triangle -->
+  <path d="M13 19.5 L13 27 L22.5 23.25 Z" fill="#e2e8f0"/>
+</svg>

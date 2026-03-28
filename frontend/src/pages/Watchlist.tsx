@@ -3,7 +3,9 @@ import type { Show, Movie } from "../types/calendar";
 import { API_URL } from "../constants";
 import { firebaseApp } from "../firebase";
 import { getAuth } from "firebase/auth";
+import { useNavigate } from "react-router-dom";
 import MediaCard from "../components/MediaCard";
+import { usePageTitle } from "../hooks/usePageTitle";
 
 type TabType = "all" | "movies" | "tv";
 type SortType = "default" | "title_asc" | "title_desc" | "date_desc" | "date_asc" | "popularity_desc";
@@ -35,6 +37,8 @@ function applySort<T extends Movie | Show>(items: T[], sort: SortType): T[] {
 }
 
 export default function Watchlist() {
+  usePageTitle("Watchlist");
+  const navigate = useNavigate();
   const [results, setResults] = useState<{ movies: Movie[]; shows: Show[] }>({
     movies: [],
     shows: [],
@@ -194,7 +198,13 @@ export default function Watchlist() {
             </svg>
           </div>
           <h3 className="text-slate-300 font-medium mb-1">Your watchlist is empty</h3>
-          <p className="text-slate-500 text-sm">Browse Trending or Upcoming to find something to add</p>
+          <p className="text-slate-500 text-sm mb-4">Browse Trending or Upcoming to find something to add</p>
+          <button
+            onClick={() => navigate("/trending")}
+            className="bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium px-5 py-2 rounded-lg transition-colors"
+          >
+            Browse Trending
+          </button>
         </div>
       )}
 

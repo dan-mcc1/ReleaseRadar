@@ -10,6 +10,7 @@ import { getAuth } from "firebase/auth";
 import { firebaseApp } from "../firebase";
 import WatchButton from "../components/WatchButton";
 import { onAuthStateChanged } from "firebase/auth";
+import { usePageTitle } from "../hooks/usePageTitle";
 
 type FullMovieData = Movie & {
   created_by: {
@@ -72,6 +73,7 @@ export default function MovieInfo() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [movie, setMovie] = useState<FullMovieData>();
+  usePageTitle(movie?.title);
   const auth = getAuth(firebaseApp);
   const [user, setUser] = useState(auth.currentUser);
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { Show, Movie } from "../types/calendar";
 import { API_URL } from "../constants";
 import MediaList from "../components/MediaList";
+import { usePageTitle } from "../hooks/usePageTitle";
 
 type MediaType = "movie" | "tv";
 
@@ -21,6 +22,7 @@ const TYPE_TABS: { label: string; value: MediaType }[] = [
 ];
 
 export default function SearchGenres() {
+  usePageTitle("Browse Genres");
   const [activeType, setActiveType] = useState<MediaType>("movie");
   const [selectedGenreId, setSelectedGenreId] = useState<number | null>(null);
   const [genres, setGenres] = useState<GenreList>({ movie: [], tv: [] });

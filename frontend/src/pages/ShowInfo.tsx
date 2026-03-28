@@ -10,6 +10,7 @@ import { Link } from "react-router-dom";
 import WatchButton from "../components/WatchButton";
 import { firebaseApp } from "../firebase";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
+import { usePageTitle } from "../hooks/usePageTitle";
 
 type FullShowData = Show & {
   created_by: {
@@ -64,6 +65,7 @@ function ExternalLink({ href, label }: { href: string; label: string }) {
 export default function ShowInfo() {
   const { id } = useParams<{ id: string }>();
   const [show, setShow] = useState<FullShowData | null>(null);
+  usePageTitle(show?.name);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const auth = getAuth(firebaseApp);

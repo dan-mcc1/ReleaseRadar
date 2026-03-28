@@ -2,10 +2,12 @@ import { useEffect, useState } from "react";
 import { API_URL } from "../constants";
 import MediaList from "../components/MediaList";
 import type { Movie, Show } from "../types/calendar";
+import { usePageTitle } from "../hooks/usePageTitle";
 
 type SearchType = "tv" | "movie";
 
 export default function Upcoming() {
+  usePageTitle("Upcoming");
   const [results, setResults] = useState<{ movies: Movie[]; shows: Show[] }>({
     shows: [],
     movies: [],

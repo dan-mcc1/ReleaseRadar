@@ -3,8 +3,10 @@ import { useLocation } from "react-router-dom";
 import type { Show, Movie, Person } from "../types/calendar";
 import { API_URL } from "../constants";
 import MediaList from "../components/MediaList";
+import { usePageTitle } from "../hooks/usePageTitle";
 
 export default function Search() {
+  usePageTitle("Search");
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
   const query = searchParams.get("q") || "";

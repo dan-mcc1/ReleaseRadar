@@ -4,6 +4,7 @@ import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { firebaseApp } from "../firebase";
 import { API_URL } from "../constants";
 import ExpandableMediaList from "../components/ExpandableMediaList";
+import { usePageTitle } from "../hooks/usePageTitle";
 
 interface MediaItem {
   id: number;
@@ -25,6 +26,7 @@ export default function FriendProfilePage() {
   const auth = getAuth(firebaseApp);
 
   const [profile, setProfile] = useState<PublicProfile | null>(null);
+  usePageTitle(profile ? `@${profile.username}` : undefined);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
