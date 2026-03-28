@@ -10,6 +10,7 @@ import { getAuth } from "firebase/auth";
 import { firebaseApp } from "../firebase";
 import WatchButton from "../components/WatchButton";
 import FavoriteButton from "../components/FavoriteButton";
+import RecommendButton from "../components/RecommendButton";
 import { onAuthStateChanged } from "firebase/auth";
 import { usePageTitle } from "../hooks/usePageTitle";
 
@@ -173,6 +174,7 @@ export default function MovieInfo() {
         <div className="flex flex-wrap items-center gap-3">
           {user && <WatchButton contentType="movie" contentId={movie.id} />}
           {user && <FavoriteButton contentType="movie" contentId={movie.id} />}
+          {user && <RecommendButton contentType="movie" contentId={movie.id} contentTitle={movie.title} contentPosterPath={movie.poster_path ?? null} />}
           {trailer && (
             <a
               href={`https://www.youtube.com/watch?v=${trailer.key}`}

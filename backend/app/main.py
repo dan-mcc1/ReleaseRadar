@@ -17,6 +17,7 @@ from app.routers import (
     notifications,
     ical,
     favorites,
+    recommendations,
 )
 from fastapi.middleware.cors import CORSMiddleware
 from app.db.session import SessionLocal
@@ -98,3 +99,4 @@ app.include_router(
 )
 app.include_router(ical.router, prefix="/ical", tags=["ical"])
 app.include_router(favorites.router, prefix="/favorites", tags=["favorites"])
+app.include_router(recommendations.router, prefix="/recommendations", tags=["recommendations"])

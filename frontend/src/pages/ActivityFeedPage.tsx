@@ -20,6 +20,19 @@ interface ActivityItem {
   created_at: string;
 }
 
+interface RecommendationItem {
+  id: number;
+  sender_id: string;
+  sender_username: string | null;
+  content_type: "movie" | "tv";
+  content_id: number;
+  content_title: string | null;
+  content_poster_path: string | null;
+  message: string | null;
+  is_read: boolean;
+  created_at: string;
+}
+
 function timeAgo(isoString: string) {
   const diff = Date.now() - new Date(isoString).getTime();
   const mins = Math.floor(diff / 60000);
@@ -110,21 +123,99 @@ function ActivityRow({ item, currentUserId }: { item: ActivityItem; currentUserI
   );
 }
 
+function RecommendationRow({
+  item,
+  onRead,
+}: {
+  item: RecommendationItem;
+  onRead: (id: number) => void;
+}) {
+  const contentPath = `/${item.content_type === "movie" ? "movie" : "tv"}/${item.content_id}`;
+
+  function handleRead() {
+    if (!item.is_read) onRead(item.id);
+  }
+
+  return (
+    <div
+      className={`flex items-start gap-4 border rounded-xl p-4 transition-colors ${
+        item.is_read
+          ? "bg-slate-800 border-slate-700"
+          : "bg-slate-800 border-blue-600/50 ring-1 ring-blue-600/20"
+      }`}
+    >
+      <Link to={contentPath} onClick={handleRead} className="flex-shrink-0">
+        {item.content_poster_path ? (
+          <img
+            src={`${BASE_IMAGE_URL}/w92${item.content_poster_path}`}
+            alt={item.content_title ?? ""}
+            className="w-12 h-[72px] rounded-lg object-cover hover:opacity-80 transition-opacity"
+          />
+        ) : (
+          <div className="w-12 h-[72px] bg-slate-700 rounded-lg" />
+        )}
+      </Link>
+
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 mb-1">
+          <span className="text-xs font-bold text-pink-400">♥</span>
+          <span className="text-xs text-slate-400">recommended by</span>
+          <Link to={`/user/${item.sender_username}`} className="text-xs font-semibold text-blue-400 hover:underline">
+            @{item.sender_username ?? "someone"}
+          </Link>
+          {!item.is_read && (
+            <span className="ml-1 bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">NEW</span>
+          )}
+        </div>
+
+        <Link to={contentPath} onClick={handleRead} className="font-semibold text-slate-100 hover:text-blue-400 transition-colors line-clamp-1 block">
+          {item.content_title ?? "Unknown"}
+        </Link>
+
+        {item.message && (
+          <p className="text-sm text-slate-400 mt-1 italic line-clamp-2">"{item.message}"</p>
+        )}
+
+        <div className="flex items-center gap-2 mt-1.5">
+          <span className="text-xs text-slate-500">{timeAgo(item.created_at)}</span>
+          {!item.is_read && (
+            <button
+              onClick={handleRead}
+              className="text-xs text-slate-500 hover:text-slate-300 underline"
+            >
+              Mark read
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type Tab = "activity" | "recommendations";
+
 export default function ActivityFeedPage() {
   usePageTitle("Activity");
   const auth = getAuth(firebaseApp);
   const navigate = useNavigate();
+  const [tab, setTab] = useState<Tab>("activity");
   const [items, setItems] = useState<ActivityItem[]>([]);
+  const [recommendations, setRecommendations] = useState<RecommendationItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [recsLoading, setRecsLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string>("");
+  const [token, setToken] = useState<string>("");
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (user) => {
       if (!user) { navigate("/signIn"); return; }
       setCurrentUserId(user.uid);
+      const tok = await user.getIdToken();
+      setToken(tok);
+
       try {
         const res = await fetch(`${API_URL}/friends/feed`, {
-          headers: { Authorization: `Bearer ${await user.getIdToken()}` },
+          headers: { Authorization: `Bearer ${tok}` },
         });
         if (res.ok) setItems(await res.json());
       } catch (err) {
@@ -132,36 +223,126 @@ export default function ActivityFeedPage() {
       } finally {
         setLoading(false);
       }
+
+      try {
+        const res = await fetch(`${API_URL}/recommendations/inbox`, {
+          headers: { Authorization: `Bearer ${tok}` },
+        });
+        if (res.ok) setRecommendations(await res.json());
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setRecsLoading(false);
+      }
     });
     return unsubscribe;
   }, []);
+
+  async function markRead(id: number) {
+    setRecommendations((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, is_read: true } : r))
+    );
+    try {
+      await fetch(`${API_URL}/recommendations/${id}/read`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    } catch {
+      // revert on error
+      setRecommendations((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, is_read: false } : r))
+      );
+    }
+  }
+
+  const unreadCount = recommendations.filter((r) => !r.is_read).length;
 
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8">
       <h1 className="text-2xl font-bold text-white mb-6">Activity</h1>
 
-      {loading && (
-        <div className="flex items-center justify-center py-20">
-          <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-        </div>
+      {/* Tabs */}
+      <div className="flex gap-1 mb-6 border-b border-slate-700">
+        <button
+          onClick={() => setTab("activity")}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            tab === "activity"
+              ? "border-blue-500 text-blue-400"
+              : "border-transparent text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          Feed
+        </button>
+        <button
+          onClick={() => setTab("recommendations")}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors relative ${
+            tab === "recommendations"
+              ? "border-blue-500 text-blue-400"
+              : "border-transparent text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          Recommendations
+          {unreadCount > 0 && (
+            <span className="ml-1.5 bg-blue-600 text-white text-xs font-bold rounded-full px-1.5 py-0.5">
+              {unreadCount}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* Activity tab */}
+      {tab === "activity" && (
+        <>
+          {loading && (
+            <div className="flex items-center justify-center py-20">
+              <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+          )}
+
+          {!loading && items.length === 0 && (
+            <div className="text-center py-20 text-slate-400">
+              <p className="text-lg mb-2">No activity yet</p>
+              <p className="text-sm">Start tracking shows and movies to see your history here.</p>
+              <Link to="/profile" className="mt-4 inline-block text-blue-400 hover:underline text-sm">
+                Find friends →
+              </Link>
+            </div>
+          )}
+
+          {!loading && items.length > 0 && (
+            <div className="flex flex-col gap-3">
+              {items.map((item) => (
+                <ActivityRow key={item.id} item={item} currentUserId={currentUserId} />
+              ))}
+            </div>
+          )}
+        </>
       )}
 
-      {!loading && items.length === 0 && (
-        <div className="text-center py-20 text-slate-400">
-          <p className="text-lg mb-2">No activity yet</p>
-          <p className="text-sm">Start tracking shows and movies to see your history here.</p>
-          <Link to="/profile" className="mt-4 inline-block text-blue-400 hover:underline text-sm">
-            Find friends →
-          </Link>
-        </div>
-      )}
+      {/* Recommendations tab */}
+      {tab === "recommendations" && (
+        <>
+          {recsLoading && (
+            <div className="flex items-center justify-center py-20">
+              <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+          )}
 
-      {!loading && items.length > 0 && (
-        <div className="flex flex-col gap-3">
-          {items.map((item) => (
-            <ActivityRow key={item.id} item={item} currentUserId={currentUserId} />
-          ))}
-        </div>
+          {!recsLoading && recommendations.length === 0 && (
+            <div className="text-center py-20 text-slate-400">
+              <p className="text-lg mb-2">No recommendations yet</p>
+              <p className="text-sm">When a friend recommends a show or movie, it will appear here.</p>
+            </div>
+          )}
+
+          {!recsLoading && recommendations.length > 0 && (
+            <div className="flex flex-col gap-3">
+              {recommendations.map((rec) => (
+                <RecommendationRow key={rec.id} item={rec} onRead={markRead} />
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

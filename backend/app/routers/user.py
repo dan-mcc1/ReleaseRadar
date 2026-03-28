@@ -23,6 +23,7 @@ from app.models.currently_watching import CurrentlyWatching
 from app.models.activity import Activity
 from app.models.friendship import Friendship
 from app.models.favorite import Favorite
+from app.models.recommendation import Recommendation
 from app.models.show import Show
 from app.models.movie import Movie
 from app.models.episode import Episode
@@ -175,6 +176,9 @@ def delete_account(
     db.query(Watchlist).filter_by(user_id=uid).delete()
     db.query(Watched).filter_by(user_id=uid).delete()
     db.query(Favorite).filter_by(user_id=uid).delete()
+    db.query(Recommendation).filter(
+        (Recommendation.sender_id == uid) | (Recommendation.recipient_id == uid)
+    ).delete()
     db.query(Friendship).filter(
         (Friendship.requester_id == uid) | (Friendship.addressee_id == uid)
     ).delete()

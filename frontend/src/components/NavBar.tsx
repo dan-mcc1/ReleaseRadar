@@ -8,10 +8,11 @@ import {
   MenuItems,
 } from "@headlessui/react";
 import { Bars3Icon, XMarkIcon } from "@heroicons/react/24/outline";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useLocation, Link, useNavigate } from "react-router-dom";
 import { onAuthStateChanged, getAuth, signOut } from "firebase/auth";
 import { firebaseApp } from "../firebase";
+import { API_URL } from "../constants";
 
 const discoverLinks = [
   { name: "Trending", href: "/trending" },
@@ -19,26 +20,33 @@ const discoverLinks = [
   { name: "Browse Genres", href: "/search-genres" },
 ];
 
-const libraryLinks = [
-  { name: "Watchlist", href: "/watchlist" },
-  { name: "Watched", href: "/watched" },
-  { name: "Activity", href: "/activity" },
-];
-
 function classNames(...classes: string[]) {
   return classes.filter(Boolean).join(" ");
+}
+
+function Badge({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span className="ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 bg-red-500 text-white text-[10px] font-bold rounded-full leading-none">
+      {count > 9 ? "9+" : count}
+    </span>
+  );
 }
 
 function NavDropdown({
   label,
   links,
+  badges,
   currentPath,
 }: {
   label: string;
   links: { name: string; href: string }[];
+  badges?: Record<string, number>;
   currentPath: string;
 }) {
   const isActive = links.some((l) => l.href === currentPath);
+  const totalBadge = badges ? Object.values(badges).reduce((a, b) => a + b, 0) : 0;
+
   return (
     <Menu as="div" className="relative">
       <MenuButton
@@ -48,24 +56,29 @@ function NavDropdown({
         )}
       >
         {label}
+        {totalBadge > 0 && <Badge count={totalBadge} />}
         <svg className="w-3.5 h-3.5 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
         </svg>
       </MenuButton>
       <MenuItems className="absolute left-0 z-20 mt-1 w-44 origin-top-left rounded-lg bg-gray-800 border border-white/10 py-1 shadow-xl transition data-closed:scale-95 data-closed:opacity-0 data-enter:duration-100 data-enter:ease-out data-leave:duration-75 data-leave:ease-in">
-        {links.map((link) => (
-          <MenuItem key={link.name}>
-            <Link
-              to={link.href}
-              className={classNames(
-                currentPath === link.href ? "text-white bg-white/10" : "text-gray-300",
-                "block px-4 py-2 text-sm hover:bg-white/5 hover:text-white data-focus:bg-white/5 data-focus:outline-hidden"
-              )}
-            >
-              {link.name}
-            </Link>
-          </MenuItem>
-        ))}
+        {links.map((link) => {
+          const badge = badges?.[link.href] ?? 0;
+          return (
+            <MenuItem key={link.name}>
+              <Link
+                to={link.href}
+                className={classNames(
+                  currentPath === link.href ? "text-white bg-white/10" : "text-gray-300",
+                  "flex items-center justify-between px-4 py-2 text-sm hover:bg-white/5 hover:text-white data-focus:bg-white/5 data-focus:outline-hidden"
+                )}
+              >
+                {link.name}
+                {badge > 0 && <Badge count={badge} />}
+              </Link>
+            </MenuItem>
+          );
+        })}
       </MenuItems>
     </Menu>
   );
@@ -77,6 +90,8 @@ export default function NavBar() {
   const auth = getAuth(firebaseApp);
   const [user, setUser] = useState(auth.currentUser);
   const [searchQuery, setSearchQuery] = useState("");
+  const [pendingRequests, setPendingRequests] = useState(0);
+  const [unreadRecs, setUnreadRecs] = useState(0);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && searchQuery.trim() !== "") {
@@ -84,12 +99,50 @@ export default function NavBar() {
     }
   };
 
+  const fetchCounts = useCallback(async (firebaseUser: typeof auth.currentUser) => {
+    if (!firebaseUser) return;
+    try {
+      const token = await firebaseUser.getIdToken();
+      const headers = { Authorization: `Bearer ${token}` };
+      const [friendsRes, recsRes] = await Promise.all([
+        fetch(`${API_URL}/friends/requests/incoming`, { headers }),
+        fetch(`${API_URL}/recommendations/unread-count`, { headers }),
+      ]);
+      if (friendsRes.ok) {
+        const data: { friendship_id: number }[] = await friendsRes.json();
+        setPendingRequests(data.length);
+      }
+      if (recsRes.ok) {
+        const data: { count: number } = await recsRes.json();
+        setUnreadRecs(data.count);
+      }
+    } catch {
+      // silently ignore — counts are non-critical
+    }
+  }, []);
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
+      fetchCounts(currentUser);
     });
     return () => unsubscribe();
-  }, []);
+  }, [fetchCounts]);
+
+  // Refresh counts on every navigation so badges stay up to date
+  useEffect(() => {
+    fetchCounts(auth.currentUser);
+  }, [location.pathname, fetchCounts]);
+
+  const libraryBadges: Record<string, number> = {
+    "/activity": unreadRecs,
+  };
+
+  const libraryLinks = [
+    { name: "Watchlist", href: "/watchlist" },
+    { name: "Watched", href: "/watched" },
+    { name: "Activity", href: "/activity" },
+  ];
 
   return (
     <Disclosure
@@ -121,7 +174,7 @@ export default function NavBar() {
             </div>
 
             <div className="hidden sm:ml-6 sm:flex sm:items-center sm:gap-1">
-              {/* Dashboard — always first */}
+              {/* Dashboard */}
               <Link
                 to="/"
                 className={classNames(
@@ -139,7 +192,12 @@ export default function NavBar() {
 
               {/* My Library dropdown — signed in only */}
               {user && (
-                <NavDropdown label="My Library" links={libraryLinks} currentPath={location.pathname} />
+                <NavDropdown
+                  label="My Library"
+                  links={libraryLinks}
+                  badges={libraryBadges}
+                  currentPath={location.pathname}
+                />
               )}
             </div>
           </div>
@@ -168,19 +226,27 @@ export default function NavBar() {
                 <MenuButton className="relative flex rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500">
                   <span className="absolute -inset-1.5" />
                   <span className="sr-only">Open user menu</span>
-                  <img
-                    src={user.photoURL ?? "/src/assets/avatar-placeholder.png"}
-                    alt={user.displayName ?? "User Avatar"}
-                    className="size-8 rounded-full bg-gray-800 outline -outline-offset-1 outline-white/10"
-                  />
+                  <div className="relative">
+                    <img
+                      src={user.photoURL ?? "/src/assets/avatar-placeholder.png"}
+                      alt={user.displayName ?? "User Avatar"}
+                      className="size-8 rounded-full bg-gray-800 outline -outline-offset-1 outline-white/10"
+                    />
+                    {pendingRequests > 0 && (
+                      <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white ring-2 ring-[#1f3b4d]">
+                        {pendingRequests > 9 ? "9+" : pendingRequests}
+                      </span>
+                    )}
+                  </div>
                 </MenuButton>
                 <MenuItems
                   transition
                   className="absolute right-0 z-20 mt-2 w-48 origin-top-right rounded-md bg-gray-800 py-1 outline -outline-offset-1 outline-white/10 transition data-closed:scale-95 data-closed:transform data-closed:opacity-0 data-enter:duration-100 data-enter:ease-out data-leave:duration-75 data-leave:ease-in"
                 >
                   <MenuItem>
-                    <a href="/profile" className="block px-4 py-2 text-sm text-gray-300 data-focus:bg-white/5 data-focus:outline-hidden">
+                    <a href="/profile" className="flex items-center justify-between px-4 py-2 text-sm text-gray-300 data-focus:bg-white/5 data-focus:outline-hidden">
                       Your profile
+                      {pendingRequests > 0 && <Badge count={pendingRequests} />}
                     </a>
                   </MenuItem>
                   <MenuItem>
@@ -253,13 +319,23 @@ export default function NavBar() {
           {user && (
             <>
               <p className="px-3 pt-2 pb-1 text-xs uppercase tracking-wider text-gray-500 font-semibold">My Library</p>
-              {libraryLinks.map((item) => (
-                <DisclosureButton key={item.name} as="a" href={item.href}
-                  className={classNames(location.pathname === item.href ? "bg-gray-950/50 text-white" : "text-gray-300 hover:bg-white/5 hover:text-white", "block rounded-md px-3 py-2 text-base font-medium")}
-                >
-                  {item.name}
-                </DisclosureButton>
-              ))}
+              {libraryLinks.map((item) => {
+                const badge = libraryBadges[item.href] ?? 0;
+                return (
+                  <DisclosureButton key={item.name} as="a" href={item.href}
+                    className={classNames(location.pathname === item.href ? "bg-gray-950/50 text-white" : "text-gray-300 hover:bg-white/5 hover:text-white", "flex items-center justify-between rounded-md px-3 py-2 text-base font-medium")}
+                  >
+                    {item.name}
+                    {badge > 0 && <Badge count={badge} />}
+                  </DisclosureButton>
+                );
+              })}
+              <DisclosureButton as="a" href="/profile"
+                className={classNames(location.pathname === "/profile" ? "bg-gray-950/50 text-white" : "text-gray-300 hover:bg-white/5 hover:text-white", "flex items-center justify-between rounded-md px-3 py-2 text-base font-medium")}
+              >
+                Profile
+                {pendingRequests > 0 && <Badge count={pendingRequests} />}
+              </DisclosureButton>
             </>
           )}
         </div>

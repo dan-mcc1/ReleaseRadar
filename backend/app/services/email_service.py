@@ -83,3 +83,45 @@ def send_notification_email(to_email: str, username: str, upcoming_items: list):
     </body></html>
     """
     send_email(to_email, "Your Watch Calendar — Releasing Today", html_body)
+
+
+def send_recommendation_email(
+    to_email: str,
+    to_username: str,
+    from_username: str,
+    content_type: str,
+    content_title: str,
+    content_id: int,
+    message: str | None,
+):
+    content_path = f"{'movie' if content_type == 'movie' else 'tv'}/{content_id}"
+    content_url = f"{settings.FRONTEND_URL}/{content_path}"
+    kind = "movie" if content_type == "movie" else "TV show"
+
+    message_block = (
+        f'<blockquote style="border-left:3px solid #3b82f6;margin:12px 0;padding:8px 12px;color:#555;font-style:italic;">'
+        f'{message}'
+        f'</blockquote>'
+    ) if message else ""
+
+    html_body = f"""
+    <html><body style="font-family:sans-serif;color:#222;max-width:600px;margin:0 auto">
+    <h2 style="color:#1e3a8a">Hi {to_username or 'there'},</h2>
+    <p>
+      <strong>{from_username}</strong> recommended a {kind} for you:
+    </p>
+    <p style="font-size:18px;font-weight:bold;">
+      <a href="{content_url}" style="color:#2563eb;text-decoration:none;">{content_title}</a>
+    </p>
+    {message_block}
+    <p>
+      <a href="{content_url}" style="display:inline-block;background:#2563eb;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:bold;">
+        View {content_title}
+      </a>
+    </p>
+    <p style="color:#888;font-size:12px;margin-top:24px;">
+      You received this because {from_username} is your friend on Watch Calendar.
+    </p>
+    </body></html>
+    """
+    send_email(to_email, f"{from_username} recommended \"{content_title}\" to you", html_body)
