@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
     SMTP_FROM: str = ""
     SMTP_USE_TLS: bool = True
+    ICAL_SECRET: str = "change-me-to-a-random-secret"
 
     model_config = SettingsConfigDict(
         env_file=".env",

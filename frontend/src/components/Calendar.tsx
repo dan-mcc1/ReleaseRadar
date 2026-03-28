@@ -20,6 +20,7 @@ interface CalendarProps {
   user: User | null;
   watchedEpisodeKeys?: Set<string>;
   isLoading?: boolean;
+  onSyncCalendar?: () => void;
 }
 
 export type CalendarItem =
@@ -46,6 +47,7 @@ export default function CalendarComponent({
   user,
   watchedEpisodeKeys = new Set(),
   isLoading = false,
+  onSyncCalendar,
 }: CalendarProps) {
   const allItems: CalendarItem[] = [
     ...calendarData.shows.flatMap((show) =>
@@ -513,8 +515,20 @@ export default function CalendarComponent({
             </button>
           </div>
 
-          {/* RIGHT: Watchlist */}
-          <div className="ml-auto">
+          {/* RIGHT: Sync + Watchlist */}
+          <div className="ml-auto flex items-center gap-2">
+            {user && onSyncCalendar && (
+              <button
+                onClick={onSyncCalendar}
+                title="Sync with Google Calendar, Outlook, or Apple Calendar"
+                className="rounded-lg bg-slate-700 border border-slate-600 px-3 py-1.5 text-xs sm:text-sm font-medium text-slate-200 hover:bg-slate-600 hover:text-white transition-colors flex items-center gap-1.5"
+              >
+                <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                Sync
+              </button>
+            )}
             {user && (
               <>
                 <button

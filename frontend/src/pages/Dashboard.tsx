@@ -12,6 +12,7 @@ import { API_URL } from "../constants";
 import { getAuth, onAuthStateChanged, User } from "firebase/auth";
 import { firebaseApp } from "../firebase";
 import CurrentlyWatchingStrip from "../components/CurrentlyWatchingStrip";
+import CalendarSyncModal from "../components/CalendarSyncModal";
 import { Link } from "react-router-dom";
 import { getDashboardCache, setDashboardCache } from "../utils/dashboardCache";
 
@@ -25,6 +26,7 @@ export default function Dashboard() {
   });
   const [watchedEpisodeKeys, setWatchedEpisodeKeys] = useState<Set<string>>(new Set());
   const [showWatchlist, setShowWatchlist] = useState(false);
+  const [showSyncModal, setShowSyncModal] = useState(false);
   const [currentlyWatchingShows, setCurrentlyWatchingShows] = useState<Show[]>([]);
   const [currentlyWatchingMovies, setCurrentlyWatchingMovies] = useState<Movie[]>([]);
 
@@ -311,6 +313,11 @@ export default function Dashboard() {
         user={user}
         watchedEpisodeKeys={watchedEpisodeKeys}
         isLoading={loading}
+        onSyncCalendar={() => setShowSyncModal(true)}
+      />
+      <CalendarSyncModal
+        isOpen={showSyncModal}
+        onClose={() => setShowSyncModal(false)}
       />
     </div>
   );
