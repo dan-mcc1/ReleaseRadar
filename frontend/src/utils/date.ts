@@ -8,6 +8,18 @@ export function parseLocalDate(dateStr: string): Date {
   return new Date(year, month - 1, day);
 }
 
+/**
+ * Format a Date as a "YYYY-MM-DD" string using LOCAL time components.
+ * date.toISOString() converts to UTC first, which shifts the date in
+ * any UTC+ timezone (e.g. midnight local = yesterday UTC).
+ */
+export function toLocalISODate(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 export function formatLocalDate(dateStr: string, options: Intl.DateTimeFormatOptions): string {
   return parseLocalDate(dateStr).toLocaleDateString("en-us", options);
 }

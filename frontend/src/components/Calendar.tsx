@@ -5,7 +5,7 @@ import WatchlistModal from "./WatchlistModal";
 import { User } from "firebase/auth";
 import DailyEpisodeList from "./DailyEpisodeList";
 import { BASE_IMAGE_URL } from "../constants";
-import { parseLocalDate } from "../utils/date";
+import { parseLocalDate, toLocalISODate } from "../utils/date";
 
 interface Day {
   date: Date;
@@ -113,7 +113,7 @@ export default function CalendarComponent({
   });
 
   function getItemsForDate(date: Date): CalendarItem[] {
-    const isoDate = date.toISOString().split("T")[0];
+    const isoDate = toLocalISODate(date);
     return getFilteredItems(
       allItems.filter(
         (item) =>
@@ -138,7 +138,7 @@ export default function CalendarComponent({
     const date = new Date(year, month, 1);
     const days: Day[] = [];
     while (date.getMonth() === month) {
-      const isoDate = date.toISOString().split("T")[0];
+      const isoDate = toLocalISODate(date);
       const todaysItems = getFilteredItems(
         allItems.filter(
           (item) =>
@@ -275,7 +275,7 @@ export default function CalendarComponent({
   }) => {
     const isToday = day.date.toDateString() === today.toDateString();
     const isSelected = selectedDate.date.toDateString() === day.date.toDateString();
-    const isoDate = day.date.toISOString().split("T")[0];
+    const isoDate = toLocalISODate(day.date);
     const cellItems = getFilteredItems(
       allItems.filter(
         (item) =>
