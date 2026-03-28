@@ -6,7 +6,7 @@ from app.models.user import User
 from app.models.watchlist import Watchlist
 from app.models.movie import Movie
 from app.models.show import Show
-from app.services.email_service import send_notification_email
+from app.services.email_service import send_notification_email, format_air_time
 from datetime import date, timedelta
 
 router = APIRouter()
@@ -71,7 +71,11 @@ def _build_upcoming_items(db: Session, user_id: str) -> list:
             try:
                 lad = date.fromisoformat(str(s.last_air_date))
                 if today <= lad <= next_week:
-                    upcoming.append({"title": s.name, "date": str(lad)})
+                    upcoming.append({
+                        "title": s.name,
+                        "date": str(lad),
+                        "air_time": format_air_time(s.air_time, s.air_timezone),
+                    })
             except (ValueError, TypeError):
                 pass
 
@@ -109,7 +113,11 @@ def _build_todays_items(db: Session, user_id: str) -> list:
         if s and s.last_air_date:
             try:
                 if date.fromisoformat(str(s.last_air_date)) == today:
-                    upcoming.append({"title": s.name, "date": str(today)})
+                    upcoming.append({
+                        "title": s.name,
+                        "date": str(today),
+                        "air_time": format_air_time(s.air_time, s.air_timezone),
+                    })
             except (ValueError, TypeError):
                 pass
 

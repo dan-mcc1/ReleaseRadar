@@ -16,6 +16,7 @@ from app.services.tmdb_movies import fetch_movie_from_tmdb
 from app.services.tmdb_tv import fetch_show_from_tmdb
 from app.services.episode_service import maybe_sync_show_episodes
 from app.services.activity_service import log_activity
+from app.services.tvmaze_service import fetch_show_air_time
 from sqlalchemy import text
 from collections import defaultdict
 
@@ -77,6 +78,8 @@ def serialize_show(show):
         "tagline": show.tagline,
         "type": show.type,
         "tracking_count": show.tracking_count,
+        "air_time": show.air_time,
+        "air_timezone": show.air_timezone,
         "seasons": [serialize_season(s) for s in show.seasons],
         "genres": [{"id": g.id, "name": g.name} for g in show.genres],
         "providers": serialize_providers(show.show_providers),
@@ -336,6 +339,7 @@ def add_to_watchlist(db: Session, user_id: str, content_type: str, content_id: i
             all_logos = show_data.get("images", {}).get("logos", [])
             english_logos = [l for l in all_logos if l.get("iso_639_1") == "en"]
             logo = english_logos[0]["file_path"] if english_logos else None
+            air_time, air_timezone = fetch_show_air_time(show_data["name"])
             show = Show(
                 id=show_data["id"],
                 name=show_data["name"],
@@ -353,6 +357,8 @@ def add_to_watchlist(db: Session, user_id: str, content_type: str, content_id: i
                 poster_path=show_data.get("poster_path"),
                 logo_path=logo,
                 tracking_count=1,
+                air_time=air_time,
+                air_timezone=air_timezone,
             )
             db.add(show)
             db.flush()

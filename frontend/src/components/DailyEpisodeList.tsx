@@ -64,6 +64,34 @@ export default function DailyEpisodeList({ dailyItems }: DailyItemListProps) {
     groupedByShow[showId].push(episode);
   });
 
+  const TZ_ABBR: Record<string, string> = {
+    "America/New_York": "ET",
+    "America/Chicago": "CT",
+    "America/Denver": "MT",
+    "America/Los_Angeles": "PT",
+    "America/Phoenix": "MT",
+    "Europe/London": "GMT",
+    "Europe/Paris": "CET",
+    "Europe/Berlin": "CET",
+    "Australia/Sydney": "AEST",
+    "Australia/Melbourne": "AEST",
+    "Asia/Tokyo": "JST",
+  };
+
+  function formatAirTime(time: string | null | undefined, timezone: string | null | undefined): string | null {
+    if (!time) return null;
+    const [hourStr, minuteStr] = time.split(":");
+    const hour = parseInt(hourStr, 10);
+    const minute = parseInt(minuteStr, 10);
+    const period = hour >= 12 ? "PM" : "AM";
+    const h12 = hour % 12 || 12;
+    const timeStr = minute > 0
+      ? `${h12}:${String(minute).padStart(2, "0")} ${period}`
+      : `${h12} ${period}`;
+    const tzAbbr = timezone ? TZ_ABBR[timezone] : null;
+    return tzAbbr ? `${timeStr} ${tzAbbr}` : timeStr;
+  }
+
   const formatDate = (date: string) => {
     const [year, month, day] = date.split("-").map(Number);
     return new Date(year, month - 1, day).toLocaleDateString("en-us", {
@@ -111,6 +139,12 @@ export default function DailyEpisodeList({ dailyItems }: DailyItemListProps) {
             )}
             <div className="flex items-center gap-3 text-slate-500 text-xs mt-2">
               <span>{formatDate(episode.air_date)}</span>
+              {formatAirTime(episode.showData?.air_time, episode.showData?.air_timezone) && (
+                <>
+                  <span>·</span>
+                  <span>{formatAirTime(episode.showData?.air_time, episode.showData?.air_timezone)}</span>
+                </>
+              )}
               <span>·</span>
               <RuntimeBadge minutes={episode.runtime} />
             </div>
@@ -150,6 +184,11 @@ export default function DailyEpisodeList({ dailyItems }: DailyItemListProps) {
               <div className="font-semibold text-slate-100 group-hover:text-blue-300 transition-colors">
                 {show.name}
               </div>
+              {formatAirTime(episodes[0].showData?.air_time, episodes[0].showData?.air_timezone) && (
+                <div className="text-xs text-slate-500 mt-0.5">
+                  {formatAirTime(episodes[0].showData?.air_time, episodes[0].showData?.air_timezone)}
+                </div>
+              )}
               <div className="mt-1.5 flex flex-col gap-1">
                 {episodes.map((episode, eIdx) => (
                   <div key={eIdx} className="text-sm text-slate-400">

@@ -25,6 +25,8 @@ export type Show = {
   type: string;
   providers: Provider;
 
+  air_time?: string | null;
+  air_timezone?: string | null;
   bg_color?: string;
   popularity?: number;
   user_rating?: number | null;

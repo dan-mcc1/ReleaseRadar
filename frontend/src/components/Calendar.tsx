@@ -49,6 +49,34 @@ export default function CalendarComponent({
   isLoading = false,
   onSyncCalendar,
 }: CalendarProps) {
+  const TZ_ABBR: Record<string, string> = {
+    "America/New_York": "ET",
+    "America/Chicago": "CT",
+    "America/Denver": "MT",
+    "America/Los_Angeles": "PT",
+    "America/Phoenix": "MT",
+    "Europe/London": "GMT",
+    "Europe/Paris": "CET",
+    "Europe/Berlin": "CET",
+    "Australia/Sydney": "AEST",
+    "Australia/Melbourne": "AEST",
+    "Asia/Tokyo": "JST",
+  };
+
+  function formatAirTime(time: string | null | undefined, timezone: string | null | undefined): string | null {
+    if (!time) return null;
+    const [hourStr, minuteStr] = time.split(":");
+    const hour = parseInt(hourStr, 10);
+    const minute = parseInt(minuteStr, 10);
+    const period = hour >= 12 ? "PM" : "AM";
+    const h12 = hour % 12 || 12;
+    const timeStr = minute > 0
+      ? `${h12}:${String(minute).padStart(2, "0")} ${period}`
+      : `${h12} ${period}`;
+    const tzAbbr = timezone ? TZ_ABBR[timezone] : null;
+    return tzAbbr ? `${timeStr} ${tzAbbr}` : timeStr;
+  }
+
   const allItems: CalendarItem[] = [
     ...calendarData.shows.flatMap((show) =>
       (show.episodes ?? []).map((ep) => ({
@@ -344,6 +372,11 @@ export default function CalendarComponent({
                     </span>
                   )}
                 </div>
+                {item.type === "tv" && formatAirTime(item.showData.air_time, item.showData.air_timezone) && (
+                  <div className="absolute bottom-0.5 right-1 z-10 hidden sm:block text-white/75 text-[7px] font-medium drop-shadow">
+                    {formatAirTime(item.showData.air_time, item.showData.air_timezone)}
+                  </div>
+                )}
               </div>
             );
           })
