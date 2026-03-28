@@ -238,17 +238,40 @@ export default function ActivityFeedPage() {
     return unsubscribe;
   }, []);
 
+  // Refetch recommendations inbox when a new one arrives via SSE
+  useEffect(() => {
+    async function handler() {
+      if (!token) return;
+      try {
+        const res = await fetch(`${API_URL}/recommendations/inbox`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) setRecommendations(await res.json());
+      } catch {
+        // non-critical
+      }
+    }
+    window.addEventListener("recommendation-received", handler);
+    return () => window.removeEventListener("recommendation-received", handler);
+  }, [token]);
+
   async function markRead(id: number) {
     setRecommendations((prev) =>
       prev.map((r) => (r.id === id ? { ...r, is_read: true } : r))
     );
     try {
-      await fetch(`${API_URL}/recommendations/${id}/read`, {
+      const res = await fetch(`${API_URL}/recommendations/${id}/read`, {
         method: "PATCH",
         headers: { Authorization: `Bearer ${token}` },
       });
+      if (res.ok) {
+        window.dispatchEvent(new CustomEvent("rec-marked-read"));
+      } else {
+        setRecommendations((prev) =>
+          prev.map((r) => (r.id === id ? { ...r, is_read: false } : r))
+        );
+      }
     } catch {
-      // revert on error
       setRecommendations((prev) =>
         prev.map((r) => (r.id === id ? { ...r, is_read: false } : r))
       );

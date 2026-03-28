@@ -8,9 +8,9 @@ import {
   MenuItems,
 } from "@headlessui/react";
 import { Bars3Icon, XMarkIcon } from "@heroicons/react/24/outline";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation, Link, useNavigate } from "react-router-dom";
-import { onAuthStateChanged, getAuth, signOut } from "firebase/auth";
+import { onIdTokenChanged, getAuth, signOut } from "firebase/auth";
 import { firebaseApp } from "../firebase";
 import { API_URL } from "../constants";
 
@@ -92,6 +92,7 @@ export default function NavBar() {
   const [searchQuery, setSearchQuery] = useState("");
   const [pendingRequests, setPendingRequests] = useState(0);
   const [unreadRecs, setUnreadRecs] = useState(0);
+  const esRef = useRef<EventSource | null>(null);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && searchQuery.trim() !== "") {
@@ -99,10 +100,8 @@ export default function NavBar() {
     }
   };
 
-  const fetchCounts = useCallback(async (firebaseUser: typeof auth.currentUser) => {
-    if (!firebaseUser) return;
+  const fetchCounts = useCallback(async (token: string) => {
     try {
-      const token = await firebaseUser.getIdToken();
       const headers = { Authorization: `Bearer ${token}` };
       const [friendsRes, recsRes] = await Promise.all([
         fetch(`${API_URL}/friends/requests/incoming`, { headers }),
@@ -117,22 +116,80 @@ export default function NavBar() {
         setUnreadRecs(data.count);
       }
     } catch {
-      // silently ignore — counts are non-critical
+      // non-critical — silently ignore
     }
   }, []);
 
+  // onIdTokenChanged fires on login, logout, and token refresh (~every hour).
+  // We close and reopen the SSE connection each time so the token stays valid.
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onIdTokenChanged(auth, async (currentUser) => {
+      esRef.current?.close();
+      esRef.current = null;
+
+      if (!currentUser) {
+        setUser(null);
+        setPendingRequests(0);
+        setUnreadRecs(0);
+        return;
+      }
+
       setUser(currentUser);
-      fetchCounts(currentUser);
+      const token = await currentUser.getIdToken();
+      fetchCounts(token);
+
+      // EventSource can't send custom headers, so token goes in the query string
+      const es = new EventSource(
+        `${API_URL}/events/stream?token=${encodeURIComponent(token)}`
+      );
+      esRef.current = es;
+      es.onmessage = (e) => {
+        try {
+          const data: { type: string } = JSON.parse(e.data);
+          if (data.type === "friend_request") {
+            setPendingRequests((n) => n + 1);
+            window.dispatchEvent(new CustomEvent("friend-request-received"));
+          }
+          if (data.type === "recommendation") {
+            setUnreadRecs((n) => n + 1);
+            window.dispatchEvent(new CustomEvent("recommendation-received"));
+          }
+        } catch {
+          // ignore malformed events
+        }
+      };
     });
-    return () => unsubscribe();
+
+    return () => {
+      unsubscribe();
+      esRef.current?.close();
+    };
   }, [fetchCounts]);
 
-  // Refresh counts on every navigation so badges stay up to date
+  // Re-sync counts on navigation so badges reset after the user acts on them
   useEffect(() => {
-    fetchCounts(auth.currentUser);
+    const currentUser = auth.currentUser;
+    if (!currentUser) return;
+    currentUser.getIdToken().then(fetchCounts).catch(() => {});
   }, [location.pathname, fetchCounts]);
+
+  // Decrement immediately when a recommendation is marked read on the same page
+  useEffect(() => {
+    function handler() {
+      setUnreadRecs((n) => Math.max(0, n - 1));
+    }
+    window.addEventListener("rec-marked-read", handler);
+    return () => window.removeEventListener("rec-marked-read", handler);
+  }, []);
+
+  // Decrement immediately when a friend request is accepted or declined on the same page
+  useEffect(() => {
+    function handler() {
+      setPendingRequests((n) => Math.max(0, n - 1));
+    }
+    window.addEventListener("friend-request-handled", handler);
+    return () => window.removeEventListener("friend-request-handled", handler);
+  }, []);
 
   const libraryBadges: Record<string, number> = {
     "/activity": unreadRecs,

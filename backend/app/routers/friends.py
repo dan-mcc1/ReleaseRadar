@@ -6,6 +6,8 @@ from app.dependencies.auth import get_current_user
 from app.services import friends_service
 from app.services.user_service import search_users_by_username
 from app.services.activity_service import get_friends_activity, get_activity_feed
+from app.core.event_bus import publish
+from app.models.user import User
 
 router = APIRouter()
 
@@ -28,7 +30,11 @@ def send_request(
     uid: str = Depends(get_current_user),
 ):
     """Send a friend request to a user by their username."""
-    return friends_service.send_friend_request(db, uid, addressee_username)
+    result = friends_service.send_friend_request(db, uid, addressee_username)
+    addressee = db.query(User).filter(User.username == addressee_username).first()
+    if addressee:
+        publish(addressee.id, "friend_request")
+    return result
 
 
 @router.patch("/respond")

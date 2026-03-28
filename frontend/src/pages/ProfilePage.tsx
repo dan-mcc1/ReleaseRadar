@@ -141,6 +141,15 @@ export default function ProfilePage() {
     return () => unsubscribe();
   }, [fetchAll]);
 
+  // Refresh friend requests when a new one arrives via SSE (NavBar broadcasts this event)
+  useEffect(() => {
+    function handler() {
+      if (token) fetchFriends(token);
+    }
+    window.addEventListener("friend-request-received", handler);
+    return () => window.removeEventListener("friend-request-received", handler);
+  }, [token]);
+
   // Username availability check
   async function checkUsername(value: string) {
     if (!USERNAME_RE.test(value)) {

@@ -40,7 +40,7 @@ def send_recommendation(
     db.refresh(entry)
 
     sender = db.query(User).filter_by(id=sender_id).first()
-    if recipient.email:
+    if recipient.email and recipient.email_notifications:
         send_recommendation_email(
             to_email=recipient.email,
             to_username=recipient.username or "",

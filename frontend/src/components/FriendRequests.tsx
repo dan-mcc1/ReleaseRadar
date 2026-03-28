@@ -33,11 +33,14 @@ export default function FriendRequests({ token, incoming, outgoing, onUpdate }: 
   async function respond(friendshipId: number, accept: boolean) {
     setResponding(friendshipId);
     try {
-      await fetch(`${API_URL}/friends/respond`, {
+      const res = await fetch(`${API_URL}/friends/respond`, {
         method: "PATCH",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({ friendship_id: friendshipId, accept }),
       });
+      if (res.ok) {
+        window.dispatchEvent(new CustomEvent("friend-request-handled"));
+      }
       onUpdate();
     } finally {
       setResponding(null);

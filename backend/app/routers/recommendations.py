@@ -8,6 +8,7 @@ from app.services.recommendation_service import (
     mark_read,
     get_unread_count,
 )
+from app.core.event_bus import publish
 
 router = APIRouter()
 
@@ -25,10 +26,12 @@ def send(
 ):
     if content_type not in ("movie", "tv"):
         raise HTTPException(status_code=400, detail="content_type must be 'movie' or 'tv'")
-    return send_recommendation(
+    result = send_recommendation(
         db, uid, recipient_username, content_type, content_id,
         content_title, content_poster_path, message,
     )
+    publish(result.recipient_id, "recommendation")
+    return result
 
 
 @router.get("/inbox")
