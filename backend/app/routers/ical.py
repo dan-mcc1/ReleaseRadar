@@ -1,7 +1,7 @@
 import base64
 import hashlib
 import hmac
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
@@ -96,6 +96,8 @@ def get_ical_feed(token: str, db: Session = Depends(get_db)):
     }
     movie_ids = list(watchlist_movie_ids | cw_movie_ids)
 
+    now = datetime.now(timezone.utc)
+
     # ── Build the iCalendar object ────────────────────────────────────────────
     cal = Calendar()
     cal.add("prodid", "-//Watch Calendar//watchcalendar//EN")
@@ -130,6 +132,7 @@ def get_ical_feed(token: str, db: Session = Depends(get_db)):
 
             event = Event()
             event.add("uid", f"tv-{ep.show_id}-s{ep.season_number}e{ep.episode_number}@watchcalendar")
+            event.add("dtstamp", now)
             event.add("summary", summary)
             event.add("dtstart", ep.air_date)
             event.add("dtend", ep.air_date + timedelta(days=1))
@@ -148,6 +151,7 @@ def get_ical_feed(token: str, db: Session = Depends(get_db)):
         for movie in movies:
             event = Event()
             event.add("uid", f"movie-{movie.id}@watchcalendar")
+            event.add("dtstamp", now)
             event.add("summary", movie.title)
             event.add("dtstart", movie.release_date)
             event.add("dtend", movie.release_date + timedelta(days=1))
