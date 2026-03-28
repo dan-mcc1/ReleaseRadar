@@ -36,29 +36,58 @@ A full-stack web application for tracking your watched content, managing watchli
    git clone https://github.com/dan-mcc1/Watch-Calendar.git
    cd Watch-Calendar
    ```
-
-2. Install dependencies
+2. Setup backend
    ```bash
+   cd backend/
+   pip install -r requirements.txt
+   ```
+   
+3. Install dependencies
+   ```bash
+   cd frontend/
    npm install
    ```
+   
+4. Set up the database and firebase
+   Go to neon and create a project to connect to
+   Go to firebase and create a project for authentication
 
-3. Set up environment variables — create a `.env` file in the root directory:
+5. Set up environment variables — create a `.env` file in the frontend directory:
    ```env
-   TMDB_BEARER_TOKEN=your_api_key_here
-   DATABASE_URL=postgresql://localhost:5432/watch_calendar
+   VITE_APP_FIREBASE_API_KEY=
+   VITE_APP_FIREBASE_AUTH_DOMAIN=
+   VITE_APP_FIREBASE_PROJECT_ID=
+   VITE_APP_FIREBASE_STORAGE_BUCKET=
+   VITE_APP_FIREBASE_MESSAGING_SENDER_ID=
+   VITE_APP_FIREBASE_APP_ID=
+   VITE_APP_FIREBASE_MEASUREMENT_ID=
+   ```
+6. Setup backend environment variables
+   ```env
+   TMDB_BEARER_TOKEN=
+   DATABASE_URL=postgresql://neondb_owner
+   FIREBASE_CREDS_PATH=./firebase-service.json
+   FRONTEND_URL=http://localhost:5173
+   SMTP_HOST=smtp.gmail.com
+   SMTP_PORT=587
+   SMTP_USER=
+   SMTP_PASSWORD=
+   SMTP_FROM=
+   ICAL_SECRET=
    ```
 
-4. Set up the database
+7. Start the development server
    ```bash
-   npm run db:migrate
-   ```
-
-5. Start the development server
-   ```bash
+   cd frontend/
    npm run dev
    ```
+   In another terminal
+   ```bash
+   cd backend/
+   uvicorn app.main:app --reload
+   ```
 
-The app will be running at `http://localhost:3000`.
+The app will be running at `http://localhost:5173`.
 
 ## How It Works
 
