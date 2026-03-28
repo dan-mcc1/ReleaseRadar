@@ -103,11 +103,29 @@ def get_ical_feed(token: str, db: Session = Depends(get_db)):
     cal = Calendar()
     cal.add("prodid", "-//Watch Calendar//watchcalendar//EN")
     cal.add("version", "2.0")
+    cal.add("method", "PUBLISH")
     cal.add("calscale", "GREGORIAN")
     cal.add("x-wr-calname", "Watch Calendar")
     cal.add("x-wr-caldesc", "TV episodes and movies from your Watch Calendar")
-    # Refresh every 12 hours
+    cal.add("x-wr-timezone", "UTC")
     cal.add("x-published-ttl", "PT12H")
+
+    def _timed_event(dtstart_utc: datetime, runtime_minutes: int | None) -> tuple[datetime, datetime]:
+        """Return (dtstart, dtend) as UTC datetimes for a timed event."""
+        dtend = dtstart_utc + timedelta(minutes=runtime_minutes or 60)
+        return dtstart_utc, dtend
+
+    def _allday_event(air_date) -> tuple[datetime, datetime]:
+        """
+        Return (dtstart, dtend) as UTC datetimes spanning the full local day.
+        Using midnight→midnight UTC keeps the event on the right date for the
+        majority of timezones and avoids mixing VALUE=DATE with DATETIME events
+        (which breaks Outlook's parser).
+        """
+        d = air_date if not isinstance(air_date, str) else datetime.fromisoformat(air_date).date()
+        dtstart = datetime(d.year, d.month, d.day, 0, 0, 0, tzinfo=timezone.utc)
+        dtend = dtstart + timedelta(days=1)
+        return dtstart, dtend
 
     # ── TV episodes ───────────────────────────────────────────────────────────
     if show_ids:
@@ -121,20 +139,17 @@ def get_ical_feed(token: str, db: Session = Depends(get_db)):
         )
 
         for ep in episodes:
-            show = show_map.get(ep.show_id)
-            if not show:
-                continue
+            try:
+                show = show_map.get(ep.show_id)
+                if not show:
+                    continue
 
-            ep_label = f"S{ep.season_number:02d}E{ep.episode_number:02d}"
-            summary = f"{show.name} — {ep_label}"
-            if ep.name:
-                summary += f" {ep.name}"
+                ep_label = f"S{ep.season_number:02d}E{ep.episode_number:02d}"
+                summary = f"{show.name} \u2014 {ep_label}"
+                if ep.name:
+                    summary += f" {ep.name}"
 
-            # Build dtstart/dtend — timed if air_time is known, all-day otherwise.
-            # Always emit UTC datetimes so Google/Outlook/Apple all accept them
-            # without needing a VTIMEZONE component.
-            if show.air_time:
-                try:
+                if show.air_time:
                     hour, minute = map(int, show.air_time.split(":"))
                     if show.air_timezone:
                         tz = ZoneInfo(show.air_timezone)
@@ -148,24 +163,25 @@ def get_ical_feed(token: str, db: Session = Depends(get_db)):
                             ep.air_date.year, ep.air_date.month, ep.air_date.day,
                             hour, minute, tzinfo=timezone.utc,
                         )
-                    duration = timedelta(minutes=ep.runtime or 60)
-                    dtend = dtstart + duration
-                except (ValueError, ZoneInfoNotFoundError):
-                    dtstart = ep.air_date
-                    dtend = ep.air_date + timedelta(days=1)
-            else:
-                dtstart = ep.air_date
-                dtend = ep.air_date + timedelta(days=1)
+                    dtstart, dtend = _timed_event(dtstart, ep.runtime)
+                else:
+                    dtstart, dtend = _allday_event(ep.air_date)
 
-            event = Event()
-            event.add("uid", f"tv-{ep.show_id}-s{ep.season_number}e{ep.episode_number}@watchcalendar")
-            event.add("dtstamp", now)
-            event.add("summary", summary)
-            event.add("dtstart", dtstart)
-            event.add("dtend", dtend)
-            if ep.overview:
-                event.add("description", ep.overview)
-            cal.add_component(event)
+                event = Event()
+                event.add("uid", f"tv-{ep.show_id}-s{ep.season_number}e{ep.episode_number}@watchcalendar")
+                event.add("dtstamp", now)
+                event.add("summary", summary)
+                event.add("dtstart", dtstart)
+                event.add("dtend", dtend)
+                if not show.air_time:
+                    # Tell Outlook to render this as an all-day event
+                    event.add("x-microsoft-cdo-alldayevent", "TRUE")
+                if ep.overview:
+                    # Cap description length to avoid parse issues in some clients
+                    event.add("description", ep.overview[:500])
+                cal.add_component(event)
+            except Exception as e:
+                print(f"[ical] Skipped episode {ep.id}: {e}")
 
     # ── Movies ────────────────────────────────────────────────────────────────
     if movie_ids:
@@ -176,15 +192,20 @@ def get_ical_feed(token: str, db: Session = Depends(get_db)):
         )
 
         for movie in movies:
-            event = Event()
-            event.add("uid", f"movie-{movie.id}@watchcalendar")
-            event.add("dtstamp", now)
-            event.add("summary", movie.title)
-            event.add("dtstart", movie.release_date)
-            event.add("dtend", movie.release_date + timedelta(days=1))
-            if movie.overview:
-                event.add("description", movie.overview)
-            cal.add_component(event)
+            try:
+                dtstart, dtend = _allday_event(movie.release_date)
+                event = Event()
+                event.add("uid", f"movie-{movie.id}@watchcalendar")
+                event.add("dtstamp", now)
+                event.add("summary", movie.title)
+                event.add("dtstart", dtstart)
+                event.add("dtend", dtend)
+                event.add("x-microsoft-cdo-alldayevent", "TRUE")
+                if movie.overview:
+                    event.add("description", movie.overview[:500])
+                cal.add_component(event)
+            except Exception as e:
+                print(f"[ical] Skipped movie {movie.id}: {e}")
 
     return Response(
         content=cal.to_ical(),
