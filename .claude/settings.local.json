@@ -1,7 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(dir \"c:\\\\Users\\\\Dan McCabe\\\\VSCode_Projects\\\\Watch-Calendar\\\\backend\\\\app\\\\schemas\")"
-    ]
-  }
-}
