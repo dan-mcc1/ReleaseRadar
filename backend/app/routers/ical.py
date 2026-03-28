@@ -106,7 +106,6 @@ def get_ical_feed(token: str, db: Session = Depends(get_db)):
     cal.add("calscale", "GREGORIAN")
     cal.add("x-wr-calname", "Watch Calendar")
     cal.add("x-wr-caldesc", "TV episodes and movies from your Watch Calendar")
-    cal.add("x-wr-timezone", "UTC")
     # Refresh every 12 hours
     cal.add("x-published-ttl", "PT12H")
 
@@ -131,15 +130,24 @@ def get_ical_feed(token: str, db: Session = Depends(get_db)):
             if ep.name:
                 summary += f" {ep.name}"
 
-            # Build dtstart/dtend — timed if air_time is known, all-day otherwise
+            # Build dtstart/dtend — timed if air_time is known, all-day otherwise.
+            # Always emit UTC datetimes so Google/Outlook/Apple all accept them
+            # without needing a VTIMEZONE component.
             if show.air_time:
                 try:
                     hour, minute = map(int, show.air_time.split(":"))
-                    tz = ZoneInfo(show.air_timezone) if show.air_timezone else timezone.utc
-                    dtstart = datetime(
-                        ep.air_date.year, ep.air_date.month, ep.air_date.day,
-                        hour, minute, tzinfo=tz,
-                    )
+                    if show.air_timezone:
+                        tz = ZoneInfo(show.air_timezone)
+                        local_dt = datetime(
+                            ep.air_date.year, ep.air_date.month, ep.air_date.day,
+                            hour, minute, tzinfo=tz,
+                        )
+                        dtstart = local_dt.astimezone(timezone.utc)
+                    else:
+                        dtstart = datetime(
+                            ep.air_date.year, ep.air_date.month, ep.air_date.day,
+                            hour, minute, tzinfo=timezone.utc,
+                        )
                     duration = timedelta(minutes=ep.runtime or 60)
                     dtend = dtstart + duration
                 except (ValueError, ZoneInfoNotFoundError):
