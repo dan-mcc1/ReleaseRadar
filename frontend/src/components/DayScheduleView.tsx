@@ -1,10 +1,14 @@
+import { useState } from "react";
 import type { Episode, Movie, Show } from "../types/calendar";
-import { BASE_IMAGE_URL } from "../constants";
+import { API_URL, BASE_IMAGE_URL } from "../constants";
 import { Link } from "react-router-dom";
 import type { CalendarItem } from "./Calendar";
 
 interface Props {
   items: CalendarItem[];
+  watchedEpisodeKeys?: Set<string>;
+  token?: string | null;
+  onMarkWatched?: (showId: number, season: number, episode: number) => void;
 }
 
 const TZ_ABBR: Record<string, string> = {
@@ -59,7 +63,17 @@ function TypeBadge({ type }: { type: "tv" | "movie" }) {
   );
 }
 
-function ItemCard({ item }: { item: CalendarItem }) {
+interface ItemCardProps {
+  item: CalendarItem;
+  isWatched?: boolean;
+  token?: string | null;
+  onMarkWatched?: (showId: number, season: number, episode: number) => void;
+}
+
+function ItemCard({ item, isWatched, token, onMarkWatched }: ItemCardProps) {
+  const [marking, setMarking] = useState(false);
+  const [localWatched, setLocalWatched] = useState(isWatched ?? false);
+
   const isTv = item.type === "tv";
   const contentPath = isTv ? `/tv/${item.showData.id}` : `/movie/${item.showData.id}`;
   const title = isTv ? item.showData.name : (item as any).title;
@@ -81,6 +95,26 @@ function ItemCard({ item }: { item: CalendarItem }) {
     : posterPath
     ? `${BASE_IMAGE_URL}/w300${posterPath}`
     : null;
+
+  async function handleMarkWatched(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isTv || !token || marking || localWatched) return;
+    const tvItem = item as Episode & { type: "tv"; showData: Show };
+    setMarking(true);
+    try {
+      await fetch(
+        `${API_URL}/watched-episode/add?show_id=${tvItem.showData.id}&season_number=${tvItem.season_number}&episode_number=${tvItem.episode_number}`,
+        { method: "POST", headers: { Authorization: `Bearer ${token}` } }
+      );
+      setLocalWatched(true);
+      onMarkWatched?.(tvItem.showData.id, tvItem.season_number, tvItem.episode_number);
+    } catch {
+      // ignore
+    } finally {
+      setMarking(false);
+    }
+  }
 
   return (
     <Link
@@ -116,12 +150,41 @@ function ItemCard({ item }: { item: CalendarItem }) {
             <RuntimeBadge minutes={runtime} />
           </div>
         )}
+
+        {/* Watched button — TV episodes only */}
+        {isTv && token && (
+          <div className="mt-2">
+            {localWatched ? (
+              <span className="inline-flex items-center gap-1 text-xs text-green-400 font-medium">
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+                Watched
+              </span>
+            ) : (
+              <button
+                onClick={handleMarkWatched}
+                disabled={marking}
+                className="inline-flex items-center gap-1 bg-slate-700 hover:bg-purple-600 disabled:opacity-50 text-slate-300 hover:text-white text-xs font-medium px-2.5 py-1 rounded-md transition-colors"
+              >
+                {marking ? (
+                  <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                )}
+                {marking ? "Saving…" : "Mark Watched"}
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </Link>
   );
 }
 
-export default function DayScheduleView({ items }: Props) {
+export default function DayScheduleView({ items, watchedEpisodeKeys, token, onMarkWatched }: Props) {
   if (items.length === 0) {
     return <p className="text-slate-500 italic">Nothing scheduled for this day.</p>;
   }
@@ -136,39 +199,45 @@ export default function DayScheduleView({ items }: Props) {
     return !!item.showData.air_time;
   });
 
-  // Sort timed items by air time
   timedItems.sort((a, b) => {
     const aTime = a.type === "tv" ? a.showData.air_time ?? "" : "";
     const bTime = b.type === "tv" ? b.showData.air_time ?? "" : "";
     return airTimeToMinutes(aTime) - airTimeToMinutes(bTime);
   });
 
-  // Group timed items by their formatted time string (multiple shows can share a time slot)
   const timedGroups: { label: string; items: CalendarItem[] }[] = [];
   for (const item of timedItems) {
     const label = item.type === "tv"
       ? formatAirTime(item.showData.air_time, item.showData.air_timezone) ?? ""
       : "";
     const existing = timedGroups.find((g) => g.label === label);
-    if (existing) {
-      existing.items.push(item);
-    } else {
-      timedGroups.push({ label, items: [item] });
-    }
+    if (existing) existing.items.push(item);
+    else timedGroups.push({ label, items: [item] });
+  }
+
+  function isWatched(item: CalendarItem): boolean {
+    if (item.type !== "tv" || !watchedEpisodeKeys) return false;
+    return watchedEpisodeKeys.has(
+      `${item.showData.id}_${item.season_number}_${item.episode_number}`
+    );
   }
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Items without a specific time */}
       {allDayItems.length > 0 && (
         <div className="flex flex-col gap-3">
           {allDayItems.map((item, idx) => (
-            <ItemCard key={idx} item={item} />
+            <ItemCard
+              key={idx}
+              item={item}
+              isWatched={isWatched(item)}
+              token={token}
+              onMarkWatched={onMarkWatched}
+            />
           ))}
         </div>
       )}
 
-      {/* Timed sections */}
       {timedGroups.map(({ label, items: groupItems }) => (
         <div key={label}>
           <div className="flex items-center gap-3 mb-3">
@@ -177,7 +246,13 @@ export default function DayScheduleView({ items }: Props) {
           </div>
           <div className="flex flex-col gap-3">
             {groupItems.map((item, idx) => (
-              <ItemCard key={idx} item={item} />
+              <ItemCard
+                key={idx}
+                item={item}
+                isWatched={isWatched(item)}
+                token={token}
+                onMarkWatched={onMarkWatched}
+              />
             ))}
           </div>
         </div>

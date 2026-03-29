@@ -152,6 +152,76 @@ def remove_season_watched(db: Session, user_id: str, show_id: int, season_number
     return {"message": f"Season {season_number} removed from watched"}
 
 
+def get_next_unwatched_episode(db: Session, user_id: str, show_id: int) -> dict:
+    """
+    Return the next episode the user hasn't watched for a given show.
+    Returns {"finished": True} if all known episodes are watched.
+    Syncs the next un-synced season from TMDb if needed.
+    """
+    from app.models.show import Show
+    from app.services.episode_service import sync_season_episodes
+
+    watched_set = {
+        (w.season_number, w.episode_number)
+        for w in db.query(EpisodeWatched).filter_by(user_id=user_id, show_id=show_id).all()
+    }
+
+    def _query_episodes():
+        return (
+            db.query(Episode)
+            .filter(Episode.show_id == show_id, Episode.season_number > 0)
+            .order_by(Episode.season_number, Episode.episode_number)
+            .all()
+        )
+
+    episodes = _query_episodes()
+
+    # If we have no episode data at all, sync season 1 first
+    if not episodes:
+        sync_season_episodes(db, show_id, 1)
+        episodes = _query_episodes()
+
+    # Find first unwatched episode
+    for ep in episodes:
+        if (ep.season_number, ep.episode_number) not in watched_set:
+            return {
+                "finished": False,
+                "season_number": ep.season_number,
+                "episode_number": ep.episode_number,
+                "name": ep.name,
+                "still_path": ep.still_path,
+                "overview": ep.overview,
+                "air_date": str(ep.air_date) if ep.air_date else None,
+            }
+
+    # All synced episodes watched — check if there are more seasons to sync
+    show = db.query(Show).filter_by(id=show_id).first()
+    max_synced = max((ep.season_number for ep in episodes), default=0)
+    total_seasons = show.number_of_seasons if show else None
+
+    if total_seasons and max_synced < total_seasons:
+        sync_season_episodes(db, show_id, max_synced + 1)
+        new_episodes = (
+            db.query(Episode)
+            .filter(Episode.show_id == show_id, Episode.season_number == max_synced + 1)
+            .order_by(Episode.episode_number)
+            .all()
+        )
+        for ep in new_episodes:
+            if (ep.season_number, ep.episode_number) not in watched_set:
+                return {
+                    "finished": False,
+                    "season_number": ep.season_number,
+                    "episode_number": ep.episode_number,
+                    "name": ep.name,
+                    "still_path": ep.still_path,
+                    "overview": ep.overview,
+                    "air_date": str(ep.air_date) if ep.air_date else None,
+                }
+
+    return {"finished": True}
+
+
 def get_watched_episodes_by_show(db: Session, user_id: str, show_id: int):
     """
     Get all watched episodes for a user for a specific show.

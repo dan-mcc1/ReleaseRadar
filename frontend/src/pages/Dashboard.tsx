@@ -301,11 +301,18 @@ export default function Dashboard() {
     );
   }
 
+  function handleEpisodeWatched(showId: number, season: number, episode: number) {
+    const key = `${showId}_${season}_${episode}`;
+    setWatchedEpisodeKeys((prev) => new Set([...prev, key]));
+  }
+
   return (
     <div>
       <CurrentlyWatchingStrip
         shows={currentlyWatchingShows}
         movies={currentlyWatchingMovies}
+        user={user}
+        onEpisodeWatched={handleEpisodeWatched}
       />
       <Calendar
         calendarData={CalendarData}
@@ -314,6 +321,7 @@ export default function Dashboard() {
         setShowWatchlist={setShowWatchlist}
         user={user}
         watchedEpisodeKeys={watchedEpisodeKeys}
+        onMarkEpisodeWatched={handleEpisodeWatched}
         isLoading={loading}
         onSyncCalendar={() => setShowSyncModal(true)}
       />

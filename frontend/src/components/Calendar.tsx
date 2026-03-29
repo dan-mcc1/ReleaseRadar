@@ -19,6 +19,7 @@ interface CalendarProps {
   setShowWatchlist: React.Dispatch<React.SetStateAction<boolean>>;
   user: User | null;
   watchedEpisodeKeys?: Set<string>;
+  onMarkEpisodeWatched?: (showId: number, season: number, episode: number) => void;
   isLoading?: boolean;
   onSyncCalendar?: () => void;
 }
@@ -46,6 +47,7 @@ export default function CalendarComponent({
   setShowWatchlist,
   user,
   watchedEpisodeKeys = new Set(),
+  onMarkEpisodeWatched,
   isLoading = false,
   onSyncCalendar,
 }: CalendarProps) {
@@ -98,6 +100,12 @@ export default function CalendarComponent({
       runtime: movie.runtime,
     })),
   ];
+
+  const [token, setToken] = useState<string | null>(null);
+  useEffect(() => {
+    if (!user) return;
+    user.getIdToken().then(setToken).catch(() => {});
+  }, [user]);
 
   const [filterType, setFilterType] = useState<"all" | "tv" | "movie">("all");
   const [watchFilter, setWatchFilter] = useState<"all" | "watched" | "unwatched">("all");
@@ -665,7 +673,12 @@ export default function CalendarComponent({
           </div>
           <div className="flex flex-col gap-3">
             {selectedDate.items && selectedDate.items.length > 0 ? (
-              <DayScheduleView items={getFilteredItems(selectedDate.items)} />
+              <DayScheduleView
+                items={getFilteredItems(selectedDate.items)}
+                watchedEpisodeKeys={watchedEpisodeKeys}
+                token={token}
+                onMarkWatched={onMarkEpisodeWatched}
+              />
             ) : (
               <p className="text-slate-500 italic">Nothing scheduled for this day.</p>
             )}
@@ -693,7 +706,12 @@ export default function CalendarComponent({
           </div>
           <div className="flex flex-col gap-3">
             {selectedDate.items && selectedDate.items.length > 0 ? (
-              <DayScheduleView items={getFilteredItems(selectedDate.items)} />
+              <DayScheduleView
+                items={getFilteredItems(selectedDate.items)}
+                watchedEpisodeKeys={watchedEpisodeKeys}
+                token={token}
+                onMarkWatched={onMarkEpisodeWatched}
+              />
             ) : (
               <p className="text-slate-500 italic">Nothing scheduled for this day.</p>
             )}

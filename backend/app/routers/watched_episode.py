@@ -7,6 +7,7 @@ from app.services.watched_episode_service import (
     remove_episode_watched,
     get_watched_episodes,
     get_watched_episodes_by_show,
+    get_next_unwatched_episode,
     add_season_watched,
     remove_season_watched,
 )
@@ -78,3 +79,13 @@ def get_watched_episodes_for_show(
     uid: str = Depends(get_current_user),
 ):
     return get_watched_episodes_by_show(db, uid, show_id)
+
+
+# Get the next unwatched episode for a show
+@router.get("/{show_id}/next")
+def get_next_episode(
+    show_id: int,
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    return get_next_unwatched_episode(db, uid, show_id)
