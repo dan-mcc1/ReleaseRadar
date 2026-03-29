@@ -15,7 +15,9 @@ export default function Settings() {
   const auth = getAuth(firebaseApp);
   const [user, setUser] = useState(auth.currentUser);
   const [error, setError] = useState<string | null>(null);
-  const [emailNotifications, setEmailNotifications] = useState<boolean>(true);
+  const [emailNotifications, setEmailNotifications] = useState<boolean | null>(
+    null,
+  );
   const [notifSaving, setNotifSaving] = useState(false);
   const navigate = useNavigate();
 
@@ -41,7 +43,7 @@ export default function Settings() {
 
   const toggleEmailNotifications = async () => {
     const u = auth.currentUser;
-    if (!u || emailNotifications === null) return;
+    if (!u || emailNotifications === null || notifSaving) return;
     const next = !emailNotifications;
     setNotifSaving(true);
     try {
@@ -123,7 +125,7 @@ export default function Settings() {
         )}
 
         {/* Email notifications toggle */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-6">
           <div>
             <p className="text-white font-medium">Email Notifications</p>
             <p className="text-gray-400 text-sm">
@@ -133,14 +135,14 @@ export default function Settings() {
           </div>
           <button
             onClick={toggleEmailNotifications}
-            disabled={notifSaving}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-50 ${
+            disabled={notifSaving || emailNotifications === null}
+            className={`relative inline-flex h-6 w-16 items-center rounded-full transition-colors disabled:opacity-50 ${
               emailNotifications ? "bg-blue-600" : "bg-slate-600"
             }`}
           >
             <span
               className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                emailNotifications ? "translate-x-6" : "translate-x-1"
+                emailNotifications ? "translate-x-5" : "translate-x-1"
               }`}
             />
           </button>
