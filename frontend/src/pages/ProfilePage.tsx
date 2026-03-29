@@ -12,7 +12,6 @@ import { usePageTitle } from "../hooks/usePageTitle";
 
 const USERNAME_RE = /^[a-zA-Z0-9_]{3,30}$/;
 
-
 interface DBUser {
   id: string;
   email: string | null;
@@ -233,7 +232,6 @@ export default function ProfilePage() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8 space-y-6">
-
       {/* ── Hero banner ── */}
       <div className="rounded-2xl overflow-hidden bg-gradient-to-br from-[#1f3b4d] via-[#2d4e63] to-[#1a3040]">
         <div className="px-6 pt-8 pb-6 flex flex-col sm:flex-row items-center sm:items-end gap-5">
@@ -243,7 +241,9 @@ export default function ProfilePage() {
             className="w-24 h-24 rounded-full object-cover border-4 border-white/20 shadow-xl flex-shrink-0"
           />
           <div className="flex-1 text-center sm:text-left">
-            <h1 className="text-2xl sm:text-3xl font-bold text-white">{user.displayName ?? "User"}</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-white">
+              {user.displayName ?? "User"}
+            </h1>
 
             {editingUsername ? (
               <div className="mt-2 flex flex-col gap-1 w-full max-w-xs mx-auto sm:mx-0">
@@ -263,28 +263,49 @@ export default function ProfilePage() {
                     {usernameSaving ? "Saving…" : "Save"}
                   </button>
                   <button
-                    onClick={() => { setEditingUsername(false); setNewUsername(""); setUsernameError(null); }}
+                    onClick={() => {
+                      setEditingUsername(false);
+                      setNewUsername("");
+                      setUsernameError(null);
+                    }}
                     className="text-slate-400 hover:text-slate-200 text-sm"
                   >
                     Cancel
                   </button>
                 </div>
                 {newUsername.length >= 3 && (
-                  <p className={`text-xs pl-1 ${usernameChecking ? "text-slate-400" : usernameAvailable === true ? "text-green-400" : usernameAvailable === false ? "text-red-400" : "text-slate-400"}`}>
-                    {usernameChecking ? "Checking…" : usernameAvailable === true ? "Available" : usernameAvailable === false ? "Already taken" : ""}
+                  <p
+                    className={`text-xs pl-1 ${usernameChecking ? "text-slate-400" : usernameAvailable === true ? "text-green-400" : usernameAvailable === false ? "text-red-400" : "text-slate-400"}`}
+                  >
+                    {usernameChecking
+                      ? "Checking…"
+                      : usernameAvailable === true
+                        ? "Available"
+                        : usernameAvailable === false
+                          ? "Already taken"
+                          : ""}
                   </p>
                 )}
-                {usernameError && <p className="text-red-400 text-xs pl-1">{usernameError}</p>}
+                {usernameError && (
+                  <p className="text-red-400 text-xs pl-1">{usernameError}</p>
+                )}
               </div>
             ) : (
               <div className="mt-1 flex items-center gap-2 justify-center sm:justify-start">
                 {dbUser?.username ? (
-                  <span className="text-slate-300 text-sm">@{dbUser.username}</span>
+                  <span className="text-slate-300 text-sm">
+                    @{dbUser.username}
+                  </span>
                 ) : (
-                  <span className="text-amber-400 text-sm">No username set</span>
+                  <span className="text-amber-400 text-sm">
+                    No username set
+                  </span>
                 )}
                 <button
-                  onClick={() => { setEditingUsername(true); setNewUsername(dbUser?.username ?? ""); }}
+                  onClick={() => {
+                    setEditingUsername(true);
+                    setNewUsername(dbUser?.username ?? "");
+                  }}
                   className="text-xs text-blue-400 hover:text-blue-300"
                 >
                   {dbUser?.username ? "Edit" : "Set username"}
@@ -317,23 +338,35 @@ export default function ProfilePage() {
 
       {/* ── Two-column body ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-
         {/* Left: content (2/3) */}
         <div className="lg:col-span-2 space-y-4">
-
           {/* Favorites */}
           {(favorites.movies.length > 0 || favorites.shows.length > 0) && (
             <div className="bg-slate-800 rounded-xl p-4">
-              <h2 className="text-base font-semibold text-white mb-3">Favorites</h2>
+              <h2 className="text-base font-semibold text-white mb-3">
+                Favorites
+              </h2>
               {favorites.movies.length > 0 && (
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Movies</p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                    Movies
+                  </p>
                   <div className="flex gap-3 overflow-x-auto pb-1">
                     {favorites.movies.map((movie) => (
                       <div key={movie.id} className="flex-shrink-0 w-28">
                         <Link to={`/movie/${movie.id}`}>
-                          <img src={movie.poster_path ? `${BASE_IMAGE_URL}/w154${movie.poster_path}` : "/src/assets/movie-icon.png"} alt={movie.title} className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity" />
-                          <p className="mt-1 text-xs font-medium text-slate-300 text-center line-clamp-1">{movie.title}</p>
+                          <img
+                            src={
+                              movie.poster_path
+                                ? `${BASE_IMAGE_URL}/w154${movie.poster_path}`
+                                : "/src/assets/movie-icon.png"
+                            }
+                            alt={movie.title}
+                            className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity"
+                          />
+                          <p className="mt-1 text-xs font-medium text-slate-300 text-center line-clamp-1">
+                            {movie.title}
+                          </p>
                         </Link>
                       </div>
                     ))}
@@ -342,13 +375,25 @@ export default function ProfilePage() {
               )}
               {favorites.shows.length > 0 && (
                 <div className={favorites.movies.length > 0 ? "mt-3" : ""}>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">TV Shows</p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                    TV Shows
+                  </p>
                   <div className="flex gap-3 overflow-x-auto pb-1">
                     {favorites.shows.map((show) => (
                       <div key={show.id} className="flex-shrink-0 w-28">
                         <Link to={`/tv/${show.id}`}>
-                          <img src={show.poster_path ? `${BASE_IMAGE_URL}/w154${show.poster_path}` : "/src/assets/tv-icon.png"} alt={show.name} className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity" />
-                          <p className="mt-1 text-xs font-medium text-slate-300 text-center line-clamp-1">{show.name}</p>
+                          <img
+                            src={
+                              show.poster_path
+                                ? `${BASE_IMAGE_URL}/w154${show.poster_path}`
+                                : "/src/assets/tv-icon.png"
+                            }
+                            alt={show.name}
+                            className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity"
+                          />
+                          <p className="mt-1 text-xs font-medium text-slate-300 text-center line-clamp-1">
+                            {show.name}
+                          </p>
                         </Link>
                       </div>
                     ))}
@@ -360,7 +405,6 @@ export default function ProfilePage() {
 
           {/* Watchlist + Watched + Stats — grouped in one card */}
           <div className="bg-slate-800 rounded-xl overflow-hidden divide-y divide-slate-700">
-
             {/* Watchlist */}
             <div>
               <button
@@ -368,24 +412,50 @@ export default function ProfilePage() {
                 className="w-full flex items-center justify-between px-4 py-3.5 text-left hover:bg-slate-700/50 transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <span className="text-base font-semibold text-white">Watchlist</span>
-                  <span className="text-xs text-slate-400 bg-slate-700 px-1.5 py-0.5 rounded-full">{totalWatchlist}</span>
+                  <span className="text-base font-semibold text-white">
+                    Watchlist
+                  </span>
+                  <span className="text-xs text-slate-400 bg-slate-700 px-1.5 py-0.5 rounded-full">
+                    {totalWatchlist}
+                  </span>
                 </div>
-                <svg className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${watchlistOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                <svg
+                  className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${watchlistOpen ? "rotate-180" : ""}`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M19 9l-7 7-7-7"
+                  />
                 </svg>
               </button>
               {watchlistOpen && (
                 <div className="px-4 pb-4">
                   {watchlist.movies.length > 0 && (
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Movies</p>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                        Movies
+                      </p>
                       <div className="flex gap-3 overflow-x-auto pb-1">
                         {watchlist.movies.slice(0, 5).map((movie) => (
                           <div key={movie.id} className="flex-shrink-0 w-28">
                             <Link to={`/movie/${movie.id}`}>
-                              <img src={movie.poster_path ? `${BASE_IMAGE_URL}/w154${movie.poster_path}` : "/src/assets/movie-icon.png"} alt={movie.title} className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity" />
-                              <p className="mt-1 text-xs font-medium text-slate-300 text-center line-clamp-1">{movie.title}</p>
+                              <img
+                                src={
+                                  movie.poster_path
+                                    ? `${BASE_IMAGE_URL}/w154${movie.poster_path}`
+                                    : "/src/assets/movie-icon.png"
+                                }
+                                alt={movie.title}
+                                className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity"
+                              />
+                              <p className="mt-1 text-xs font-medium text-slate-300 text-center line-clamp-1">
+                                {movie.title}
+                              </p>
                             </Link>
                           </div>
                         ))}
@@ -394,22 +464,41 @@ export default function ProfilePage() {
                   )}
                   {watchlist.shows.length > 0 && (
                     <div className={watchlist.movies.length > 0 ? "mt-3" : ""}>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">TV Shows</p>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                        TV Shows
+                      </p>
                       <div className="flex gap-3 overflow-x-auto pb-1">
                         {watchlist.shows.slice(0, 5).map((show) => (
                           <div key={show.id} className="flex-shrink-0 w-28">
                             <Link to={`/tv/${show.id}`}>
-                              <img src={show.poster_path ? `${BASE_IMAGE_URL}/w154${show.poster_path}` : "/src/assets/tv-icon.png"} alt={show.name} className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity" />
-                              <p className="mt-1 text-xs font-medium text-slate-300 text-center line-clamp-1">{show.name}</p>
+                              <img
+                                src={
+                                  show.poster_path
+                                    ? `${BASE_IMAGE_URL}/w154${show.poster_path}`
+                                    : "/src/assets/tv-icon.png"
+                                }
+                                alt={show.name}
+                                className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity"
+                              />
+                              <p className="mt-1 text-xs font-medium text-slate-300 text-center line-clamp-1">
+                                {show.name}
+                              </p>
                             </Link>
                           </div>
                         ))}
                       </div>
-                      <Link to="/watchlist" className="text-blue-400 hover:text-blue-300 text-sm mt-2 inline-block">View full watchlist →</Link>
+                      <Link
+                        to="/watchlist"
+                        className="text-blue-400 hover:text-blue-300 text-sm mt-2 inline-block"
+                      >
+                        View full watchlist →
+                      </Link>
                     </div>
                   )}
                   {totalWatchlist === 0 && !loading && (
-                    <p className="text-slate-400 text-sm">Your watchlist is empty.</p>
+                    <p className="text-slate-400 text-sm">
+                      Your watchlist is empty.
+                    </p>
                   )}
                 </div>
               )}
@@ -422,24 +511,50 @@ export default function ProfilePage() {
                 className="w-full flex items-center justify-between px-4 py-3.5 text-left hover:bg-slate-700/50 transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <span className="text-base font-semibold text-white">Watched</span>
-                  <span className="text-xs text-slate-400 bg-slate-700 px-1.5 py-0.5 rounded-full">{totalWatched}</span>
+                  <span className="text-base font-semibold text-white">
+                    Watched
+                  </span>
+                  <span className="text-xs text-slate-400 bg-slate-700 px-1.5 py-0.5 rounded-full">
+                    {totalWatched}
+                  </span>
                 </div>
-                <svg className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${watchedOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                <svg
+                  className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${watchedOpen ? "rotate-180" : ""}`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M19 9l-7 7-7-7"
+                  />
                 </svg>
               </button>
               {watchedOpen && (
                 <div className="px-4 pb-4">
                   {watched.movies.length > 0 && (
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Movies</p>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                        Movies
+                      </p>
                       <div className="flex gap-3 overflow-x-auto pb-1">
                         {watched.movies.slice(0, 5).map((movie) => (
                           <div key={movie.id} className="flex-shrink-0 w-28">
                             <Link to={`/movie/${movie.id}`}>
-                              <img src={movie.poster_path ? `${BASE_IMAGE_URL}/w154${movie.poster_path}` : "/src/assets/movie-icon.png"} alt={movie.title} className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity" />
-                              <p className="mt-1 text-xs font-medium text-slate-300 text-center line-clamp-1">{movie.title}</p>
+                              <img
+                                src={
+                                  movie.poster_path
+                                    ? `${BASE_IMAGE_URL}/w154${movie.poster_path}`
+                                    : "/src/assets/movie-icon.png"
+                                }
+                                alt={movie.title}
+                                className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity"
+                              />
+                              <p className="mt-1 text-xs font-medium text-slate-300 text-center line-clamp-1">
+                                {movie.title}
+                              </p>
                             </Link>
                           </div>
                         ))}
@@ -448,27 +563,45 @@ export default function ProfilePage() {
                   )}
                   {watched.shows.length > 0 && (
                     <div className={watched.movies.length > 0 ? "mt-3" : ""}>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">TV Shows</p>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                        TV Shows
+                      </p>
                       <div className="flex gap-3 overflow-x-auto pb-1">
                         {watched.shows.slice(0, 5).map((show) => (
                           <div key={show.id} className="flex-shrink-0 w-28">
                             <Link to={`/tv/${show.id}`}>
-                              <img src={show.poster_path ? `${BASE_IMAGE_URL}/w154${show.poster_path}` : "/src/assets/tv-icon.png"} alt={show.name} className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity" />
-                              <p className="mt-1 text-xs font-medium text-slate-300 text-center line-clamp-1">{show.name}</p>
+                              <img
+                                src={
+                                  show.poster_path
+                                    ? `${BASE_IMAGE_URL}/w154${show.poster_path}`
+                                    : "/src/assets/tv-icon.png"
+                                }
+                                alt={show.name}
+                                className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity"
+                              />
+                              <p className="mt-1 text-xs font-medium text-slate-300 text-center line-clamp-1">
+                                {show.name}
+                              </p>
                             </Link>
                           </div>
                         ))}
                       </div>
-                      <Link to="/watched" className="text-blue-400 hover:text-blue-300 text-sm mt-2 inline-block">View full watched list →</Link>
+                      <Link
+                        to="/watched"
+                        className="text-blue-400 hover:text-blue-300 text-sm mt-2 inline-block"
+                      >
+                        View full watched list →
+                      </Link>
                     </div>
                   )}
                   {totalWatched === 0 && !loading && (
-                    <p className="text-slate-400 text-sm">Nothing watched yet.</p>
+                    <p className="text-slate-400 text-sm">
+                      Nothing watched yet.
+                    </p>
                   )}
                 </div>
               )}
             </div>
-
           </div>
 
           {/* Stats — separate card */}
@@ -478,9 +611,21 @@ export default function ProfilePage() {
                 onClick={() => setStatsOpen((o) => !o)}
                 className="w-full flex items-center justify-between px-4 py-3.5 text-left hover:bg-slate-700/50 transition-colors"
               >
-                <span className="text-base font-semibold text-white">Stats</span>
-                <svg className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${statsOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                <span className="text-base font-semibold text-white">
+                  Stats
+                </span>
+                <svg
+                  className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${statsOpen ? "rotate-180" : ""}`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M19 9l-7 7-7-7"
+                  />
                 </svg>
               </button>
               {statsOpen && (
@@ -509,7 +654,9 @@ export default function ProfilePage() {
             >
               Requests
               {incomingCount > 0 && (
-                <span className="ml-1.5 bg-red-500 text-white text-xs font-bold rounded-full px-1.5 py-0.5">{incomingCount}</span>
+                <span className="ml-1.5 bg-red-500 text-white text-xs font-bold rounded-full px-1.5 py-0.5">
+                  {incomingCount}
+                </span>
               )}
             </button>
             <button
@@ -521,20 +668,31 @@ export default function ProfilePage() {
           </div>
 
           {friendsTab === "friends" && token && (
-            <FriendsList token={token} friends={friends} onUpdate={() => token && fetchFriends(token)} />
+            <FriendsList
+              token={token}
+              friends={friends}
+              onUpdate={() => token && fetchFriends(token)}
+            />
           )}
           {friendsTab === "requests" && token && (
-            <FriendRequests token={token} incoming={incoming} outgoing={outgoing} onUpdate={() => token && fetchFriends(token)} />
+            <FriendRequests
+              token={token}
+              incoming={incoming}
+              outgoing={outgoing}
+              onUpdate={() => token && fetchFriends(token)}
+            />
           )}
           {friendsTab === "add" && token && (
             <FriendSearch
               token={token}
               friendIds={new Set(friends.map((f) => f.friend.id))}
-              onRequestSent={() => { if (token) fetchFriends(token); setFriendsTab("requests"); }}
+              onRequestSent={() => {
+                if (token) fetchFriends(token);
+                setFriendsTab("requests");
+              }}
             />
           )}
         </div>
-
       </div>
     </div>
   );

@@ -21,7 +21,7 @@ export default function ExpandableMediaList({
   items,
   linkPrefix,
   fallbackImage,
-  initialCount = 5,
+  initialCount = 8,
 }: Props) {
   const [expanded, setExpanded] = useState(false);
 
@@ -37,7 +37,11 @@ export default function ExpandableMediaList({
           <div key={item.id} className="flex-shrink-0 w-24">
             <Link to={`${linkPrefix}/${item.id}`}>
               <img
-                src={item.poster_path ? `${BASE_IMAGE_URL}/w154${item.poster_path}` : fallbackImage}
+                src={
+                  item.poster_path
+                    ? `${BASE_IMAGE_URL}/w154${item.poster_path}`
+                    : fallbackImage
+                }
                 alt={item.title ?? item.name}
                 className="w-full h-auto rounded-md object-cover"
               />
