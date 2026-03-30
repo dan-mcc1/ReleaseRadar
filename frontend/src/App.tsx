@@ -21,7 +21,8 @@ import EpisodeInfo from "./pages/EpisodeInfo";
 function App() {
   return (
     <BrowserRouter>
-      <div className="min-h-screen bg-slate-950 text-slate-100">
+      {/* <div className="min-h-screen bg-slate-950 text-slate-100"> */}
+      <div className="flex flex-col min-h-screen bg-slate-950 text-slate-100">
         <NavBar />
         <Routes>
           <Route path="/" element={<Dashboard />} />
@@ -39,7 +40,10 @@ function App() {
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/user/:username" element={<FriendProfilePage />} />
           <Route path="/activity" element={<ActivityFeedPage />} />
-          <Route path="/tv/:showId/episode/:season/:episode" element={<EpisodeInfo />} />
+          <Route
+            path="/tv/:showId/episode/:season/:episode"
+            element={<EpisodeInfo />}
+          />
         </Routes>
       </div>
     </BrowserRouter>
