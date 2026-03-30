@@ -151,8 +151,19 @@ const SignIn: React.FC = () => {
         }),
       });
       navigate("/");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Google sign-in error:", error);
+
+      let msg = error.message ?? "Registration failed.";
+      if (error.code === "auth/invalid-email") msg = "Invalid email address.";
+      else if (error.code === "auth/weak-password")
+        msg = "Password should be at least 6 characters.";
+      else if (error.code === "auth/email-already-in-use")
+        msg = "Email is already in use.";
+      else if (error.code === "auth/account-exists-with-different-credential")
+        msg = "Account already exists using a different provider";
+
+      setErrorMessage(msg);
     }
   };
 
@@ -170,8 +181,19 @@ const SignIn: React.FC = () => {
         }),
       });
       navigate("/");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Microsoft sign-in error:", error);
+
+      let msg = error.message ?? "Registration failed.";
+      if (error.code === "auth/invalid-email") msg = "Invalid email address.";
+      else if (error.code === "auth/weak-password")
+        msg = "Password should be at least 6 characters.";
+      else if (error.code === "auth/email-already-in-use")
+        msg = "Email is already in use.";
+      else if (error.code === "auth/account-exists-with-different-credential")
+        msg = "Account already exists using a different provider";
+
+      setErrorMessage(msg);
     }
   };
 
@@ -189,8 +211,19 @@ const SignIn: React.FC = () => {
         }),
       });
       navigate("/");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Facebook sign-in error:", error);
+
+      let msg = error.message ?? "Registration failed.";
+      if (error.code === "auth/invalid-email") msg = "Invalid email address.";
+      else if (error.code === "auth/weak-password")
+        msg = "Password should be at least 6 characters.";
+      else if (error.code === "auth/email-already-in-use")
+        msg = "Email is already in use.";
+      else if (error.code === "auth/account-exists-with-different-credential")
+        msg = "Account already exists using a different provider";
+
+      setErrorMessage(msg);
     }
   };
 
