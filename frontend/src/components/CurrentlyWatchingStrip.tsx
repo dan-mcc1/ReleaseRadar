@@ -19,6 +19,35 @@ function formatAirDate(dateStr: string): string {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+function formatToLocalTime(time24: string, sourceTimeZone: string): string {
+  const [hour, minute] = time24.split(":").map(Number);
+
+  // Create a date in the SOURCE timezone
+  const now = new Date();
+
+  const sourceDate = new Date(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: sourceTimeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(now),
+  );
+
+  // Set correct time
+  sourceDate.setHours(hour, minute, 0, 0);
+
+  // Convert to user's local timezone automatically
+  return sourceDate.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
 interface ShowCardProps {
   show: Show;
   token: string;
@@ -29,6 +58,7 @@ function ShowCard({ show, token, onEpisodeWatched }: ShowCardProps) {
   const [next, setNext] = useState<NextEpisode | null>(null);
   const [marking, setMarking] = useState(false);
   const navigate = useNavigate();
+  const todayStr = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD local
 
   useEffect(() => {
     let cancelled = false;
@@ -66,10 +96,29 @@ function ShowCard({ show, token, onEpisodeWatched }: ShowCardProps) {
     }
   }
 
-  const isUnreleased =
-    next && !next.finished && next.air_date
-      ? new Date(next.air_date + "T00:00:00") > new Date()
-      : false;
+  const isUnreleased = (() => {
+    if (!next || next.finished || !next.air_date) return false;
+    if (next.air_date > todayStr) return true;
+    if (next.air_date < todayStr) return false;
+    // Same day — check air time in show's timezone if available
+    const airTime = show.air_time;
+    const airTimezone = show.air_timezone;
+    if (!airTime) return false; // no time info, assume it's aired
+    try {
+      const [h, m] = airTime.split(":").map(Number);
+      const tz = airTimezone ?? "UTC";
+      const nowInTZ = new Date(
+        new Date().toLocaleString("en-US", { timeZone: tz }),
+      );
+      const airInTZ = new Date(
+        new Date().toLocaleString("en-US", { timeZone: tz }),
+      );
+      airInTZ.setHours(h, m, 0, 0);
+      return nowInTZ < airInTZ;
+    } catch {
+      return false;
+    }
+  })();
 
   const episodeUrl =
     next && !next.finished && !isUnreleased
@@ -141,14 +190,47 @@ function ShowCard({ show, token, onEpisodeWatched }: ShowCardProps) {
             )}
           </div>
 
-          {next && !next.finished && (
-            isUnreleased ? (
-              <span className="mt-2 self-start inline-flex items-center gap-1 text-xs text-slate-400 bg-slate-600/50 border border-slate-600 px-2.5 py-1 rounded-md">
-                <svg className="w-3 h-3 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-                Airs {next.air_date ? formatAirDate(next.air_date) : "soon"}
-              </span>
+          {next &&
+            !next.finished &&
+            (isUnreleased ? (
+              todayStr === next.air_date ? (
+                <span className="mt-2 self-start inline-flex items-center gap-1 text-xs text-slate-400 bg-slate-600/50 border border-slate-600 px-2.5 py-1 rounded-md">
+                  <svg
+                    className="w-3 h-3 text-slate-500"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                    />
+                  </svg>
+                  Airs{" "}
+                  {show.air_time && show.air_timezone
+                    ? formatToLocalTime(show.air_time, show.air_timezone)
+                    : "soon"}
+                </span>
+              ) : (
+                <span className="mt-2 self-start inline-flex items-center gap-1 text-xs text-slate-400 bg-slate-600/50 border border-slate-600 px-2.5 py-1 rounded-md">
+                  <svg
+                    className="w-3 h-3 text-slate-500"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                    />
+                  </svg>
+                  Airs {next.air_date ? formatAirDate(next.air_date) : "soon"}
+                </span>
+              )
             ) : (
               <button
                 onClick={(e) => {
@@ -161,14 +243,23 @@ function ShowCard({ show, token, onEpisodeWatched }: ShowCardProps) {
                 {marking ? (
                   <span className="w-3 h-3 border border-white/50 border-t-white rounded-full animate-spin" />
                 ) : (
-                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  <svg
+                    className="w-3 h-3"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2.5}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M5 13l4 4L19 7"
+                    />
                   </svg>
                 )}
                 {marking ? "Saving…" : "Mark Watched"}
               </button>
-            )
-          )}
+            ))}
         </div>
       </div>
 
