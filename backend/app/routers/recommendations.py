@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Body, HTTPException
+from fastapi import APIRouter, Depends, Body, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
@@ -8,6 +8,7 @@ from app.services.recommendation_service import (
     mark_read,
     get_unread_count,
 )
+from app.services.email_service import send_recommendation_email
 from app.core.event_bus import publish
 
 router = APIRouter()
@@ -15,6 +16,7 @@ router = APIRouter()
 
 @router.post("/send")
 def send(
+    background_tasks: BackgroundTasks,
     recipient_username: str = Body(...),
     content_type: str = Body(...),
     content_id: int = Body(...),
@@ -31,6 +33,8 @@ def send(
         content_title, content_poster_path, message,
     )
     publish(result.recipient_id, "recommendation")
+    if result._email_params:
+        background_tasks.add_task(send_recommendation_email, **result._email_params)
     return result
 
 

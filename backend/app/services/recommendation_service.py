@@ -3,7 +3,6 @@ from fastapi import HTTPException
 from app.models.recommendation import Recommendation
 from app.models.user import User
 from app.services.friends_service import are_friends
-from app.services.email_service import send_recommendation_email
 
 
 def send_recommendation(
@@ -40,16 +39,20 @@ def send_recommendation(
     db.refresh(entry)
 
     sender = db.query(User).filter_by(id=sender_id).first()
+
+    # Return email params alongside the entry so the router can fire the email
+    # in a background task without blocking the response.
+    entry._email_params = None
     if recipient.email and recipient.email_notifications:
-        send_recommendation_email(
-            to_email=recipient.email,
-            to_username=recipient.username or "",
-            from_username=sender.username or sender.email or "Someone",
-            content_type=content_type,
-            content_title=content_title or "something",
-            content_id=content_id,
-            message=message,
-        )
+        entry._email_params = {
+            "to_email": recipient.email,
+            "to_username": recipient.username or "",
+            "from_username": sender.username or sender.email or "Someone",
+            "content_type": content_type,
+            "content_title": content_title or "something",
+            "content_id": content_id,
+            "message": message,
+        }
 
     return entry
 
