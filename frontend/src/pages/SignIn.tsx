@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import {
   signInWithEmailAndPassword,
   GoogleAuthProvider,
+  FacebookAuthProvider,
   OAuthProvider,
   signInWithPopup,
   createUserWithEmailAndPassword,
@@ -171,6 +172,25 @@ const SignIn: React.FC = () => {
       navigate("/");
     } catch (error) {
       console.error("Microsoft sign-in error:", error);
+    }
+  };
+
+  // FACEBOOK SIGN-IN
+  const handleFacebookSignIn = async () => {
+    const provider = new FacebookAuthProvider();
+    try {
+      const result = await signInWithPopup(auth, provider);
+      await fetch(`${API_URL}/user/create`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          uid: result.user.uid,
+          email: result.user.email,
+        }),
+      });
+      navigate("/");
+    } catch (error) {
+      console.error("Facebook sign-in error:", error);
     }
   };
 
@@ -346,7 +366,7 @@ const SignIn: React.FC = () => {
             <button
               type="button"
               onClick={handleGoogleSignIn}
-              className="w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-100 text-slate-800 font-medium px-4 py-2.5 rounded-lg transition-colors duration-200"
+              className="w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-300 text-slate-800 font-medium px-4 py-2.5 rounded-lg transition-colors duration-200"
             >
               <svg
                 className="w-5 h-5 shrink-0"
@@ -377,7 +397,7 @@ const SignIn: React.FC = () => {
             <button
               type="button"
               onClick={handleMicrosoftSignIn}
-              className="w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-100 text-slate-800 font-medium px-4 py-2.5 rounded-lg transition-colors duration-200"
+              className="w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-300 text-slate-800 font-medium px-4 py-2.5 rounded-lg transition-colors duration-200"
             >
               <svg
                 className="w-5 h-5 shrink-0"
@@ -390,6 +410,22 @@ const SignIn: React.FC = () => {
                 <rect x="13" y="13" width="10" height="10" fill="#FFB900" />
               </svg>
               Continue with Microsoft
+            </button>
+
+            <button
+              type="button"
+              onClick={handleFacebookSignIn}
+              className="w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-300 text-slate-800 font-medium px-4 py-2.5 rounded-lg transition-colors duration-200"
+            >
+              <svg
+                className="w-5 h-5 shrink-0"
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="#1877F2"
+              >
+                <path d="M22.675 0H1.325C.593 0 0 .593 0 1.326v21.348C0 23.406.593 24 1.325 24h11.495v-9.294H9.691v-3.622h3.129V8.413c0-3.1 1.893-4.788 4.659-4.788 1.325 0 2.464.099 2.795.143v3.24l-1.918.001c-1.504 0-1.794.715-1.794 1.763v2.31h3.587l-.467 3.622h-3.12V24h6.116c.73 0 1.324-.594 1.324-1.326V1.326C24 .593 23.406 0 22.675 0z" />
+              </svg>
+              Continue with Facebook
             </button>
           </div>
         </div>
