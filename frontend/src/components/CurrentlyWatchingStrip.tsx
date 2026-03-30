@@ -30,9 +30,13 @@ function ShowCard({ show, token, onEpisodeWatched }: ShowCardProps) {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((r) => r.json())
-      .then((data) => { if (!cancelled) setNext(data); })
+      .then((data) => {
+        if (!cancelled) setNext(data);
+      })
       .catch(() => {});
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [show.id, token]);
 
   async function markWatched() {
@@ -41,7 +45,7 @@ function ShowCard({ show, token, onEpisodeWatched }: ShowCardProps) {
     try {
       await fetch(
         `${API_URL}/watched-episode/add?show_id=${show.id}&season_number=${next.season_number}&episode_number=${next.episode_number}`,
-        { method: "POST", headers: { Authorization: `Bearer ${token}` } }
+        { method: "POST", headers: { Authorization: `Bearer ${token}` } },
       );
       onEpisodeWatched(show.id, next.season_number!, next.episode_number!);
       // Fetch next episode after marking
@@ -56,9 +60,10 @@ function ShowCard({ show, token, onEpisodeWatched }: ShowCardProps) {
     }
   }
 
-  const episodeUrl = next && !next.finished
-    ? `/tv/${show.id}/episode/${next.season_number}/${next.episode_number}`
-    : null;
+  const episodeUrl =
+    next && !next.finished
+      ? `/tv/${show.id}/episode/${next.season_number}/${next.episode_number}`
+      : null;
 
   return (
     <div
@@ -67,7 +72,11 @@ function ShowCard({ show, token, onEpisodeWatched }: ShowCardProps) {
     >
       <div className="flex gap-3 p-3">
         {/* Poster — links to show, not episode */}
-        <Link to={`/tv/${show.id}`} onClick={(e) => e.stopPropagation()} className="flex-shrink-0">
+        <Link
+          to={`/tv/${show.id}`}
+          onClick={(e) => e.stopPropagation()}
+          className="flex-shrink-0"
+        >
           {show.poster_path ? (
             <img
               src={`${BASE_IMAGE_URL}/w154${show.poster_path}`}
@@ -76,8 +85,13 @@ function ShowCard({ show, token, onEpisodeWatched }: ShowCardProps) {
               style={{ height: "72px" }}
             />
           ) : (
-            <div className="w-12 rounded-lg bg-slate-600 flex items-center justify-center" style={{ height: "72px" }}>
-              <span className="text-slate-400 text-[9px] text-center px-0.5">{show.name}</span>
+            <div
+              className="w-12 rounded-lg bg-slate-600 flex items-center justify-center"
+              style={{ height: "72px" }}
+            >
+              <span className="text-slate-400 text-[9px] text-center px-0.5">
+                {show.name}
+              </span>
             </div>
           )}
         </Link>
@@ -86,7 +100,11 @@ function ShowCard({ show, token, onEpisodeWatched }: ShowCardProps) {
         <div className="flex-1 min-w-0 flex flex-col justify-between">
           <div>
             {/* Show name — links to show, not episode */}
-            <Link to={`/tv/${show.id}`} onClick={(e) => e.stopPropagation()} className="text-sm font-semibold text-white hover:text-purple-300 transition-colors line-clamp-1">
+            <Link
+              to={`/tv/${show.id}`}
+              onClick={(e) => e.stopPropagation()}
+              className="text-sm font-semibold text-white hover:text-purple-300 transition-colors line-clamp-1"
+            >
               {show.name}
             </Link>
 
@@ -95,7 +113,9 @@ function ShowCard({ show, token, onEpisodeWatched }: ShowCardProps) {
             )}
 
             {next?.finished && (
-              <p className="text-xs text-green-400 mt-0.5 font-medium">All caught up!</p>
+              <p className="text-xs text-green-400 mt-0.5 font-medium">
+                All caught up!
+              </p>
             )}
 
             {next && !next.finished && (
@@ -112,15 +132,28 @@ function ShowCard({ show, token, onEpisodeWatched }: ShowCardProps) {
 
           {next && !next.finished && (
             <button
-              onClick={(e) => { e.stopPropagation(); markWatched(); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                markWatched();
+              }}
               disabled={marking}
               className="mt-2 self-start inline-flex items-center gap-1.5 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-xs font-medium px-2.5 py-1 rounded-md transition-colors"
             >
               {marking ? (
                 <span className="w-3 h-3 border border-white/50 border-t-white rounded-full animate-spin" />
               ) : (
-                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                <svg
+                  className="w-3 h-3"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2.5}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M5 13l4 4L19 7"
+                  />
                 </svg>
               )}
               {marking ? "Saving…" : "Mark Watched"}
@@ -131,7 +164,7 @@ function ShowCard({ show, token, onEpisodeWatched }: ShowCardProps) {
 
       {/* Episode still image */}
       {next && !next.finished && next.still_path && (
-        <div className="h-24 w-full overflow-hidden">
+        <div className="aspect-video w-full overflow-hidden">
           <img
             src={`${BASE_IMAGE_URL}/w300${next.still_path}`}
             alt={next.name ?? "Episode"}
@@ -150,14 +183,22 @@ interface Props {
   onEpisodeWatched?: (showId: number, season: number, episode: number) => void;
 }
 
-export default function CurrentlyWatchingStrip({ shows, movies, user, onEpisodeWatched }: Props) {
+export default function CurrentlyWatchingStrip({
+  shows,
+  movies,
+  user,
+  onEpisodeWatched,
+}: Props) {
   const [open, setOpen] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const total = shows.length + movies.length;
 
   useEffect(() => {
     if (!user) return;
-    user.getIdToken().then(setToken).catch(() => {});
+    user
+      .getIdToken()
+      .then(setToken)
+      .catch(() => {});
   }, [user]);
 
   if (total === 0) return null;
@@ -183,7 +224,11 @@ export default function CurrentlyWatchingStrip({ shows, movies, user, onEpisodeW
           strokeWidth={2.5}
           className={`w-4 h-4 ml-auto text-slate-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
         >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M19 9l-7 7-7-7"
+          />
         </svg>
       </button>
 
@@ -191,14 +236,15 @@ export default function CurrentlyWatchingStrip({ shows, movies, user, onEpisodeW
         <div className="px-4 sm:px-6 pb-4 pt-1">
           <div className="flex gap-4 overflow-x-auto pb-2">
             {/* TV shows with next-episode info */}
-            {token && shows.map((show) => (
-              <ShowCard
-                key={`tv-${show.id}`}
-                show={show}
-                token={token}
-                onEpisodeWatched={onEpisodeWatched ?? (() => {})}
-              />
-            ))}
+            {token &&
+              shows.map((show) => (
+                <ShowCard
+                  key={`tv-${show.id}`}
+                  show={show}
+                  token={token}
+                  onEpisodeWatched={onEpisodeWatched ?? (() => {})}
+                />
+              ))}
 
             {/* Movies — simple poster cards unchanged */}
             {movies.map((movie) => (
@@ -215,7 +261,9 @@ export default function CurrentlyWatchingStrip({ shows, movies, user, onEpisodeW
                   />
                 ) : (
                   <div className="w-16 h-24 rounded-xl bg-slate-700 border-2 border-purple-500 flex items-center justify-center shadow-lg">
-                    <span className="text-slate-400 text-[10px] text-center leading-tight px-1">{movie.title}</span>
+                    <span className="text-slate-400 text-[10px] text-center leading-tight px-1">
+                      {movie.title}
+                    </span>
                   </div>
                 )}
                 <span className="text-xs text-slate-300 group-hover:text-white transition-colors w-16 text-center truncate">
