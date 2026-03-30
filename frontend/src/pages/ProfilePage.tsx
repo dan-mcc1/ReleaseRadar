@@ -279,7 +279,7 @@ export default function ProfilePage() {
                             src={
                               movie.poster_path
                                 ? `${BASE_IMAGE_URL}/w154${movie.poster_path}`
-                                : "/public/movie-icon.png"
+                                : "/movie-icon.png"
                             }
                             alt={movie.title}
                             className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity"
@@ -306,7 +306,7 @@ export default function ProfilePage() {
                             src={
                               show.poster_path
                                 ? `${BASE_IMAGE_URL}/w154${show.poster_path}`
-                                : "/public/tv-icon.png"
+                                : "/tv-icon.png"
                             }
                             alt={show.name}
                             className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity"
@@ -368,7 +368,7 @@ export default function ProfilePage() {
                                 src={
                                   movie.poster_path
                                     ? `${BASE_IMAGE_URL}/w154${movie.poster_path}`
-                                    : "/public/movie-icon.png"
+                                    : "/movie-icon.png"
                                 }
                                 alt={movie.title}
                                 className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity"
@@ -395,7 +395,7 @@ export default function ProfilePage() {
                                 src={
                                   show.poster_path
                                     ? `${BASE_IMAGE_URL}/w154${show.poster_path}`
-                                    : "/public/tv-icon.png"
+                                    : "/tv-icon.png"
                                 }
                                 alt={show.name}
                                 className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity"
@@ -467,7 +467,7 @@ export default function ProfilePage() {
                                 src={
                                   movie.poster_path
                                     ? `${BASE_IMAGE_URL}/w154${movie.poster_path}`
-                                    : "/public/movie-icon.png"
+                                    : "/movie-icon.png"
                                 }
                                 alt={movie.title}
                                 className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity"
@@ -494,7 +494,7 @@ export default function ProfilePage() {
                                 src={
                                   show.poster_path
                                     ? `${BASE_IMAGE_URL}/w154${show.poster_path}`
-                                    : "/public/tv-icon.png"
+                                    : "/tv-icon.png"
                                 }
                                 alt={show.name}
                                 className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity"

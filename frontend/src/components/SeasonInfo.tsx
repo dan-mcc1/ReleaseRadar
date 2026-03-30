@@ -211,7 +211,7 @@ export default function SeasonInfo({ showId, seasons }: SeasonInfoProps) {
                 <div className="flex-1">
                   <h3 className="font-semibold">{season.name}</h3>
                   <p className="text-slate-400 text-sm">
-                    Air date: {season.air_date || "N/A"} | Episodes:{" "}
+                    Air date: {season.air_date ? new Date(season.air_date + "T00:00:00").toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" }) : "N/A"} | Episodes:{" "}
                     {season.episode_count}
                   </p>
                   {isLoggedIn && totalCount > 0 && (
@@ -372,7 +372,7 @@ export default function SeasonInfo({ showId, seasons }: SeasonInfoProps) {
                                   })()}
                                 </div>
                                 <p className="text-slate-400 text-sm">
-                                  {ep.air_date} | Runtime:{" "}
+                                  {ep.air_date ? new Date(ep.air_date + "T00:00:00").toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" }) : "N/A"} | Runtime:{" "}
                                   {ep.runtime ? (
                                     <>
                                       {Math.floor(ep.runtime / 60) > 0 &&

@@ -368,7 +368,7 @@ export default function NavBar() {
                       </div>
                     ) : (
                       <img
-                        src={user.photoURL ?? "/public/avatar-placeholder.png"}
+                        src={user.photoURL ?? "/avatar-placeholder.png"}
                         alt={user.displayName ?? "User Avatar"}
                         className="size-8 rounded-full bg-gray-800 outline -outline-offset-1 outline-white/10"
                       />
