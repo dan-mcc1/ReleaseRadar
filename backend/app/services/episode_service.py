@@ -5,6 +5,21 @@ from app.models.show import Show
 from app.services.tmdb_client import get
 
 
+def _compute_episode_type(
+    episode_number: int,
+    season_number: int,
+    tmdb_type: str | None,
+    in_production: bool | None,
+) -> str | None:
+    if episode_number == 1:
+        return "show_premiere" if season_number == 1 else "season_premiere"
+    if tmdb_type == "finale":
+        return "series_finale" if in_production is False else "season_finale"
+    if tmdb_type == "mid_season":
+        return "mid_season"
+    return None
+
+
 def ensure_show_in_db(db: Session, show_id: int) -> bool:
     """
     Ensure the show row exists in the show table so episode FKs are satisfied.
@@ -52,6 +67,9 @@ def sync_season_episodes(db: Session, show_id: int, season_number: int):
     if not ensure_show_in_db(db, show_id):
         return
 
+    show = db.query(Show).filter_by(id=show_id).first()
+    in_production = show.in_production if show else None
+
     try:
         season_data = get(f"/tv/{show_id}/season/{season_number}")
     except Exception:
@@ -65,17 +83,19 @@ def sync_season_episodes(db: Session, show_id: int, season_number: int):
         if db.query(Episode).filter_by(id=ep_id).first():
             continue
 
+        ep_num = ep.get("episode_number")
         db.add(Episode(
             id=ep_id,
             show_id=show_id,
             season_number=season_number,
-            episode_number=ep.get("episode_number"),
+            episode_number=ep_num,
             name=ep.get("name"),
             overview=ep.get("overview"),
             air_date=ep.get("air_date") or None,
             runtime=ep.get("runtime"),
             still_path=ep.get("still_path"),
             vote_average=ep.get("vote_average"),
+            episode_type=_compute_episode_type(ep_num, season_number, ep.get("episode_type"), in_production),
         ))
 
     db.commit()
@@ -115,17 +135,19 @@ def sync_show_episodes(db: Session, show_id: int):
             if existing:
                 continue
 
+            ep_num = ep.get("episode_number")
             episode = Episode(
                 id=ep_id,
                 show_id=show_id,
                 season_number=season_number,
-                episode_number=ep.get("episode_number"),
+                episode_number=ep_num,
                 name=ep.get("name"),
                 overview=ep.get("overview"),
                 air_date=ep.get("air_date") or None,
                 runtime=ep.get("runtime"),
                 still_path=ep.get("still_path"),
                 vote_average=ep.get("vote_average"),
+                episode_type=_compute_episode_type(ep_num, season_number, ep.get("episode_type"), show.in_production),
             )
             db.add(episode)
 
@@ -162,6 +184,8 @@ def get_or_create_episode(
         return episode
 
     ensure_show_in_db(db, show_id)
+    show = db.query(Show).filter_by(id=show_id).first()
+    in_production = show.in_production if show else None
 
     try:
         ep_data = get(f"/tv/{show_id}/season/{season_number}/episode/{episode_number}")
@@ -183,6 +207,7 @@ def get_or_create_episode(
         runtime=ep_data.get("runtime"),
         still_path=ep_data.get("still_path"),
         vote_average=ep_data.get("vote_average"),
+        episode_type=_compute_episode_type(episode_number, season_number, ep_data.get("episode_type"), in_production),
     )
     db.add(episode)
     db.commit()

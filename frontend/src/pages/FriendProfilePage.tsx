@@ -107,7 +107,7 @@ export default function FriendProfilePage() {
                 <ExpandableMediaList
                   items={favorites.movies}
                   linkPrefix="/movie"
-                  fallbackImage="/src/assets/movie-icon.png"
+                  fallbackImage="/public/movie-icon.png"
                 />
               </div>
             )}
@@ -120,7 +120,7 @@ export default function FriendProfilePage() {
                 <ExpandableMediaList
                   items={favorites.shows}
                   linkPrefix="/tv"
-                  fallbackImage="/src/assets/tv-icon.png"
+                  fallbackImage="/public/tv-icon.png"
                 />
               </div>
             )}
@@ -142,7 +142,7 @@ export default function FriendProfilePage() {
                 <ExpandableMediaList
                   items={watchlist.movies}
                   linkPrefix="/movie"
-                  fallbackImage="/src/assets/movie-icon.png"
+                  fallbackImage="/public/movie-icon.png"
                 />
               </div>
             )}
@@ -155,7 +155,7 @@ export default function FriendProfilePage() {
                 <ExpandableMediaList
                   items={watchlist.shows}
                   linkPrefix="/tv"
-                  fallbackImage="/src/assets/tv-icon.png"
+                  fallbackImage="/public/tv-icon.png"
                 />
               </div>
             )}
@@ -179,7 +179,7 @@ export default function FriendProfilePage() {
                 <ExpandableMediaList
                   items={watched.movies}
                   linkPrefix="/movie"
-                  fallbackImage="/src/assets/movie-icon.png"
+                  fallbackImage="/public/movie-icon.png"
                 />
               </div>
             )}
@@ -192,7 +192,7 @@ export default function FriendProfilePage() {
                 <ExpandableMediaList
                   items={watched.shows}
                   linkPrefix="/tv"
-                  fallbackImage="/src/assets/tv-icon.png"
+                  fallbackImage="/public/tv-icon.png"
                 />
               </div>
             )}

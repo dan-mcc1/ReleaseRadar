@@ -51,6 +51,17 @@ function RuntimeBadge({ minutes }: { minutes: number | null | undefined }) {
   return <span>{h > 0 ? `${h}h ` : ""}{m > 0 ? `${m}m` : ""}</span>;
 }
 
+function getEpisodeTag(episodeType: string | null | undefined): { label: string; classes: string } | null {
+  switch (episodeType) {
+    case "show_premiere":    return { label: "Series Premiere", classes: "bg-purple-600/80 text-purple-100 border border-purple-400/50" };
+    case "season_premiere":  return { label: "Season Premiere", classes: "bg-blue-600/80 text-blue-100 border border-blue-400/50" };
+    case "season_finale":    return { label: "Season Finale",   classes: "bg-orange-600/80 text-orange-100 border border-orange-400/50" };
+    case "series_finale":    return { label: "Series Finale",   classes: "bg-red-700/80 text-red-100 border border-red-500/50" };
+    case "mid_season":       return { label: "Mid-Season Finale", classes: "bg-yellow-600/80 text-yellow-100 border border-yellow-400/50" };
+    default:                 return null;
+  }
+}
+
 function TypeBadge({ type }: { type: "tv" | "movie" }) {
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
@@ -75,7 +86,12 @@ function ItemCard({ item, isWatched, token, onMarkWatched }: ItemCardProps) {
   const [localWatched, setLocalWatched] = useState(isWatched ?? false);
 
   const isTv = item.type === "tv";
-  const contentPath = isTv ? `/tv/${item.showData.id}` : `/movie/${item.showData.id}`;
+  const contentPath = isTv
+    ? `/tv/${item.showData.id}/episode/${(item as Episode & { type: "tv" }).season_number}/${(item as Episode & { type: "tv" }).episode_number}`
+    : `/movie/${item.showData.id}`;
+  const episodeTag = isTv
+    ? getEpisodeTag((item as Episode & { type: "tv" }).episode_type)
+    : null;
   const title = isTv ? item.showData.name : (item as any).title;
   const episodeName = isTv ? (item as Episode & { type: "tv"; showData: Show }).name : null;
   const posterPath = item.showData.poster_path;
@@ -125,14 +141,24 @@ function ItemCard({ item, isWatched, token, onMarkWatched }: ItemCardProps) {
         <div className={`relative flex-shrink-0 ${stillPath || backdropPath ? "w-48 sm:w-56 aspect-video" : "w-24 sm:w-32"}`}>
           <img src={imageSrc} alt={title} className="h-full w-full object-cover" />
           <div className="absolute inset-0 bg-gradient-to-r from-transparent to-slate-800/20" />
+          {episodeTag && (
+            <span className={`absolute bottom-1.5 left-1.5 text-[10px] font-semibold px-1.5 py-0.5 rounded backdrop-blur-sm ${episodeTag.classes}`}>
+              {episodeTag.label}
+            </span>
+          )}
         </div>
       )}
       <div className="flex flex-col justify-center px-4 py-3 min-w-0 flex-1">
-        <div className="flex items-center gap-2 mb-1">
+        <div className="flex items-center gap-2 mb-1 flex-wrap">
           <TypeBadge type={item.type} />
           {isTv && (
             <span className="text-slate-500 text-xs">
               S{(item as Episode & { type: "tv" }).season_number}E{(item as Episode & { type: "tv" }).episode_number}
+            </span>
+          )}
+          {episodeTag && (
+            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${episodeTag.classes}`}>
+              {episodeTag.label}
             </span>
           )}
         </div>

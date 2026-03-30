@@ -109,17 +109,6 @@ export default function WhereToWatch({ providers }: WhereToWatchProps) {
           </div>
         </div>
       )}
-
-      {providers.link && (
-        <a
-          href={providers.link}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-block mt-2 text-indigo-600 hover:underline text-sm"
-        >
-          View all options on TMDB →
-        </a>
-      )}
     </div>
   );
 }

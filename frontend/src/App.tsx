@@ -16,6 +16,7 @@ import ProfilePage from "./pages/ProfilePage";
 import SearchGenres from "./pages/SearchGenres";
 import FriendProfilePage from "./pages/FriendProfilePage";
 import ActivityFeedPage from "./pages/ActivityFeedPage";
+import EpisodeInfo from "./pages/EpisodeInfo";
 
 function App() {
   return (
@@ -38,6 +39,7 @@ function App() {
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/user/:username" element={<FriendProfilePage />} />
           <Route path="/activity" element={<ActivityFeedPage />} />
+          <Route path="/tv/:showId/episode/:season/:episode" element={<EpisodeInfo />} />
         </Routes>
       </div>
     </BrowserRouter>

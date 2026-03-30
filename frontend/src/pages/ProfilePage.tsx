@@ -53,7 +53,15 @@ function HeroAvatar({
       <img
         src={photoURL}
         alt="Profile"
-        style={{ width: 96, height: 96, borderRadius: "50%", objectFit: "cover", flexShrink: 0, border: borderStyle, boxShadow: shadow }}
+        style={{
+          width: 96,
+          height: 96,
+          borderRadius: "50%",
+          objectFit: "cover",
+          flexShrink: 0,
+          border: borderStyle,
+          boxShadow: shadow,
+        }}
       />
     );
   }
@@ -73,7 +81,12 @@ function HeroAvatar({
         boxShadow: shadow,
       }}
     >
-      <svg width={53} height={53} viewBox="0 0 24 24" fill="rgba(255,255,255,0.9)">
+      <svg
+        width={53}
+        height={53}
+        viewBox="0 0 24 24"
+        fill="rgba(255,255,255,0.9)"
+      >
         <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z" />
       </svg>
     </div>
@@ -87,9 +100,18 @@ export default function ProfilePage() {
   const [dbUser, setDbUser] = useState<DBUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
 
-  const [watchlist, setWatchlist] = useState<{ movies: Movie[]; shows: Show[] }>({ movies: [], shows: [] });
-  const [watched, setWatched] = useState<{ movies: Movie[]; shows: Show[] }>({ movies: [], shows: [] });
-  const [favorites, setFavorites] = useState<{ movies: Movie[]; shows: Show[] }>({ movies: [], shows: [] });
+  const [watchlist, setWatchlist] = useState<{
+    movies: Movie[];
+    shows: Show[];
+  }>({ movies: [], shows: [] });
+  const [watched, setWatched] = useState<{ movies: Movie[]; shows: Show[] }>({
+    movies: [],
+    shows: [],
+  });
+  const [favorites, setFavorites] = useState<{
+    movies: Movie[];
+    shows: Show[];
+  }>({ movies: [], shows: [] });
   const [loading, setLoading] = useState(true);
 
   // Collapsible sections
@@ -105,9 +127,15 @@ export default function ProfilePage() {
 
   async function fetchFriends(tok: string) {
     const [friendsRes, incomingRes, outgoingRes] = await Promise.all([
-      fetch(`${API_URL}/friends/`, { headers: { Authorization: `Bearer ${tok}` } }),
-      fetch(`${API_URL}/friends/requests/incoming`, { headers: { Authorization: `Bearer ${tok}` } }),
-      fetch(`${API_URL}/friends/requests/outgoing`, { headers: { Authorization: `Bearer ${tok}` } }),
+      fetch(`${API_URL}/friends/`, {
+        headers: { Authorization: `Bearer ${tok}` },
+      }),
+      fetch(`${API_URL}/friends/requests/incoming`, {
+        headers: { Authorization: `Bearer ${tok}` },
+      }),
+      fetch(`${API_URL}/friends/requests/outgoing`, {
+        headers: { Authorization: `Bearer ${tok}` },
+      }),
     ]);
     setFriends(friendsRes.ok ? await friendsRes.json() : []);
     setIncoming(incomingRes.ok ? await incomingRes.json() : []);
@@ -120,17 +148,33 @@ export default function ProfilePage() {
       const tok = await firebaseUser.getIdToken();
       setToken(tok);
 
-      const [watchlistRes, watchedRes, meRes, favoritesRes] = await Promise.all([
-        fetch(`${API_URL}/watchlist`, { headers: { Authorization: `Bearer ${tok}` } }),
-        fetch(`${API_URL}/watched`, { headers: { Authorization: `Bearer ${tok}` } }),
-        fetch(`${API_URL}/user/me`, { headers: { Authorization: `Bearer ${tok}` } }),
-        fetch(`${API_URL}/favorites`, { headers: { Authorization: `Bearer ${tok}` } }),
-      ]);
+      const [watchlistRes, watchedRes, meRes, favoritesRes] = await Promise.all(
+        [
+          fetch(`${API_URL}/watchlist`, {
+            headers: { Authorization: `Bearer ${tok}` },
+          }),
+          fetch(`${API_URL}/watched`, {
+            headers: { Authorization: `Bearer ${tok}` },
+          }),
+          fetch(`${API_URL}/user/me`, {
+            headers: { Authorization: `Bearer ${tok}` },
+          }),
+          fetch(`${API_URL}/favorites`, {
+            headers: { Authorization: `Bearer ${tok}` },
+          }),
+        ],
+      );
 
-      setWatchlist(watchlistRes.ok ? await watchlistRes.json() : { movies: [], shows: [] });
-      setWatched(watchedRes.ok ? await watchedRes.json() : { movies: [], shows: [] });
+      setWatchlist(
+        watchlistRes.ok ? await watchlistRes.json() : { movies: [], shows: [] },
+      );
+      setWatched(
+        watchedRes.ok ? await watchedRes.json() : { movies: [], shows: [] },
+      );
       setDbUser(meRes.ok ? await meRes.json() : null);
-      setFavorites(favoritesRes.ok ? await favoritesRes.json() : { movies: [], shows: [] });
+      setFavorites(
+        favoritesRes.ok ? await favoritesRes.json() : { movies: [], shows: [] },
+      );
 
       await fetchFriends(tok);
     } catch (err) {
@@ -182,7 +226,9 @@ export default function ProfilePage() {
             </h1>
             <div className="mt-1 flex items-center gap-2 justify-center sm:justify-start">
               {dbUser?.username ? (
-                <span className="text-slate-300 text-sm">@{dbUser.username}</span>
+                <span className="text-slate-300 text-sm">
+                  @{dbUser.username}
+                </span>
               ) : (
                 <span className="text-amber-400 text-sm">No username set</span>
               )}
@@ -217,20 +263,30 @@ export default function ProfilePage() {
           {/* Favorites */}
           {(favorites.movies.length > 0 || favorites.shows.length > 0) && (
             <div className="bg-slate-800 rounded-xl p-4">
-              <h2 className="text-base font-semibold text-white mb-3">Favorites</h2>
+              <h2 className="text-base font-semibold text-white mb-3">
+                Favorites
+              </h2>
               {favorites.movies.length > 0 && (
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Movies</p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                    Movies
+                  </p>
                   <div className="flex gap-3 overflow-x-auto pb-1">
                     {favorites.movies.map((movie) => (
                       <div key={movie.id} className="flex-shrink-0 w-28">
                         <Link to={`/movie/${movie.id}`}>
                           <img
-                            src={movie.poster_path ? `${BASE_IMAGE_URL}/w154${movie.poster_path}` : "/src/assets/movie-icon.png"}
+                            src={
+                              movie.poster_path
+                                ? `${BASE_IMAGE_URL}/w154${movie.poster_path}`
+                                : "/public/movie-icon.png"
+                            }
                             alt={movie.title}
                             className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity"
                           />
-                          <p className="mt-1 text-xs font-medium text-slate-300 text-center line-clamp-1">{movie.title}</p>
+                          <p className="mt-1 text-xs font-medium text-slate-300 text-center line-clamp-1">
+                            {movie.title}
+                          </p>
                         </Link>
                       </div>
                     ))}
@@ -239,17 +295,25 @@ export default function ProfilePage() {
               )}
               {favorites.shows.length > 0 && (
                 <div className={favorites.movies.length > 0 ? "mt-3" : ""}>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">TV Shows</p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                    TV Shows
+                  </p>
                   <div className="flex gap-3 overflow-x-auto pb-1">
                     {favorites.shows.map((show) => (
                       <div key={show.id} className="flex-shrink-0 w-28">
                         <Link to={`/tv/${show.id}`}>
                           <img
-                            src={show.poster_path ? `${BASE_IMAGE_URL}/w154${show.poster_path}` : "/src/assets/tv-icon.png"}
+                            src={
+                              show.poster_path
+                                ? `${BASE_IMAGE_URL}/w154${show.poster_path}`
+                                : "/public/tv-icon.png"
+                            }
                             alt={show.name}
                             className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity"
                           />
-                          <p className="mt-1 text-xs font-medium text-slate-300 text-center line-clamp-1">{show.name}</p>
+                          <p className="mt-1 text-xs font-medium text-slate-300 text-center line-clamp-1">
+                            {show.name}
+                          </p>
                         </Link>
                       </div>
                     ))}
@@ -268,28 +332,50 @@ export default function ProfilePage() {
                 className="w-full flex items-center justify-between px-4 py-3.5 text-left hover:bg-slate-700/50 transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <span className="text-base font-semibold text-white">Watchlist</span>
-                  <span className="text-xs text-slate-400 bg-slate-700 px-1.5 py-0.5 rounded-full">{totalWatchlist}</span>
+                  <span className="text-base font-semibold text-white">
+                    Watchlist
+                  </span>
+                  <span className="text-xs text-slate-400 bg-slate-700 px-1.5 py-0.5 rounded-full">
+                    {totalWatchlist}
+                  </span>
                 </div>
-                <svg className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${watchlistOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                <svg
+                  className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${watchlistOpen ? "rotate-180" : ""}`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M19 9l-7 7-7-7"
+                  />
                 </svg>
               </button>
               {watchlistOpen && (
                 <div className="px-4 pb-4">
                   {watchlist.movies.length > 0 && (
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Movies</p>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                        Movies
+                      </p>
                       <div className="flex gap-3 overflow-x-auto pb-1">
                         {watchlist.movies.slice(0, 5).map((movie) => (
                           <div key={movie.id} className="flex-shrink-0 w-28">
                             <Link to={`/movie/${movie.id}`}>
                               <img
-                                src={movie.poster_path ? `${BASE_IMAGE_URL}/w154${movie.poster_path}` : "/src/assets/movie-icon.png"}
+                                src={
+                                  movie.poster_path
+                                    ? `${BASE_IMAGE_URL}/w154${movie.poster_path}`
+                                    : "/public/movie-icon.png"
+                                }
                                 alt={movie.title}
                                 className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity"
                               />
-                              <p className="mt-1 text-xs font-medium text-slate-300 text-center line-clamp-1">{movie.title}</p>
+                              <p className="mt-1 text-xs font-medium text-slate-300 text-center line-clamp-1">
+                                {movie.title}
+                              </p>
                             </Link>
                           </div>
                         ))}
@@ -298,28 +384,41 @@ export default function ProfilePage() {
                   )}
                   {watchlist.shows.length > 0 && (
                     <div className={watchlist.movies.length > 0 ? "mt-3" : ""}>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">TV Shows</p>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                        TV Shows
+                      </p>
                       <div className="flex gap-3 overflow-x-auto pb-1">
                         {watchlist.shows.slice(0, 5).map((show) => (
                           <div key={show.id} className="flex-shrink-0 w-28">
                             <Link to={`/tv/${show.id}`}>
                               <img
-                                src={show.poster_path ? `${BASE_IMAGE_URL}/w154${show.poster_path}` : "/src/assets/tv-icon.png"}
+                                src={
+                                  show.poster_path
+                                    ? `${BASE_IMAGE_URL}/w154${show.poster_path}`
+                                    : "/public/tv-icon.png"
+                                }
                                 alt={show.name}
                                 className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity"
                               />
-                              <p className="mt-1 text-xs font-medium text-slate-300 text-center line-clamp-1">{show.name}</p>
+                              <p className="mt-1 text-xs font-medium text-slate-300 text-center line-clamp-1">
+                                {show.name}
+                              </p>
                             </Link>
                           </div>
                         ))}
                       </div>
-                      <Link to="/watchlist" className="text-blue-400 hover:text-blue-300 text-sm mt-2 inline-block">
+                      <Link
+                        to="/watchlist"
+                        className="text-blue-400 hover:text-blue-300 text-sm mt-2 inline-block"
+                      >
                         View full watchlist →
                       </Link>
                     </div>
                   )}
                   {totalWatchlist === 0 && !loading && (
-                    <p className="text-slate-400 text-sm">Your watchlist is empty.</p>
+                    <p className="text-slate-400 text-sm">
+                      Your watchlist is empty.
+                    </p>
                   )}
                 </div>
               )}
@@ -332,28 +431,50 @@ export default function ProfilePage() {
                 className="w-full flex items-center justify-between px-4 py-3.5 text-left hover:bg-slate-700/50 transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <span className="text-base font-semibold text-white">Watched</span>
-                  <span className="text-xs text-slate-400 bg-slate-700 px-1.5 py-0.5 rounded-full">{totalWatched}</span>
+                  <span className="text-base font-semibold text-white">
+                    Watched
+                  </span>
+                  <span className="text-xs text-slate-400 bg-slate-700 px-1.5 py-0.5 rounded-full">
+                    {totalWatched}
+                  </span>
                 </div>
-                <svg className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${watchedOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                <svg
+                  className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${watchedOpen ? "rotate-180" : ""}`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M19 9l-7 7-7-7"
+                  />
                 </svg>
               </button>
               {watchedOpen && (
                 <div className="px-4 pb-4">
                   {watched.movies.length > 0 && (
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Movies</p>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                        Movies
+                      </p>
                       <div className="flex gap-3 overflow-x-auto pb-1">
                         {watched.movies.slice(0, 5).map((movie) => (
                           <div key={movie.id} className="flex-shrink-0 w-28">
                             <Link to={`/movie/${movie.id}`}>
                               <img
-                                src={movie.poster_path ? `${BASE_IMAGE_URL}/w154${movie.poster_path}` : "/src/assets/movie-icon.png"}
+                                src={
+                                  movie.poster_path
+                                    ? `${BASE_IMAGE_URL}/w154${movie.poster_path}`
+                                    : "/public/movie-icon.png"
+                                }
                                 alt={movie.title}
                                 className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity"
                               />
-                              <p className="mt-1 text-xs font-medium text-slate-300 text-center line-clamp-1">{movie.title}</p>
+                              <p className="mt-1 text-xs font-medium text-slate-300 text-center line-clamp-1">
+                                {movie.title}
+                              </p>
                             </Link>
                           </div>
                         ))}
@@ -362,28 +483,41 @@ export default function ProfilePage() {
                   )}
                   {watched.shows.length > 0 && (
                     <div className={watched.movies.length > 0 ? "mt-3" : ""}>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">TV Shows</p>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                        TV Shows
+                      </p>
                       <div className="flex gap-3 overflow-x-auto pb-1">
                         {watched.shows.slice(0, 5).map((show) => (
                           <div key={show.id} className="flex-shrink-0 w-28">
                             <Link to={`/tv/${show.id}`}>
                               <img
-                                src={show.poster_path ? `${BASE_IMAGE_URL}/w154${show.poster_path}` : "/src/assets/tv-icon.png"}
+                                src={
+                                  show.poster_path
+                                    ? `${BASE_IMAGE_URL}/w154${show.poster_path}`
+                                    : "/public/tv-icon.png"
+                                }
                                 alt={show.name}
                                 className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity"
                               />
-                              <p className="mt-1 text-xs font-medium text-slate-300 text-center line-clamp-1">{show.name}</p>
+                              <p className="mt-1 text-xs font-medium text-slate-300 text-center line-clamp-1">
+                                {show.name}
+                              </p>
                             </Link>
                           </div>
                         ))}
                       </div>
-                      <Link to="/watched" className="text-blue-400 hover:text-blue-300 text-sm mt-2 inline-block">
+                      <Link
+                        to="/watched"
+                        className="text-blue-400 hover:text-blue-300 text-sm mt-2 inline-block"
+                      >
                         View full watched list →
                       </Link>
                     </div>
                   )}
                   {totalWatched === 0 && !loading && (
-                    <p className="text-slate-400 text-sm">Nothing watched yet.</p>
+                    <p className="text-slate-400 text-sm">
+                      Nothing watched yet.
+                    </p>
                   )}
                 </div>
               )}
@@ -397,9 +531,21 @@ export default function ProfilePage() {
                 onClick={() => setStatsOpen((o) => !o)}
                 className="w-full flex items-center justify-between px-4 py-3.5 text-left hover:bg-slate-700/50 transition-colors"
               >
-                <span className="text-base font-semibold text-white">Stats</span>
-                <svg className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${statsOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                <span className="text-base font-semibold text-white">
+                  Stats
+                </span>
+                <svg
+                  className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${statsOpen ? "rotate-180" : ""}`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M19 9l-7 7-7-7"
+                  />
                 </svg>
               </button>
               {statsOpen && (
@@ -442,10 +588,19 @@ export default function ProfilePage() {
           </div>
 
           {friendsTab === "friends" && token && (
-            <FriendsList token={token} friends={friends} onUpdate={() => token && fetchFriends(token)} />
+            <FriendsList
+              token={token}
+              friends={friends}
+              onUpdate={() => token && fetchFriends(token)}
+            />
           )}
           {friendsTab === "requests" && token && (
-            <FriendRequests token={token} incoming={incoming} outgoing={outgoing} onUpdate={() => token && fetchFriends(token)} />
+            <FriendRequests
+              token={token}
+              incoming={incoming}
+              outgoing={outgoing}
+              onUpdate={() => token && fetchFriends(token)}
+            />
           )}
           {friendsTab === "add" && token && (
             <FriendSearch

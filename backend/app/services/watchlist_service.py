@@ -600,6 +600,7 @@ def get_tv_calendar(db: Session, user_id: str):
             "still_path": ep.still_path,
             "overview": ep.overview,
             "vote_average": ep.vote_average,
+            "episode_type": ep.episode_type,
         })
 
     return [

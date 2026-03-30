@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import {
   signInWithEmailAndPassword,
   GoogleAuthProvider,
+  OAuthProvider,
   signInWithPopup,
   createUserWithEmailAndPassword,
 } from "firebase/auth";
@@ -19,7 +20,9 @@ const SignIn: React.FC = () => {
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
   const [isRegistering, setIsRegistering] = useState(false);
-  const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null);
+  const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(
+    null,
+  );
   const [usernameChecking, setUsernameChecking] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -47,7 +50,9 @@ const SignIn: React.FC = () => {
     }
     setUsernameChecking(true);
     try {
-      const res = await fetch(`${API_URL}/user/check-username?username=${encodeURIComponent(value)}`);
+      const res = await fetch(
+        `${API_URL}/user/check-username?username=${encodeURIComponent(value)}`,
+      );
       const data = await res.json();
       setUsernameAvailable(data.available);
     } catch {
@@ -65,13 +70,25 @@ const SignIn: React.FC = () => {
     setUsernameAvailable(null);
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (value.length >= 3) {
-      debounceRef.current = setTimeout(() => checkUsernameAvailability(value), 400);
+      debounceRef.current = setTimeout(
+        () => checkUsernameAvailability(value),
+        400,
+      );
     }
   }
 
-  useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current); }, []);
+  useEffect(
+    () => () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    },
+    [],
+  );
 
-  async function registerUserInBackend(uid: string, email: string | null, username: string) {
+  async function registerUserInBackend(
+    uid: string,
+    email: string | null,
+    username: string,
+  ) {
     const res = await fetch(`${API_URL}/user/create`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -88,7 +105,9 @@ const SignIn: React.FC = () => {
     setErrorMessage(null);
 
     if (!USERNAME_RE.test(username)) {
-      setErrorMessage("Username must be 3–30 characters: letters, numbers, or underscores only.");
+      setErrorMessage(
+        "Username must be 3–30 characters: letters, numbers, or underscores only.",
+      );
       return;
     }
     if (usernameAvailable === false) {
@@ -106,8 +125,10 @@ const SignIn: React.FC = () => {
 
       let msg = err.message ?? "Registration failed.";
       if (err.code === "auth/invalid-email") msg = "Invalid email address.";
-      else if (err.code === "auth/weak-password") msg = "Password should be at least 6 characters.";
-      else if (err.code === "auth/email-already-in-use") msg = "Email is already in use.";
+      else if (err.code === "auth/weak-password")
+        msg = "Password should be at least 6 characters.";
+      else if (err.code === "auth/email-already-in-use")
+        msg = "Email is already in use.";
 
       setErrorMessage(msg);
     } finally {
@@ -123,11 +144,33 @@ const SignIn: React.FC = () => {
       await fetch(`${API_URL}/user/create`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uid: result.user.uid, email: result.user.email }),
+        body: JSON.stringify({
+          uid: result.user.uid,
+          email: result.user.email,
+        }),
       });
       navigate("/");
     } catch (error) {
       console.error("Google sign-in error:", error);
+    }
+  };
+
+  // MICROSOFT SIGN-IN
+  const handleMicrosoftSignIn = async () => {
+    const provider = new OAuthProvider("microsoft.com");
+    try {
+      const result = await signInWithPopup(auth, provider);
+      await fetch(`${API_URL}/user/create`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          uid: result.user.uid,
+          email: result.user.email,
+        }),
+      });
+      navigate("/");
+    } catch (error) {
+      console.error("Microsoft sign-in error:", error);
     }
   };
 
@@ -147,7 +190,9 @@ const SignIn: React.FC = () => {
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-white mb-1">Watch Calendar</h1>
           <p className="text-slate-400 text-sm">
-            {isRegistering ? "Create your account to get started" : "Welcome back — sign in to continue"}
+            {isRegistering
+              ? "Create your account to get started"
+              : "Welcome back — sign in to continue"}
           </p>
         </div>
 
@@ -181,13 +226,18 @@ const SignIn: React.FC = () => {
           <form
             onSubmit={
               isRegistering
-                ? (e) => { e.preventDefault(); handleRegister(); }
+                ? (e) => {
+                    e.preventDefault();
+                    handleRegister();
+                  }
                 : handleLogin
             }
             className="space-y-4"
           >
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1.5">Email</label>
+              <label className="block text-sm font-medium text-slate-300 mb-1.5">
+                Email
+              </label>
               <input
                 type="email"
                 value={email}
@@ -199,12 +249,18 @@ const SignIn: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1.5">Password</label>
+              <label className="block text-sm font-medium text-slate-300 mb-1.5">
+                Password
+              </label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder={isRegistering ? "At least 6 characters" : "Enter your password"}
+                placeholder={
+                  isRegistering
+                    ? "At least 6 characters"
+                    : "Enter your password"
+                }
                 required
                 className="w-full bg-slate-900 border border-slate-600 text-white placeholder-slate-500 px-4 py-2.5 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
               />
@@ -212,7 +268,9 @@ const SignIn: React.FC = () => {
 
             {isRegistering && (
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Username</label>
+                <label className="block text-sm font-medium text-slate-300 mb-1.5">
+                  Username
+                </label>
                 <input
                   type="text"
                   value={username}
@@ -224,30 +282,32 @@ const SignIn: React.FC = () => {
                       ? usernameAvailable === true
                         ? "border-green-500 focus:border-green-500 focus:ring-green-500"
                         : usernameAvailable === false
-                        ? "border-red-500 focus:border-red-500 focus:ring-red-500"
-                        : "border-slate-600 focus:border-blue-500 focus:ring-blue-500"
+                          ? "border-red-500 focus:border-red-500 focus:ring-red-500"
+                          : "border-slate-600 focus:border-blue-500 focus:ring-blue-500"
                       : "border-slate-600 focus:border-blue-500 focus:ring-blue-500"
                   }`}
                 />
                 {username.length >= 3 && (
-                  <p className={`text-xs mt-1.5 ${
-                    usernameChecking
-                      ? "text-slate-400"
-                      : usernameAvailable === true
-                      ? "text-green-400"
-                      : usernameAvailable === false
-                      ? "text-red-400"
-                      : "text-slate-400"
-                  }`}>
+                  <p
+                    className={`text-xs mt-1.5 ${
+                      usernameChecking
+                        ? "text-slate-400"
+                        : usernameAvailable === true
+                          ? "text-green-400"
+                          : usernameAvailable === false
+                            ? "text-red-400"
+                            : "text-slate-400"
+                    }`}
+                  >
                     {usernameChecking
                       ? "Checking availability…"
                       : usernameAvailable === true
-                      ? "✓ Username available"
-                      : usernameAvailable === false
-                      ? "✗ Username already taken"
-                      : !USERNAME_RE.test(username)
-                      ? "3–30 chars, letters/numbers/underscores only"
-                      : ""}
+                        ? "✓ Username available"
+                        : usernameAvailable === false
+                          ? "✗ Username already taken"
+                          : !USERNAME_RE.test(username)
+                            ? "3–30 chars, letters/numbers/underscores only"
+                            : ""}
                   </p>
                 )}
               </div>
@@ -265,8 +325,12 @@ const SignIn: React.FC = () => {
               className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 disabled:cursor-not-allowed text-white font-semibold py-2.5 px-4 rounded-lg transition-colors duration-200 mt-2"
             >
               {isLoading
-                ? (isRegistering ? "Creating account…" : "Signing in…")
-                : (isRegistering ? "Create Account" : "Sign In")}
+                ? isRegistering
+                  ? "Creating account…"
+                  : "Signing in…"
+                : isRegistering
+                  ? "Create Account"
+                  : "Sign In"}
             </button>
           </form>
 
@@ -277,20 +341,57 @@ const SignIn: React.FC = () => {
             <div className="flex-1 h-px bg-slate-700" />
           </div>
 
-          {/* Google Sign-In */}
-          <button
-            type="button"
-            onClick={handleGoogleSignIn}
-            className="w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-100 text-slate-800 font-medium px-4 py-2.5 rounded-lg transition-colors duration-200"
-          >
-            <svg className="w-5 h-5 shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 533.5 544.3">
-              <path fill="#4285F4" d="M533.5 278.4c0-18.5-1.5-37-4.8-54.6H272.1v103.6h146.6c-6.3 33.5-25 61.9-53.6 80.8v67h86.8c50.8-46.8 80.6-115.6 80.6-196.8z" />
-              <path fill="#34A853" d="M272.1 544.3c72.8 0 134-24.2 178.7-65.8l-86.8-67c-24.1 16.1-55.1 25.6-91.8 25.6-70.8 0-130.8-47.8-152.2-112.4h-89.3v70.6c44.4 88 135.4 149.9 241.5 149.9z" />
-              <path fill="#FBBC05" d="M119.9 323.7c-10.7-31.8-10.7-66.4 0-98.2v-70.6h-89.3c-38.6 75-38.6 164.3 0 239.3l89.3-70.5z" />
-              <path fill="#EA4335" d="M272.1 107.7c39.6 0 75.3 13.6 103.3 40.1l77.3-77.3c-47.6-44.2-110.6-71.5-180.6-71.5-106 0-197.1 61.9-241.5 149.9l89.3 70.6c21.5-64.6 81.5-112.4 152.2-112.4z" />
-            </svg>
-            Continue with Google
-          </button>
+          <div className="flex flex-col gap-3">
+            {/* Google Sign-In */}
+            <button
+              type="button"
+              onClick={handleGoogleSignIn}
+              className="w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-100 text-slate-800 font-medium px-4 py-2.5 rounded-lg transition-colors duration-200"
+            >
+              <svg
+                className="w-5 h-5 shrink-0"
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 533.5 544.3"
+              >
+                <path
+                  fill="#4285F4"
+                  d="M533.5 278.4c0-18.5-1.5-37-4.8-54.6H272.1v103.6h146.6c-6.3 33.5-25 61.9-53.6 80.8v67h86.8c50.8-46.8 80.6-115.6 80.6-196.8z"
+                />
+                <path
+                  fill="#34A853"
+                  d="M272.1 544.3c72.8 0 134-24.2 178.7-65.8l-86.8-67c-24.1 16.1-55.1 25.6-91.8 25.6-70.8 0-130.8-47.8-152.2-112.4h-89.3v70.6c44.4 88 135.4 149.9 241.5 149.9z"
+                />
+                <path
+                  fill="#FBBC05"
+                  d="M119.9 323.7c-10.7-31.8-10.7-66.4 0-98.2v-70.6h-89.3c-38.6 75-38.6 164.3 0 239.3l89.3-70.5z"
+                />
+                <path
+                  fill="#EA4335"
+                  d="M272.1 107.7c39.6 0 75.3 13.6 103.3 40.1l77.3-77.3c-47.6-44.2-110.6-71.5-180.6-71.5-106 0-197.1 61.9-241.5 149.9l89.3 70.6c21.5-64.6 81.5-112.4 152.2-112.4z"
+                />
+              </svg>
+              Continue with Google
+            </button>
+
+            {/* Microsoft Sign-In */}
+            <button
+              type="button"
+              onClick={handleMicrosoftSignIn}
+              className="w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-100 text-slate-800 font-medium px-4 py-2.5 rounded-lg transition-colors duration-200"
+            >
+              <svg
+                className="w-5 h-5 shrink-0"
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+              >
+                <rect x="1" y="1" width="10" height="10" fill="#F25022" />
+                <rect x="13" y="1" width="10" height="10" fill="#7FBA00" />
+                <rect x="1" y="13" width="10" height="10" fill="#00A4EF" />
+                <rect x="13" y="13" width="10" height="10" fill="#FFB900" />
+              </svg>
+              Continue with Microsoft
+            </button>
+          </div>
         </div>
       </div>
     </div>

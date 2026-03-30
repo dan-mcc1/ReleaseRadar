@@ -16,6 +16,7 @@ class Episode(Base):
     runtime = Column(Integer, nullable=True)
     still_path = Column(String, nullable=True)
     vote_average = Column(Float, nullable=True)
+    episode_type = Column(String, nullable=True)  # "standard", "finale", "mid_season"
 
     __table_args__ = (
         UniqueConstraint("show_id", "season_number", "episode_number", name="uq_show_season_episode"),

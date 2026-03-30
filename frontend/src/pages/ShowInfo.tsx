@@ -1,7 +1,7 @@
 import { useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { BASE_IMAGE_URL, API_URL } from "../constants";
-import type { Show, Episode } from "../types/calendar";
+import type { Show } from "../types/calendar";
 import { parseLocalDate, formatLocalDate } from "../utils/date";
 import SeasonInfo from "../components/SeasonInfo";
 import WhereToWatch from "../components/WhereToWatch";

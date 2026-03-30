@@ -1,5 +1,6 @@
 # app/routers/user.py
 import re
+import random
 from fastapi import APIRouter, Depends, HTTPException, Body, Query
 from sqlalchemy.orm import Session
 from app.db.session import get_db
@@ -53,7 +54,7 @@ def create_user_route(
         _validate_username(username)
         if not is_username_available(db, username):
             raise HTTPException(status_code=409, detail="Username already taken.")
-    return create_user(db, uid, email, username)
+    return create_user(db, uid, email, username, random.choice(VALID_AVATAR_KEYS))
 
 
 @router.get("/me")
@@ -89,9 +90,16 @@ def update_username_route(
     return user
 
 
-VALID_AVATAR_KEYS = {
-    "blue", "purple", "green", "red", "orange", "teal", "pink", "yellow",
-}
+VALID_AVATAR_KEYS = [
+    "blue",
+    "purple",
+    "green",
+    "red",
+    "orange",
+    "teal",
+    "pink",
+    "yellow",
+]
 
 
 @router.put("/update-avatar")
@@ -142,7 +150,9 @@ def get_public_profile(
         raise HTTPException(status_code=404, detail="User not found.")
 
     if target.id == uid:
-        raise HTTPException(status_code=400, detail="Use /user/me for your own profile.")
+        raise HTTPException(
+            status_code=400, detail="Use /user/me for your own profile."
+        )
 
     is_friend = are_friends(db, uid, target.id)
     visibility = target.profile_visibility or "friends_only"
@@ -158,9 +168,8 @@ def get_public_profile(
     profile["favorites"] = get_favorites(db, target.id)
 
     # Watchlist and watched respect the target user's visibility setting
-    can_see_details = (
-        visibility == "public"
-        or (visibility == "friends_only" and is_friend)
+    can_see_details = visibility == "public" or (
+        visibility == "friends_only" and is_friend
     )
     if can_see_details:
         profile["watchlist"] = get_profile_watchlist(db, target.id)
@@ -182,9 +191,15 @@ def delete_account(
     # Watchlist and Watched are mutually exclusive per item, so we can union them.
     tracked: set[tuple[str, int]] = set()
 
-    for row in db.query(Watchlist.content_type, Watchlist.content_id).filter_by(user_id=uid).all():
+    for row in (
+        db.query(Watchlist.content_type, Watchlist.content_id)
+        .filter_by(user_id=uid)
+        .all()
+    ):
         tracked.add((row.content_type, row.content_id))
-    for row in db.query(Watched.content_type, Watched.content_id).filter_by(user_id=uid).all():
+    for row in (
+        db.query(Watched.content_type, Watched.content_id).filter_by(user_id=uid).all()
+    ):
         tracked.add((row.content_type, row.content_id))
 
     # Decrement tracking counts

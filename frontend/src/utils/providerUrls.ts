@@ -29,7 +29,7 @@ const PROVIDER_URLS: Record<number, string> = {
   372: "https://www.directv.com",               // DIRECTV
   384: "https://www.max.com",                   // Max
   386: "https://www.peacocktv.com",             // Peacock
-  387: "https://www.hbomax.com",               // HBO Max (legacy)
+  387: "https://www.peacocktv.com",               // Peacock Premium
   444: "https://www.plex.tv",                   // Plex
   526: "https://www.amcplus.com",               // AMC+
   531: "https://www.paramountplus.com",         // Paramount+
@@ -39,6 +39,7 @@ const PROVIDER_URLS: Record<number, string> = {
   1285: "https://www.hbomax.com",                // HBO Max
   1796: "https://www.netflix.com",              // Netflix basic with ads
   1899: "https://www.hbomax.com",               // HBO Max
+  2528: "https://tv.youtube.com",               // YoutubeTV
 };
 
 export function getProviderUrl(providerId: number): string | undefined {

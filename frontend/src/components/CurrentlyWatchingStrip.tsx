@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { BASE_IMAGE_URL, API_URL } from "../constants";
 import type { Show, Movie } from "../types/calendar";
 import type { User } from "firebase/auth";
@@ -22,6 +22,7 @@ interface ShowCardProps {
 function ShowCard({ show, token, onEpisodeWatched }: ShowCardProps) {
   const [next, setNext] = useState<NextEpisode | null>(null);
   const [marking, setMarking] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     let cancelled = false;
@@ -55,11 +56,18 @@ function ShowCard({ show, token, onEpisodeWatched }: ShowCardProps) {
     }
   }
 
+  const episodeUrl = next && !next.finished
+    ? `/tv/${show.id}/episode/${next.season_number}/${next.episode_number}`
+    : null;
+
   return (
-    <div className="flex-shrink-0 w-72 bg-slate-700/50 rounded-xl overflow-hidden border border-slate-600/50">
+    <div
+      onClick={() => episodeUrl && navigate(episodeUrl)}
+      className={`flex-shrink-0 w-72 bg-slate-700/50 rounded-xl overflow-hidden border border-slate-600/50 ${episodeUrl ? "cursor-pointer hover:border-slate-500 transition-colors" : ""}`}
+    >
       <div className="flex gap-3 p-3">
-        {/* Poster */}
-        <Link to={`/tv/${show.id}`} className="flex-shrink-0">
+        {/* Poster — links to show, not episode */}
+        <Link to={`/tv/${show.id}`} onClick={(e) => e.stopPropagation()} className="flex-shrink-0">
           {show.poster_path ? (
             <img
               src={`${BASE_IMAGE_URL}/w154${show.poster_path}`}
@@ -77,7 +85,8 @@ function ShowCard({ show, token, onEpisodeWatched }: ShowCardProps) {
         {/* Info */}
         <div className="flex-1 min-w-0 flex flex-col justify-between">
           <div>
-            <Link to={`/tv/${show.id}`} className="text-sm font-semibold text-white hover:text-purple-300 transition-colors line-clamp-1">
+            {/* Show name — links to show, not episode */}
+            <Link to={`/tv/${show.id}`} onClick={(e) => e.stopPropagation()} className="text-sm font-semibold text-white hover:text-purple-300 transition-colors line-clamp-1">
               {show.name}
             </Link>
 
@@ -103,7 +112,7 @@ function ShowCard({ show, token, onEpisodeWatched }: ShowCardProps) {
 
           {next && !next.finished && (
             <button
-              onClick={markWatched}
+              onClick={(e) => { e.stopPropagation(); markWatched(); }}
               disabled={marking}
               className="mt-2 self-start inline-flex items-center gap-1.5 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-xs font-medium px-2.5 py-1 rounded-md transition-colors"
             >

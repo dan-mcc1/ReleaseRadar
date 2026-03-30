@@ -98,6 +98,7 @@ def season_calendar(
             "still_path": ep.still_path,
             "overview": ep.overview,
             "vote_average": ep.vote_average,
+            "episode_type": ep.episode_type,
         }
 
     # ── Windowed mode ────────────────────────────────────────────────────
@@ -200,3 +201,24 @@ def full_season_info(id: int, season_number: int, db: Session = Depends(get_db))
     Return season metadata + full episode list from TMDB.
     """
     return get_full_season_info(id, season_number)
+
+
+@router.get("/{id}/season/{season_number}/episode/{episode_number}")
+def get_episode_info(id: int, season_number: int, episode_number: int):
+    """
+    Return full episode details from TMDb, including credits (guest stars, crew)
+    and images.
+    """
+    from app.services.tmdb_client import get as tmdb_get
+    try:
+        data = tmdb_get(
+            f"/tv/{id}/season/{season_number}/episode/{episode_number}",
+            params={"append_to_response": "credits,images,videos,external_ids"},
+        )
+    except Exception:
+        raise HTTPException(status_code=404, detail="Episode not found")
+    if not data:
+        raise HTTPException(status_code=404, detail="Episode not found")
+    # Attach show_id so the frontend can link back
+    data["show_id"] = id
+    return data

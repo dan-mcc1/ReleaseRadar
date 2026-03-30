@@ -9,7 +9,13 @@ from app.models.movie import Movie
 from app.models.show import Show
 
 
-def create_user(db: Session, user_id: str, email: str = None, username: str = None):
+def create_user(
+    db: Session,
+    user_id: str,
+    email: str = None,
+    username: str = None,
+    avatar_key: str = None,
+):
     """
     Create a user in the database if they don't exist.
     """
@@ -22,6 +28,7 @@ def create_user(db: Session, user_id: str, email: str = None, username: str = No
         email=email,
         username=username,
         created_at=datetime.utcnow(),
+        avatar_key=avatar_key,
     )
     db.add(db_user)
     db.commit()
@@ -54,7 +61,9 @@ def update_username(db: Session, user_id: str, new_username: str):
     """
     Set or update the username of a user. Returns None if username is taken.
     """
-    taken = db.query(User).filter(User.username == new_username, User.id != user_id).first()
+    taken = (
+        db.query(User).filter(User.username == new_username, User.id != user_id).first()
+    )
     if taken:
         return None
 
@@ -92,19 +101,49 @@ def get_profile_watchlist(db: Session, user_id: str) -> dict:
     """
     movies = (
         db.query(Movie.id, Movie.title, Movie.poster_path, Watchlist.added_at)
-        .join(Watchlist, and_(Watchlist.content_id == Movie.id, Watchlist.content_type == "movie", Watchlist.user_id == user_id))
+        .join(
+            Watchlist,
+            and_(
+                Watchlist.content_id == Movie.id,
+                Watchlist.content_type == "movie",
+                Watchlist.user_id == user_id,
+            ),
+        )
         .order_by(Watchlist.added_at.desc())
         .all()
     )
     shows = (
         db.query(Show.id, Show.name, Show.poster_path, Watchlist.added_at)
-        .join(Watchlist, and_(Watchlist.content_id == Show.id, Watchlist.content_type == "tv", Watchlist.user_id == user_id))
+        .join(
+            Watchlist,
+            and_(
+                Watchlist.content_id == Show.id,
+                Watchlist.content_type == "tv",
+                Watchlist.user_id == user_id,
+            ),
+        )
         .order_by(Watchlist.added_at.desc())
         .all()
     )
     return {
-        "movies": [{"id": r.id, "title": r.title, "poster_path": r.poster_path, "added_at": r.added_at} for r in movies],
-        "shows": [{"id": r.id, "name": r.name, "poster_path": r.poster_path, "added_at": r.added_at} for r in shows],
+        "movies": [
+            {
+                "id": r.id,
+                "title": r.title,
+                "poster_path": r.poster_path,
+                "added_at": r.added_at,
+            }
+            for r in movies
+        ],
+        "shows": [
+            {
+                "id": r.id,
+                "name": r.name,
+                "poster_path": r.poster_path,
+                "added_at": r.added_at,
+            }
+            for r in shows
+        ],
     }
 
 
@@ -115,23 +154,55 @@ def get_profile_watched(db: Session, user_id: str) -> dict:
     """
     movies = (
         db.query(Movie.id, Movie.title, Movie.poster_path, Watched.watched_at)
-        .join(Watched, and_(Watched.content_id == Movie.id, Watched.content_type == "movie", Watched.user_id == user_id))
+        .join(
+            Watched,
+            and_(
+                Watched.content_id == Movie.id,
+                Watched.content_type == "movie",
+                Watched.user_id == user_id,
+            ),
+        )
         .order_by(Watched.watched_at.desc())
         .all()
     )
     shows = (
         db.query(Show.id, Show.name, Show.poster_path, Watched.watched_at)
-        .join(Watched, and_(Watched.content_id == Show.id, Watched.content_type == "tv", Watched.user_id == user_id))
+        .join(
+            Watched,
+            and_(
+                Watched.content_id == Show.id,
+                Watched.content_type == "tv",
+                Watched.user_id == user_id,
+            ),
+        )
         .order_by(Watched.watched_at.desc())
         .all()
     )
     return {
-        "movies": [{"id": r.id, "title": r.title, "poster_path": r.poster_path, "watched_at": r.watched_at} for r in movies],
-        "shows": [{"id": r.id, "name": r.name, "poster_path": r.poster_path, "watched_at": r.watched_at} for r in shows],
+        "movies": [
+            {
+                "id": r.id,
+                "title": r.title,
+                "poster_path": r.poster_path,
+                "watched_at": r.watched_at,
+            }
+            for r in movies
+        ],
+        "shows": [
+            {
+                "id": r.id,
+                "name": r.name,
+                "poster_path": r.poster_path,
+                "watched_at": r.watched_at,
+            }
+            for r in shows
+        ],
     }
 
 
-def search_users_by_username(db: Session, query: str, current_user_id: str, limit: int = 10):
+def search_users_by_username(
+    db: Session, query: str, current_user_id: str, limit: int = 10
+):
     """
     Search users by partial username match, excluding the current user.
     """
