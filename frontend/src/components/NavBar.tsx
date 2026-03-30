@@ -12,7 +12,16 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation, Link, useNavigate } from "react-router-dom";
 import { onIdTokenChanged, getAuth, signOut } from "firebase/auth";
 import { firebaseApp } from "../firebase";
-import { API_URL, getAvatarColor } from "../constants";
+import { API_URL, BASE_IMAGE_URL, getAvatarColor } from "../constants";
+
+interface SearchResult {
+  id: number;
+  media_type: "movie" | "tv" | "person";
+  title?: string;
+  name?: string;
+  poster_path?: string | null;
+  profile_path?: string | null;
+}
 
 const discoverLinks = [
   { name: "Trending", href: "/trending" },
@@ -109,13 +118,75 @@ export default function NavBar() {
   const [pendingRequests, setPendingRequests] = useState(0);
   const [unreadRecs, setUnreadRecs] = useState(0);
   const [avatarKey, setAvatarKey] = useState<string | null>(null);
+  const [dropdownResults, setDropdownResults] = useState<SearchResult[]>([]);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [dropdownLoading, setDropdownLoading] = useState(false);
   const esRef = useRef<EventSource | null>(null);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && searchQuery.trim() !== "") {
+      setDropdownOpen(false);
       navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}&type=all`);
     }
+    if (e.key === "Escape") {
+      setDropdownOpen(false);
+    }
   };
+
+  // Debounced search for dropdown
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (!q) {
+      setDropdownResults([]);
+      setDropdownOpen(false);
+      return;
+    }
+    setDropdownLoading(true);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `${API_URL}/search?query=${encodeURIComponent(q)}&type=all`,
+        );
+        if (res.ok) {
+          const data: { movies: SearchResult[]; shows: SearchResult[]; people: SearchResult[] } =
+            await res.json();
+          // Tag each with media_type then interleave: up to 3 shows, 2 movies, 1 person
+          const shows = (data.shows ?? []).slice(0, 3).map((r) => ({ ...r, media_type: "tv" as const }));
+          const movies = (data.movies ?? []).slice(0, 2).map((r) => ({ ...r, media_type: "movie" as const }));
+          const people = (data.people ?? []).slice(0, 1).map((r) => ({ ...r, media_type: "person" as const }));
+          const combined: SearchResult[] = [];
+          const maxLen = Math.max(shows.length, movies.length, people.length);
+          for (let i = 0; i < maxLen; i++) {
+            if (shows[i]) combined.push(shows[i]);
+            if (movies[i]) combined.push(movies[i]);
+            if (people[i]) combined.push(people[i]);
+          }
+          setDropdownResults(combined.slice(0, 6));
+          setDropdownOpen(true);
+        }
+      } catch {
+        // ignore
+      } finally {
+        setDropdownLoading(false);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (
+        searchContainerRef.current &&
+        !searchContainerRef.current.contains(e.target as Node)
+      ) {
+        setDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
 
   const fetchCounts = useCallback(async (token: string) => {
     try {
@@ -324,8 +395,8 @@ export default function NavBar() {
 
           {/* Right side: search + avatar/sign in */}
           <div className="absolute inset-y-0 right-0 flex items-center pr-2 sm:static sm:inset-auto sm:ml-6 sm:pr-0 space-x-2">
-            <div className="relative hidden sm:block">
-              <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
+            <div ref={searchContainerRef} className="relative hidden sm:block">
+              <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none z-10">
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
                   viewBox="0 0 24 24"
@@ -340,9 +411,82 @@ export default function NavBar() {
                 value={searchQuery}
                 onKeyDown={handleKeyDown}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                onFocus={() => dropdownResults.length > 0 && setDropdownOpen(true)}
                 placeholder="Search..."
-                className="pl-10 w-full py-1.5 rounded-md bg-[#2d4e63] border border-[#1f3b4d]/50 text-white text-sm placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-950/50 transition"
+                className="pl-10 w-56 py-1.5 rounded-md bg-[#2d4e63] border border-[#1f3b4d]/50 text-white text-sm placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-950/50 transition"
               />
+
+              {/* Search dropdown */}
+              {dropdownOpen && (
+                <div className="absolute top-full mt-1 right-0 w-72 bg-gray-800 border border-white/10 rounded-lg shadow-xl z-50 overflow-hidden">
+                  {dropdownLoading && dropdownResults.length === 0 ? (
+                    <div className="px-4 py-3 text-sm text-slate-400">Searching…</div>
+                  ) : dropdownResults.length === 0 ? (
+                    <div className="px-4 py-3 text-sm text-slate-400">No results found.</div>
+                  ) : (
+                    <>
+                      {dropdownResults.map((result) => {
+                        const label = result.title ?? result.name ?? "";
+                        const href =
+                          result.media_type === "movie"
+                            ? `/movie/${result.id}`
+                            : result.media_type === "tv"
+                              ? `/tv/${result.id}`
+                              : `/person/${result.id}`;
+                        const imgPath =
+                          result.media_type === "person"
+                            ? result.profile_path
+                            : result.poster_path;
+                        const typeLabel =
+                          result.media_type === "movie"
+                            ? "Movie"
+                            : result.media_type === "tv"
+                              ? "TV Show"
+                              : "Person";
+                        return (
+                          <Link
+                            key={`${result.media_type}-${result.id}`}
+                            to={href}
+                            onClick={() => {
+                              setDropdownOpen(false);
+                              setSearchQuery("");
+                            }}
+                            className="flex items-center gap-3 px-3 py-2 hover:bg-white/5 transition-colors"
+                          >
+                            <div className="flex-shrink-0 w-8 h-12 rounded overflow-hidden bg-slate-700">
+                              {imgPath ? (
+                                <img
+                                  src={`${BASE_IMAGE_URL}/w92${imgPath}`}
+                                  alt={label}
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center text-slate-500 text-[9px] text-center leading-tight px-0.5">
+                                  {label}
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm text-white truncate">{label}</p>
+                              <p className="text-xs text-slate-400">{typeLabel}</p>
+                            </div>
+                          </Link>
+                        );
+                      })}
+                      <Link
+                        to={`/search?q=${encodeURIComponent(searchQuery.trim())}&type=all`}
+                        onClick={() => {
+                          setDropdownOpen(false);
+                          setSearchQuery("");
+                        }}
+                        className="flex items-center justify-center px-3 py-2 border-t border-white/10 text-xs text-purple-400 hover:text-purple-300 hover:bg-white/5 transition-colors"
+                      >
+                        See all results →
+                      </Link>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Profile dropdown */}
