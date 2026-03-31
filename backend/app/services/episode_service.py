@@ -1,4 +1,6 @@
 # app/services/episode_service.py
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from sqlalchemy.orm import Session
 from app.models.episode import Episode
 from app.models.show import Show
@@ -120,19 +122,30 @@ def sync_show_episodes(db: Session, show_id: int):
         n = show.number_of_seasons or 0
         season_numbers = list(range(1, n + 1))
 
-    for season_number in season_numbers:
+    # Fetch all seasons from TMDB in parallel
+    def _fetch_season(sn):
         try:
-            season_data = get(f"/tv/{show_id}/season/{season_number}")
+            return sn, get(f"/tv/{show_id}/season/{sn}")
         except Exception:
+            return sn, None
+
+    max_workers = min(8, len(season_numbers)) if season_numbers else 1
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        season_results = dict(executor.map(_fetch_season, season_numbers))
+
+    # Collect IDs already in DB to skip existing episodes efficiently
+    existing_ids = {
+        ep_id for (ep_id,) in db.query(Episode.id).filter(Episode.show_id == show_id).all()
+    }
+
+    for season_number in season_numbers:
+        season_data = season_results.get(season_number)
+        if not season_data:
             continue
 
         for ep in season_data.get("episodes", []):
             ep_id = ep.get("id")
-            if not ep_id:
-                continue
-
-            existing = db.query(Episode).filter_by(id=ep_id).first()
-            if existing:
+            if not ep_id or ep_id in existing_ids:
                 continue
 
             ep_num = ep.get("episode_number")
@@ -150,6 +163,7 @@ def sync_show_episodes(db: Session, show_id: int):
                 episode_type=_compute_episode_type(ep_num, season_number, ep.get("episode_type"), show.in_production),
             )
             db.add(episode)
+            existing_ids.add(ep_id)
 
     db.commit()
 
@@ -162,6 +176,25 @@ def maybe_sync_show_episodes(db: Session, show_id: int):
     if existing:
         return
     sync_show_episodes(db, show_id)
+
+
+def sync_show_episodes_background(show_id: int):
+    """
+    Fire-and-forget: sync all episodes for a show in a daemon thread.
+    The calling request returns immediately; episodes appear in the DB shortly after.
+    """
+    from app.db.session import SessionLocal
+
+    def _run():
+        db = SessionLocal()
+        try:
+            maybe_sync_show_episodes(db, show_id)
+        except Exception as e:
+            print(f"[episode sync] Error syncing show {show_id}: {e}")
+        finally:
+            db.close()
+
+    threading.Thread(target=_run, daemon=True).start()
 
 
 def get_or_create_episode(

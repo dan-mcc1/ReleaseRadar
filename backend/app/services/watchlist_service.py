@@ -14,7 +14,7 @@ from app.models.provider import Provider, ShowProvider, MovieProvider
 from app.models.season import Season
 from app.services.tmdb_movies import fetch_movie_from_tmdb
 from app.services.tmdb_tv import fetch_show_from_tmdb
-from app.services.episode_service import maybe_sync_show_episodes
+from app.services.episode_service import sync_show_episodes_background
 from app.services.activity_service import log_activity
 from app.services.tvmaze_service import fetch_show_air_time
 from sqlalchemy import text
@@ -391,7 +391,7 @@ def add_to_watchlist(db: Session, user_id: str, content_type: str, content_id: i
     db.refresh(entry)
 
     if content_type == "tv":
-        maybe_sync_show_episodes(db, content_id)
+        sync_show_episodes_background(content_id)
 
     return entry
 

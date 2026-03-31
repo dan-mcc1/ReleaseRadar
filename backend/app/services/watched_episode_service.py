@@ -113,18 +113,14 @@ def add_season_watched(db: Session, user_id: str, show_id: int, season_number: i
     episodes = (
         db.query(Episode).filter_by(show_id=show_id, season_number=season_number).all()
     )
+    already_watched = {
+        ep_num
+        for (ep_num,) in db.query(EpisodeWatched.episode_number).filter_by(
+            user_id=user_id, show_id=show_id, season_number=season_number
+        ).all()
+    }
     for ep in episodes:
-        exists = (
-            db.query(EpisodeWatched)
-            .filter_by(
-                user_id=user_id,
-                show_id=show_id,
-                season_number=season_number,
-                episode_number=ep.episode_number,
-            )
-            .first()
-        )
-        if not exists:
+        if ep.episode_number not in already_watched:
             db.add(
                 EpisodeWatched(
                     user_id=user_id,
@@ -220,6 +216,67 @@ def get_next_unwatched_episode(db: Session, user_id: str, show_id: int) -> dict:
                 }
 
     return {"finished": True}
+
+
+def get_next_unwatched_episodes_bulk(db: Session, user_id: str, show_ids: list[int]) -> dict:
+    """
+    Return next unwatched episode for each show_id in one pass.
+    Avoids one round-trip per show.
+    """
+    if not show_ids:
+        return {}
+
+    # Load all watched episodes for the user + these shows in one query
+    watched_rows = (
+        db.query(EpisodeWatched.show_id, EpisodeWatched.season_number, EpisodeWatched.episode_number)
+        .filter(EpisodeWatched.user_id == user_id, EpisodeWatched.show_id.in_(show_ids))
+        .all()
+    )
+    watched_by_show: dict[int, set] = {sid: set() for sid in show_ids}
+    for row in watched_rows:
+        watched_by_show[row.show_id].add((row.season_number, row.episode_number))
+
+    # Load all episodes for these shows in one query
+    episodes_rows = (
+        db.query(Episode)
+        .filter(Episode.show_id.in_(show_ids), Episode.season_number > 0)
+        .order_by(Episode.show_id, Episode.season_number, Episode.episode_number)
+        .all()
+    )
+    episodes_by_show: dict[int, list] = {sid: [] for sid in show_ids}
+    for ep in episodes_rows:
+        episodes_by_show[ep.show_id].append(ep)
+
+    result = {}
+    for show_id in show_ids:
+        watched = watched_by_show[show_id]
+        episodes = episodes_by_show[show_id]
+
+        # If no episodes synced yet, fall back to per-show logic (rare for already-tracked shows)
+        if not episodes:
+            result[show_id] = get_next_unwatched_episode(db, user_id, show_id)
+            continue
+
+        next_ep = None
+        for ep in episodes:
+            if (ep.season_number, ep.episode_number) not in watched:
+                next_ep = ep
+                break
+
+        if next_ep is None:
+            result[show_id] = {"finished": True}
+        else:
+            result[show_id] = {
+                "finished": False,
+                "season_number": next_ep.season_number,
+                "episode_number": next_ep.episode_number,
+                "name": next_ep.name,
+                "still_path": next_ep.still_path,
+                "overview": next_ep.overview,
+                "air_date": str(next_ep.air_date) if next_ep.air_date else None,
+            }
+
+    return result
 
 
 def get_watched_episodes_by_show(db: Session, user_id: str, show_id: int):

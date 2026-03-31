@@ -20,7 +20,7 @@ from app.services.watchlist_service import (
 )
 from app.services.tmdb_movies import fetch_movie_from_tmdb
 from app.services.tmdb_tv import fetch_show_from_tmdb
-from app.services.episode_service import maybe_sync_show_episodes
+from app.services.episode_service import sync_show_episodes_background
 from app.services.tvmaze_service import fetch_show_air_time
 
 
@@ -129,7 +129,7 @@ def add_to_currently_watching(db: Session, user_id: str, content_type: str, cont
     db.refresh(entry)
 
     if content_type == "tv":
-        maybe_sync_show_episodes(db, content_id)
+        sync_show_episodes_background(content_id)
 
     return entry
 

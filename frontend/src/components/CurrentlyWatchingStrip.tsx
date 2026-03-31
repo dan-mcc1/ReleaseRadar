@@ -51,29 +51,20 @@ function formatToLocalTime(time24: string, sourceTimeZone: string): string {
 interface ShowCardProps {
   show: Show;
   token: string;
+  initialNext: NextEpisode | null;
   onEpisodeWatched: (showId: number, season: number, episode: number) => void;
 }
 
-function ShowCard({ show, token, onEpisodeWatched }: ShowCardProps) {
-  const [next, setNext] = useState<NextEpisode | null>(null);
+function ShowCard({ show, token, initialNext, onEpisodeWatched }: ShowCardProps) {
+  const [next, setNext] = useState<NextEpisode | null>(initialNext);
   const [marking, setMarking] = useState(false);
   const navigate = useNavigate();
   const todayStr = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD local
 
+  // Sync when bulk data arrives after initial render
   useEffect(() => {
-    let cancelled = false;
-    fetch(`${API_URL}/watched-episode/${show.id}/next`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => r.json())
-      .then((data) => {
-        if (!cancelled) setNext(data);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [show.id, token]);
+    setNext(initialNext);
+  }, [initialNext]);
 
   async function markWatched() {
     if (!next || next.finished || marking) return;
@@ -294,6 +285,7 @@ export default function CurrentlyWatchingStrip({
 }: Props) {
   const [open, setOpen] = useState(false);
   const [token, setToken] = useState<string | null>(null);
+  const [nextEpisodes, setNextEpisodes] = useState<Record<number, NextEpisode>>({});
   const total = shows.length + movies.length;
 
   useEffect(() => {
@@ -303,6 +295,22 @@ export default function CurrentlyWatchingStrip({
       .then(setToken)
       .catch(() => {});
   }, [user]);
+
+  // Fetch all next-episodes in one bulk request when the strip opens
+  useEffect(() => {
+    if (!open || !token || shows.length === 0) return;
+    const ids = shows.map((s) => s.id).join(",");
+    fetch(`${API_URL}/watched-episode/next/bulk?show_ids=${ids}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((data: Record<string, NextEpisode>) => {
+        const parsed: Record<number, NextEpisode> = {};
+        for (const [k, v] of Object.entries(data)) parsed[Number(k)] = v;
+        setNextEpisodes(parsed);
+      })
+      .catch(() => {});
+  }, [open, token, shows]);
 
   if (total === 0) return null;
 
@@ -345,6 +353,7 @@ export default function CurrentlyWatchingStrip({
                   key={`tv-${show.id}`}
                   show={show}
                   token={token}
+                  initialNext={nextEpisodes[show.id] ?? null}
                   onEpisodeWatched={onEpisodeWatched ?? (() => {})}
                 />
               ))}
