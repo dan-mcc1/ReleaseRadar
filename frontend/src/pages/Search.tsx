@@ -10,7 +10,6 @@ export default function Search() {
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
   const query = searchParams.get("q") || "";
-  const searchType = searchParams.get("type") || "all";
 
   const [results, setResults] = useState<{
     movies: Movie[];
@@ -30,7 +29,6 @@ export default function Search() {
       try {
         const params = new URLSearchParams();
         params.append("query", query);
-        params.append("type", searchType);
         const res = await fetch(`${API_URL}/search?${params}`);
         if (!res.ok) throw new Error("Failed to fetch search results");
         const data = await res.json();
@@ -46,7 +44,7 @@ export default function Search() {
       }
     }
     fetchResults();
-  }, [query, searchType]);
+  }, [query]);
 
   const total =
     results.movies.length + results.shows.length + results.people.length;

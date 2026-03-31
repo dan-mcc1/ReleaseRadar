@@ -157,36 +157,57 @@ def add_to_watched(
     return entry
 
 
+def _mark_episodes_watched(db: Session, user_id: str, content_id: int):
+    """
+    Mark all episodes currently in the DB for this show as watched.
+    Called with an existing session (no commit — caller must commit).
+    """
+    episodes = db.query(Episode).filter_by(show_id=content_id).all()
+    existing_keys = {
+        (row.season_number, row.episode_number)
+        for row in db.query(EpisodeWatched.season_number, EpisodeWatched.episode_number)
+        .filter_by(user_id=user_id, show_id=content_id)
+        .all()
+    }
+    new_rows = [
+        EpisodeWatched(
+            user_id=user_id,
+            show_id=content_id,
+            episode_id=ep.id,
+            season_number=ep.season_number,
+            episode_number=ep.episode_number,
+            watched_at=datetime.utcnow(),
+        )
+        for ep in episodes
+        if (ep.season_number, ep.episode_number) not in existing_keys
+    ]
+    if new_rows:
+        db.bulk_save_objects(new_rows)
+
+
+def mark_existing_episodes_watched(db: Session, user_id: str, content_id: int):
+    """
+    Synchronously mark all episodes as watched and commit.
+    If no episodes are in the DB yet, syncs from TMDB first so the client
+    sees accurate data immediately rather than waiting for the background task.
+    """
+    episode_count = db.query(Episode).filter_by(show_id=content_id).count()
+    if episode_count == 0:
+        sync_show_episodes(db, content_id)
+    _mark_episodes_watched(db, user_id, content_id)
+    db.commit()
+
+
 def sync_watched_episodes_bg(user_id: str, content_id: int):
     """
-    Background task: sync all episodes for a show then mark them all as watched.
-    Uses its own DB session so it can run after the request has returned.
+    Background task: sync episodes from TMDB then mark any newly discovered
+    ones as watched. Uses its own DB session (runs after the response returns).
     """
     db = SessionLocal()
     try:
         sync_show_episodes(db, content_id)
-        episodes = db.query(Episode).filter_by(show_id=content_id).all()
-        existing_keys = {
-            (row.season_number, row.episode_number)
-            for row in db.query(EpisodeWatched.season_number, EpisodeWatched.episode_number)
-            .filter_by(user_id=user_id, show_id=content_id)
-            .all()
-        }
-        new_rows = [
-            EpisodeWatched(
-                user_id=user_id,
-                show_id=content_id,
-                episode_id=ep.id,
-                season_number=ep.season_number,
-                episode_number=ep.episode_number,
-                watched_at=datetime.utcnow(),
-            )
-            for ep in episodes
-            if (ep.season_number, ep.episode_number) not in existing_keys
-        ]
-        if new_rows:
-            db.bulk_save_objects(new_rows)
-            db.commit()
+        _mark_episodes_watched(db, user_id, content_id)
+        db.commit()
     except Exception as e:
         db.rollback()
         print(f"[sync_watched_episodes_bg] Error for show {content_id}: {e}")

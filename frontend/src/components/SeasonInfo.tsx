@@ -1,6 +1,6 @@
 import { API_URL, BASE_IMAGE_URL } from "../constants";
 import { Season, Episode } from "../types/calendar";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { getAuth } from "firebase/auth";
 import { firebaseApp } from "../firebase";
 import { Link } from "react-router-dom";
@@ -10,16 +10,40 @@ type FullSeason = Season & { episodes?: Episode[] };
 interface SeasonInfoProps {
   showId: number;
   seasons: Season[];
+  refreshKey?: number;
 }
 
-function getEpisodeTag(episodeType: string | null | undefined): { label: string; classes: string } | null {
+function getEpisodeTag(
+  episodeType: string | null | undefined,
+): { label: string; classes: string } | null {
   switch (episodeType) {
-    case "show_premiere":   return { label: "Series Premiere", classes: "bg-purple-600/20 text-purple-300 border border-purple-500/40" };
-    case "season_premiere": return { label: "Season Premiere", classes: "bg-blue-600/20 text-blue-300 border border-blue-500/40" };
-    case "season_finale":   return { label: "Season Finale",   classes: "bg-orange-600/20 text-orange-300 border border-orange-500/40" };
-    case "series_finale":   return { label: "Series Finale",   classes: "bg-red-700/20 text-red-300 border border-red-500/40" };
-    case "mid_season":      return { label: "Mid-Season Finale", classes: "bg-yellow-600/20 text-yellow-300 border border-yellow-500/40" };
-    default:                return null;
+    case "show_premiere":
+      return {
+        label: "Series Premiere",
+        classes: "bg-purple-600/20 text-purple-300 border border-purple-500/40",
+      };
+    case "season_premiere":
+      return {
+        label: "Season Premiere",
+        classes: "bg-blue-600/20 text-blue-300 border border-blue-500/40",
+      };
+    case "season_finale":
+      return {
+        label: "Season Finale",
+        classes: "bg-orange-600/20 text-orange-300 border border-orange-500/40",
+      };
+    case "series_finale":
+      return {
+        label: "Series Finale",
+        classes: "bg-red-700/20 text-red-300 border border-red-500/40",
+      };
+    case "mid_season":
+      return {
+        label: "Mid-Season Finale",
+        classes: "bg-yellow-600/20 text-yellow-300 border border-yellow-500/40",
+      };
+    default:
+      return null;
   }
 }
 
@@ -27,7 +51,11 @@ function epKey(seasonNumber: number, episodeNumber: number) {
   return `${seasonNumber}_${episodeNumber}`;
 }
 
-export default function SeasonInfo({ showId, seasons }: SeasonInfoProps) {
+export default function SeasonInfo({
+  showId,
+  seasons,
+  refreshKey,
+}: SeasonInfoProps) {
   const auth = getAuth(firebaseApp);
 
   const [expandedSeasons, setExpandedSeasons] = useState<
@@ -48,6 +76,9 @@ export default function SeasonInfo({ showId, seasons }: SeasonInfoProps) {
     new Set(),
   );
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const authUserRef = useRef<{ getIdToken: () => Promise<string> } | null>(
+    null,
+  );
 
   async function fetchWatchedEpisodes(user: {
     getIdToken: () => Promise<string>;
@@ -70,6 +101,7 @@ export default function SeasonInfo({ showId, seasons }: SeasonInfoProps) {
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (user) => {
+      authUserRef.current = user;
       if (!user) {
         setIsLoggedIn(false);
         setWatchedEpisodes(new Set());
@@ -80,6 +112,11 @@ export default function SeasonInfo({ showId, seasons }: SeasonInfoProps) {
     });
     return unsubscribe;
   }, [showId]);
+
+  useEffect(() => {
+    if (refreshKey === undefined || refreshKey === 0) return;
+    if (authUserRef.current) fetchWatchedEpisodes(authUserRef.current);
+  }, [refreshKey]);
 
   const toggleSeason = async (season: Season) => {
     if (expandedSeasons[season.season_number]) {
@@ -211,8 +248,17 @@ export default function SeasonInfo({ showId, seasons }: SeasonInfoProps) {
                 <div className="flex-1">
                   <h3 className="font-semibold">{season.name}</h3>
                   <p className="text-slate-400 text-sm">
-                    Air date: {season.air_date ? new Date(season.air_date + "T00:00:00").toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" }) : "N/A"} | Episodes:{" "}
-                    {season.episode_count}
+                    Air date:{" "}
+                    {season.air_date
+                      ? new Date(
+                          season.air_date + "T00:00:00",
+                        ).toLocaleDateString(undefined, {
+                          year: "numeric",
+                          month: "long",
+                          day: "numeric",
+                        })
+                      : "N/A"}{" "}
+                    | Episodes: {season.episode_count}
                   </p>
                   {isLoggedIn && totalCount > 0 && (
                     <div className="flex items-center gap-2 mt-1">
@@ -303,9 +349,24 @@ export default function SeasonInfo({ showId, seasons }: SeasonInfoProps) {
                     title={expandedSeason ? "Collapse" : "Expand"}
                   >
                     {loadingSeason ? (
-                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      <svg
+                        className="w-4 h-4 animate-spin"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        />
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                        />
                       </svg>
                     ) : (
                       <span
@@ -326,152 +387,172 @@ export default function SeasonInfo({ showId, seasons }: SeasonInfoProps) {
                       {expandedSeason.overview}
                     </p>
                   )}
-                  {expandedSeason.episodes && expandedSeason.episodes.length === 0 && (
-                    <p className="text-slate-500 text-sm mt-2">No episodes available yet.</p>
-                  )}
-                  {expandedSeason.episodes && expandedSeason.episodes.length > 0 && (
-                    <div className="flex flex-col gap-3 mt-2">
-                      {expandedSeason.episodes.map((ep) => {
-                        const key = epKey(ep.season_number, ep.episode_number);
-                        const watched = watchedEpisodes.has(key);
-                        const toggling = togglingEpisodes.has(key);
+                  {expandedSeason.episodes &&
+                    expandedSeason.episodes.length === 0 && (
+                      <p className="text-slate-500 text-sm mt-2">
+                        No episodes available yet.
+                      </p>
+                    )}
+                  {expandedSeason.episodes &&
+                    expandedSeason.episodes.length > 0 && (
+                      <div className="flex flex-col gap-3 mt-2">
+                        {expandedSeason.episodes.map((ep) => {
+                          const key = epKey(
+                            ep.season_number,
+                            ep.episode_number,
+                          );
+                          const watched = watchedEpisodes.has(key);
+                          const toggling = togglingEpisodes.has(key);
 
-                        return (
-                          <div key={ep.id} className="flex gap-3 items-start">
-                            <Link
-                              to={`/tv/${showId}/episode/${ep.season_number}/${ep.episode_number}`}
-                              className="flex gap-3 items-start flex-1 min-w-0 hover:opacity-90 transition-opacity"
-                            >
-                              {ep.still_path ? (
-                                <div className="relative flex-shrink-0">
-                                  <img
-                                    src={`${BASE_IMAGE_URL}/w300${ep.still_path}`}
-                                    alt={ep.name}
-                                    className="w-40 h-auto rounded-md object-cover"
-                                  />
-                                  {(() => {
-                                    const tag = getEpisodeTag((ep as any).episode_type);
-                                    return tag ? (
-                                      <span
-                                        className={`absolute bottom-1.5 left-1.5 text-[10px] font-semibold px-1.5 py-0.5 rounded backdrop-blur-sm ${tag.classes}`}
-                                      >
-                                        {tag.label}
-                                      </span>
-                                    ) : null;
-                                  })()}
-                                </div>
-                              ) : null}
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                                  <p className="font-medium text-slate-100 hover:text-blue-300 transition-colors">
-                                    {ep.episode_number}. {ep.name}
-                                  </p>
-                                  {(() => {
-                                    const tag = getEpisodeTag((ep as any).episode_type);
-                                    return tag ? (
-                                      <span
-                                        className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${tag.classes}`}
-                                      >
-                                        {tag.label}
-                                      </span>
-                                    ) : null;
-                                  })()}
-                                </div>
-                                <p className="text-slate-400 text-sm">
-                                  {ep.air_date ? new Date(ep.air_date + "T00:00:00").toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" }) : "N/A"} | Runtime:{" "}
-                                  {ep.runtime ? (
-                                    <>
-                                      {Math.floor(ep.runtime / 60) > 0 &&
-                                        `${Math.floor(ep.runtime / 60)}h `}
-                                      {ep.runtime % 60 > 0 &&
-                                        `${ep.runtime % 60}m`}
-                                    </>
-                                  ) : (
-                                    "N/A"
-                                  )}
-                                </p>
-                                <p className="text-sm text-slate-300 mt-1">
-                                  {ep.overview}
-                                </p>
-                              </div>
-                            </Link>
-                            {isLoggedIn && (
-                              <button
-                                onClick={() =>
-                                  toggleEpisodeWatched(
-                                    ep.season_number,
-                                    ep.episode_number,
-                                  )
-                                }
-                                disabled={toggling}
-                                title={
-                                  watched
-                                    ? "Mark as unwatched"
-                                    : "Mark as watched"
-                                }
-                                className={`flex-shrink-0 mt-0.5 w-8 h-8 rounded-full flex items-center justify-center transition-all duration-150 disabled:opacity-50 ${
-                                  watched
-                                    ? "bg-green-700/40 border border-green-600/60 text-green-400 hover:bg-red-900/30 hover:border-red-600/40 hover:text-red-400"
-                                    : "bg-slate-700 border border-slate-600 text-slate-400 hover:bg-green-900/30 hover:border-green-600/40 hover:text-green-400"
-                                }`}
+                          return (
+                            <div key={ep.id} className="flex gap-3 items-start">
+                              <Link
+                                to={`/tv/${showId}/episode/${ep.season_number}/${ep.episode_number}`}
+                                className="flex gap-3 items-start flex-1 min-w-0 hover:opacity-90 transition-opacity"
                               >
-                                {toggling ? (
-                                  <svg
-                                    className="w-4 h-4 animate-spin"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                  >
-                                    <circle
-                                      className="opacity-25"
-                                      cx="12"
-                                      cy="12"
-                                      r="10"
+                                {ep.still_path ? (
+                                  <div className="relative flex-shrink-0">
+                                    <img
+                                      src={`${BASE_IMAGE_URL}/w300${ep.still_path}`}
+                                      alt={ep.name}
+                                      className="w-40 h-auto rounded-md object-cover"
+                                    />
+                                    {(() => {
+                                      const tag = getEpisodeTag(
+                                        (ep as any).episode_type,
+                                      );
+                                      return tag ? (
+                                        <span
+                                          className={`absolute bottom-1.5 left-1.5 text-[10px] font-semibold px-1.5 py-0.5 rounded backdrop-blur-sm ${tag.classes}`}
+                                        >
+                                          {tag.label}
+                                        </span>
+                                      ) : null;
+                                    })()}
+                                  </div>
+                                ) : null}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                                    <p className="font-medium text-slate-100 hover:text-blue-300 transition-colors">
+                                      {ep.episode_number}. {ep.name}
+                                    </p>
+                                    {(() => {
+                                      const tag = getEpisodeTag(
+                                        (ep as any).episode_type,
+                                      );
+                                      return tag ? (
+                                        <span
+                                          className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${tag.classes}`}
+                                        >
+                                          {tag.label}
+                                        </span>
+                                      ) : null;
+                                    })()}
+                                  </div>
+                                  <p className="text-slate-400 text-sm">
+                                    {ep.air_date
+                                      ? new Date(
+                                          ep.air_date + "T00:00:00",
+                                        ).toLocaleDateString(undefined, {
+                                          year: "numeric",
+                                          month: "long",
+                                          day: "numeric",
+                                        })
+                                      : "N/A"}{" "}
+                                    | Runtime:{" "}
+                                    {ep.runtime ? (
+                                      <>
+                                        {Math.floor(ep.runtime / 60) > 0 &&
+                                          `${Math.floor(ep.runtime / 60)}h `}
+                                        {ep.runtime % 60 > 0 &&
+                                          `${ep.runtime % 60}m`}
+                                      </>
+                                    ) : (
+                                      "N/A"
+                                    )}
+                                  </p>
+                                  <p className="text-sm text-slate-300 mt-1">
+                                    {ep.overview}
+                                  </p>
+                                </div>
+                              </Link>
+                              {isLoggedIn && (
+                                <button
+                                  onClick={() =>
+                                    toggleEpisodeWatched(
+                                      ep.season_number,
+                                      ep.episode_number,
+                                    )
+                                  }
+                                  disabled={toggling}
+                                  title={
+                                    watched
+                                      ? "Mark as unwatched"
+                                      : "Mark as watched"
+                                  }
+                                  className={`flex-shrink-0 mt-0.5 w-8 h-8 rounded-full flex items-center justify-center transition-all duration-150 disabled:opacity-50 ${
+                                    watched
+                                      ? "bg-green-700/40 border border-green-600/60 text-green-400 hover:bg-red-900/30 hover:border-red-600/40 hover:text-red-400"
+                                      : "bg-slate-700 border border-slate-600 text-slate-400 hover:bg-green-900/30 hover:border-green-600/40 hover:text-green-400"
+                                  }`}
+                                >
+                                  {toggling ? (
+                                    <svg
+                                      className="w-4 h-4 animate-spin"
+                                      fill="none"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <circle
+                                        className="opacity-25"
+                                        cx="12"
+                                        cy="12"
+                                        r="10"
+                                        stroke="currentColor"
+                                        strokeWidth="4"
+                                      />
+                                      <path
+                                        className="opacity-75"
+                                        fill="currentColor"
+                                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                                      />
+                                    </svg>
+                                  ) : watched ? (
+                                    <svg
+                                      className="w-4 h-4"
+                                      viewBox="0 0 24 24"
+                                      fill="none"
                                       stroke="currentColor"
-                                      strokeWidth="4"
-                                    />
-                                    <path
-                                      className="opacity-75"
-                                      fill="currentColor"
-                                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                                    />
-                                  </svg>
-                                ) : watched ? (
-                                  <svg
-                                    className="w-4 h-4"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth={2.5}
-                                  >
-                                    <path
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      d="M5 13l4 4L19 7"
-                                    />
-                                  </svg>
-                                ) : (
-                                  <svg
-                                    className="w-4 h-4"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth={2}
-                                  >
-                                    <circle cx="12" cy="12" r="9" />
-                                    <path
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      d="M5 13l4 4L19 7"
-                                    />
-                                  </svg>
-                                )}
-                              </button>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                                      strokeWidth={2.5}
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        d="M5 13l4 4L19 7"
+                                      />
+                                    </svg>
+                                  ) : (
+                                    <svg
+                                      className="w-4 h-4"
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth={2}
+                                    >
+                                      <circle cx="12" cy="12" r="9" />
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        d="M5 13l4 4L19 7"
+                                      />
+                                    </svg>
+                                  )}
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                 </div>
               )}
             </div>

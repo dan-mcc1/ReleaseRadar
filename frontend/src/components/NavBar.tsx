@@ -124,11 +124,22 @@ export default function NavBar() {
   const [dropdownLoading, setDropdownLoading] = useState(false);
   const esRef = useRef<EventSource | null>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
+  const dropdownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dropdownAbortRef = useRef<AbortController | null>(null);
+
+  function cancelPendingDropdown() {
+    if (dropdownTimerRef.current) clearTimeout(dropdownTimerRef.current);
+    if (dropdownAbortRef.current) dropdownAbortRef.current.abort();
+    dropdownTimerRef.current = null;
+    dropdownAbortRef.current = null;
+  }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && searchQuery.trim() !== "") {
+      cancelPendingDropdown();
       setDropdownOpen(false);
-      navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}&type=all`);
+      setDropdownLoading(false);
+      navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
     }
     if (e.key === "Escape") {
       setDropdownOpen(false);
@@ -144,18 +155,30 @@ export default function NavBar() {
       return;
     }
     setDropdownLoading(true);
+    const abort = new AbortController();
+    dropdownAbortRef.current = abort;
     const timer = setTimeout(async () => {
       try {
         const res = await fetch(
-          `${API_URL}/search?query=${encodeURIComponent(q)}&type=all`,
+          `${API_URL}/search?query=${encodeURIComponent(q)}`,
+          { signal: abort.signal },
         );
         if (res.ok) {
-          const data: { movies: SearchResult[]; shows: SearchResult[]; people: SearchResult[] } =
-            await res.json();
+          const data: {
+            movies: SearchResult[];
+            shows: SearchResult[];
+            people: SearchResult[];
+          } = await res.json();
           // Tag each with media_type then interleave: up to 3 shows, 2 movies, 1 person
-          const shows = (data.shows ?? []).slice(0, 3).map((r) => ({ ...r, media_type: "tv" as const }));
-          const movies = (data.movies ?? []).slice(0, 2).map((r) => ({ ...r, media_type: "movie" as const }));
-          const people = (data.people ?? []).slice(0, 1).map((r) => ({ ...r, media_type: "person" as const }));
+          const shows = (data.shows ?? [])
+            .slice(0, 3)
+            .map((r) => ({ ...r, media_type: "tv" as const }));
+          const movies = (data.movies ?? [])
+            .slice(0, 2)
+            .map((r) => ({ ...r, media_type: "movie" as const }));
+          const people = (data.people ?? [])
+            .slice(0, 1)
+            .map((r) => ({ ...r, media_type: "person" as const }));
           const combined: SearchResult[] = [];
           const maxLen = Math.max(shows.length, movies.length, people.length);
           for (let i = 0; i < maxLen; i++) {
@@ -167,12 +190,16 @@ export default function NavBar() {
           setDropdownOpen(true);
         }
       } catch {
-        // ignore
+        // ignore (includes AbortError)
       } finally {
         setDropdownLoading(false);
       }
     }, 300);
-    return () => clearTimeout(timer);
+    dropdownTimerRef.current = timer;
+    return () => {
+      clearTimeout(timer);
+      abort.abort();
+    };
   }, [searchQuery]);
 
   // Close dropdown on outside click
@@ -412,7 +439,9 @@ export default function NavBar() {
                 value={searchQuery}
                 onKeyDown={handleKeyDown}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                onFocus={() => dropdownResults.length > 0 && setDropdownOpen(true)}
+                onFocus={() =>
+                  dropdownResults.length > 0 && setDropdownOpen(true)
+                }
                 placeholder="Search..."
                 className="pl-10 w-56 py-1.5 rounded-md bg-[#2d4e63] border border-[#1f3b4d]/50 text-white text-sm placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-950/50 transition"
               />
@@ -421,9 +450,13 @@ export default function NavBar() {
               {dropdownOpen && (
                 <div className="absolute top-full mt-1 right-0 w-72 bg-gray-800 border border-white/10 rounded-lg shadow-xl z-50 overflow-hidden">
                   {dropdownLoading && dropdownResults.length === 0 ? (
-                    <div className="px-4 py-3 text-sm text-slate-400">Searching…</div>
+                    <div className="px-4 py-3 text-sm text-slate-400">
+                      Searching…
+                    </div>
                   ) : dropdownResults.length === 0 ? (
-                    <div className="px-4 py-3 text-sm text-slate-400">No results found.</div>
+                    <div className="px-4 py-3 text-sm text-slate-400">
+                      No results found.
+                    </div>
                   ) : (
                     <>
                       {dropdownResults.map((result) => {
@@ -468,8 +501,12 @@ export default function NavBar() {
                               )}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm text-white truncate">{label}</p>
-                              <p className="text-xs text-slate-400">{typeLabel}</p>
+                              <p className="text-sm text-white truncate">
+                                {label}
+                              </p>
+                              <p className="text-xs text-slate-400">
+                                {typeLabel}
+                              </p>
                             </div>
                           </Link>
                         );

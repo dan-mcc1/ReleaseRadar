@@ -131,6 +131,7 @@ export default function ShowInfo() {
     null,
   );
   const [aggRating, setAggRating] = useState<AggregateRating | null>(null);
+  const [episodeRefreshKey, setEpisodeRefreshKey] = useState(0);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
@@ -258,7 +259,7 @@ export default function ShowInfo() {
       <div className="px-4 sm:px-6 mt-6 space-y-8">
         {/* Top meta row: genres + watch button + trailer */}
         <div className="flex flex-wrap items-center gap-3">
-          {user && <WatchButton contentType="tv" contentId={show.id} />}
+          {user && <WatchButton contentType="tv" contentId={show.id} onStatusChange={() => setEpisodeRefreshKey((k) => k + 1)} />}
           {user && <FavoriteButton contentType="tv" contentId={show.id} />}
           {user && (
             <RecommendButton
@@ -481,7 +482,7 @@ export default function ShowInfo() {
 
         {/* Seasons */}
         {show.seasons?.length > 0 && (
-          <SeasonInfo showId={show.id} seasons={show.seasons} />
+          <SeasonInfo showId={show.id} seasons={show.seasons} refreshKey={episodeRefreshKey} />
         )}
 
         {/* Reviews */}

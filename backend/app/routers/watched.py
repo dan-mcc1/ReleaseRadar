@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.services.watched_service import (
     add_to_watched,
+    mark_existing_episodes_watched,
     sync_watched_episodes_bg,
     get_watched,
     remove_from_watched,
@@ -25,6 +26,7 @@ def add_item(
 ):
     result = add_to_watched(db, uid, content_type, content_id)
     if content_type == "tv":
+        mark_existing_episodes_watched(db, uid, content_id)
         background_tasks.add_task(sync_watched_episodes_bg, uid, content_id)
     return result
 
