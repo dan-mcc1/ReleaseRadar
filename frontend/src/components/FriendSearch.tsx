@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
 import { API_URL } from "../constants";
+import { Link } from "react-router-dom";
 
 interface SearchResult {
   id: string;
@@ -12,7 +13,11 @@ interface Props {
   friendIds?: Set<string>;
 }
 
-export default function FriendSearch({ token, onRequestSent, friendIds }: Props) {
+export default function FriendSearch({
+  token,
+  onRequestSent,
+  friendIds,
+}: Props) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [sending, setSending] = useState<string | null>(null); // username being sent to
@@ -34,9 +39,12 @@ export default function FriendSearch({ token, onRequestSent, friendIds }: Props)
 
     debounceRef.current = setTimeout(async () => {
       try {
-        const res = await fetch(`${API_URL}/friends/search?q=${encodeURIComponent(value.trim())}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await fetch(
+          `${API_URL}/friends/search?q=${encodeURIComponent(value.trim())}`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          },
+        );
         if (res.ok) {
           setResults(await res.json());
         }
@@ -52,7 +60,10 @@ export default function FriendSearch({ token, onRequestSent, friendIds }: Props)
     try {
       const res = await fetch(`${API_URL}/friends/request`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({ addressee_username: username }),
       });
       if (res.ok) {
@@ -88,7 +99,12 @@ export default function FriendSearch({ token, onRequestSent, friendIds }: Props)
               key={user.id}
               className="flex items-center justify-between bg-slate-700 px-3 py-2 rounded-lg"
             >
-              <span className="text-slate-100 font-medium">@{user.username}</span>
+              <Link
+                to={`/user/${user.username}`}
+                className="text-slate-100 font-medium hover:text-blue-400 transition-colors"
+              >
+                <span>@{user.username}</span>
+              </Link>
               {friendIds?.has(user.id) ? (
                 <span className="text-slate-400 text-sm">Already friends</span>
               ) : sentTo.has(user.username) ? (
