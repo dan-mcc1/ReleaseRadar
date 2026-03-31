@@ -36,7 +36,7 @@ export default function Trending() {
   const total = results.movies.length + results.shows.length + results.people.length;
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 pb-16">
+    <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 py-8 pb-16">
       {/* Page header */}
       <div className="mb-8">
         <div className="flex items-center gap-3 mb-1">

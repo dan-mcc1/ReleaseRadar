@@ -52,7 +52,7 @@ export default function Search() {
     results.movies.length + results.shows.length + results.people.length;
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 pb-16">
+    <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 py-8 pb-16">
       {/* Header */}
       <div className="mb-6">
         {query ? (

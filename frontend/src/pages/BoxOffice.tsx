@@ -187,13 +187,13 @@ export default function BoxOffice() {
       {!loading && !error && movies.length > 0 && (
         <div className="rounded-xl border border-white/10 overflow-hidden">
           {/* Table header */}
-          <div className="grid grid-cols-[2.5rem_3rem_1fr_repeat(3,minmax(0,1fr))] gap-2 items-center px-4 py-3 bg-slate-800/60 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+          <div className="grid grid-cols-[2rem_2.5rem_1fr_auto] sm:grid-cols-[2.5rem_3rem_1fr_repeat(3,minmax(0,1fr))] gap-2 items-center px-3 sm:px-4 py-3 bg-slate-800/60 text-xs font-semibold text-slate-400 uppercase tracking-wider">
             <span>#</span>
             <span></span>
             <span>Movie</span>
             <span className="text-right">Revenue</span>
-            <span className="text-right">Budget</span>
-            <span className="text-right">Profit / Loss</span>
+            <span className="hidden sm:block text-right">Budget</span>
+            <span className="hidden sm:block text-right">Profit / Loss</span>
           </div>
 
           {/* Rows */}
@@ -204,7 +204,7 @@ export default function BoxOffice() {
                 <Link
                   key={movie.id}
                   to={`/movie/${movie.id}`}
-                  className="grid grid-cols-[2.5rem_3rem_1fr_repeat(3,minmax(0,1fr))] gap-2 items-center px-4 py-3 hover:bg-white/5 transition-colors"
+                  className="grid grid-cols-[2rem_2.5rem_1fr_auto] sm:grid-cols-[2.5rem_3rem_1fr_repeat(3,minmax(0,1fr))] gap-2 items-center px-3 sm:px-4 py-3 hover:bg-white/5 transition-colors"
                 >
                   {/* Rank */}
                   <span
@@ -222,7 +222,7 @@ export default function BoxOffice() {
                   </span>
 
                   {/* Poster */}
-                  <div className="w-9 h-[54px] rounded overflow-hidden bg-slate-700 flex-shrink-0">
+                  <div className="w-8 sm:w-9 h-[48px] sm:h-[54px] rounded overflow-hidden bg-slate-700 flex-shrink-0">
                     {movie.poster_path ? (
                       <img
                         src={`${BASE_IMAGE_URL}/w92${movie.poster_path}`}
@@ -238,7 +238,7 @@ export default function BoxOffice() {
 
                   {/* Title + date */}
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-white truncate">
+                    <p className="text-sm font-medium text-white line-clamp-2 sm:truncate leading-snug">
                       {movie.title}
                     </p>
                     {movie.release_date && (
@@ -259,14 +259,14 @@ export default function BoxOffice() {
                     {formatMoney(movie.revenue)}
                   </span>
 
-                  {/* Budget */}
-                  <span className="text-sm text-slate-400 text-right">
+                  {/* Budget — hidden on mobile */}
+                  <span className="hidden sm:block text-sm text-slate-400 text-right">
                     {formatMoney(movie.budget)}
                   </span>
 
-                  {/* Profit */}
+                  {/* Profit — hidden on mobile */}
                   <span
-                    className={`text-sm text-right font-medium ${profit.color}`}
+                    className={`hidden sm:block text-sm text-right font-medium ${profit.color}`}
                   >
                     {profit.text}
                   </span>

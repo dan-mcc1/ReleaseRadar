@@ -174,7 +174,7 @@ export default function EpisodeInfo() {
 
   if (error || !data) {
     return (
-      <div className="max-w-3xl mx-auto px-4 py-16 text-center">
+      <div className="w-full max-w-3xl mx-auto px-4 py-16 text-center">
         <p className="text-red-400 text-lg">{error ?? "Episode not found."}</p>
         {showId && <Link to={`/tv/${showId}`} className="text-blue-400 hover:text-blue-300 text-sm mt-4 inline-block">← Back to show</Link>}
       </div>
@@ -193,7 +193,7 @@ export default function EpisodeInfo() {
     : null;
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8 space-y-8">
+    <div className="w-full max-w-4xl mx-auto px-4 py-8 space-y-8">
       {/* Breadcrumb */}
       <nav className="flex items-center gap-1.5 text-sm text-slate-400 flex-wrap">
         {showName && showId && (

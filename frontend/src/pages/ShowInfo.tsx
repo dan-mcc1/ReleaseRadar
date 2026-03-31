@@ -228,7 +228,7 @@ export default function ShowInfo() {
             <img
               src={`${BASE_IMAGE_URL}/w300${show.poster_path}`}
               alt={show.name}
-              className="hidden sm:block w-28 md:w-36 rounded-xl shadow-2xl border border-white/10 flex-shrink-0 -mb-1"
+              className="hidden md:block w-28 lg:w-36 rounded-xl shadow-2xl border border-white/10 flex-shrink-0 -mb-1"
             />
           )}
 

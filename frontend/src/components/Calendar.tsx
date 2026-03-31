@@ -488,7 +488,7 @@ export default function CalendarComponent({
       {/* Controls bar */}
       <div className="border-b border-slate-700 bg-slate-900">
         {/* Mobile-only: period navigation row */}
-        <div className="flex sm:hidden items-center justify-between px-4 pt-2 pb-1">
+        <div className="flex lg:hidden items-center justify-between px-4 pt-2 pb-1">
           <button
             onClick={handlePrev}
             className="h-8 w-8 flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
@@ -670,7 +670,7 @@ export default function CalendarComponent({
           </div>
 
           {/* CENTER: Period navigation (desktop only) */}
-          <div className="hidden sm:flex absolute left-1/2 -translate-x-1/2 items-center gap-1">
+          <div className="hidden lg:flex absolute left-1/2 -translate-x-1/2 items-center gap-1">
             <button
               onClick={handlePrev}
               className="h-8 w-8 flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"

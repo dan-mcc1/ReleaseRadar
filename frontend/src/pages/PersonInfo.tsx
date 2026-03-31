@@ -142,7 +142,7 @@ export default function PersonInfo() {
     : person.biography;
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 pb-16 space-y-10">
+    <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 py-8 pb-16 space-y-10">
       {/* ── PROFILE SECTION ── */}
       <div className="flex flex-col sm:flex-row gap-6">
         {/* Photo */}

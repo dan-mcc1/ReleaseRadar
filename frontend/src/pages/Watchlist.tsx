@@ -113,7 +113,7 @@ export default function Watchlist() {
   );
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 pb-16">
+    <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-8 pb-16">
       {/* Page header */}
       <div className="mb-8">
         <div className="flex items-center gap-3 mb-1">

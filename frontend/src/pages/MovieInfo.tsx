@@ -234,7 +234,7 @@ export default function MovieInfo() {
             <img
               src={`${BASE_IMAGE_URL}/w300${movie.poster_path}`}
               alt={movie.title}
-              className="hidden sm:block w-28 md:w-36 rounded-xl shadow-2xl border border-white/10 flex-shrink-0"
+              className="hidden md:block w-28 lg:w-36 rounded-xl shadow-2xl border border-white/10 flex-shrink-0"
             />
           )}
 

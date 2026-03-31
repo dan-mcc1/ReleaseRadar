@@ -82,7 +82,7 @@ export default function SearchGenres() {
   const total = results.movies.length + results.shows.length;
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 pb-16">
+    <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 py-8 pb-16">
       {/* Header */}
       <div className="mb-5">
         <h1 className="text-2xl font-bold text-white">Search Genres</h1>

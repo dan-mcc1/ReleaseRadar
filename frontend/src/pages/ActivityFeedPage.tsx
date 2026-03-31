@@ -296,7 +296,7 @@ export default function ActivityFeedPage() {
   const unreadCount = recommendations.filter((r) => !r.is_read).length;
 
   return (
-    <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8">
+    <div className="w-full max-w-2xl mx-auto px-4 sm:px-6 py-8">
       <h1 className="text-2xl font-bold text-white mb-6">Activity</h1>
 
       {/* Tabs */}

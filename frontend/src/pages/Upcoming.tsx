@@ -54,7 +54,7 @@ export default function Upcoming() {
   const total = results.movies.length + results.shows.length;
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 pb-16">
+    <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 py-8 pb-16">
       {/* Page header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-white mb-1">Coming Soon</h1>

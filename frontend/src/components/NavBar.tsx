@@ -327,10 +327,10 @@ export default function NavBar() {
       as="nav"
       className="relative bg-[#1f3b4d] after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-white/10"
     >
-      <div className="mx-auto max-w-7xl px-2 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl px-4 lg:px-8">
         <div className="relative flex h-16 items-center justify-between">
           {/* Mobile hamburger */}
-          <div className="absolute inset-y-0 left-0 flex items-center sm:hidden">
+          <div className="absolute inset-y-0 left-0 flex items-center lg:hidden">
             <DisclosureButton className="group relative inline-flex items-center justify-center rounded-md p-2 text-gray-400 hover:bg-white/5 hover:text-white focus:outline-2 focus:-outline-offset-1 focus:outline-indigo-500">
               <span className="absolute -inset-0.5" />
               <span className="sr-only">Open main menu</span>
@@ -346,7 +346,7 @@ export default function NavBar() {
           </div>
 
           {/* Logo + desktop nav */}
-          <div className="flex flex-1 items-center justify-center sm:items-stretch sm:justify-start">
+          <div className="flex flex-1 items-center justify-center lg:items-stretch lg:justify-start">
             <div className="flex shrink-0 items-center text-white">
               <a href="/" className="flex items-center gap-2 shrink-0">
                 <svg
@@ -361,7 +361,7 @@ export default function NavBar() {
               </a>
             </div>
 
-            <div className="hidden sm:ml-6 sm:flex sm:items-center sm:gap-1">
+            <div className="hidden lg:ml-6 lg:flex lg:items-center lg:gap-1">
               {/* Dashboard */}
               <Link
                 to="/"
@@ -395,8 +395,8 @@ export default function NavBar() {
           </div>
 
           {/* Right side: search + avatar/sign in */}
-          <div className="absolute inset-y-0 right-0 flex items-center pr-2 sm:static sm:inset-auto sm:ml-6 sm:pr-0 space-x-2">
-            <div ref={searchContainerRef} className="relative hidden sm:block">
+          <div className="absolute inset-y-0 right-0 flex items-center pr-2 lg:static lg:inset-auto lg:ml-6 lg:pr-0 space-x-2">
+            <div ref={searchContainerRef} className="relative hidden lg:block">
               <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none z-10">
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -574,7 +574,7 @@ export default function NavBar() {
       </div>
 
       {/* Mobile panel */}
-      <DisclosurePanel className="sm:hidden">
+      <DisclosurePanel className="lg:hidden">
         <div className="space-y-1 px-2 pt-2 pb-3">
           {/* Search */}
           <div className="relative mb-2">

@@ -215,7 +215,7 @@ export default function ProfilePage() {
   const totalFavorites = favorites.movies.length + favorites.shows.length;
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8 space-y-6">
+    <div className="w-full max-w-6xl mx-auto px-4 py-8 space-y-6">
       {/* ── Hero banner ── */}
       <div className="rounded-2xl overflow-hidden bg-gradient-to-br from-[#1f3b4d] via-[#2d4e63] to-[#1a3040]">
         <div className="px-6 pt-8 pb-6 flex flex-col sm:flex-row items-center sm:items-end gap-5">

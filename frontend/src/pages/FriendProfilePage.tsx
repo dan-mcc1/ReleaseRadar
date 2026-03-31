@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, Navigate } from "react-router-dom";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { firebaseApp } from "../firebase";
 import { API_URL } from "../constants";
@@ -39,6 +39,7 @@ export default function FriendProfilePage() {
   const [error, setError] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [requesting, setRequesting] = useState(false);
+  const [isSelf, setIsSelf] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -52,7 +53,9 @@ export default function FriendProfilePage() {
           `${API_URL}/user/profile/${encodeURIComponent(username)}`,
           { headers: { Authorization: `Bearer ${tok}` } },
         );
-        if (res.status === 404) {
+        if (res.status === 400) {
+          setIsSelf(true);
+        } else if (res.status === 404) {
           setError("User not found.");
         } else if (!res.ok) {
           setError("Could not load profile.");
@@ -119,8 +122,10 @@ export default function FriendProfilePage() {
   const favorites = profile.favorites;
   const friends = profile.friends ?? [];
 
+  if (isSelf) return <Navigate to="/profile" replace />;
+
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8 space-y-8">
+    <div className="w-full max-w-6xl mx-auto px-4 py-8 space-y-8">
       {/* Header */}
       <div className="flex items-center gap-6 bg-[#2d4e63] p-6 rounded-lg text-white">
         <div className="w-24 h-24 rounded-full bg-slate-600 flex items-center justify-center text-3xl font-bold text-slate-300 border-2 border-white/20">
