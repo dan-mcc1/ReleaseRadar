@@ -103,6 +103,18 @@ def mark_read(db: Session, user_id: str, recommendation_id: int):
     return {"message": "Marked as read"}
 
 
+def delete_recommendation(db: Session, user_id: str, recommendation_id: int):
+    rec = (
+        db.query(Recommendation)
+        .filter_by(id=recommendation_id, recipient_id=user_id)
+        .first()
+    )
+    if not rec:
+        raise HTTPException(status_code=404, detail="Recommendation not found.")
+    db.delete(rec)
+    db.commit()
+
+
 def delete_old_recommendations(db: Session) -> int:
     cutoff = datetime.now(timezone.utc) - timedelta(days=_REC_TTL_DAYS)
     deleted = (

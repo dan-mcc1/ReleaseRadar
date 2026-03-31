@@ -179,9 +179,11 @@ function ActivityRow({
 function RecommendationRow({
   item,
   onRead,
+  onDelete,
 }: {
   item: RecommendationItem;
   onRead: (id: number) => void;
+  onDelete: (id: number) => void;
 }) {
   const contentPath = `/${item.content_type === "movie" ? "movie" : "tv"}/${item.content_id}`;
 
@@ -191,7 +193,7 @@ function RecommendationRow({
 
   return (
     <div
-      className={`flex items-start gap-4 border rounded-xl p-4 transition-colors ${
+      className={`relative flex items-start gap-4 border rounded-xl p-4 transition-colors ${
         item.is_read
           ? "bg-slate-800 border-slate-700"
           : "bg-slate-800 border-blue-600/50 ring-1 ring-blue-600/20"
@@ -254,6 +256,16 @@ function RecommendationRow({
           )}
         </div>
       </div>
+
+      <button
+        onClick={() => onDelete(item.id)}
+        title="Delete recommendation"
+        className="absolute top-2 right-2 text-slate-600 hover:text-red-400 transition-colors"
+      >
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
 
       <div className="flex-shrink-0 self-center">
         <WatchButton
@@ -360,6 +372,18 @@ export default function ActivityFeedPage() {
       setRecommendations((prev) =>
         prev.map((r) => (r.id === id ? { ...r, is_read: false } : r)),
       );
+    }
+  }
+
+  async function deleteRec(id: number) {
+    setRecommendations((prev) => prev.filter((r) => r.id !== id));
+    try {
+      await fetch(`${API_URL}/recommendations/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    } catch {
+      // non-critical, item already removed from UI
     }
   }
 
@@ -502,7 +526,7 @@ export default function ActivityFeedPage() {
           {!recsLoading && recommendations.length > 0 && (
             <div className="flex flex-col gap-3">
               {recommendations.map((rec) => (
-                <RecommendationRow key={rec.id} item={rec} onRead={markRead} />
+                <RecommendationRow key={rec.id} item={rec} onRead={markRead} onDelete={deleteRec} />
               ))}
             </div>
           )}

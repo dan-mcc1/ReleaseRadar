@@ -7,6 +7,7 @@ from app.services.recommendation_service import (
     get_inbox,
     mark_read,
     get_unread_count,
+    delete_recommendation,
 )
 from app.services.email_service import send_recommendation_email
 from app.core.event_bus import publish
@@ -61,3 +62,13 @@ def read(
     uid: str = Depends(get_current_user),
 ):
     return mark_read(db, uid, recommendation_id)
+
+
+@router.delete("/{recommendation_id}")
+def delete(
+    recommendation_id: int,
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    delete_recommendation(db, uid, recommendation_id)
+    return {"detail": "Deleted."}
