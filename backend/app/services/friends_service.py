@@ -143,13 +143,19 @@ def get_friends(db: Session, user_id: str) -> list[dict]:
         .all()
     )
 
-    result = []
-    for f in friendships:
-        friend_id = f.addressee_id if f.requester_id == user_id else f.requester_id
-        friend = db.query(User).filter_by(id=friend_id).first()
-        if friend:
-            result.append({"friendship_id": f.id, "friend": _serialize_user(friend)})
-    return result
+    friend_ids = [
+        f.addressee_id if f.requester_id == user_id else f.requester_id
+        for f in friendships
+    ]
+    users = {u.id: u for u in db.query(User).filter(User.id.in_(friend_ids)).all()}
+
+    return [
+        {"friendship_id": f.id, "friend": _serialize_user(users[
+            f.addressee_id if f.requester_id == user_id else f.requester_id
+        ])}
+        for f in friendships
+        if (f.addressee_id if f.requester_id == user_id else f.requester_id) in users
+    ]
 
 
 def get_incoming_requests(db: Session, user_id: str) -> list[dict]:
@@ -163,12 +169,14 @@ def get_incoming_requests(db: Session, user_id: str) -> list[dict]:
         .all()
     )
 
-    result = []
-    for f in friendships:
-        requester = db.query(User).filter_by(id=f.requester_id).first()
-        if requester:
-            result.append({"friendship_id": f.id, "from_user": _serialize_user(requester), "created_at": f.created_at})
-    return result
+    requester_ids = [f.requester_id for f in friendships]
+    users = {u.id: u for u in db.query(User).filter(User.id.in_(requester_ids)).all()}
+
+    return [
+        {"friendship_id": f.id, "from_user": _serialize_user(users[f.requester_id]), "created_at": f.created_at}
+        for f in friendships
+        if f.requester_id in users
+    ]
 
 
 def get_outgoing_requests(db: Session, user_id: str) -> list[dict]:
@@ -182,12 +190,14 @@ def get_outgoing_requests(db: Session, user_id: str) -> list[dict]:
         .all()
     )
 
-    result = []
-    for f in friendships:
-        addressee = db.query(User).filter_by(id=f.addressee_id).first()
-        if addressee:
-            result.append({"friendship_id": f.id, "to_user": _serialize_user(addressee), "created_at": f.created_at})
-    return result
+    addressee_ids = [f.addressee_id for f in friendships]
+    users = {u.id: u for u in db.query(User).filter(User.id.in_(addressee_ids)).all()}
+
+    return [
+        {"friendship_id": f.id, "to_user": _serialize_user(users[f.addressee_id]), "created_at": f.created_at}
+        for f in friendships
+        if f.addressee_id in users
+    ]
 
 
 def are_friends(db: Session, user_a: str, user_b: str) -> bool:

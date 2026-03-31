@@ -16,10 +16,10 @@ interface FriendEntry {
 interface Props {
   token: string;
   friends: FriendEntry[];
-  onUpdate: () => void;
+  onFriendRemoved: (friendId: string) => void;
 }
 
-export default function FriendsList({ token, friends, onUpdate }: Props) {
+export default function FriendsList({ token, friends, onFriendRemoved }: Props) {
   const [removing, setRemoving] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
@@ -30,7 +30,7 @@ export default function FriendsList({ token, friends, onUpdate }: Props) {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
-      onUpdate();
+      onFriendRemoved(friendId);
     } finally {
       setRemoving(null);
       setConfirmId(null);

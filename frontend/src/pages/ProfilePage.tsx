@@ -591,7 +591,9 @@ export default function ProfilePage() {
             <FriendsList
               token={token}
               friends={friends}
-              onUpdate={() => token && fetchFriends(token)}
+              onFriendRemoved={(friendId) =>
+                setFriends((prev) => prev.filter((f) => f.friend.id !== friendId))
+              }
             />
           )}
           {friendsTab === "requests" && token && (
@@ -599,7 +601,18 @@ export default function ProfilePage() {
               token={token}
               incoming={incoming}
               outgoing={outgoing}
-              onUpdate={() => token && fetchFriends(token)}
+              onResponded={(friendshipId, accepted, req) => {
+                setIncoming((prev) => prev.filter((r) => r.friendship_id !== friendshipId));
+                if (accepted) {
+                  setFriends((prev) => [
+                    ...prev,
+                    { friendship_id: friendshipId, friend: req.from_user },
+                  ]);
+                }
+              }}
+              onCancelled={(friendshipId) =>
+                setOutgoing((prev) => prev.filter((r) => r.friendship_id !== friendshipId))
+              }
             />
           )}
           {friendsTab === "add" && token && (

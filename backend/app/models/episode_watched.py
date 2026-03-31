@@ -1,5 +1,5 @@
 # src/models/episode_watched.py
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Float
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Float, Index
 from sqlalchemy.sql import func
 from app.db.base import Base
 
@@ -15,3 +15,8 @@ class EpisodeWatched(Base):
     episode_number = Column(Integer)
     watched_at = Column(DateTime(timezone=True), server_default=func.now())
     rating = Column(Float, nullable=True)
+
+    __table_args__ = (
+        Index("ix_episode_watched_user_show", "user_id", "show_id"),
+        Index("ix_episode_watched_show", "show_id"),
+    )

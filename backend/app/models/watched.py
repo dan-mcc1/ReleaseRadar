@@ -1,5 +1,5 @@
 # src/models/movie_watched.py
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Float
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Float, Index
 from sqlalchemy.sql import func
 from app.db.base import Base
 
@@ -13,3 +13,7 @@ class Watched(Base):
     content_id = Column(Integer)
     watched_at = Column(DateTime(timezone=True), server_default=func.now())
     rating = Column(Float, nullable=True)
+
+    __table_args__ = (
+        Index("ix_watched_user_content", "user_id", "content_type", "content_id"),
+    )

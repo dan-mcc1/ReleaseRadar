@@ -23,15 +23,17 @@ interface Props {
   token: string;
   incoming: IncomingRequest[];
   outgoing: OutgoingRequest[];
-  onUpdate: () => void;
+  onResponded: (friendshipId: number, accepted: boolean, req: IncomingRequest) => void;
+  onCancelled: (friendshipId: number) => void;
 }
 
-export default function FriendRequests({ token, incoming, outgoing, onUpdate }: Props) {
+export default function FriendRequests({ token, incoming, outgoing, onResponded, onCancelled }: Props) {
   const [responding, setResponding] = useState<number | null>(null);
   const [cancelling, setCancelling] = useState<number | null>(null);
 
   async function respond(friendshipId: number, accept: boolean) {
     setResponding(friendshipId);
+    const req = incoming.find((r) => r.friendship_id === friendshipId)!;
     try {
       const res = await fetch(`${API_URL}/friends/respond`, {
         method: "PATCH",
@@ -40,8 +42,8 @@ export default function FriendRequests({ token, incoming, outgoing, onUpdate }: 
       });
       if (res.ok) {
         window.dispatchEvent(new CustomEvent("friend-request-handled"));
+        onResponded(friendshipId, accept, req);
       }
-      onUpdate();
     } finally {
       setResponding(null);
     }
@@ -54,7 +56,7 @@ export default function FriendRequests({ token, incoming, outgoing, onUpdate }: 
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
-      onUpdate();
+      onCancelled(friendshipId);
     } finally {
       setCancelling(null);
     }

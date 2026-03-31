@@ -113,27 +113,35 @@ def serialize_movie(movie):
 # -------------------------
 
 def _upsert_genres_for_show(db: Session, show: Show, genres_data: list):
-    for g in (genres_data or []):
-        genre = db.query(Genre).filter_by(id=g["id"]).first()
-        if not genre:
-            genre = Genre(id=g["id"], name=g["name"])
-            db.add(genre)
-            db.flush()
-        exists = db.query(ShowGenre).filter_by(show_id=show.id, genre_id=genre.id).first()
-        if not exists:
-            db.add(ShowGenre(show_id=show.id, genre_id=genre.id))
+    if not genres_data:
+        return
+    genre_ids = [g["id"] for g in genres_data]
+    existing_genres = {g.id: g for g in db.query(Genre).filter(Genre.id.in_(genre_ids)).all()}
+    existing_links = {
+        sg.genre_id
+        for sg in db.query(ShowGenre).filter_by(show_id=show.id).filter(ShowGenre.genre_id.in_(genre_ids)).all()
+    }
+    for g in genres_data:
+        if g["id"] not in existing_genres:
+            db.add(Genre(id=g["id"], name=g["name"]))
+        if g["id"] not in existing_links:
+            db.add(ShowGenre(show_id=show.id, genre_id=g["id"]))
 
 
 def _upsert_genres_for_movie(db: Session, movie: Movie, genres_data: list):
-    for g in (genres_data or []):
-        genre = db.query(Genre).filter_by(id=g["id"]).first()
-        if not genre:
-            genre = Genre(id=g["id"], name=g["name"])
-            db.add(genre)
-            db.flush()
-        exists = db.query(MovieGenre).filter_by(movie_id=movie.id, genre_id=genre.id).first()
-        if not exists:
-            db.add(MovieGenre(movie_id=movie.id, genre_id=genre.id))
+    if not genres_data:
+        return
+    genre_ids = [g["id"] for g in genres_data]
+    existing_genres = {g.id: g for g in db.query(Genre).filter(Genre.id.in_(genre_ids)).all()}
+    existing_links = {
+        mg.genre_id
+        for mg in db.query(MovieGenre).filter_by(movie_id=movie.id).filter(MovieGenre.genre_id.in_(genre_ids)).all()
+    }
+    for g in genres_data:
+        if g["id"] not in existing_genres:
+            db.add(Genre(id=g["id"], name=g["name"]))
+        if g["id"] not in existing_links:
+            db.add(MovieGenre(movie_id=movie.id, genre_id=g["id"]))
 
 
 def _upsert_providers_for_show(db: Session, show: Show, us_providers: dict):
@@ -157,13 +165,18 @@ def _upsert_providers_for_show(db: Session, show: Show, us_providers: dict):
                 }
             provider_map[pid][ptype] = True
 
+    if not provider_map:
+        return
+    pids = list(provider_map.keys())
+    existing_providers = {p.id for p in db.query(Provider).filter(Provider.id.in_(pids)).all()}
+    existing_show_providers = {
+        sp.provider_id: sp
+        for sp in db.query(ShowProvider).filter_by(show_id=show.id).filter(ShowProvider.provider_id.in_(pids)).all()
+    }
     for pid, data in provider_map.items():
-        provider = db.query(Provider).filter_by(id=pid).first()
-        if not provider:
-            provider = Provider(id=pid, name=data["name"], logo_path=data["logo_path"])
-            db.add(provider)
-            db.flush()
-        sp = db.query(ShowProvider).filter_by(show_id=show.id, provider_id=pid).first()
+        if pid not in existing_providers:
+            db.add(Provider(id=pid, name=data["name"], logo_path=data["logo_path"]))
+        sp = existing_show_providers.get(pid)
         if not sp:
             db.add(ShowProvider(
                 show_id=show.id,
@@ -193,13 +206,18 @@ def _upsert_providers_for_movie(db: Session, movie: Movie, us_providers: dict):
                 }
             provider_map[pid][ptype] = True
 
+    if not provider_map:
+        return
+    pids = list(provider_map.keys())
+    existing_providers = {p.id for p in db.query(Provider).filter(Provider.id.in_(pids)).all()}
+    existing_movie_providers = {
+        mp.provider_id: mp
+        for mp in db.query(MovieProvider).filter_by(movie_id=movie.id).filter(MovieProvider.provider_id.in_(pids)).all()
+    }
     for pid, data in provider_map.items():
-        provider = db.query(Provider).filter_by(id=pid).first()
-        if not provider:
-            provider = Provider(id=pid, name=data["name"], logo_path=data["logo_path"])
-            db.add(provider)
-            db.flush()
-        mp = db.query(MovieProvider).filter_by(movie_id=movie.id, provider_id=pid).first()
+        if pid not in existing_providers:
+            db.add(Provider(id=pid, name=data["name"], logo_path=data["logo_path"]))
+        mp = existing_movie_providers.get(pid)
         if not mp:
             db.add(MovieProvider(
                 movie_id=movie.id,
@@ -215,11 +233,17 @@ def _upsert_providers_for_movie(db: Session, movie: Movie, us_providers: dict):
 
 
 def _upsert_seasons_for_show(db: Session, show: Show, seasons_data: list):
-    for s in (seasons_data or []):
+    if not seasons_data:
+        return
+    season_ids = [s.get("id") for s in seasons_data if s.get("id")]
+    existing_seasons = {
+        s.id: s for s in db.query(Season).filter(Season.id.in_(season_ids)).all()
+    }
+    for s in seasons_data:
         sid = s.get("id")
         if not sid:
             continue
-        season = db.query(Season).filter_by(id=sid).first()
+        season = existing_seasons.get(sid)
         if not season:
             db.add(Season(
                 id=sid,
