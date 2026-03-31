@@ -8,7 +8,7 @@ import MediaCard from "../components/MediaCard";
 import { usePageTitle } from "../hooks/usePageTitle";
 
 type TabType = "all" | "movies" | "tv";
-type SortType = "default" | "title_asc" | "title_desc" | "date_desc" | "date_asc" | "popularity_desc";
+type SortType = "default" | "title_asc" | "title_desc" | "date_desc" | "date_asc" | "popularity_desc" | "tmdb_rating_desc" | "tmdb_rating_asc";
 
 function getTitle(item: Movie | Show) {
   return "title" in item ? item.title : item.name;
@@ -31,6 +31,10 @@ function applySort<T extends Movie | Show>(items: T[], sort: SortType): T[] {
       return sorted.sort((a, b) => getDate(a).localeCompare(getDate(b)));
     case "popularity_desc":
       return sorted.sort((a, b) => (b.popularity ?? 0) - (a.popularity ?? 0));
+    case "tmdb_rating_desc":
+      return sorted.sort((a, b) => (b.vote_average ?? 0) - (a.vote_average ?? 0));
+    case "tmdb_rating_asc":
+      return sorted.sort((a, b) => (a.vote_average ?? 0) - (b.vote_average ?? 0));
     default:
       return sorted;
   }
@@ -43,6 +47,7 @@ export default function Watchlist() {
     movies: [],
     shows: [],
   });
+  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>("all");
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortType>("default");
@@ -86,6 +91,8 @@ export default function Watchlist() {
         setResults({ movies: data.movies ?? [], shows: data.shows ?? [] });
       } catch (err) {
         console.error(err);
+      } finally {
+        setLoading(false);
       }
     });
     return () => unsubscribe();
@@ -125,8 +132,15 @@ export default function Watchlist() {
         <p className="text-slate-400">Shows and movies you want to watch</p>
       </div>
 
+      {/* Loading */}
+      {loading && (
+        <div className="flex items-center justify-center py-20">
+          <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      )}
+
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-slate-700 mb-6">
+      {!loading && <div className="flex gap-1 border-b border-slate-700 mb-6">
         {tabs.map((tab) => (
           <button
             key={tab.id}
@@ -147,10 +161,10 @@ export default function Watchlist() {
             )}
           </button>
         ))}
-      </div>
+      </div>}
 
       {/* Search + Sort */}
-      {totalCount > 0 && (
+      {!loading && totalCount > 0 && (
         <div className="flex gap-3 mb-6">
           <div className="relative flex-1">
             <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -185,12 +199,14 @@ export default function Watchlist() {
             <option value="date_desc">Release Date: Newest</option>
             <option value="date_asc">Release Date: Oldest</option>
             <option value="popularity_desc">Most Popular</option>
+            <option value="tmdb_rating_desc">TMDB Rating: High → Low</option>
+            <option value="tmdb_rating_asc">TMDB Rating: Low → High</option>
           </select>
         </div>
       )}
 
       {/* Empty state */}
-      {totalCount === 0 && (
+      {!loading && totalCount === 0 && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <div className="w-16 h-16 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center mb-4">
             <svg className="w-8 h-8 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -209,7 +225,7 @@ export default function Watchlist() {
       )}
 
       {/* No search results */}
-      {totalCount > 0 && query && filteredMovies.length === 0 && filteredShows.length === 0 && (
+      {!loading && totalCount > 0 && query && filteredMovies.length === 0 && filteredShows.length === 0 && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <p className="text-slate-400 font-medium mb-1">No results for "{query}"</p>
           <p className="text-slate-500 text-sm">Try a different search term</p>

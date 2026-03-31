@@ -594,6 +594,7 @@ export default function ProfilePage() {
               onFriendRemoved={(friendId) =>
                 setFriends((prev) => prev.filter((f) => f.friend.id !== friendId))
               }
+              onFindFriends={() => setFriendsTab("add")}
             />
           )}
           {friendsTab === "requests" && token && (

@@ -44,12 +44,7 @@ def get_show_info(
     db: Session = Depends(get_db),
 ):
     # 1. Check DB first — load all relationships so serialize_show works
-    show = (
-        db.query(Show)
-        .options(*_show_query_options())
-        .filter(Show.id == id)
-        .first()
-    )
+    show = db.query(Show).options(*_show_query_options()).filter(Show.id == id).first()
     if show:
         return serialize_show(show)
 
@@ -64,7 +59,14 @@ def get_show_info(
 @router.get("/{id}/full")
 def get_full_show_info(id: int):
     append = ",".join(
-        ["watch/providers", "credits", "external_ids", "recommendations", "images", "videos"]
+        [
+            "watch/providers",
+            "credits",
+            "external_ids",
+            "recommendations",
+            "images",
+            "videos",
+        ]
     )
     show_data = fetch_show_from_tmdb(id, append)
     if not show_data:
@@ -76,8 +78,12 @@ def get_full_show_info(id: int):
 @router.get("/{id}/season_calendar")
 def season_calendar(
     id: int,
-    min_date: str | None = Query(None, description="ISO date YYYY-MM-DD — start of window"),
-    max_date: str | None = Query(None, description="ISO date YYYY-MM-DD — end of window"),
+    min_date: str | None = Query(
+        None, description="ISO date YYYY-MM-DD — start of window"
+    ),
+    max_date: str | None = Query(
+        None, description="ISO date YYYY-MM-DD — end of window"
+    ),
     db: Session = Depends(get_db),
 ):
     """
@@ -86,6 +92,7 @@ def season_calendar(
     window (used by the windowed calendar on the frontend).
     Without date params, falls back to the original 'last 2 seasons' behaviour.
     """
+
     def _serialize(ep: Episode) -> dict:
         return {
             "id": ep.id,
@@ -128,13 +135,17 @@ def season_calendar(
         )[:2]
         all_episodes = []
         for season in recent:
-            for ep in fetch_season_data_from_tmdb(show_data["id"], season["season_number"]):
+            for ep in fetch_season_data_from_tmdb(
+                show_data["id"], season["season_number"]
+            ):
                 if ep.get("air_date") and min_date <= ep["air_date"] <= max_date:
                     all_episodes.append(ep)
         return all_episodes
 
     # ── Original mode: last 2 seasons ────────────────────────────────────
-    show = db.query(Show).options(selectinload(Show.seasons)).filter(Show.id == id).first()
+    show = (
+        db.query(Show).options(selectinload(Show.seasons)).filter(Show.id == id).first()
+    )
 
     if show:
         seasons = [{"season_number": s.season_number} for s in show.seasons]
@@ -175,7 +186,9 @@ def full_calendar(id: int, db: Session = Depends(get_db)):
     Return seasons and episodes for a show.
     If the show is not in the DB, fetch from TMDb and store it.
     """
-    show = db.query(Show).options(selectinload(Show.seasons)).filter(Show.id == id).first()
+    show = (
+        db.query(Show).options(selectinload(Show.seasons)).filter(Show.id == id).first()
+    )
 
     if show:
         # Convert Season ORM objects to dicts for consistent access below
@@ -210,6 +223,7 @@ def get_episode_info(id: int, season_number: int, episode_number: int):
     and images.
     """
     from app.services.tmdb_client import get as tmdb_get
+
     try:
         data = tmdb_get(
             f"/tv/{id}/season/{season_number}/episode/{episode_number}",

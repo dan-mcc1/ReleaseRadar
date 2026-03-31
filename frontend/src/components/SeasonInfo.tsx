@@ -303,7 +303,10 @@ export default function SeasonInfo({ showId, seasons }: SeasonInfoProps) {
                     title={expandedSeason ? "Collapse" : "Expand"}
                   >
                     {loadingSeason ? (
-                      <span className="text-sm">Loading...</span>
+                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
                     ) : (
                       <span
                         className={`transition-transform inline-block ${expandedSeason ? "rotate-180" : ""}`}
@@ -323,7 +326,10 @@ export default function SeasonInfo({ showId, seasons }: SeasonInfoProps) {
                       {expandedSeason.overview}
                     </p>
                   )}
-                  {expandedSeason.episodes && (
+                  {expandedSeason.episodes && expandedSeason.episodes.length === 0 && (
+                    <p className="text-slate-500 text-sm mt-2">No episodes available yet.</p>
+                  )}
+                  {expandedSeason.episodes && expandedSeason.episodes.length > 0 && (
                     <div className="flex flex-col gap-3 mt-2">
                       {expandedSeason.episodes.map((ep) => {
                         const key = epKey(ep.season_number, ep.episode_number);

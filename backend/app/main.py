@@ -1,7 +1,7 @@
 import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
-from fastapi import FastAPI
+from fastapi import FastAPI, Header, HTTPException
 from app.config import settings
 from app.routers import (
     tv,
@@ -28,6 +28,7 @@ from app.db.base import Base
 from app.services.activity_service import delete_old_activity
 from app.services.recommendation_service import delete_old_recommendations
 from app.routers.notifications import send_daily_digest_to_all
+from app.services.vote_update_service import update_all_vote_averages
 
 
 async def _activity_cleanup_loop():
@@ -69,6 +70,25 @@ async def _daily_digest_loop():
         await asyncio.sleep(86400)  # sleep 24h before recalculating
 
 
+async def _vote_update_loop():
+    """Refresh TMDB vote_average for all shows and movies once a day at 3am."""
+    while True:
+        now = datetime.now()
+        next_run = now.replace(hour=3, minute=0, second=0, microsecond=0)
+        if now >= next_run:
+            next_run += timedelta(days=1)
+        await asyncio.sleep((next_run - now).total_seconds())
+        print("[vote update] Starting daily vote_average refresh...")
+        try:
+            db = SessionLocal()
+            await asyncio.to_thread(update_all_vote_averages, db)
+        except Exception as e:
+            print(f"[vote update] Error: {e}")
+        finally:
+            db.close()
+        await asyncio.sleep(86400)  # sleep 24h before recalculating
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Import all models so SQLAlchemy Base.metadata is populated before create_all
@@ -88,9 +108,11 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(engine)
     task = asyncio.create_task(_activity_cleanup_loop())
     digest_task = asyncio.create_task(_daily_digest_loop())
+    vote_task = asyncio.create_task(_vote_update_loop())
     yield
     task.cancel()
     digest_task.cancel()
+    vote_task.cancel()
 
 
 app = FastAPI(title="Show Tracker API", lifespan=lifespan)

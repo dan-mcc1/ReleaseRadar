@@ -3,11 +3,12 @@ import type { Show, Movie } from "../types/calendar";
 import { API_URL } from "../constants";
 import { firebaseApp } from "../firebase";
 import { getAuth } from "firebase/auth";
+import { useNavigate } from "react-router-dom";
 import MediaCard from "../components/MediaCard";
 import { usePageTitle } from "../hooks/usePageTitle";
 
 type TabType = "all" | "movies" | "tv";
-type SortType = "default" | "title_asc" | "title_desc" | "date_desc" | "date_asc" | "popularity_desc" | "rating_desc" | "rating_asc";
+type SortType = "default" | "title_asc" | "title_desc" | "date_desc" | "date_asc" | "popularity_desc" | "rating_desc" | "rating_asc" | "tmdb_rating_desc" | "tmdb_rating_asc";
 
 function getTitle(item: Movie | Show) {
   return "title" in item ? item.title : item.name;
@@ -48,6 +49,10 @@ function applySort<T extends Movie | Show>(items: T[], sort: SortType): T[] {
         if (rb === null) return -1;
         return ra - rb;
       });
+    case "tmdb_rating_desc":
+      return sorted.sort((a, b) => (b.vote_average ?? 0) - (a.vote_average ?? 0));
+    case "tmdb_rating_asc":
+      return sorted.sort((a, b) => (a.vote_average ?? 0) - (b.vote_average ?? 0));
     default:
       return sorted;
   }
@@ -55,10 +60,12 @@ function applySort<T extends Movie | Show>(items: T[], sort: SortType): T[] {
 
 export default function Watched() {
   usePageTitle("Watched");
+  const navigate = useNavigate();
   const [results, setResults] = useState<{ movies: Movie[]; shows: Show[] }>({
     movies: [],
     shows: [],
   });
+  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>("all");
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortType>("default");
@@ -102,6 +109,8 @@ export default function Watched() {
         setResults({ movies: data.movies ?? [], shows: data.shows ?? [] });
       } catch (err) {
         console.error(err);
+      } finally {
+        setLoading(false);
       }
     });
     return () => unsubscribe();
@@ -141,7 +150,15 @@ export default function Watched() {
         <p className="text-slate-400">Everything you've already seen</p>
       </div>
 
+      {/* Loading */}
+      {loading && (
+        <div className="flex items-center justify-center py-20">
+          <div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      )}
+
       {/* Tabs */}
+      {!loading && (
       <div className="flex gap-1 border-b border-slate-700 mb-6">
         {tabs.map((tab) => (
           <button
@@ -164,6 +181,7 @@ export default function Watched() {
           </button>
         ))}
       </div>
+      )}
 
       {/* Search + Sort */}
       {totalCount > 0 && (
@@ -203,12 +221,14 @@ export default function Watched() {
             <option value="popularity_desc">Most Popular</option>
             <option value="rating_desc">Rating: High → Low</option>
             <option value="rating_asc">Rating: Low → High</option>
+            <option value="tmdb_rating_desc">TMDB Rating: High → Low</option>
+            <option value="tmdb_rating_asc">TMDB Rating: Low → High</option>
           </select>
         </div>
       )}
 
       {/* Empty state */}
-      {totalCount === 0 && (
+      {!loading && totalCount === 0 && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <div className="w-16 h-16 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center mb-4">
             <svg className="w-8 h-8 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -216,7 +236,13 @@ export default function Watched() {
             </svg>
           </div>
           <h3 className="text-slate-300 font-medium mb-1">Nothing watched yet</h3>
-          <p className="text-slate-500 text-sm">Mark items as watched from their detail pages</p>
+          <p className="text-slate-500 text-sm mb-4">Find something to watch and mark it as watched from its detail page</p>
+          <button
+            onClick={() => navigate("/trending")}
+            className="bg-green-600 hover:bg-green-500 text-white text-sm font-medium px-5 py-2 rounded-lg transition-colors"
+          >
+            Browse Trending
+          </button>
         </div>
       )}
 

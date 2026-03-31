@@ -78,6 +78,7 @@ def add_to_currently_watching(db: Session, user_id: str, content_type: str, cont
                 title=movie_data.get("title"),
                 logo_path=logo,
                 tracking_count=1,
+                vote_average=movie_data.get("vote_average"),
             )
             db.add(movie)
             db.flush()
@@ -116,6 +117,7 @@ def add_to_currently_watching(db: Session, user_id: str, content_type: str, cont
                 tracking_count=1,
                 air_time=air_time,
                 air_timezone=air_timezone,
+                vote_average=show_data.get("vote_average"),
             )
             db.add(show)
             db.flush()

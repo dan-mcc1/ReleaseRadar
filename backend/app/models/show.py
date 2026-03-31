@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, Date, Text
+from sqlalchemy import Column, Integer, String, Boolean, Date, Text, Float
 from sqlalchemy.orm import relationship
 from app.db.base import Base
 
@@ -24,6 +24,7 @@ class Show(Base):
     tracking_count = Column(Integer)
     air_time = Column(String, nullable=True)
     air_timezone = Column(String, nullable=True)
+    vote_average = Column(Float, nullable=True)
 
     genres = relationship("Genre", secondary="show_genre", back_populates="shows", passive_deletes=True)
     show_providers = relationship("ShowProvider", back_populates="show", cascade="all, delete-orphan", passive_deletes=True)

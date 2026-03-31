@@ -17,9 +17,10 @@ interface Props {
   token: string;
   friends: FriendEntry[];
   onFriendRemoved: (friendId: string) => void;
+  onFindFriends?: () => void;
 }
 
-export default function FriendsList({ token, friends, onFriendRemoved }: Props) {
+export default function FriendsList({ token, friends, onFriendRemoved, onFindFriends }: Props) {
   const [removing, setRemoving] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
@@ -38,7 +39,19 @@ export default function FriendsList({ token, friends, onFriendRemoved }: Props) 
   }
 
   if (friends.length === 0) {
-    return <p className="text-slate-400 text-sm">You have no friends added yet.</p>;
+    return (
+      <div className="text-center py-4">
+        <p className="text-slate-400 text-sm mb-3">You have no friends added yet.</p>
+        {onFindFriends && (
+          <button
+            onClick={onFindFriends}
+            className="text-sm bg-blue-600 hover:bg-blue-500 text-white font-medium px-4 py-1.5 rounded-lg transition-colors"
+          >
+            Find Friends
+          </button>
+        )}
+      </div>
+    );
   }
 
   return (

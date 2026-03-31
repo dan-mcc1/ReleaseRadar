@@ -370,6 +370,11 @@ export default function ActivityFeedPage() {
             <div className="text-center py-20 text-slate-400">
               <p className="text-lg mb-2">No recommendations yet</p>
               <p className="text-sm">When a friend recommends a show or movie, it will appear here.</p>
+              <p className="text-sm mt-1">
+                Visit a friend's profile to recommend something to them, or{" "}
+                <Link to="/profile" className="text-blue-400 hover:underline">find friends</Link>
+                {" "}to get started.
+              </p>
             </div>
           )}
 

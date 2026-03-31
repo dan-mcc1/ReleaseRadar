@@ -80,6 +80,7 @@ def serialize_show(show):
         "tracking_count": show.tracking_count,
         "air_time": show.air_time,
         "air_timezone": show.air_timezone,
+        "vote_average": show.vote_average,
         "seasons": [serialize_season(s) for s in show.seasons],
         "genres": [{"id": g.id, "name": g.name} for g in show.genres],
         "providers": serialize_providers(show.show_providers),
@@ -103,6 +104,7 @@ def serialize_movie(movie):
         "status": movie.status,
         "title": movie.title,
         "tracking_count": movie.tracking_count,
+        "vote_average": movie.vote_average,
         "genres": [{"id": g.id, "name": g.name} for g in movie.genres],
         "providers": serialize_providers(movie.movie_providers),
     }
@@ -355,6 +357,7 @@ def add_to_watchlist(db: Session, user_id: str, content_type: str, content_id: i
                 title=movie_data.get("title"),
                 logo_path=logo,
                 tracking_count=1,
+                vote_average=movie_data.get("vote_average"),
             )
             db.add(movie)
             db.flush()
@@ -396,6 +399,7 @@ def add_to_watchlist(db: Session, user_id: str, content_type: str, content_id: i
                 tracking_count=1,
                 air_time=air_time,
                 air_timezone=air_timezone,
+                vote_average=show_data.get("vote_average"),
             )
             db.add(show)
             db.flush()
