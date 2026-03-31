@@ -37,6 +37,7 @@ def _get_friendship(db: Session, user_a: str, user_b: str) -> Friendship | None:
 def send_friend_request(db: Session, requester_id: str, addressee_username: str):
     """
     Send a friend request to a user identified by username.
+    If the target's profile is public, the friendship is auto-accepted immediately.
     """
     if not addressee_username:
         raise HTTPException(status_code=422, detail="Username is required.")
@@ -48,12 +49,32 @@ def send_friend_request(db: Session, requester_id: str, addressee_username: str)
     if addressee.id == requester_id:
         raise HTTPException(status_code=400, detail="You cannot send a friend request to yourself.")
 
+    is_public = (addressee.profile_visibility or "friends_only") == "public"
+
     existing = _get_friendship(db, requester_id, addressee.id)
 
     if existing:
         if existing.status == "accepted":
             raise HTTPException(status_code=409, detail="You are already friends.")
+        if existing.status == "following":
+            if existing.requester_id == requester_id:
+                # Requester is already following this person
+                raise HTTPException(status_code=409, detail="You are already following this user.")
+            else:
+                # The target is already following the requester — add back → mutual friends
+                existing.status = "accepted"
+                existing.updated_at = _utcnow()
+                db.commit()
+                db.refresh(existing)
+                return existing
         if existing.status == "pending":
+            if existing.requester_id != requester_id:
+                # The other person already sent a request — auto-accept it
+                existing.status = "accepted"
+                existing.updated_at = _utcnow()
+                db.commit()
+                db.refresh(existing)
+                return existing
             raise HTTPException(status_code=409, detail="A friend request already exists between you.")
         if existing.status == "declined":
             cooldown_end = existing.updated_at.replace(tzinfo=timezone.utc) + timedelta(days=DECLINED_COOLDOWN_DAYS)
@@ -66,28 +87,29 @@ def send_friend_request(db: Session, requester_id: str, addressee_username: str)
             # Cooldown passed — reuse the row, reset it
             existing.requester_id = requester_id
             existing.addressee_id = addressee.id
-            existing.status = "pending"
+            existing.status = "following" if is_public else "pending"
             existing.updated_at = _utcnow()
             db.commit()
             db.refresh(existing)
             return existing
 
-    # Check outgoing pending limit
-    pending_count = (
-        db.query(Friendship)
-        .filter(Friendship.requester_id == requester_id, Friendship.status == "pending")
-        .count()
-    )
-    if pending_count >= MAX_PENDING_OUTGOING:
-        raise HTTPException(
-            status_code=429,
-            detail=f"You have reached the limit of {MAX_PENDING_OUTGOING} pending friend requests.",
+    # Check outgoing pending limit (only applies to actual pending requests)
+    if not is_public:
+        pending_count = (
+            db.query(Friendship)
+            .filter(Friendship.requester_id == requester_id, Friendship.status == "pending")
+            .count()
         )
+        if pending_count >= MAX_PENDING_OUTGOING:
+            raise HTTPException(
+                status_code=429,
+                detail=f"You have reached the limit of {MAX_PENDING_OUTGOING} pending friend requests.",
+            )
 
     friendship = Friendship(
         requester_id=requester_id,
         addressee_id=addressee.id,
-        status="pending",
+        status="following" if is_public else "pending",
     )
     db.add(friendship)
     db.commit()
@@ -208,14 +230,14 @@ def are_friends(db: Session, user_a: str, user_b: str) -> bool:
 
 def cancel_friend_request(db: Session, requester_id: str, friendship_id: int):
     """
-    Cancel an outgoing pending friend request.
+    Cancel an outgoing pending friend request or unfollow a public user.
     """
     friendship = (
         db.query(Friendship)
         .filter(
             Friendship.id == friendship_id,
             Friendship.requester_id == requester_id,
-            Friendship.status == "pending",
+            Friendship.status.in_(["pending", "following"]),
         )
         .first()
     )
@@ -224,3 +246,24 @@ def cancel_friend_request(db: Session, requester_id: str, friendship_id: int):
 
     db.delete(friendship)
     db.commit()
+
+
+def get_followers(db: Session, user_id: str) -> list[dict]:
+    """
+    Return users who are following this user (one-way, not yet mutual friends).
+    """
+    followings = (
+        db.query(Friendship)
+        .filter(Friendship.addressee_id == user_id, Friendship.status == "following")
+        .order_by(Friendship.created_at.desc())
+        .all()
+    )
+
+    follower_ids = [f.requester_id for f in followings]
+    users = {u.id: u for u in db.query(User).filter(User.id.in_(follower_ids)).all()}
+
+    return [
+        {"friendship_id": f.id, "follower": _serialize_user(users[f.requester_id])}
+        for f in followings
+        if f.requester_id in users
+    ]

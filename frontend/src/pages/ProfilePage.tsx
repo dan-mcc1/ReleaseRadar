@@ -15,6 +15,7 @@ interface DBUser {
   email: string | null;
   username: string | null;
   avatar_key: string | null;
+  profile_visibility: string | null;
 }
 
 interface FriendEntry {
@@ -34,7 +35,12 @@ interface OutgoingRequest {
   created_at: string;
 }
 
-type FriendsTab = "friends" | "requests" | "add";
+interface FollowerEntry {
+  friendship_id: number;
+  follower: { id: string; username: string; email: string };
+}
+
+type FriendsTab = "friends" | "requests" | "followers" | "add";
 
 /** Avatar for the profile hero: color preset → Google photo → grey fallback. */
 function HeroAvatar({
@@ -124,9 +130,11 @@ export default function ProfilePage() {
   const [friends, setFriends] = useState<FriendEntry[]>([]);
   const [incoming, setIncoming] = useState<IncomingRequest[]>([]);
   const [outgoing, setOutgoing] = useState<OutgoingRequest[]>([]);
+  const [followers, setFollowers] = useState<FollowerEntry[]>([]);
+  const [addingBack, setAddingBack] = useState<string | null>(null);
 
   async function fetchFriends(tok: string) {
-    const [friendsRes, incomingRes, outgoingRes] = await Promise.all([
+    const [friendsRes, incomingRes, outgoingRes, followersRes] = await Promise.all([
       fetch(`${API_URL}/friends/`, {
         headers: { Authorization: `Bearer ${tok}` },
       }),
@@ -136,10 +144,33 @@ export default function ProfilePage() {
       fetch(`${API_URL}/friends/requests/outgoing`, {
         headers: { Authorization: `Bearer ${tok}` },
       }),
+      fetch(`${API_URL}/friends/followers`, {
+        headers: { Authorization: `Bearer ${tok}` },
+      }),
     ]);
     setFriends(friendsRes.ok ? await friendsRes.json() : []);
     setIncoming(incomingRes.ok ? await incomingRes.json() : []);
     setOutgoing(outgoingRes.ok ? await outgoingRes.json() : []);
+    setFollowers(followersRes.ok ? await followersRes.json() : []);
+  }
+
+  async function addBack(follower: FollowerEntry["follower"]) {
+    if (!token || addingBack) return;
+    setAddingBack(follower.id);
+    try {
+      const res = await fetch(`${API_URL}/friends/request`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ addressee_username: follower.username }),
+      });
+      if (res.ok) {
+        // Upgrade from follower → mutual friend
+        setFollowers((prev) => prev.filter((f) => f.follower.id !== follower.id));
+        setFriends((prev) => [...prev, { friendship_id: 0, friend: follower }]);
+      }
+    } finally {
+      setAddingBack(null);
+    }
   }
 
   const fetchAll = useCallback(async (firebaseUser: User) => {
@@ -561,13 +592,26 @@ export default function ProfilePage() {
         <div className="bg-slate-800 rounded-xl p-4">
           <h2 className="text-base font-semibold text-white mb-3">Friends</h2>
 
-          <div className="flex gap-1 mb-4 border-b border-slate-700">
+          <div className="flex gap-1 mb-4 border-b border-slate-700 flex-wrap">
             <button
               onClick={() => setFriendsTab("friends")}
               className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${friendsTab === "friends" ? "border-blue-500 text-blue-400" : "border-transparent text-slate-400 hover:text-slate-200"}`}
             >
               Friends ({friends.length})
             </button>
+            {dbUser?.profile_visibility === "public" && (
+              <button
+                onClick={() => setFriendsTab("followers")}
+                className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${friendsTab === "followers" ? "border-blue-500 text-blue-400" : "border-transparent text-slate-400 hover:text-slate-200"}`}
+              >
+                Followers
+                {followers.length > 0 && (
+                  <span className="ml-1.5 bg-slate-600 text-slate-300 text-xs font-bold rounded-full px-1.5 py-0.5">
+                    {followers.length}
+                  </span>
+                )}
+              </button>
+            )}
             <button
               onClick={() => setFriendsTab("requests")}
               className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${friendsTab === "requests" ? "border-blue-500 text-blue-400" : "border-transparent text-slate-400 hover:text-slate-200"}`}
@@ -596,6 +640,31 @@ export default function ProfilePage() {
               }
               onFindFriends={() => setFriendsTab("add")}
             />
+          )}
+          {friendsTab === "followers" && dbUser?.profile_visibility === "public" && (
+            <div className="space-y-2">
+              {followers.length === 0 ? (
+                <p className="text-slate-400 text-sm">No followers yet.</p>
+              ) : (
+                followers.map(({ friendship_id, follower }) => (
+                  <div key={friendship_id} className="flex items-center justify-between bg-slate-700 px-3 py-2 rounded-lg">
+                    <Link
+                      to={`/user/${follower.username}`}
+                      className="text-slate-200 text-sm font-medium hover:text-blue-400 transition-colors"
+                    >
+                      @{follower.username}
+                    </Link>
+                    <button
+                      onClick={() => addBack(follower)}
+                      disabled={addingBack === follower.id}
+                      className="text-xs bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-3 py-1 rounded transition-colors"
+                    >
+                      {addingBack === follower.id ? "Adding…" : "Add back"}
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
           )}
           {friendsTab === "requests" && token && (
             <FriendRequests

@@ -91,6 +91,19 @@ def _visible_friend_ids(db: Session, user_id: str) -> list[str]:
     return [row.id for row in visible]
 
 
+def get_my_activity(db: Session, user_id: str, limit: int = 50) -> list:
+    """Returns only the current user's own activity, newest first."""
+    rows = (
+        db.query(Activity, User.username)
+        .join(User, User.id == Activity.user_id)
+        .filter(Activity.user_id == user_id)
+        .order_by(Activity.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return [_serialize_activity(a, username) for a, username in rows]
+
+
 def get_activity_feed(db: Session, user_id: str, limit: int = 50) -> list:
     """
     Returns own activity + accepted friends' (non-private) activity, newest first.

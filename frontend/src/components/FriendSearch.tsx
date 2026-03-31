@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 interface SearchResult {
   id: string;
   username: string;
+  profile_visibility: "public" | "friends_only" | "private";
 }
 
 interface Props {
@@ -22,6 +23,7 @@ export default function FriendSearch({
   const [results, setResults] = useState<SearchResult[]>([]);
   const [sending, setSending] = useState<string | null>(null); // username being sent to
   const [sentTo, setSentTo] = useState<Set<string>>(new Set());
+  const [followedTo, setFollowedTo] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -54,8 +56,8 @@ export default function FriendSearch({
     }, 300);
   }
 
-  async function sendRequest(username: string) {
-    setSending(username);
+  async function sendRequest(user: SearchResult) {
+    setSending(user.username);
     setError(null);
     try {
       const res = await fetch(`${API_URL}/friends/request`, {
@@ -64,10 +66,15 @@ export default function FriendSearch({
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ addressee_username: username }),
+        body: JSON.stringify({ addressee_username: user.username }),
       });
       if (res.ok) {
-        setSentTo((prev) => new Set(prev).add(username));
+        const data = await res.json();
+        if (data.status === "following") {
+          setFollowedTo((prev) => new Set(prev).add(user.username));
+        } else {
+          setSentTo((prev) => new Set(prev).add(user.username));
+        }
         onRequestSent();
       } else {
         const data = await res.json().catch(() => ({}));
@@ -107,15 +114,17 @@ export default function FriendSearch({
               </Link>
               {friendIds?.has(user.id) ? (
                 <span className="text-slate-400 text-sm">Already friends</span>
+              ) : followedTo.has(user.username) ? (
+                <span className="text-green-400 text-sm">Following</span>
               ) : sentTo.has(user.username) ? (
                 <span className="text-green-400 text-sm">Request sent</span>
               ) : (
                 <button
-                  onClick={() => sendRequest(user.username)}
+                  onClick={() => sendRequest(user)}
                   disabled={sending === user.username}
                   className="text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-3 py-1 rounded"
                 >
-                  {sending === user.username ? "Sending…" : "Add Friend"}
+                  {sending === user.username ? "Sending…" : user.profile_visibility === "public" ? "Follow" : "Add Friend"}
                 </button>
               )}
             </li>

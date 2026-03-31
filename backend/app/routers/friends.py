@@ -4,8 +4,9 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.services import friends_service
+from app.services.friends_service import get_followers
 from app.services.user_service import search_users_by_username
-from app.services.activity_service import get_friends_activity, get_activity_feed
+from app.services.activity_service import get_friends_activity, get_activity_feed, get_my_activity
 from app.core.event_bus import publish
 from app.models.user import User
 
@@ -20,7 +21,7 @@ def search_users(
 ):
     """Search users by partial username to find someone to add."""
     users = search_users_by_username(db, q, current_user_id=uid)
-    return [{"id": u.id, "username": u.username} for u in users]
+    return [{"id": u.id, "username": u.username, "profile_visibility": u.profile_visibility or "friends_only"} for u in users]
 
 
 @router.post("/request")
@@ -95,6 +96,24 @@ def get_outgoing(
 ):
     """Get all pending outgoing friend requests."""
     return friends_service.get_outgoing_requests(db, uid)
+
+
+@router.get("/followers")
+def get_my_followers(
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    """Get users who are following the current user (one-way, not yet mutual)."""
+    return get_followers(db, uid)
+
+
+@router.get("/my-activity")
+def my_activity(
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    """Get the current user's own activity."""
+    return get_my_activity(db, uid)
 
 
 @router.get("/activity")

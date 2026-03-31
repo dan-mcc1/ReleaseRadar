@@ -165,22 +165,46 @@ def get_public_profile(
         .first()
     )
 
+    # Check if the current user is following the target (one-way)
+    following_row = (
+        db.query(Friendship)
+        .filter_by(requester_id=uid, addressee_id=target.id, status="following")
+        .first()
+    )
+
+    # Check if the target is following the current user (they follow viewer)
+    followed_by_target = (
+        db.query(Friendship)
+        .filter_by(requester_id=target.id, addressee_id=uid, status="following")
+        .first()
+    )
+
+    # Check for a pending incoming request from the target to the current user
+    incoming_request = (
+        db.query(Friendship)
+        .filter_by(requester_id=target.id, addressee_id=uid, status="pending")
+        .first()
+    )
+
     profile = {
         "id": target.id,
         "username": target.username,
         "is_friend": is_friend,
         "profile_visibility": visibility,
         "pending_request_id": pending.id if pending else None,
+        "incoming_request_id": incoming_request.id if incoming_request else None,
+        "is_following": following_row is not None,
+        "following_id": following_row.id if following_row else None,
+        "is_followed_by_them": followed_by_target is not None,
     }
 
-    # Favorites are always public
-    profile["favorites"] = get_favorites(db, target.id)
-
-    # Watchlist and watched respect the target user's visibility setting
+    # All profile content respects visibility setting
     can_see_details = visibility == "public" or (
-        visibility == "friends_only" and is_friend
+        visibility in ("friends_only", "private") and is_friend
     )
     if can_see_details:
+        profile["favorites"] = get_favorites(db, target.id)
+
         profile["watchlist"] = get_profile_watchlist(db, target.id)
         profile["watched"] = get_profile_watched(db, target.id)
         profile["friends"] = get_friends(db, target.id)
