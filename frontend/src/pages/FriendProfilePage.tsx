@@ -21,6 +21,7 @@ interface FriendUser {
 interface PublicProfile {
   id: string;
   username: string;
+  bio: string | null;
   is_friend: boolean;
   profile_visibility: "public" | "friends_only" | "private";
   pending_request_id: number | null;
@@ -250,6 +251,9 @@ export default function FriendProfilePage() {
           </div>
           <div className="flex-1">
             <h1 className="text-2xl font-bold">@{profile.username}</h1>
+            {profile.bio && (
+              <p className="text-slate-300 text-sm mt-1">{profile.bio}</p>
+            )}
             {!profile.is_friend &&
               !profile.is_following &&
               profile.profile_visibility === "friends_only" && (
@@ -420,8 +424,8 @@ export default function FriendProfilePage() {
           </div>
         )}
 
-      {/* Friends list — shown to friends and on public profiles */}
-      {(canSeeDetails || profile.is_friend) && friends.length > 0 && (
+      {/* Friends list — shown to friends (non-private) and on public profiles */}
+      {canSeeDetails && friends.length > 0 && (
         <div className="bg-slate-800 rounded-lg p-4">
           <h2 className="text-lg font-semibold text-white mb-3">
             Friends{" "}

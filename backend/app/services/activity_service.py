@@ -25,6 +25,21 @@ def log_activity(
     season_number: int = None,
     episode_number: int = None,
 ):
+    # Remove any existing entry for the same user/type/content so re-adding
+    # a show doesn't accumulate duplicate activity rows.
+    q = db.query(Activity).filter(
+        Activity.user_id == user_id,
+        Activity.activity_type == activity_type,
+        Activity.content_type == content_type,
+        Activity.content_id == content_id,
+    )
+    if activity_type == "episode_watched":
+        q = q.filter(
+            Activity.season_number == season_number,
+            Activity.episode_number == episode_number,
+        )
+    q.delete()
+
     entry = Activity(
         user_id=user_id,
         activity_type=activity_type,

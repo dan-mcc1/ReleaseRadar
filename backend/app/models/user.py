@@ -15,3 +15,4 @@ class User(Base):
     notification_frequency = Column(String, default="daily", nullable=False, server_default="daily")
     profile_visibility = Column(String, default="friends_only", nullable=False, server_default="friends_only")
     avatar_key = Column(String, nullable=True)
+    bio = Column(String, nullable=True)

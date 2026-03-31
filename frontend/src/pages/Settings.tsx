@@ -17,6 +17,7 @@ interface DBUser {
   email: string | null;
   username: string | null;
   avatar_key: string | null;
+  bio: string | null;
 }
 
 /** Renders the current avatar: color preset, Google photo, or grey fallback. */
@@ -99,6 +100,11 @@ export default function Settings() {
   const [usernameError, setUsernameError] = useState<string | null>(null);
   const [usernameSaving, setUsernameSaving] = useState(false);
 
+  // Bio
+  const [bio, setBio] = useState("");
+  const [bioSaving, setBioSaving] = useState(false);
+  const [bioSaved, setBioSaved] = useState(false);
+
   // Avatar
   const [selectedAvatar, setSelectedAvatar] = useState<string | null>(null);
   const [avatarSaving, setAvatarSaving] = useState(false);
@@ -118,6 +124,7 @@ export default function Settings() {
         const data: DBUser = await meRes.json();
         setDbUser(data);
         setSelectedAvatar(data.avatar_key);
+        setBio(data.bio ?? "");
       }
       if (notifRes.ok) {
         const data = await notifRes.json();
@@ -232,6 +239,34 @@ export default function Settings() {
       }
     } finally {
       setUsernameSaving(false);
+    }
+  }
+
+  // ── Bio ──────────────────────────────────────────────────────────────────
+  async function saveBio() {
+    if (!token || bioSaving) return;
+    setBioSaving(true);
+    setBioSaved(false);
+    try {
+      const res = await fetch(`${API_URL}/user/update-bio`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ bio: bio.trim() || null }),
+      });
+      if (res.ok) {
+        const updated: DBUser = await res.json();
+        setDbUser(updated);
+        setBio(updated.bio ?? "");
+        setBioSaved(true);
+        setTimeout(() => setBioSaved(false), 2000);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setBioSaving(false);
     }
   }
 
@@ -455,6 +490,29 @@ export default function Settings() {
           >
             {avatarSaving ? "Saving…" : avatarSaved ? "Saved!" : "Save Avatar"}
           </button>
+        </div>
+
+        {/* Bio */}
+        <div>
+          <p className="text-gray-400 text-sm font-medium mb-2">Bio</p>
+          <textarea
+            value={bio}
+            onChange={(e) => setBio(e.target.value)}
+            maxLength={300}
+            rows={3}
+            placeholder="Tell people a little about yourself…"
+            className="w-full bg-slate-700 text-slate-100 placeholder-slate-500 px-3 py-2 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none"
+          />
+          <div className="flex items-center justify-between mt-1.5">
+            <span className="text-xs text-slate-500">{bio.length}/300</span>
+            <button
+              onClick={saveBio}
+              disabled={bioSaving || bio === (dbUser?.bio ?? "")}
+              className="bg-blue-600 enabled:hover:bg-blue-500 disabled:opacity-40 text-white text-sm px-4 py-1.5 rounded"
+            >
+              {bioSaving ? "Saving…" : bioSaved ? "Saved!" : "Save Bio"}
+            </button>
+          </div>
         </div>
       </div>
 

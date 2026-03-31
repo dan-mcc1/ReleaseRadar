@@ -14,6 +14,7 @@ interface MediaListProps {
     people?: Person[];
   };
   showWatchButton?: boolean;
+  paginated?: boolean;
 }
 
 const INITIAL_COUNT = 6;
@@ -252,12 +253,14 @@ function Section({
   total,
   visible,
   onToggle,
+  hideToggle,
   children,
 }: {
   title: string;
   total: number;
   visible: number;
   onToggle: () => void;
+  hideToggle?: boolean;
   children: React.ReactNode;
 }) {
   const isExpanded = visible >= total;
@@ -277,7 +280,7 @@ function Section({
       <div className="flex flex-col gap-3">{children}</div>
 
       {/* Toggle */}
-      {total > INITIAL_COUNT && (
+      {!hideToggle && total > INITIAL_COUNT && (
         <button
           onClick={onToggle}
           className="mt-4 flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-200 transition-colors"
@@ -307,6 +310,7 @@ function Section({
 export default function MediaList({
   results,
   showWatchButton = true,
+  paginated = false,
 }: MediaListProps) {
   const [visibleCounts, setVisibleCounts] = useState<Record<string, number>>(
     {},
@@ -379,7 +383,7 @@ export default function MediaList({
   return (
     <div className="flex flex-col gap-10">
       {mediaSections.map((section) => {
-        const visible = visibleCounts[section.key] ?? INITIAL_COUNT;
+        const visible = paginated ? section.items.length : (visibleCounts[section.key] ?? INITIAL_COUNT);
         return (
           <Section
             key={section.key}
@@ -387,6 +391,7 @@ export default function MediaList({
             total={section.items.length}
             visible={visible}
             onToggle={() => toggle(section.key, section.items.length)}
+            hideToggle={paginated}
           >
             {section.items.slice(0, visible).map((item) => (
               <MediaRow
@@ -403,13 +408,14 @@ export default function MediaList({
 
       {people.length > 0 &&
         (() => {
-          const visible = visibleCounts["People"] ?? INITIAL_COUNT;
+          const visible = paginated ? people.length : (visibleCounts["People"] ?? INITIAL_COUNT);
           return (
             <Section
               title="People"
               total={people.length}
               visible={visible}
               onToggle={() => toggle("People", people.length)}
+              hideToggle={paginated}
             >
               {people.slice(0, visible).map((p) => (
                 <PersonRow key={p.id} person={p} />

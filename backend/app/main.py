@@ -38,10 +38,14 @@ async def _activity_cleanup_loop():
             db = SessionLocal()
             deleted_activity = delete_old_activity(db)
             if deleted_activity:
-                print(f"[activity cleanup] Removed {deleted_activity} old activity entries")
+                print(
+                    f"[activity cleanup] Removed {deleted_activity} old activity entries"
+                )
             deleted_recs = delete_old_recommendations(db)
             if deleted_recs:
-                print(f"[activity cleanup] Removed {deleted_recs} expired recommendations")
+                print(
+                    f"[activity cleanup] Removed {deleted_recs} expired recommendations"
+                )
         except Exception as e:
             print(f"[activity cleanup] Error: {e}")
         finally:
@@ -105,7 +109,19 @@ async def lifespan(app: FastAPI):
     import app.models.episode  # noqa: F401
     import app.models.activity  # noqa: F401
     import app.models.review  # noqa: F401
+
     Base.metadata.create_all(engine)
+    # Add new columns to existing tables that create_all won't backfill
+    from sqlalchemy import text
+    with engine.connect() as conn:
+        for col_sql in [
+            'ALTER TABLE "user" ADD COLUMN IF NOT EXISTS bio TEXT',
+        ]:
+            try:
+                conn.execute(text(col_sql))
+                conn.commit()
+            except Exception:
+                conn.rollback()
     task = asyncio.create_task(_activity_cleanup_loop())
     digest_task = asyncio.create_task(_daily_digest_loop())
     vote_task = asyncio.create_task(_vote_update_loop())
@@ -144,7 +160,9 @@ app.include_router(
 )
 app.include_router(ical.router, prefix="/ical", tags=["ical"])
 app.include_router(favorites.router, prefix="/favorites", tags=["favorites"])
-app.include_router(recommendations.router, prefix="/recommendations", tags=["recommendations"])
+app.include_router(
+    recommendations.router, prefix="/recommendations", tags=["recommendations"]
+)
 app.include_router(events.router, prefix="/events", tags=["events"])
 app.include_router(reviews.router, prefix="/reviews", tags=["reviews"])
 app.include_router(box_office.router, prefix="/box-office", tags=["box-office"])

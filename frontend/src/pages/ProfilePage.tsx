@@ -16,6 +16,7 @@ interface DBUser {
   username: string | null;
   avatar_key: string | null;
   profile_visibility: string | null;
+  bio: string | null;
 }
 
 interface FriendEntry {
@@ -268,6 +269,9 @@ export default function ProfilePage() {
             <p className="text-slate-500 text-xs mt-0.5">
               Joined {user.metadata?.creationTime?.split("T")[0]}
             </p>
+            {dbUser?.bio && (
+              <p className="text-slate-300 text-sm mt-2">{dbUser.bio}</p>
+            )}
           </div>
         </div>
 

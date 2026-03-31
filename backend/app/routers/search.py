@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from app.services.tmdb_search import (
     get_multi_search_results,
     get_tv_search_results,
@@ -18,14 +18,15 @@ router = APIRouter()
 
 
 @router.get("/")
-def search(query: str = "", genre_id: int = None):
+def search(query: str = "", genre_id: int = None, type: str = Query(None), page: int = Query(1, ge=1)):
     # Genre mode: use TMDB /discover sorted by popularity
     if genre_id:
-        return {
-            "movies": get_movie_by_genre(genre_id),
-            "shows": get_tv_by_genre(genre_id),
-            "people": [],
-        }
+        if type == "tv":
+            data = get_tv_by_genre(genre_id, page)
+            return {"movies": [], "shows": data["results"], "total_pages": data["total_pages"], "people": []}
+        else:
+            data = get_movie_by_genre(genre_id, page)
+            return {"movies": data["results"], "shows": [], "total_pages": data["total_pages"], "people": []}
 
     # Text search mode
     if not query:
@@ -69,13 +70,13 @@ def multi_trending():
 
 
 @router.get("/tv/trending")
-def tv_trending():
-    return get_tv_trending_results()
+def tv_trending(page: int = Query(1, ge=1)):
+    return get_tv_trending_results(page)
 
 
 @router.get("/movie/trending")
-def movie_trending():
-    return get_movie_trending_results()
+def movie_trending(page: int = Query(1, ge=1)):
+    return get_movie_trending_results(page)
 
 
 @router.get("/tv/upcoming")

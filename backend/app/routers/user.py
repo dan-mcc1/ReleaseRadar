@@ -117,6 +117,23 @@ def update_avatar_route(
     return user
 
 
+@router.put("/update-bio")
+def update_bio_route(
+    bio: str | None = Body(None, embed=True),
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    if bio is not None and len(bio) > 300:
+        raise HTTPException(status_code=422, detail="Bio must be 300 characters or fewer.")
+    user = db.query(User).filter_by(id=uid).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+    user.bio = bio.strip() if bio else None
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 @router.get("/check-username")
 def check_username_route(
     username: str = Query(...),
@@ -189,6 +206,7 @@ def get_public_profile(
     profile = {
         "id": target.id,
         "username": target.username,
+        "bio": target.bio,
         "is_friend": is_friend,
         "profile_visibility": visibility,
         "pending_request_id": pending.id if pending else None,
@@ -200,7 +218,7 @@ def get_public_profile(
 
     # All profile content respects visibility setting
     can_see_details = visibility == "public" or (
-        visibility in ("friends_only", "private") and is_friend
+        visibility == "friends_only" and is_friend
     )
     if can_see_details:
         profile["favorites"] = get_favorites(db, target.id)

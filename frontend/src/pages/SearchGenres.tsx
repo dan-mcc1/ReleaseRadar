@@ -30,6 +30,8 @@ export default function SearchGenres() {
     movies: [],
     shows: [],
   });
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(false);
 
   // Fetch genre list once on mount
@@ -40,11 +42,18 @@ export default function SearchGenres() {
       .catch(console.error);
   }, []);
 
-  // Reset genre selection when type changes
+  // Reset genre selection and page when type changes
   useEffect(() => {
     setSelectedGenreId(null);
     setResults({ movies: [], shows: [] });
+    setPage(1);
+    setTotalPages(1);
   }, [activeType]);
+
+  // Reset page when genre changes
+  useEffect(() => {
+    setPage(1);
+  }, [selectedGenreId]);
 
   // Fetch results when genre is selected
   useEffect(() => {
@@ -59,6 +68,7 @@ export default function SearchGenres() {
         const params = new URLSearchParams({
           genre_id: String(selectedGenreId),
           type: activeType,
+          page: String(page),
         });
         const res = await fetch(`${API_URL}/search?${params}`);
         if (!res.ok) throw new Error("Failed to fetch genre results");
@@ -67,6 +77,7 @@ export default function SearchGenres() {
           movies: data.movies ?? [],
           shows: data.shows ?? [],
         });
+        setTotalPages(data.total_pages ?? 1);
       } catch (err) {
         console.error(err);
       } finally {
@@ -75,7 +86,7 @@ export default function SearchGenres() {
     }
 
     fetchResults();
-  }, [selectedGenreId, activeType]);
+  }, [selectedGenreId, activeType, page]);
 
   const genrePills = genres[activeType];
   const selectedGenreName = genrePills.find((g) => g.id === selectedGenreId)?.name;
@@ -88,7 +99,7 @@ export default function SearchGenres() {
         <h1 className="text-2xl font-bold text-white">Search Genres</h1>
         {selectedGenreName && !loading && total > 0 && (
           <p className="text-slate-400 text-sm mt-1">
-            {total} result{total !== 1 ? "s" : ""} in {selectedGenreName}
+            {selectedGenreName} — page {page} of {totalPages}
           </p>
         )}
       </div>
@@ -154,7 +165,30 @@ export default function SearchGenres() {
         </div>
       )}
 
-      {!loading && <MediaList results={results} />}
+      {!loading && <MediaList results={results} paginated />}
+
+      {/* Pagination */}
+      {!loading && selectedGenreId && totalPages > 1 && (
+        <div className="flex items-center justify-center gap-4 mt-8">
+          <button
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page === 1}
+            className="px-4 py-2 rounded-lg text-sm font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            Previous
+          </button>
+          <span className="text-slate-400 text-sm">
+            Page {page} of {totalPages}
+          </span>
+          <button
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages}
+            className="px-4 py-2 rounded-lg text-sm font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            Next
+          </button>
+        </div>
+      )}
     </div>
   );
 }

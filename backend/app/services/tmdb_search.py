@@ -50,39 +50,45 @@ def get_genre_list():
 
 
 @lru_cache(maxsize=1024)
-def get_tv_by_genre(genre_id: int):
+def get_tv_by_genre(genre_id: int, page: int = 1):
     data = get("/discover/tv", params={
         "with_genres": genre_id,
         "sort_by": "popularity.desc",
+        "page": page,
     })
-    return data.get("results", [])
+    return {"results": data.get("results", []), "total_pages": min(data.get("total_pages", 1), 500)}
 
 
 @lru_cache(maxsize=1024)
-def get_movie_by_genre(genre_id: int):
+def get_movie_by_genre(genre_id: int, page: int = 1):
     data = get("/discover/movie", params={
         "with_genres": genre_id,
         "sort_by": "popularity.desc",
+        "page": page,
     })
-    return data.get("results", [])
+    return {"results": data.get("results", []), "total_pages": min(data.get("total_pages", 1), 500)}
 
 
 @lru_cache(maxsize=1024)
 def get_multi_trending_results():
+    tv = get_tv_trending_results()
+    movies = get_movie_trending_results()
     return {
-        "movies": get_movie_trending_results(),
-        "shows": get_tv_trending_results(),
+        "movies": movies["results"],
+        "shows": tv["results"],
     }
 
 
 @lru_cache(maxsize=1024)
-def get_tv_trending_results():
-    return get(f"/trending/tv/week").get("results", [])
+def get_tv_trending_results(page: int = 1):
+    data = get("/trending/tv/week", params={"page": page})
+    return {"results": data.get("results", []), "total_pages": min(data.get("total_pages", 1), 500)}
 
 
 @lru_cache(maxsize=1024)
-def get_movie_trending_results():
-    return get(f"/trending/movie/week").get("results", [])
+def get_movie_trending_results(page: int = 1):
+    data = get("/trending/movie/week", params={"page": page})
+    return {"results": data.get("results", []), "total_pages": min(data.get("total_pages", 1), 500)}
 
 
 @lru_cache(maxsize=1024)
