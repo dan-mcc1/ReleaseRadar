@@ -349,29 +349,67 @@ export default function CurrentlyWatchingStrip({
                 />
               ))}
 
-            {/* Movies — simple poster cards unchanged */}
+            {/* Movies */}
             {movies.map((movie) => (
               <Link
                 key={`movie-${movie.id}`}
                 to={`/movie/${movie.id}`}
-                className="flex-shrink-0 group flex flex-col items-center gap-2"
+                className="flex-shrink-0 w-72 flex flex-col bg-slate-700/50 rounded-xl overflow-hidden border border-slate-600/50 hover:border-slate-500 transition-colors"
               >
-                {movie.poster_path ? (
-                  <img
-                    src={`${BASE_IMAGE_URL}/w154${movie.poster_path}`}
-                    alt={movie.title}
-                    className="w-16 h-24 rounded-xl object-cover border-2 border-purple-500 group-hover:border-purple-300 shadow-lg shadow-purple-900/30 transition-all duration-150 group-hover:scale-105"
-                  />
-                ) : (
-                  <div className="w-16 h-24 rounded-xl bg-slate-700 border-2 border-purple-500 flex items-center justify-center shadow-lg">
-                    <span className="text-slate-400 text-[10px] text-center leading-tight px-1">
-                      {movie.title}
+                <div className="flex gap-3 p-3 flex-1">
+                  {/* Poster */}
+                  <div className="flex-shrink-0">
+                    {movie.poster_path ? (
+                      <img
+                        src={`${BASE_IMAGE_URL}/w154${movie.poster_path}`}
+                        alt={movie.title}
+                        className="w-12 rounded-lg object-cover border border-purple-500/50"
+                        style={{ height: "72px" }}
+                      />
+                    ) : (
+                      <div
+                        className="w-12 rounded-lg bg-slate-600 flex items-center justify-center"
+                        style={{ height: "72px" }}
+                      >
+                        <span className="text-slate-400 text-[9px] text-center px-0.5">
+                          {movie.title}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Info */}
+                  <div className="flex-1 min-w-0 flex flex-col justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-white hover:text-purple-300 transition-colors line-clamp-1">
+                        {movie.title}
+                      </p>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        {movie.release_date
+                          ? new Date(movie.release_date + "T00:00:00").getFullYear()
+                          : ""}
+                        {movie.runtime ? ` · ${Math.floor(movie.runtime / 60) > 0 ? `${Math.floor(movie.runtime / 60)}h ` : ""}${movie.runtime % 60 > 0 ? `${movie.runtime % 60}m` : ""}` : ""}
+                      </p>
+                    </div>
+                    <span className="mt-2 self-start inline-flex items-center gap-1 text-xs text-slate-400 bg-slate-600/50 border border-slate-600 px-2.5 py-1 rounded-md">
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.36a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" />
+                      </svg>
+                      Movie
                     </span>
                   </div>
+                </div>
+
+                {/* Backdrop */}
+                {(movie.backdrop_path ?? movie.poster_path) && (
+                  <div className="aspect-video w-full overflow-hidden">
+                    <img
+                      src={`${BASE_IMAGE_URL}/w300${movie.backdrop_path ?? movie.poster_path}`}
+                      alt={movie.title}
+                      className="w-full aspect-video object-cover opacity-60"
+                    />
+                  </div>
                 )}
-                <span className="text-xs text-slate-300 group-hover:text-white transition-colors w-16 text-center truncate">
-                  {movie.title}
-                </span>
               </Link>
             ))}
           </div>

@@ -20,6 +20,7 @@ from app.routers import (
     recommendations,
     events,
     reviews,
+    box_office,
 )
 from fastapi.middleware.cors import CORSMiddleware
 from app.db.session import SessionLocal, engine
@@ -124,3 +125,4 @@ app.include_router(favorites.router, prefix="/favorites", tags=["favorites"])
 app.include_router(recommendations.router, prefix="/recommendations", tags=["recommendations"])
 app.include_router(events.router, prefix="/events", tags=["events"])
 app.include_router(reviews.router, prefix="/reviews", tags=["reviews"])
+app.include_router(box_office.router, prefix="/box-office", tags=["box-office"])

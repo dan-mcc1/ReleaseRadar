@@ -27,6 +27,7 @@ const discoverLinks = [
   { name: "Trending", href: "/trending" },
   { name: "Upcoming", href: "/upcoming" },
   { name: "Browse Genres", href: "/search-genres" },
+  { name: "Box Office", href: "/box-office" },
 ];
 
 function classNames(...classes: string[]) {

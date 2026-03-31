@@ -17,6 +17,7 @@ import SearchGenres from "./pages/SearchGenres";
 import FriendProfilePage from "./pages/FriendProfilePage";
 import ActivityFeedPage from "./pages/ActivityFeedPage";
 import EpisodeInfo from "./pages/EpisodeInfo";
+import BoxOffice from "./pages/BoxOffice";
 
 function App() {
   return (
@@ -44,6 +45,7 @@ function App() {
             path="/tv/:showId/episode/:season/:episode"
             element={<EpisodeInfo />}
           />
+          <Route path="/box-office" element={<BoxOffice />} />
         </Routes>
       </div>
     </BrowserRouter>
