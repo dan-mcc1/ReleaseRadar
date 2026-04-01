@@ -95,7 +95,7 @@ export default function CollectionInfo() {
         <div className="absolute bottom-0 left-0 right-0 px-6 pb-6 flex items-end gap-5">
           {collection.poster_path && (
             <img
-              src={`${BASE_IMAGE_URL}/w300${collection.poster_path}`}
+              src={`${BASE_IMAGE_URL}/w500${collection.poster_path}`}
               alt={collection.name}
               className="hidden md:block w-28 lg:w-36 rounded-xl shadow-2xl border border-white/10 flex-shrink-0"
             />
@@ -158,13 +158,13 @@ export default function CollectionInfo() {
                   >
                     {movie.backdrop_path ? (
                       <img
-                        src={`${BASE_IMAGE_URL}/w300${movie.backdrop_path}`}
+                        src={`${BASE_IMAGE_URL}/w780${movie.backdrop_path}`}
                         alt=""
                         className="h-full w-full object-cover"
                       />
                     ) : movie.poster_path ? (
                       <img
-                        src={`${BASE_IMAGE_URL}/w154${movie.poster_path}`}
+                        src={`${BASE_IMAGE_URL}/w342${movie.poster_path}`}
                         alt=""
                         className="h-full w-full object-cover object-top"
                       />

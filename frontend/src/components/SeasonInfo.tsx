@@ -240,7 +240,7 @@ export default function SeasonInfo({
               <div className="flex items-start gap-3">
                 {season.poster_path && (
                   <img
-                    src={`${BASE_IMAGE_URL}/w154${season.poster_path}`}
+                    src={`${BASE_IMAGE_URL}/w342${season.poster_path}`}
                     alt={season.name}
                     className="w-16 sm:w-24 flex-shrink-0 h-auto rounded-md object-cover"
                   />
@@ -412,7 +412,7 @@ export default function SeasonInfo({
                                 {ep.still_path ? (
                                   <div className="relative flex-shrink-0">
                                     <img
-                                      src={`${BASE_IMAGE_URL}/w300${ep.still_path}`}
+                                      src={`${BASE_IMAGE_URL}/w500${ep.still_path}`}
                                       alt={ep.name}
                                       className="w-28 sm:w-40 h-auto rounded-md object-cover"
                                     />

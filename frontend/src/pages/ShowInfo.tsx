@@ -227,7 +227,7 @@ export default function ShowInfo() {
           {/* Poster */}
           {show.poster_path && (
             <img
-              src={`${BASE_IMAGE_URL}/w300${show.poster_path}`}
+              src={`${BASE_IMAGE_URL}/w500${show.poster_path}`}
               alt={show.name}
               className="hidden md:block w-28 lg:w-36 rounded-xl shadow-2xl border border-white/10 flex-shrink-0 -mb-1"
             />
@@ -237,7 +237,7 @@ export default function ShowInfo() {
           <div className="min-w-0">
             {show.logo_path ? (
               <img
-                src={`${BASE_IMAGE_URL}/w300${show.logo_path}`}
+                src={`${BASE_IMAGE_URL}/w500${show.logo_path}`}
                 alt={show.name}
                 className="max-h-16 max-w-[280px] object-contain drop-shadow-2xl mb-1"
               />
@@ -499,7 +499,7 @@ export default function ShowInfo() {
                 <Link key={rec.id} to={`/tv/${rec.id}`} className="group">
                   {rec.poster_path ? (
                     <img
-                      src={`${BASE_IMAGE_URL}/w300${rec.poster_path}`}
+                      src={`${BASE_IMAGE_URL}/w342${rec.poster_path}`}
                       alt={rec.name}
                       className="w-full rounded-lg object-cover border border-slate-700 group-hover:border-slate-500 transition-all duration-200 group-hover:scale-105"
                     />

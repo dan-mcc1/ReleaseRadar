@@ -313,7 +313,7 @@ export default function ProfilePage() {
                           <img
                             src={
                               movie.poster_path
-                                ? `${BASE_IMAGE_URL}/w154${movie.poster_path}`
+                                ? `${BASE_IMAGE_URL}/w342${movie.poster_path}`
                                 : "/movie-icon.png"
                             }
                             alt={movie.title}
@@ -340,7 +340,7 @@ export default function ProfilePage() {
                           <img
                             src={
                               show.poster_path
-                                ? `${BASE_IMAGE_URL}/w154${show.poster_path}`
+                                ? `${BASE_IMAGE_URL}/w342${show.poster_path}`
                                 : "/tv-icon.png"
                             }
                             alt={show.name}
@@ -402,7 +402,7 @@ export default function ProfilePage() {
                               <img
                                 src={
                                   movie.poster_path
-                                    ? `${BASE_IMAGE_URL}/w154${movie.poster_path}`
+                                    ? `${BASE_IMAGE_URL}/w342${movie.poster_path}`
                                     : "/movie-icon.png"
                                 }
                                 alt={movie.title}
@@ -429,7 +429,7 @@ export default function ProfilePage() {
                               <img
                                 src={
                                   show.poster_path
-                                    ? `${BASE_IMAGE_URL}/w154${show.poster_path}`
+                                    ? `${BASE_IMAGE_URL}/w342${show.poster_path}`
                                     : "/tv-icon.png"
                                 }
                                 alt={show.name}
@@ -501,7 +501,7 @@ export default function ProfilePage() {
                               <img
                                 src={
                                   movie.poster_path
-                                    ? `${BASE_IMAGE_URL}/w154${movie.poster_path}`
+                                    ? `${BASE_IMAGE_URL}/w342${movie.poster_path}`
                                     : "/movie-icon.png"
                                 }
                                 alt={movie.title}
@@ -528,7 +528,7 @@ export default function ProfilePage() {
                               <img
                                 src={
                                   show.poster_path
-                                    ? `${BASE_IMAGE_URL}/w154${show.poster_path}`
+                                    ? `${BASE_IMAGE_URL}/w342${show.poster_path}`
                                     : "/tv-icon.png"
                                 }
                                 alt={show.name}

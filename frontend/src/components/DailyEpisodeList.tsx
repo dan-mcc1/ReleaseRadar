@@ -166,7 +166,7 @@ export default function DailyEpisodeList({ dailyItems }: DailyItemListProps) {
             <div className="relative w-24 sm:w-32 flex-shrink-0">
               {show.poster_path ? (
                 <img
-                  src={`${BASE_IMAGE_URL}/w300${show.poster_path}`}
+                  src={`${BASE_IMAGE_URL}/w342${show.poster_path}`}
                   alt={show.name}
                   className="h-full w-full object-cover"
                 />
@@ -218,7 +218,7 @@ export default function DailyEpisodeList({ dailyItems }: DailyItemListProps) {
           <div className="relative w-24 sm:w-32 flex-shrink-0">
             {movie.poster_path ? (
               <img
-                src={`${BASE_IMAGE_URL}/w300${movie.poster_path}`}
+                src={`${BASE_IMAGE_URL}/w342${movie.poster_path}`}
                 alt={movie.title}
                 className="h-full w-full object-cover"
               />

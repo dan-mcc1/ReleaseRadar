@@ -26,7 +26,7 @@ export default function CastBar({ cast }: CastBarProps) {
             <Link to={`/person/${actor.id}`}>
               {actor.profile_path ? (
                 <img
-                  src={`${BASE_IMAGE_URL}/w185${actor.profile_path}`}
+                  src={`${BASE_IMAGE_URL}/w342${actor.profile_path}`}
                   alt={actor.name}
                   className="w-32 h-40 object-cover rounded-t-lg"
                 />

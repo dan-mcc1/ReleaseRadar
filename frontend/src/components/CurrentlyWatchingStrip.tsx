@@ -130,7 +130,7 @@ function ShowCard({ show, token, initialNext, onEpisodeWatched }: ShowCardProps)
         >
           {show.poster_path ? (
             <img
-              src={`${BASE_IMAGE_URL}/w154${show.poster_path}`}
+              src={`${BASE_IMAGE_URL}/w342${show.poster_path}`}
               alt={show.name}
               className="w-12 h-18 rounded-lg object-cover border border-purple-500/50"
               style={{ height: "72px" }}
@@ -260,7 +260,7 @@ function ShowCard({ show, token, initialNext, onEpisodeWatched }: ShowCardProps)
         (next.still_path ?? show.backdrop_path ?? show.poster_path) && (
           <div className="aspect-video w-full overflow-hidden">
             <img
-              src={`${BASE_IMAGE_URL}/w300${next.still_path ?? show.backdrop_path ?? show.poster_path}`}
+              src={`${BASE_IMAGE_URL}/w780${next.still_path ?? show.backdrop_path ?? show.poster_path}`}
               alt={next.name ?? show.name}
               className="w-full aspect-video object-cover opacity-60"
             />
@@ -370,7 +370,7 @@ export default function CurrentlyWatchingStrip({
                   <div className="flex-shrink-0">
                     {movie.poster_path ? (
                       <img
-                        src={`${BASE_IMAGE_URL}/w154${movie.poster_path}`}
+                        src={`${BASE_IMAGE_URL}/w342${movie.poster_path}`}
                         alt={movie.title}
                         className="w-12 rounded-lg object-cover border border-purple-500/50"
                         style={{ height: "72px" }}
@@ -413,7 +413,7 @@ export default function CurrentlyWatchingStrip({
                 {(movie.backdrop_path ?? movie.poster_path) && (
                   <div className="aspect-video w-full overflow-hidden">
                     <img
-                      src={`${BASE_IMAGE_URL}/w300${movie.backdrop_path ?? movie.poster_path}`}
+                      src={`${BASE_IMAGE_URL}/w780${movie.backdrop_path ?? movie.poster_path}`}
                       alt={movie.title}
                       className="w-full aspect-video object-cover opacity-60"
                     />

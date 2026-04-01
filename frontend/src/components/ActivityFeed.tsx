@@ -90,7 +90,7 @@ export default function ActivityFeed() {
             <div key={item.id} className="flex items-center gap-3 bg-slate-900/60 border border-slate-700 rounded-xl p-2.5">
               {item.content_poster_path ? (
                 <img
-                  src={`${BASE_IMAGE_URL}/w92${item.content_poster_path}`}
+                  src={`${BASE_IMAGE_URL}/w185${item.content_poster_path}`}
                   alt={item.content_title ?? ""}
                   className="w-9 h-[54px] rounded-lg flex-shrink-0 object-cover"
                 />

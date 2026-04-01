@@ -225,7 +225,7 @@ export default function BoxOffice() {
                   <div className="w-8 sm:w-9 h-[48px] sm:h-[54px] rounded overflow-hidden bg-slate-700 flex-shrink-0">
                     {movie.poster_path ? (
                       <img
-                        src={`${BASE_IMAGE_URL}/w92${movie.poster_path}`}
+                        src={`${BASE_IMAGE_URL}/w185${movie.poster_path}`}
                         alt={movie.title}
                         className="w-full h-full object-cover"
                       />

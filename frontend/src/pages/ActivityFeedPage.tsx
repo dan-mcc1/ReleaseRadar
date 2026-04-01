@@ -107,7 +107,7 @@ function ActivityRow({
       <Link to={contentPath} className="flex-shrink-0">
         {item.content_poster_path ? (
           <img
-            src={`${BASE_IMAGE_URL}/w92${item.content_poster_path}`}
+            src={`${BASE_IMAGE_URL}/w185${item.content_poster_path}`}
             alt={item.content_title ?? ""}
             className="w-12 h-[72px] rounded-lg object-cover hover:opacity-80 transition-opacity"
           />
@@ -202,7 +202,7 @@ function RecommendationRow({
       <Link to={contentPath} onClick={handleRead} className="flex-shrink-0">
         {item.content_poster_path ? (
           <img
-            src={`${BASE_IMAGE_URL}/w92${item.content_poster_path}`}
+            src={`${BASE_IMAGE_URL}/w185${item.content_poster_path}`}
             alt={item.content_title ?? ""}
             className="w-12 h-[72px] rounded-lg object-cover hover:opacity-80 transition-opacity"
           />

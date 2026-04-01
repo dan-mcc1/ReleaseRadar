@@ -145,7 +145,7 @@ export default function WatchlistModal({
                   >
                     {show.poster_path && (
                       <img
-                        src={`${BASE_IMAGE_URL}/w154${show.poster_path}`}
+                        src={`${BASE_IMAGE_URL}/w342${show.poster_path}`}
                         alt={show.name}
                         className="w-16 h-auto rounded-lg object-cover flex-shrink-0"
                       />
@@ -182,7 +182,7 @@ export default function WatchlistModal({
                 >
                   {movie.poster_path && (
                     <img
-                      src={`${BASE_IMAGE_URL}/w154${movie.poster_path}`}
+                      src={`${BASE_IMAGE_URL}/w342${movie.poster_path}`}
                       alt={movie.title}
                       className="w-16 h-auto rounded-lg object-cover flex-shrink-0"
                     />

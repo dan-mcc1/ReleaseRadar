@@ -70,7 +70,7 @@ function CreditList({
             >
               {poster ? (
                 <img
-                  src={`${BASE_IMAGE_URL}/w300${poster}`}
+                  src={`${BASE_IMAGE_URL}/w342${poster}`}
                   alt={name}
                   className="w-full rounded-lg object-cover border border-slate-700 group-hover:border-slate-500 transition-all duration-200 group-hover:scale-105"
                 />
@@ -149,7 +149,7 @@ export default function PersonInfo() {
         {person.profile_path && (
           <div className="flex-shrink-0">
             <img
-              src={`${BASE_IMAGE_URL}/w300${person.profile_path}`}
+              src={`${BASE_IMAGE_URL}/w500${person.profile_path}`}
               alt={person.name}
               className="w-40 sm:w-48 rounded-2xl object-cover border border-slate-700 shadow-2xl shadow-black/50"
             />

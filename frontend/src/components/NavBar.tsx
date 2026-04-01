@@ -506,7 +506,7 @@ export default function NavBar() {
                             <div className="flex-shrink-0 w-8 h-12 rounded overflow-hidden bg-slate-700">
                               {imgPath ? (
                                 <img
-                                  src={`${BASE_IMAGE_URL}/w92${imgPath}`}
+                                  src={`${BASE_IMAGE_URL}/w185${imgPath}`}
                                   alt={label}
                                   className="w-full h-full object-cover"
                                 />

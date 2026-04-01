@@ -78,13 +78,13 @@ function MediaRow({
       >
         {item.backdrop_path ? (
           <img
-            src={`${BASE_IMAGE_URL}/w300${item.backdrop_path}`}
+            src={`${BASE_IMAGE_URL}/w780${item.backdrop_path}`}
             alt=""
             className="h-full w-full object-cover"
           />
         ) : item.poster_path ? (
           <img
-            src={`${BASE_IMAGE_URL}/w154${item.poster_path}`}
+            src={`${BASE_IMAGE_URL}/w342${item.poster_path}`}
             alt=""
             className="h-full w-full object-cover object-top"
           />
@@ -210,7 +210,7 @@ function PersonRow({ person }: { person: Person }) {
       <div className="relative flex-shrink-0 w-16 h-16 sm:w-20 sm:h-20 m-2 rounded-full overflow-hidden bg-slate-700">
         {person.profile_path ? (
           <img
-            src={`${BASE_IMAGE_URL}/w154${person.profile_path}`}
+            src={`${BASE_IMAGE_URL}/w185${person.profile_path}`}
             alt={person.name}
             className="h-full w-full object-cover object-top"
           />
@@ -258,13 +258,13 @@ function CollectionRow({ collection }: { collection: CollectionResult }) {
       <div className="relative flex-shrink-0 w-36 sm:w-44 overflow-hidden rounded-l-xl">
         {collection.backdrop_path ? (
           <img
-            src={`${BASE_IMAGE_URL}/w300${collection.backdrop_path}`}
+            src={`${BASE_IMAGE_URL}/w780${collection.backdrop_path}`}
             alt=""
             className="h-full w-full object-cover"
           />
         ) : collection.poster_path ? (
           <img
-            src={`${BASE_IMAGE_URL}/w154${collection.poster_path}`}
+            src={`${BASE_IMAGE_URL}/w342${collection.poster_path}`}
             alt=""
             className="h-full w-full object-cover object-top"
           />

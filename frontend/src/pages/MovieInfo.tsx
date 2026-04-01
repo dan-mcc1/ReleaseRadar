@@ -238,7 +238,7 @@ export default function MovieInfo() {
         <div className="absolute bottom-0 left-0 right-0 px-6 pb-6 flex items-end gap-5">
           {movie.poster_path && (
             <img
-              src={`${BASE_IMAGE_URL}/w300${movie.poster_path}`}
+              src={`${BASE_IMAGE_URL}/w500${movie.poster_path}`}
               alt={movie.title}
               className="hidden md:block w-28 lg:w-36 rounded-xl shadow-2xl border border-white/10 flex-shrink-0"
             />
@@ -247,7 +247,7 @@ export default function MovieInfo() {
           <div className="min-w-0">
             {movie.logo_path ? (
               <img
-                src={`${BASE_IMAGE_URL}/w300${movie.logo_path}`}
+                src={`${BASE_IMAGE_URL}/w500${movie.logo_path}`}
                 alt={movie.title}
                 className="max-h-16 max-w-[280px] object-contain drop-shadow-2xl mb-1"
               />
@@ -530,7 +530,7 @@ export default function MovieInfo() {
                 <Link key={rec.id} to={`/movie/${rec.id}`} className="group">
                   {rec.poster_path ? (
                     <img
-                      src={`${BASE_IMAGE_URL}/w300${rec.poster_path}`}
+                      src={`${BASE_IMAGE_URL}/w342${rec.poster_path}`}
                       alt={rec.title}
                       className="w-full rounded-lg object-cover border border-slate-700 group-hover:border-slate-500 transition-all duration-200 group-hover:scale-105"
                     />

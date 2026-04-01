@@ -39,7 +39,7 @@ export default function ExpandableMediaList({
               <img
                 src={
                   item.poster_path
-                    ? `${BASE_IMAGE_URL}/w154${item.poster_path}`
+                    ? `${BASE_IMAGE_URL}/w342${item.poster_path}`
                     : fallbackImage
                 }
                 alt={item.title ?? item.name}

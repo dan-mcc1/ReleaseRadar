@@ -70,7 +70,7 @@ function PersonCard({ name, character, profilePath }: { name: string; character?
     <div className="flex-shrink-0 w-24 text-center">
       {profilePath ? (
         <img
-          src={`${BASE_IMAGE_URL}/w185${profilePath}`}
+          src={`${BASE_IMAGE_URL}/w342${profilePath}`}
           alt={name}
           className="w-24 h-36 object-cover rounded-xl mb-1"
         />
