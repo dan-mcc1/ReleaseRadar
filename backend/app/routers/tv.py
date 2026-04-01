@@ -3,18 +3,13 @@ from sqlalchemy.orm import Session, selectinload
 from app.services.tmdb_tv import (
     fetch_show_from_tmdb,
     get_popular_shows,
-    search_tv,
     get_active_popular_shows,
-    get_trending_shows,
-    get_shows_airing_today,
-    get_upcoming_shows,
     get_shows_by_actor,
     fetch_season_data_from_tmdb,
     get_full_season_info,
 )
 from app.models.show import Show
 from app.models.episode import Episode
-from app.models.provider import ShowProvider
 from app.db.session import get_db
 from app.services.watchlist_service import serialize_show, _show_query_options
 

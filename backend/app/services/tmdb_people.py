@@ -1,5 +1,4 @@
 from functools import lru_cache
-from typing import Tuple, Optional
 
 from app.services.tmdb_client import get
 

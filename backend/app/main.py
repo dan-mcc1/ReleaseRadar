@@ -27,7 +27,10 @@ from app.db.session import SessionLocal, engine
 from app.db.base import Base
 from app.services.activity_service import delete_old_activity
 from app.services.recommendation_service import delete_old_recommendations
-from app.routers.notifications import send_daily_digest_to_all, send_season_premiere_alerts_to_all
+from app.routers.notifications import (
+    send_daily_digest_to_all,
+    send_season_premiere_alerts_to_all,
+)
 from app.services.vote_update_service import update_all_vote_averages
 
 
@@ -112,17 +115,6 @@ async def lifespan(app: FastAPI):
     import app.models.review  # noqa: F401
 
     Base.metadata.create_all(engine)
-    # Add new columns to existing tables that create_all won't backfill
-    from sqlalchemy import text
-    with engine.connect() as conn:
-        for col_sql in [
-            'ALTER TABLE "user" ADD COLUMN IF NOT EXISTS bio TEXT',
-        ]:
-            try:
-                conn.execute(text(col_sql))
-                conn.commit()
-            except Exception:
-                conn.rollback()
     task = asyncio.create_task(_activity_cleanup_loop())
     digest_task = asyncio.create_task(_daily_digest_loop())
     vote_task = asyncio.create_task(_vote_update_loop())

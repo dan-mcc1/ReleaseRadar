@@ -1,10 +1,8 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter
 from app.config import settings
 from app.services.tmdb_people import (
     search_person,
     get_person,
-    get_person_credits,
-    get_external_ids,
 )
 
 router = APIRouter()
