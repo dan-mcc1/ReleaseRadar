@@ -119,3 +119,21 @@ export type Person = {
   known_for_department: string;
   popularity?: number
 }
+
+export type Collection = {
+  id: number;
+  name: string;
+  overview: string;
+  poster_path: string | null;
+  backdrop_path: string | null;
+  parts: Movie[];
+}
+
+export type CollectionResult = {
+  id: number;
+  name: string;
+  overview: string;
+  poster_path: string | null;
+  backdrop_path: string | null;
+  popularity?: number;
+}

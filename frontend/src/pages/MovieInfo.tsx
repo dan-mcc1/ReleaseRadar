@@ -18,6 +18,12 @@ import { usePageTitle } from "../hooks/usePageTitle";
 type FullMovieData = Movie & {
   vote_average?: number;
   vote_count?: number;
+  belongs_to_collection?: {
+    id: number;
+    name: string;
+    poster_path: string | null;
+    backdrop_path: string | null;
+  } | null;
   created_by: {
     id: number;
     credit_id: string;
@@ -401,6 +407,24 @@ export default function MovieInfo() {
               Overview
             </h2>
             <p className="text-slate-300 leading-relaxed">{movie.overview}</p>
+          </div>
+        )}
+
+        {/* Part of collection */}
+        {movie.belongs_to_collection && (
+          <div>
+            <h2 className="text-slate-400 text-xs uppercase tracking-wider font-semibold mb-2">
+              Part of a Collection
+            </h2>
+            <Link
+              to={`/collection/${movie.belongs_to_collection.id}`}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 hover:border-blue-600/50 hover:bg-slate-700 transition-all duration-150 text-slate-200 text-sm font-medium"
+            >
+              <svg className="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+              </svg>
+              {movie.belongs_to_collection.name}
+            </Link>
           </div>
         )}
 

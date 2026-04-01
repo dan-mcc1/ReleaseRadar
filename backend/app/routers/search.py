@@ -12,6 +12,7 @@ from app.services.tmdb_search import (
     get_genre_list,
     get_tv_by_genre,
     get_movie_by_genre,
+    get_collection_search_results,
 )
 
 router = APIRouter()
@@ -30,12 +31,13 @@ def search(query: str = "", genre_id: int = None, type: str = Query(None), page:
 
     # Text search mode
     if not query:
-        return {"movies": [], "shows": [], "people": []}
+        return {"movies": [], "shows": [], "people": [], "collections": []}
 
     return {
         "movies": get_movie_search_results(query),
         "shows": get_tv_search_results(query),
         "people": get_person_search_results(query),
+        "collections": get_collection_search_results(query),
     }
 
 

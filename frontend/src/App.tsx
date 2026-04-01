@@ -13,11 +13,12 @@ import Watched from "./pages/Watched";
 import Watchlist from "./pages/Watchlist";
 import Trending from "./pages/Trending";
 import ProfilePage from "./pages/ProfilePage";
-import SearchGenres from "./pages/SearchGenres";
+import BrowseGenres from "./pages/BrowseGenres";
 import FriendProfilePage from "./pages/FriendProfilePage";
 import ActivityFeedPage from "./pages/ActivityFeedPage";
 import EpisodeInfo from "./pages/EpisodeInfo";
 import BoxOffice from "./pages/BoxOffice";
+import CollectionInfo from "./pages/CollectionInfo";
 
 function App() {
   return (
@@ -37,7 +38,7 @@ function App() {
           <Route path="/watched" element={<Watched />} />
           <Route path="/watchlist" element={<Watchlist />} />
           <Route path="/trending" element={<Trending />} />
-          <Route path="/search-genres" element={<SearchGenres />} />
+          <Route path="/browse-genres" element={<BrowseGenres />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/user/:username" element={<FriendProfilePage />} />
           <Route path="/activity" element={<ActivityFeedPage />} />
@@ -46,6 +47,7 @@ function App() {
             element={<EpisodeInfo />}
           />
           <Route path="/box-office" element={<BoxOffice />} />
+          <Route path="/collection/:id" element={<CollectionInfo />} />
         </Routes>
       </div>
     </BrowserRouter>

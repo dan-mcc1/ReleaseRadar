@@ -1,6 +1,6 @@
 import { BASE_IMAGE_URL, API_URL } from "../constants";
 import { Link } from "react-router-dom";
-import { Movie, Show, Person } from "../types/calendar";
+import { Movie, Show, Person, CollectionResult } from "../types/calendar";
 import { parseLocalDate } from "../utils/date";
 import { useState, useEffect } from "react";
 import { getAuth } from "firebase/auth";
@@ -13,6 +13,7 @@ interface MediaListProps {
     shows?: Show[];
     people?: Person[];
   };
+  collections?: CollectionResult[];
   showWatchButton?: boolean;
   paginated?: boolean;
 }
@@ -246,6 +247,54 @@ function PersonRow({ person }: { person: Person }) {
   );
 }
 
+// ── Collection row ─────────────────────────────────────────────────────────
+
+function CollectionRow({ collection }: { collection: CollectionResult }) {
+  return (
+    <Link
+      to={`/collection/${collection.id}`}
+      className="flex gap-4 bg-slate-800/60 border border-slate-700 hover:border-slate-600 rounded-xl overflow-hidden transition-all duration-200 hover:bg-slate-800 hover:shadow-lg hover:shadow-black/30 group"
+    >
+      <div className="relative flex-shrink-0 w-36 sm:w-44 overflow-hidden rounded-l-xl">
+        {collection.backdrop_path ? (
+          <img
+            src={`${BASE_IMAGE_URL}/w300${collection.backdrop_path}`}
+            alt=""
+            className="h-full w-full object-cover"
+          />
+        ) : collection.poster_path ? (
+          <img
+            src={`${BASE_IMAGE_URL}/w154${collection.poster_path}`}
+            alt=""
+            className="h-full w-full object-cover object-top"
+          />
+        ) : (
+          <div className="h-full w-full min-h-[88px] bg-slate-700 flex items-center justify-center">
+            <svg className="w-8 h-8 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+            </svg>
+          </div>
+        )}
+        <div className="absolute top-2 left-2">
+          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full backdrop-blur-sm bg-blue-600/80 text-blue-100">
+            Collection
+          </span>
+        </div>
+      </div>
+      <div className="flex flex-col justify-center gap-1.5 py-3 pr-3 flex-1 min-w-0">
+        <h3 className="font-semibold text-slate-100 group-hover:text-white transition-colors line-clamp-1 text-sm sm:text-base">
+          {collection.name}
+        </h3>
+        {collection.overview && (
+          <p className="text-slate-400 text-xs sm:text-sm line-clamp-2 leading-relaxed">
+            {collection.overview}
+          </p>
+        )}
+      </div>
+    </Link>
+  );
+}
+
 // ── Section wrapper ────────────────────────────────────────────────────────
 
 function Section({
@@ -309,6 +358,7 @@ function Section({
 
 export default function MediaList({
   results,
+  collections = [],
   showWatchButton = true,
   paginated = false,
 }: MediaListProps) {
@@ -361,7 +411,7 @@ export default function MediaList({
     return unsubscribe;
   }, [movies, shows, showWatchButton]);
 
-  if (movies.length === 0 && shows.length === 0 && people.length === 0)
+  if (movies.length === 0 && shows.length === 0 && people.length === 0 && collections.length === 0)
     return null;
 
   const mediaSections = [
@@ -419,6 +469,24 @@ export default function MediaList({
             >
               {people.slice(0, visible).map((p) => (
                 <PersonRow key={p.id} person={p} />
+              ))}
+            </Section>
+          );
+        })()}
+
+      {collections.length > 0 &&
+        (() => {
+          const visible = paginated ? collections.length : (visibleCounts["Collections"] ?? INITIAL_COUNT);
+          return (
+            <Section
+              title="Collections"
+              total={collections.length}
+              visible={visible}
+              onToggle={() => toggle("Collections", collections.length)}
+              hideToggle={paginated}
+            >
+              {collections.slice(0, visible).map((c) => (
+                <CollectionRow key={c.id} collection={c} />
               ))}
             </Section>
           );

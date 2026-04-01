@@ -26,7 +26,7 @@ interface SearchResult {
 const discoverLinks = [
   { name: "Trending", href: "/trending" },
   { name: "Upcoming", href: "/upcoming" },
-  { name: "Browse Genres", href: "/search-genres" },
+  { name: "Browse", href: "/browse-genres" },
   { name: "Box Office", href: "/box-office" },
 ];
 
@@ -389,7 +389,7 @@ export default function NavBar() {
             </div>
 
             <div className="hidden lg:ml-6 lg:flex lg:items-center lg:gap-1">
-              {/* Dashboard */}
+              {/* Calendar */}
               <Link
                 to="/"
                 className={classNames(

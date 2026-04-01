@@ -4,6 +4,16 @@ from app.services.tmdb_client import get
 
 
 @lru_cache(maxsize=1024)
+def get_collection_search_results(query: str):
+    data = get("/search/collection", params={"query": query})
+    return sorted(
+        data.get("results", []),
+        key=lambda x: x.get("popularity", 0),
+        reverse=True,
+    )
+
+
+@lru_cache(maxsize=1024)
 def get_multi_search_results(query: str):
     return {
         "movies": get_movie_search_results(query),
