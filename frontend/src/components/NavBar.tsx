@@ -361,8 +361,19 @@ export default function NavBar() {
     >
       <div className="mx-auto max-w-7xl px-4 lg:px-8">
         <div className="relative flex h-16 items-center justify-between">
-          {/* Mobile hamburger */}
-          <div className="absolute inset-y-0 left-0 flex items-center lg:hidden">
+          {/* Mobile hamburger + back button */}
+          <div className="absolute inset-y-0 left-0 flex items-center gap-0.5 lg:hidden">
+            {location.pathname !== "/" && (
+              <button
+                onClick={() => navigate(-1)}
+                className="inline-flex items-center justify-center rounded-md p-2 text-gray-400 hover:bg-white/5 hover:text-white"
+                aria-label="Go back"
+              >
+                <svg className="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+            )}
             <DisclosureButton className="group relative inline-flex items-center justify-center rounded-md p-2 text-gray-400 hover:bg-white/5 hover:text-white focus:outline-2 focus:-outline-offset-1 focus:outline-indigo-500">
               <span className="absolute -inset-0.5" />
               <span className="sr-only">Open main menu</span>
