@@ -129,7 +129,7 @@ app = FastAPI(title="ReleaseRadar API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.FRONTEND_URL],
+    allow_origins=["https://releaseradar.co", "https://www.releaseradar.co"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
