@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import type { Show, Movie } from "../types/calendar";
 import { API_URL } from "../constants";
 import MediaList from "../components/MediaList";
@@ -13,16 +14,13 @@ const TYPE_TABS: { label: string; value: MediaType }[] = [
 
 export default function Trending() {
   usePageTitle("Trending");
-  const [activeType, setActiveType] = useState<MediaType>("movie");
-  const [page, setPage] = useState(1);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeType = (searchParams.get("type") as MediaType) ?? "movie";
+  const page = Number(searchParams.get("page") ?? "1");
   const [totalPages, setTotalPages] = useState(1);
   const [movies, setMovies] = useState<Movie[]>([]);
   const [shows, setShows] = useState<Show[]>([]);
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    setPage(1);
-  }, [activeType]);
 
   useEffect(() => {
     async function fetchResults() {
@@ -71,7 +69,7 @@ export default function Trending() {
         {TYPE_TABS.map((tab) => (
           <button
             key={tab.value}
-            onClick={() => setActiveType(tab.value)}
+            onClick={() => setSearchParams({ type: tab.value, page: "1" })}
             className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
               activeType === tab.value
                 ? "bg-blue-600 text-white"
@@ -104,7 +102,7 @@ export default function Trending() {
       {!loading && totalPages > 1 && (
         <div className="flex items-center justify-center gap-4 mt-8">
           <button
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            onClick={() => setSearchParams({ type: activeType, page: String(Math.max(1, page - 1)) })}
             disabled={page === 1}
             className="px-4 py-2 rounded-lg text-sm font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
@@ -114,7 +112,7 @@ export default function Trending() {
             Page {page} of {totalPages}
           </span>
           <button
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            onClick={() => setSearchParams({ type: activeType, page: String(Math.min(totalPages, page + 1)) })}
             disabled={page === totalPages}
             className="px-4 py-2 rounded-lg text-sm font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >

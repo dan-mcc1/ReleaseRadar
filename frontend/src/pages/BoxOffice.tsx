@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { API_URL, BASE_IMAGE_URL } from "../constants";
 import { usePageTitle } from "../hooks/usePageTitle";
 
@@ -55,9 +55,10 @@ const years = Array.from(
 
 export default function BoxOffice() {
   usePageTitle("Box Office");
-  const [mode, setMode] = useState<"yearly" | "monthly">("yearly");
-  const [year, setYear] = useState(currentYear);
-  const [month, setMonth] = useState(new Date().getMonth() + 1);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const mode = (searchParams.get("mode") as "yearly" | "monthly") ?? "yearly";
+  const year = Number(searchParams.get("year") ?? currentYear);
+  const month = Number(searchParams.get("month") ?? new Date().getMonth() + 1);
   const [movies, setMovies] = useState<BoxOfficeMovie[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -88,8 +89,8 @@ export default function BoxOffice() {
 
   const subtitle =
     mode === "yearly"
-      ? `Top-grossing movies of ${year}`
-      : `Top-grossing movies of ${MONTH_NAMES[month - 1]} ${year}`;
+      ? `Top-grossing movies released in ${year}`
+      : `Top-grossing movies released in ${MONTH_NAMES[month - 1]} ${year}`;
 
   return (
     <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 py-8 pb-16">
@@ -107,7 +108,9 @@ export default function BoxOffice() {
         {/* Mode toggle */}
         <div className="flex rounded-lg overflow-hidden border border-white/10">
           <button
-            onClick={() => setMode("yearly")}
+            onClick={() =>
+              setSearchParams({ mode: "yearly", year: String(year) })
+            }
             className={`px-4 py-2 text-sm font-medium transition-colors ${
               mode === "yearly"
                 ? "bg-blue-600 text-white"
@@ -117,7 +120,13 @@ export default function BoxOffice() {
             Yearly
           </button>
           <button
-            onClick={() => setMode("monthly")}
+            onClick={() =>
+              setSearchParams({
+                mode: "monthly",
+                year: String(year),
+                month: String(month),
+              })
+            }
             className={`px-4 py-2 text-sm font-medium transition-colors ${
               mode === "monthly"
                 ? "bg-blue-600 text-white"
@@ -131,7 +140,13 @@ export default function BoxOffice() {
         {/* Year selector */}
         <select
           value={year}
-          onChange={(e) => setYear(Number(e.target.value))}
+          onChange={(e) =>
+            setSearchParams(
+              mode === "monthly"
+                ? { mode, year: e.target.value, month: String(month) }
+                : { mode, year: e.target.value },
+            )
+          }
           className="bg-slate-800 border border-white/10 text-slate-200 text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           {years.map((y) => (
@@ -145,7 +160,13 @@ export default function BoxOffice() {
         {mode === "monthly" && (
           <select
             value={month}
-            onChange={(e) => setMonth(Number(e.target.value))}
+            onChange={(e) =>
+              setSearchParams({
+                mode,
+                year: String(year),
+                month: e.target.value,
+              })
+            }
             className="bg-slate-800 border border-white/10 text-slate-200 text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             {MONTH_NAMES.map((name, i) => (

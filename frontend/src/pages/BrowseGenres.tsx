@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import type { Show, Movie, CollectionResult } from "../types/calendar";
 import { API_URL, BASE_IMAGE_URL } from "../constants";
 import MediaList from "../components/MediaList";
@@ -24,16 +25,17 @@ const TABS: { label: string; value: ActiveTab }[] = [
 
 export default function BrowseGenres() {
   usePageTitle("Browse");
-  const [activeTab, setActiveTab] = useState<ActiveTab>("movie");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = (searchParams.get("type") as ActiveTab) ?? "movie";
+  const selectedGenreId = searchParams.get("genre") ? Number(searchParams.get("genre")) : null;
+  const page = Number(searchParams.get("page") ?? "1");
 
   // Genre browsing state
-  const [selectedGenreId, setSelectedGenreId] = useState<number | null>(null);
   const [genres, setGenres] = useState<GenreList>({ movie: [], tv: [] });
   const [results, setResults] = useState<{ movies: Movie[]; shows: Show[] }>({
     movies: [],
     shows: [],
   });
-  const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(false);
 
@@ -53,16 +55,9 @@ export default function BrowseGenres() {
 
   // Reset genre state when switching between movie/tv tabs
   useEffect(() => {
-    setSelectedGenreId(null);
     setResults({ movies: [], shows: [] });
-    setPage(1);
     setTotalPages(1);
   }, [activeTab]);
-
-  // Reset page when genre changes
-  useEffect(() => {
-    setPage(1);
-  }, [selectedGenreId]);
 
   // Fetch genre results
   useEffect(() => {
@@ -117,7 +112,7 @@ export default function BrowseGenres() {
         {TABS.map((tab) => (
           <button
             key={tab.value}
-            onClick={() => setActiveTab(tab.value)}
+            onClick={() => setSearchParams({ type: tab.value, page: "1" })}
             className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
               activeTab === tab.value
                 ? "bg-blue-600 text-white"
@@ -136,9 +131,11 @@ export default function BrowseGenres() {
           <button
             key={genre.id}
             onClick={() =>
-              setSelectedGenreId((prev) =>
-                prev === genre.id ? null : genre.id,
-              )
+              setSearchParams({
+                type: activeTab,
+                ...(selectedGenreId === genre.id ? {} : { genre: String(genre.id) }),
+                page: "1",
+              })
             }
             className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
               selectedGenreId === genre.id
@@ -180,7 +177,7 @@ export default function BrowseGenres() {
       {!loading && selectedGenreId && totalPages > 1 && (
         <div className="flex items-center justify-center gap-4 mt-8">
           <button
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            onClick={() => setSearchParams({ type: activeTab, genre: String(selectedGenreId), page: String(Math.max(1, page - 1)) })}
             disabled={page === 1}
             className="px-4 py-2 rounded-lg text-sm font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
@@ -190,7 +187,7 @@ export default function BrowseGenres() {
             Page {page} of {totalPages}
           </span>
           <button
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            onClick={() => setSearchParams({ type: activeTab, genre: String(selectedGenreId), page: String(Math.min(totalPages, page + 1)) })}
             disabled={page === totalPages}
             className="px-4 py-2 rounded-lg text-sm font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >

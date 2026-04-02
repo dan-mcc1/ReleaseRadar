@@ -517,7 +517,7 @@ export default function Settings() {
       </div>
 
       {/* ── Notifications ── */}
-      <div className="bg-slate-800 shadow-md rounded-lg p-4 space-y-5">
+      <div id="notifications" className="bg-slate-800 shadow-md rounded-lg p-4 space-y-5">
         <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">
           Notifications
         </h2>

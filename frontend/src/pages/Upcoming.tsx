@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { API_URL } from "../constants";
 import MediaList from "../components/MediaList";
 import type { Movie, Show } from "../types/calendar";
@@ -13,12 +14,13 @@ const TYPE_TABS: { label: string; value: MediaType }[] = [
 
 export default function Upcoming() {
   usePageTitle("Upcoming");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeType = (searchParams.get("type") as MediaType) ?? "movie";
+  const page = Number(searchParams.get("page") ?? "1");
   const [results, setResults] = useState<{ movies: Movie[]; shows: Show[] }>({
     shows: [],
     movies: [],
   });
-  const [activeType, setActiveType] = useState<MediaType>("movie");
-  const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(false);
 
@@ -32,10 +34,6 @@ export default function Upcoming() {
     const opts: Intl.DateTimeFormatOptions = { month: "long", day: "numeric" };
     return `${today.toLocaleDateString("en-us", opts)} – ${nextMonth.toLocaleDateString("en-us", { ...opts, year: "numeric" })}`;
   };
-
-  useEffect(() => {
-    setPage(1);
-  }, [activeType]);
 
   useEffect(() => {
     async function fetchUpcoming() {
@@ -82,7 +80,7 @@ export default function Upcoming() {
         {TYPE_TABS.map((tab) => (
           <button
             key={tab.value}
-            onClick={() => setActiveType(tab.value)}
+            onClick={() => setSearchParams({ type: tab.value, page: "1" })}
             className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
               activeType === tab.value
                 ? "bg-blue-600 text-white"
@@ -148,7 +146,7 @@ export default function Upcoming() {
       {!loading && totalPages > 1 && (
         <div className="flex items-center justify-center gap-4 mt-8">
           <button
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            onClick={() => setSearchParams({ type: activeType, page: String(Math.max(1, page - 1)) })}
             disabled={page === 1}
             className="px-4 py-2 rounded-lg text-sm font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
@@ -158,7 +156,7 @@ export default function Upcoming() {
             Page {page} of {totalPages}
           </span>
           <button
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            onClick={() => setSearchParams({ type: activeType, page: String(Math.min(totalPages, page + 1)) })}
             disabled={page === totalPages}
             className="px-4 py-2 rounded-lg text-sm font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
