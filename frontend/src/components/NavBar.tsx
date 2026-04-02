@@ -15,6 +15,8 @@ import { onIdTokenChanged, getAuth, signOut } from "firebase/auth";
 import { firebaseApp } from "../firebase";
 import { API_URL, BASE_IMAGE_URL, getAvatarColor } from "../constants";
 
+const NAV_BAR_REFRESH_TIME = 30; // amount of time between each GET for recommendations and friend requests
+
 interface SearchResult {
   id: number;
   media_type: "movie" | "tv" | "person";
@@ -127,6 +129,7 @@ export default function NavBar() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [dropdownLoading, setDropdownLoading] = useState(false);
   const esRef = useRef<EventSource | null>(null);
+  const lastCountsFetchRef = useRef<number>(0);
   const searchContainerRef = useRef<HTMLDivElement>(null);
   const dropdownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dropdownAbortRef = useRef<AbortController | null>(null);
@@ -301,15 +304,38 @@ export default function NavBar() {
     };
   }, [fetchCounts]);
 
-  // Re-sync counts on navigation so badges reset after the user acts on them
+  // Re-sync counts on navigation, throttled to at most once every 30 s
+  // useEffect(() => {
+  //   const currentUser = auth.currentUser;
+  //   if (!currentUser) return;
+  //   const now = Date.now();
+  //   if (now - lastCountsFetchRef.current < 30_000) return;
+  //   lastCountsFetchRef.current = now;
+  //   currentUser
+  //     .getIdToken()
+  //     .then(fetchCounts)
+  //     .catch(() => {});
+  // }, [location.pathname, fetchCounts]);
   useEffect(() => {
     const currentUser = auth.currentUser;
     if (!currentUser) return;
-    currentUser
-      .getIdToken()
-      .then(fetchCounts)
-      .catch(() => {});
-  }, [location.pathname, fetchCounts]);
+
+    let isMounted = true;
+
+    const interval = setInterval(() => {
+      currentUser
+        .getIdToken()
+        .then((token) => {
+          if (isMounted) fetchCounts(token);
+        })
+        .catch(() => {});
+    }, NAV_BAR_REFRESH_TIME * 1000); // every 30s (same as your throttle)
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [fetchCounts]);
 
   // Decrement immediately when a recommendation is marked read on the same page
   useEffect(() => {
@@ -369,8 +395,18 @@ export default function NavBar() {
                 className="inline-flex items-center justify-center rounded-md p-2 text-gray-400 hover:bg-white/5 hover:text-white"
                 aria-label="Go back"
               >
-                <svg className="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                <svg
+                  className="size-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2.5}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M15 19l-7-7 7-7"
+                  />
                 </svg>
               </button>
             )}
@@ -628,7 +664,12 @@ export default function NavBar() {
 
       {/* Mobile panel */}
       <DisclosurePanel className="lg:hidden">
-        <CloseButton ref={mobileCloseRef} className="sr-only" aria-hidden="true" tabIndex={-1} />
+        <CloseButton
+          ref={mobileCloseRef}
+          className="sr-only"
+          aria-hidden="true"
+          tabIndex={-1}
+        />
         <div className="space-y-1 px-2 pt-2 pb-3">
           {/* Search */}
           <form
@@ -644,7 +685,12 @@ export default function NavBar() {
             }}
           >
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                className="w-4 h-4"
+              >
                 <path d="M10 2a8 8 0 105.293 14.293l4.707 4.707 1.414-1.414-4.707-4.707A8 8 0 0010 2zm0 2a6 6 0 110 12 6 6 0 010-12z" />
               </svg>
             </span>
@@ -681,9 +727,16 @@ export default function NavBar() {
             Discover
             <svg
               className={`w-4 h-4 opacity-60 transition-transform duration-200 ${mobileDiscoverOpen ? "rotate-180" : ""}`}
-              fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2.5}
             >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M19 9l-7 7-7-7"
+              />
             </svg>
           </button>
           {mobileDiscoverOpen && (
@@ -715,15 +768,31 @@ export default function NavBar() {
               >
                 <span className="flex items-center gap-1">
                   My Library
-                  {(Object.values(libraryBadges).reduce((a, b) => a + b, 0) + pendingRequests) > 0 && (
-                    <Badge count={Object.values(libraryBadges).reduce((a, b) => a + b, 0) + pendingRequests} />
+                  {Object.values(libraryBadges).reduce((a, b) => a + b, 0) +
+                    pendingRequests >
+                    0 && (
+                    <Badge
+                      count={
+                        Object.values(libraryBadges).reduce(
+                          (a, b) => a + b,
+                          0,
+                        ) + pendingRequests
+                      }
+                    />
                   )}
                 </span>
                 <svg
                   className={`w-4 h-4 opacity-60 transition-transform duration-200 ${mobileLibraryOpen ? "rotate-180" : ""}`}
-                  fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2.5}
                 >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M19 9l-7 7-7-7"
+                  />
                 </svg>
               </button>
               {mobileLibraryOpen && (

@@ -125,7 +125,7 @@ async def lifespan(app: FastAPI):
     vote_task.cancel()
 
 
-app = FastAPI(title="Show Tracker API", lifespan=lifespan)
+app = FastAPI(title="ReleaseRadar API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

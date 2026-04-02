@@ -234,5 +234,5 @@ def get_ical_feed(token: str, db: Session = Depends(get_db)):
     return Response(
         content=cal.to_ical(),
         media_type="text/calendar; charset=utf-8",
-        headers={"Content-Disposition": 'inline; filename="watch-calendar.ics"'},
+        headers={"Content-Disposition": 'inline; filename="releaseradar.ics"'},
     )

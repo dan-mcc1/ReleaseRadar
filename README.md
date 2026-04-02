@@ -13,11 +13,13 @@ A full-stack web application for tracking your watched content, managing watchli
 ## Tech Stack
 
 **Frontend**
+
 - React
 - TypeScript
 - Tailwind CSS
 
 **Backend**
+
 - Node.js / Express.js
 - PostgreSQL
 - TMDb API
@@ -25,6 +27,7 @@ A full-stack web application for tracking your watched content, managing watchli
 ## Getting Started
 
 ### Prerequisites
+
 - Node.js
 - PostgreSQL
 - TMDb API key (free at [themoviedb.org](https://www.themoviedb.org/settings/api))
@@ -33,7 +36,7 @@ A full-stack web application for tracking your watched content, managing watchli
 
 1. Clone the repository
    ```bash
-   git clone https://github.com/dan-mcc1/Watch-Calendar.git
+   git clone https://github.com/dan-mcc1/ReleaseRadar.git
    cd Watch-Calendar
    ```
 2. Setup backend
@@ -41,13 +44,11 @@ A full-stack web application for tracking your watched content, managing watchli
    cd backend/
    pip install -r requirements.txt
    ```
-   
 3. Install dependencies
    ```bash
    cd frontend/
    npm install
    ```
-   
 4. Set up the database and firebase
    Go to neon and create a project to connect to
    Go to firebase and create a project for authentication
@@ -63,6 +64,7 @@ A full-stack web application for tracking your watched content, managing watchli
    VITE_APP_FIREBASE_MEASUREMENT_ID=
    ```
 6. Setup backend environment variables
+
    ```env
    TMDB_BEARER_TOKEN=
    DATABASE_URL=postgresql://neondb_owner
