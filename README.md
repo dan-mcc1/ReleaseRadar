@@ -1,4 +1,4 @@
-# 📅 TV Watch Calendar
+# 📅 ReleaseRadar
 
 A full-stack web application for tracking your watched content, managing watchlists, and staying up to date on upcoming movie and TV releases — all in one place.
 
