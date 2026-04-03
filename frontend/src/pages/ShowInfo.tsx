@@ -128,8 +128,12 @@ export default function ShowInfo() {
   const [error, setError] = useState<string | null>(null);
   const auth = getAuth(firebaseApp);
   const [user, setUser] = useState(auth.currentUser);
-  const [initialStatus, setInitialStatus] = useState<WatchStatus | undefined>(undefined);
-  const [initialRating, setInitialRating] = useState<number | null | undefined>(undefined);
+  const [initialStatus, setInitialStatus] = useState<WatchStatus | undefined>(
+    undefined,
+  );
+  const [initialRating, setInitialRating] = useState<number | null | undefined>(
+    undefined,
+  );
   const [statusReady, setStatusReady] = useState(false);
   const [externalScores, setExternalScores] = useState<ExternalScores | null>(
     null,
@@ -157,17 +161,22 @@ export default function ShowInfo() {
     user.getIdToken().then((token) =>
       fetch(`${API_URL}/watchlist/status/bulk`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify(missing),
       })
         .then((r) => (r.ok ? r.json() : {}))
-        .then((data: Record<string, { status: string; rating: number | null }>) => {
-          mergeCachedStatuses(user.uid, data);
-          setInitialStatus(data[`tv:${show.id}`]?.status as WatchStatus);
-          setInitialRating(data[`tv:${show.id}`]?.rating ?? null);
-        })
+        .then(
+          (data: Record<string, { status: string; rating: number | null }>) => {
+            mergeCachedStatuses(user.uid, data);
+            setInitialStatus(data[`tv:${show.id}`]?.status as WatchStatus);
+            setInitialRating(data[`tv:${show.id}`]?.rating ?? null);
+          },
+        )
         .catch(() => {})
-        .finally(() => setStatusReady(true))
+        .finally(() => setStatusReady(true)),
     );
   }, [user, show]);
 
@@ -290,7 +299,15 @@ export default function ShowInfo() {
       <div className="px-4 sm:px-6 mt-6 space-y-8">
         {/* Buttons row */}
         <div className="flex flex-wrap items-center gap-2">
-          {user && statusReady && <WatchButton contentType="tv" contentId={show.id} initialStatus={initialStatus} initialRating={initialRating} onStatusChange={() => setEpisodeRefreshKey((k) => k + 1)} />}
+          {user && statusReady && (
+            <WatchButton
+              contentType="tv"
+              contentId={show.id}
+              initialStatus={initialStatus}
+              initialRating={initialRating}
+              onStatusChange={() => setEpisodeRefreshKey((k) => k + 1)}
+            />
+          )}
           {user && <FavoriteButton contentType="tv" contentId={show.id} />}
           {user && (
             <RecommendButton
@@ -307,7 +324,12 @@ export default function ShowInfo() {
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm font-semibold transition-colors"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                className="w-4 h-4"
+              >
                 <path d="M8 5v14l11-7z" />
               </svg>
               Trailer
@@ -461,6 +483,15 @@ export default function ShowInfo() {
         {/* Where to Watch */}
         {show.providers && <WhereToWatch providers={show.providers} />}
 
+        {/* Seasons */}
+        {show.seasons?.length > 0 && (
+          <SeasonInfo
+            showId={show.id}
+            seasons={show.seasons}
+            refreshKey={episodeRefreshKey}
+          />
+        )}
+
         {/* Cast */}
         {show.credits?.cast.length > 0 && <CastBar cast={show.credits.cast} />}
 
@@ -509,11 +540,6 @@ export default function ShowInfo() {
               )}
             </div>
           </div>
-        )}
-
-        {/* Seasons */}
-        {show.seasons?.length > 0 && (
-          <SeasonInfo showId={show.id} seasons={show.seasons} refreshKey={episodeRefreshKey} />
         )}
 
         {/* Reviews */}
