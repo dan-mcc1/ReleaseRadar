@@ -1,6 +1,7 @@
 import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from fastapi import FastAPI, Header, HTTPException
 from app.config import settings
 from app.routers import (
@@ -58,9 +59,10 @@ async def _activity_cleanup_loop():
 
 
 async def _daily_digest_loop():
-    """Send daily email digest at 9am every day."""
+    """Send daily email digest at 9am Eastern every day."""
+    eastern = ZoneInfo("America/New_York")
     while True:
-        now = datetime.now()
+        now = datetime.now(eastern)
         next_run = now.replace(hour=9, minute=0, second=0, microsecond=0)
         if now >= next_run:
             next_run += timedelta(days=1)

@@ -51,7 +51,7 @@ export default function InstallBanner() {
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
             <img
-              src="/favicon.svg"
+              src="/logo-512.png"
               className="w-10 h-10 rounded-xl flex-shrink-0"
               alt=""
             />

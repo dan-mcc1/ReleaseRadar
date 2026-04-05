@@ -428,14 +428,11 @@ export default function NavBar() {
           <div className="flex flex-1 items-center justify-center lg:items-stretch lg:justify-start">
             <div className="flex shrink-0 items-center text-white">
               <a href="/" className="flex items-center gap-2 shrink-0">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                  className="w-6 h-6"
-                >
-                  <path d="M8 5v14l11-7z" />
-                </svg>
+                <img
+                  src="/favicon-1024.png"
+                  className="h-15 w-auto"
+                  alt="Logo"
+                />
                 <span className="text-xl font-bold">Release Radar</span>
               </a>
             </div>
