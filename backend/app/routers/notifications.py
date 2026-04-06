@@ -7,12 +7,17 @@ from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.models.user import User
 from app.models.watchlist import Watchlist
+from app.models.currently_watching import CurrentlyWatching
 from app.models.watched import Watched
 from app.models.movie import Movie
 from app.models.show import Show
 from app.models.season import Season
 from app.models.episode import Episode
-from app.services.email_service import send_notification_email, send_season_premiere_email, format_air_time
+from app.services.email_service import (
+    send_notification_email,
+    send_season_premiere_email,
+    format_air_time,
+)
 from app.config import settings
 from datetime import date, timedelta
 from collections import defaultdict
@@ -59,7 +64,9 @@ def update_notification_preferences(
 
     if body.notification_frequency is not None:
         if body.notification_frequency not in VALID_FREQUENCIES:
-            raise HTTPException(status_code=422, detail="Invalid notification frequency.")
+            raise HTTPException(
+                status_code=422, detail="Invalid notification frequency."
+            )
         user.notification_frequency = body.notification_frequency
 
     if body.profile_visibility is not None:
@@ -81,48 +88,82 @@ def _build_items_for_window(db: Session, user_id: str, days: int) -> list:
     end = today + timedelta(days=days)
     upcoming = []
 
-    movie_ids = [
-        r.content_id
-        for r in db.query(Watchlist.content_id)
-        .filter_by(user_id=user_id, content_type="movie")
-        .all()
-    ]
-    for mid in movie_ids:
-        m = db.query(Movie).filter_by(id=mid).first()
-        if m and m.release_date:
-            try:
-                rd = date.fromisoformat(str(m.release_date))
-                if today <= rd <= end:
-                    upcoming.append({"title": m.title, "date": str(rd)})
-            except (ValueError, TypeError):
-                pass
-
-    show_ids = [
-        r.content_id
-        for r in db.query(Watchlist.content_id)
-        .filter_by(user_id=user_id, content_type="tv")
-        .all()
-    ]
-    for sid in show_ids:
-        show = db.query(Show).filter_by(id=sid).first()
-        if not show:
-            continue
-        episodes = (
-            db.query(Episode)
-            .filter(
-                Episode.show_id == sid,
-                Episode.air_date >= today,
-                Episode.air_date <= end,
-            )
-            .all()
+    movies = (
+        db.query(Movie)
+        .join(Watchlist, Watchlist.content_id == Movie.id)
+        .filter(
+            Watchlist.user_id == user_id,
+            Watchlist.content_type == "movie",
+            Movie.release_date >= today,
+            Movie.release_date < end,
         )
-        for ep in episodes:
-            upcoming.append({
+        .all()
+    )
+
+    for m in movies:
+        upcoming.append(
+            {
+                "title": m.title,
+                "date": str(m.release_date),
+                "content_type": "movie",
+                "content_id": m.id,
+                "poster_path": m.poster_path,
+            }
+        )
+
+    # 📺 Episodes
+    episodes = (
+        db.query(Episode, Show)
+        .join(Show, Show.id == Episode.show_id)
+        .join(Watchlist, Watchlist.content_id == Show.id)
+        .filter(
+            Watchlist.user_id == user_id,
+            Watchlist.content_type == "tv",
+            Episode.air_date >= today,
+            Episode.air_date < end,
+        )
+        .all()
+    )
+    for ep, show in episodes:
+        upcoming.append(
+            {
                 "title": f"{show.name} S{ep.season_number:02d}E{ep.episode_number:02d}"
                 + (f" — {ep.name}" if ep.name else ""),
                 "date": str(ep.air_date),
                 "air_time": format_air_time(show.air_time, show.air_timezone),
-            })
+                "content_type": "tv",
+                "content_id": show.id,
+                "poster_path": show.poster_path,
+                "episode_type": ep.episode_type,
+            }
+        )
+
+    watching_episodes = (
+        db.query(Episode, Show)
+        .join(Show, Show.id == Episode.show_id)
+        .join(CurrentlyWatching, CurrentlyWatching.content_id == Show.id)
+        .filter(
+            CurrentlyWatching.user_id == user_id,
+            CurrentlyWatching.content_type == "tv",
+            Episode.air_date >= today,
+            Episode.air_date < end,
+        )
+        .all()
+    )
+
+    for ep, show in watching_episodes:
+        upcoming.append(
+            {
+                "title": f"{show.name} S{ep.season_number:02d}E{ep.episode_number:02d}"
+                + (f" — {ep.name}" if ep.name else ""),
+                "date": str(ep.air_date),
+                "air_time": format_air_time(show.air_time, show.air_timezone),
+                "content_type": "tv",
+                "content_id": show.id,
+                "poster_path": show.poster_path,
+                "episode_type": ep.episode_type,
+            }
+        )
 
     return upcoming
 
@@ -157,9 +198,7 @@ def send_season_premiere_alerts_to_all(db: Session):
 
     # Find all seasons whose air_date matches either target date
     upcoming_seasons = (
-        db.query(Season)
-        .filter(Season.air_date.in_(target_dates.values()))
-        .all()
+        db.query(Season).filter(Season.air_date.in_(target_dates.values())).all()
     )
     if not upcoming_seasons:
         return
@@ -171,13 +210,17 @@ def send_season_premiere_alerts_to_all(db: Session):
         if not show:
             continue
         days_away = next(d for d, dt in target_dates.items() if dt == season.air_date)
-        show_alerts[season.show_id].append({
-            "show_name": show.name,
-            "season_number": season.season_number,
-            "season_name": season.name,
-            "air_date": str(season.air_date),
-            "days_away": days_away,
-        })
+        show_alerts[season.show_id].append(
+            {
+                "show_name": show.name,
+                "season_number": season.season_number,
+                "season_name": season.name,
+                "air_date": str(season.air_date),
+                "days_away": days_away,
+                "show_id": show.id,
+                "poster_path": show.poster_path,
+            }
+        )
 
     if not show_alerts:
         return
@@ -211,7 +254,9 @@ def send_season_premiere_alerts_to_all(db: Session):
                 for alert in show_alerts[show_id]
             ]
             if alerts:
-                send_season_premiere_email(user.email, user.username or "", alerts, uid=user.id)
+                send_season_premiere_email(
+                    user.email, user.username or "", alerts, uid=user.id
+                )
         except Exception as e:
             print(f"[season alert] Failed for {user.email}: {e}")
 
@@ -235,7 +280,9 @@ def send_daily_digest_to_all(db: Session):
             window = _frequency_window(freq)
             items = _build_items_for_window(db, user.id, window)
             if items:
-                send_notification_email(user.email, user.username or "", items, uid=user.id)
+                send_notification_email(
+                    user.email, user.username or "", items, uid=user.id, frequency=freq
+                )
         except Exception as e:
             print(f"[digest] Failed for {user.email}: {e}")
 
@@ -260,7 +307,12 @@ def send_digest(
     upcoming = _build_items_for_window(db, uid, window)
 
     background_tasks.add_task(
-        send_notification_email, user.email, user.username or "", upcoming
+        send_notification_email,
+        user.email,
+        user.username or "",
+        upcoming,
+        uid,
+        frequency=freq,
     )
     return {"message": "Digest email queued"}
 

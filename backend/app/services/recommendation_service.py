@@ -56,6 +56,7 @@ def send_recommendation(
             "content_id": content_id,
             "message": message,
             "uid": recipient.id,
+            "poster_path": content_poster_path,
         }
 
     return entry

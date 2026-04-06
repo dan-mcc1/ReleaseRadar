@@ -78,12 +78,10 @@ function ActivityRow({
   item,
   currentUserId,
   statusMap,
-  statusesReady,
 }: {
   item: ActivityItem;
   currentUserId: string;
   statusMap: StatusMap;
-  statusesReady: boolean;
 }) {
   const isMe = item.user_id === currentUserId;
   const nameLabel = isMe ? "You" : (item.username ?? "Someone");
@@ -171,16 +169,16 @@ function ActivityRow({
         </div>
       </div>
 
-      {!isMe && statusesReady && (
+      {!isMe && statusMap[`${item.content_type}:${item.content_id}`] !== undefined && (
         <div className="flex-shrink-0 self-center">
           <WatchButton
             contentType={item.content_type}
             contentId={item.content_id}
             initialStatus={
-              statusMap[`${item.content_type}:${item.content_id}`]?.status
+              statusMap[`${item.content_type}:${item.content_id}`]!.status
             }
             initialRating={
-              statusMap[`${item.content_type}:${item.content_id}`]?.rating
+              statusMap[`${item.content_type}:${item.content_id}`]!.rating
             }
           />
         </div>
@@ -194,13 +192,11 @@ function RecommendationRow({
   onRead,
   onDelete,
   statusMap,
-  statusesReady,
 }: {
   item: RecommendationItem;
   onRead: (id: number) => void;
   onDelete: (id: number) => void;
   statusMap: StatusMap;
-  statusesReady: boolean;
 }) {
   const contentPath = `/${item.content_type === "movie" ? "movie" : "tv"}/${item.content_id}`;
 
@@ -294,16 +290,16 @@ function RecommendationRow({
         </svg>
       </button>
 
-      {statusesReady && (
+      {statusMap[`${item.content_type}:${item.content_id}`] !== undefined && (
         <div className="flex-shrink-0 self-center">
           <WatchButton
             contentType={item.content_type}
             contentId={item.content_id}
             initialStatus={
-              statusMap[`${item.content_type}:${item.content_id}`]?.status
+              statusMap[`${item.content_type}:${item.content_id}`]!.status
             }
             initialRating={
-              statusMap[`${item.content_type}:${item.content_id}`]?.rating
+              statusMap[`${item.content_type}:${item.content_id}`]!.rating
             }
             onStatusChange={(status) => {
               if (status !== "none") handleRead();
@@ -333,7 +329,6 @@ export default function ActivityFeedPage() {
   const [currentUserId, setCurrentUserId] = useState<string>("");
   const [token, setToken] = useState<string>("");
   const [statusMap, setStatusMap] = useState<StatusMap>({});
-  const [statusesReady, setStatusesReady] = useState(false);
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (user) => {
@@ -372,16 +367,15 @@ export default function ActivityFeedPage() {
     return unsubscribe;
   }, []);
 
-  // Bulk-fetch watch statuses for friend items + recommendations
+  // Bulk-fetch watch statuses for all tabs
   useEffect(() => {
-    if (!currentUserId || (!friendItems.length && !recommendations.length)) {
-      setStatusesReady(true);
+    if (!currentUserId || (!myItems.length && !friendItems.length && !recommendations.length)) {
       return;
     }
     const user = auth.currentUser;
     if (!user) return;
     const seen = new Set<string>();
-    const unique = [...friendItems, ...recommendations]
+    const unique = [...myItems, ...friendItems, ...recommendations]
       .map((i) => ({ content_type: i.content_type, content_id: i.content_id }))
       .filter(({ content_type, content_id }) => {
         const key = `${content_type}:${content_id}`;
@@ -406,10 +400,9 @@ export default function ActivityFeedPage() {
           mergeCachedStatuses(user.uid, data);
           setStatusMap({ ...cached, ...data } as StatusMap);
         })
-        .catch(() => setStatusMap(cached as StatusMap))
-        .finally(() => setStatusesReady(true)),
+        .catch(() => setStatusMap(cached as StatusMap)),
     );
-  }, [friendItems, recommendations, currentUserId]);
+  }, [myItems, friendItems, recommendations, currentUserId]);
 
   // Refetch recommendations inbox when a new one arrives via SSE
   useEffect(() => {
@@ -532,7 +525,6 @@ export default function ActivityFeedPage() {
                   item={item}
                   currentUserId={currentUserId}
                   statusMap={statusMap}
-                  statusesReady={statusesReady}
                 />
               ))}
             </div>
@@ -570,7 +562,6 @@ export default function ActivityFeedPage() {
                   item={item}
                   currentUserId={currentUserId}
                   statusMap={statusMap}
-                  statusesReady={statusesReady}
                 />
               ))}
             </div>
@@ -615,7 +606,6 @@ export default function ActivityFeedPage() {
                   onRead={markRead}
                   onDelete={deleteRec}
                   statusMap={statusMap}
-                  statusesReady={statusesReady}
                 />
               ))}
             </div>
