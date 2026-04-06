@@ -58,24 +58,21 @@ A full-stack web application for tracking your watched content, managing watchli
    VITE_APP_FIREBASE_API_KEY=
    VITE_APP_FIREBASE_AUTH_DOMAIN=
    VITE_APP_FIREBASE_PROJECT_ID=
-   VITE_APP_FIREBASE_STORAGE_BUCKET=
-   VITE_APP_FIREBASE_MESSAGING_SENDER_ID=
    VITE_APP_FIREBASE_APP_ID=
-   VITE_APP_FIREBASE_MEASUREMENT_ID=
+   VITE_API_URL=
    ```
 6. Setup backend environment variables
 
    ```env
    TMDB_BEARER_TOKEN=
    DATABASE_URL=postgresql://neondb_owner
+   EMAIL_FROM=
    FIREBASE_CREDS_PATH=./firebase-service.json
    FRONTEND_URL=http://localhost:5173
-   SMTP_HOST=smtp.gmail.com
-   SMTP_PORT=587
-   SMTP_USER=
-   SMTP_PASSWORD=
-   SMTP_FROM=
    ICAL_SECRET=
+   OMDB_API_KEY=
+   RESEND_API_KEY=
+   UNSUBSCRIBE_KEY=
    ```
 
 7. Start the development server
