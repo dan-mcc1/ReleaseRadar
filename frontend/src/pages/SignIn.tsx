@@ -21,49 +21,50 @@ const SignIn: React.FC = () => {
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
   const [isRegistering, setIsRegistering] = useState(false);
-  const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(
-    null,
-  );
+  const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null);
   const [usernameChecking, setUsernameChecking] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  // LOGIN
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMessage(null);
-    setIsLoading(true);
-    try {
-      await signInWithEmailAndPassword(auth, email, password);
-      navigate("/");
-    } catch (error) {
-      console.error("Error logging in:", error);
-      setErrorMessage("Invalid email or password.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // OAuth username step state
+  const [pendingOAuth, setPendingOAuth] = useState<{ uid: string; email: string | null } | null>(null);
+  const [oauthUsername, setOauthUsername] = useState("");
+  const [oauthUsernameAvailable, setOauthUsernameAvailable] = useState<boolean | null>(null);
+  const [oauthUsernameChecking, setOauthUsernameChecking] = useState(false);
 
-  async function checkUsernameAvailability(value: string) {
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const oauthDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      if (oauthDebounceRef.current) clearTimeout(oauthDebounceRef.current);
+    },
+    [],
+  );
+
+  async function checkAvailability(
+    value: string,
+    setAvailable: (v: boolean | null) => void,
+    setChecking: (v: boolean) => void,
+  ) {
     if (!USERNAME_RE.test(value)) {
-      setUsernameAvailable(null);
+      setAvailable(null);
       return;
     }
-    setUsernameChecking(true);
+    setChecking(true);
     try {
       const res = await fetch(
         `${API_URL}/user/check-username?username=${encodeURIComponent(value)}`,
       );
       const data = await res.json();
-      setUsernameAvailable(data.available);
+      setAvailable(data.available);
     } catch {
-      setUsernameAvailable(null);
+      setAvailable(null);
     } finally {
-      setUsernameChecking(false);
+      setChecking(false);
     }
   }
-
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function handleUsernameChange(e: React.ChangeEvent<HTMLInputElement>) {
     const value = e.target.value;
@@ -72,18 +73,24 @@ const SignIn: React.FC = () => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (value.length >= 3) {
       debounceRef.current = setTimeout(
-        () => checkUsernameAvailability(value),
+        () => checkAvailability(value, setUsernameAvailable, setUsernameChecking),
         400,
       );
     }
   }
 
-  useEffect(
-    () => () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    },
-    [],
-  );
+  function handleOauthUsernameChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const value = e.target.value;
+    setOauthUsername(value);
+    setOauthUsernameAvailable(null);
+    if (oauthDebounceRef.current) clearTimeout(oauthDebounceRef.current);
+    if (value.length >= 3) {
+      oauthDebounceRef.current = setTimeout(
+        () => checkAvailability(value, setOauthUsernameAvailable, setOauthUsernameChecking),
+        400,
+      );
+    }
+  }
 
   async function registerUserInBackend(
     uid: string,
@@ -101,7 +108,23 @@ const SignIn: React.FC = () => {
     }
   }
 
-  // REGISTER
+  // LOGIN
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage(null);
+    setIsLoading(true);
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      navigate("/");
+    } catch (error) {
+      console.error("Error logging in:", error);
+      setErrorMessage("Invalid email or password.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // REGISTER (email/password)
   const handleRegister = async () => {
     setErrorMessage(null);
 
@@ -137,32 +160,83 @@ const SignIn: React.FC = () => {
     }
   };
 
+  // Called after any OAuth sign-in to check if user needs a username
+  async function handleOAuthResult(uid: string, email: string | null) {
+    // Check if user already exists in backend with a username
+    try {
+      const res = await fetch(`${API_URL}/user/create`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uid, email }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (!data.username) {
+          // New user or no username yet — prompt for one
+          setPendingOAuth({ uid, email });
+          return;
+        }
+      }
+    } catch {
+      // non-critical — proceed anyway
+    }
+    navigate("/");
+  }
+
+  // Submit chosen username for OAuth user
+  async function handleOAuthUsernameSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!pendingOAuth) return;
+    setErrorMessage(null);
+
+    if (!USERNAME_RE.test(oauthUsername)) {
+      setErrorMessage("Username must be 3–30 characters: letters, numbers, or underscores only.");
+      return;
+    }
+    if (oauthUsernameAvailable === false) {
+      setErrorMessage("That username is already taken.");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) {
+        setErrorMessage("Session expired, please sign in again.");
+        return;
+      }
+      const res = await fetch(`${API_URL}/user/update-username`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ new_username: oauthUsername }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setErrorMessage(err.detail ?? "Failed to set username.");
+        return;
+      }
+      navigate("/");
+    } catch {
+      setErrorMessage("Network error.");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   // GOOGLE SIGN-IN
   const handleGoogleSignIn = async () => {
     const provider = new GoogleAuthProvider();
     try {
       const result = await signInWithPopup(auth, provider);
-      await fetch(`${API_URL}/user/create`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          uid: result.user.uid,
-          email: result.user.email,
-        }),
-      });
-      navigate("/");
+      await handleOAuthResult(result.user.uid, result.user.email);
     } catch (error: any) {
       console.error("Google sign-in error:", error);
-
-      let msg = error.message ?? "Registration failed.";
-      if (error.code === "auth/invalid-email") msg = "Invalid email address.";
-      else if (error.code === "auth/weak-password")
-        msg = "Password should be at least 6 characters.";
-      else if (error.code === "auth/email-already-in-use")
-        msg = "Email is already in use.";
-      else if (error.code === "auth/account-exists-with-different-credential")
+      let msg = error.message ?? "Sign-in failed.";
+      if (error.code === "auth/account-exists-with-different-credential")
         msg = "Account already exists using a different provider";
-
       setErrorMessage(msg);
     }
   };
@@ -172,27 +246,12 @@ const SignIn: React.FC = () => {
     const provider = new OAuthProvider("microsoft.com");
     try {
       const result = await signInWithPopup(auth, provider);
-      await fetch(`${API_URL}/user/create`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          uid: result.user.uid,
-          email: result.user.email,
-        }),
-      });
-      navigate("/");
+      await handleOAuthResult(result.user.uid, result.user.email);
     } catch (error: any) {
       console.error("Microsoft sign-in error:", error);
-
-      let msg = error.message ?? "Registration failed.";
-      if (error.code === "auth/invalid-email") msg = "Invalid email address.";
-      else if (error.code === "auth/weak-password")
-        msg = "Password should be at least 6 characters.";
-      else if (error.code === "auth/email-already-in-use")
-        msg = "Email is already in use.";
-      else if (error.code === "auth/account-exists-with-different-credential")
+      let msg = error.message ?? "Sign-in failed.";
+      if (error.code === "auth/account-exists-with-different-credential")
         msg = "Account already exists using a different provider";
-
       setErrorMessage(msg);
     }
   };
@@ -202,27 +261,12 @@ const SignIn: React.FC = () => {
     const provider = new FacebookAuthProvider();
     try {
       const result = await signInWithPopup(auth, provider);
-      await fetch(`${API_URL}/user/create`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          uid: result.user.uid,
-          email: result.user.email,
-        }),
-      });
-      navigate("/");
+      await handleOAuthResult(result.user.uid, result.user.email);
     } catch (error: any) {
       console.error("Facebook sign-in error:", error);
-
-      let msg = error.message ?? "Registration failed.";
-      if (error.code === "auth/invalid-email") msg = "Invalid email address.";
-      else if (error.code === "auth/weak-password")
-        msg = "Password should be at least 6 characters.";
-      else if (error.code === "auth/email-already-in-use")
-        msg = "Email is already in use.";
-      else if (error.code === "auth/account-exists-with-different-credential")
+      let msg = error.message ?? "Sign-in failed.";
+      if (error.code === "auth/account-exists-with-different-credential")
         msg = "Account already exists using a different provider";
-
       setErrorMessage(msg);
     }
   };
@@ -235,6 +279,83 @@ const SignIn: React.FC = () => {
     setUsername("");
     setUsernameAvailable(null);
   };
+
+  // OAuth username step
+  if (pendingOAuth) {
+    return (
+      <div className="flex-1 flex items-center justify-center px-4 py-12">
+        <div className="w-full max-w-md">
+          <div className="text-center mb-8">
+            <h1 className="text-3xl font-bold text-white mb-1">Release Radar</h1>
+            <p className="text-neutral-400 text-sm">Choose a username to complete sign-up</p>
+          </div>
+          <div className="bg-neutral-800 border border-neutral-700 rounded-2xl shadow-xl p-8">
+            <form onSubmit={handleOAuthUsernameSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-neutral-300 mb-1.5">
+                  Username
+                </label>
+                <input
+                  type="text"
+                  value={oauthUsername}
+                  onChange={handleOauthUsernameChange}
+                  placeholder="letters, numbers, underscores"
+                  required
+                  autoFocus
+                  className={`w-full bg-neutral-900 border text-white placeholder-neutral-500 px-4 py-2.5 rounded-lg focus:outline-none focus:ring-1 transition-colors ${
+                    oauthUsername.length >= 3
+                      ? oauthUsernameAvailable === true
+                        ? "border-success-500 focus:border-success-500 focus:ring-success-500"
+                        : oauthUsernameAvailable === false
+                          ? "border-error-500 focus:border-error-500 focus:ring-error-500"
+                          : "border-neutral-600 focus:border-primary-500 focus:ring-primary-500"
+                      : "border-neutral-600 focus:border-primary-500 focus:ring-primary-500"
+                  }`}
+                />
+                {oauthUsername.length >= 3 && (
+                  <p
+                    className={`text-xs mt-1.5 ${
+                      oauthUsernameChecking
+                        ? "text-neutral-400"
+                        : oauthUsernameAvailable === true
+                          ? "text-success-400"
+                          : oauthUsernameAvailable === false
+                            ? "text-error-400"
+                            : "text-neutral-400"
+                    }`}
+                  >
+                    {oauthUsernameChecking
+                      ? "Checking availability…"
+                      : oauthUsernameAvailable === true
+                        ? "✓ Username available"
+                        : oauthUsernameAvailable === false
+                          ? "✗ Username already taken"
+                          : !USERNAME_RE.test(oauthUsername)
+                            ? "3–30 chars, letters/numbers/underscores only"
+                            : ""}
+                  </p>
+                )}
+              </div>
+
+              {errorMessage && (
+                <div className="text-error-400 bg-error-950 border border-error-800 px-4 py-2.5 rounded-lg text-sm">
+                  {errorMessage}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={isLoading || oauthUsernameAvailable !== true}
+                className="w-full bg-primary-600 hover:bg-primary-500 disabled:bg-primary-800 disabled:cursor-not-allowed text-white font-semibold py-2.5 px-4 rounded-lg transition-colors duration-200 mt-2"
+              >
+                {isLoading ? "Saving…" : "Continue"}
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 flex items-center justify-center px-4 py-12">
