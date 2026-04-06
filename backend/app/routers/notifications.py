@@ -11,6 +11,7 @@ from app.models.watched import Watched
 from app.models.movie import Movie
 from app.models.show import Show
 from app.models.season import Season
+from app.models.episode import Episode
 from app.services.email_service import send_notification_email, send_season_premiere_email, format_air_time
 from app.config import settings
 from datetime import date, timedelta
@@ -103,18 +104,25 @@ def _build_items_for_window(db: Session, user_id: str, days: int) -> list:
         .all()
     ]
     for sid in show_ids:
-        s = db.query(Show).filter_by(id=sid).first()
-        if s and s.last_air_date:
-            try:
-                lad = date.fromisoformat(str(s.last_air_date))
-                if today <= lad <= end:
-                    upcoming.append({
-                        "title": s.name,
-                        "date": str(lad),
-                        "air_time": format_air_time(s.air_time, s.air_timezone),
-                    })
-            except (ValueError, TypeError):
-                pass
+        show = db.query(Show).filter_by(id=sid).first()
+        if not show:
+            continue
+        episodes = (
+            db.query(Episode)
+            .filter(
+                Episode.show_id == sid,
+                Episode.air_date >= today,
+                Episode.air_date <= end,
+            )
+            .all()
+        )
+        for ep in episodes:
+            upcoming.append({
+                "title": f"{show.name} S{ep.season_number:02d}E{ep.episode_number:02d}"
+                + (f" — {ep.name}" if ep.name else ""),
+                "date": str(ep.air_date),
+                "air_time": format_air_time(show.air_time, show.air_timezone),
+            })
 
     return upcoming
 
