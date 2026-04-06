@@ -6,6 +6,7 @@ import {
   OAuthProvider,
   signInWithPopup,
   createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
 } from "firebase/auth";
 import { auth } from "../firebase";
 import { useNavigate } from "react-router-dom";
@@ -25,6 +26,7 @@ const SignIn: React.FC = () => {
   const [usernameChecking, setUsernameChecking] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
 
   // OAuth username step state
   const [pendingOAuth, setPendingOAuth] = useState<{ uid: string; email: string | null } | null>(null);
@@ -105,6 +107,28 @@ const SignIn: React.FC = () => {
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail ?? "Backend registration failed.");
+    }
+  }
+
+  async function handleForgotPassword() {
+    if (!email.trim()) {
+      setErrorMessage("Enter your email above, then click Forgot password.");
+      return;
+    }
+    setIsLoading(true);
+    setErrorMessage(null);
+    try {
+      await sendPasswordResetEmail(auth, email.trim());
+      setResetSent(true);
+    } catch (err: any) {
+      if (err.code === "auth/user-not-found" || err.code === "auth/invalid-email") {
+        // Don't reveal whether the email exists
+        setResetSent(true);
+      } else {
+        setErrorMessage("Failed to send reset email. Please try again.");
+      }
+    } finally {
+      setIsLoading(false);
     }
   }
 
@@ -274,6 +298,7 @@ const SignIn: React.FC = () => {
   const switchMode = (registering: boolean) => {
     setIsRegistering(registering);
     setErrorMessage(null);
+    setResetSent(false);
     setEmail("");
     setPassword("");
     setUsername("");
@@ -493,6 +518,12 @@ const SignIn: React.FC = () => {
               </div>
             )}
 
+            {resetSent && !isRegistering && (
+              <div className="text-success-400 bg-success-950 border border-success-800 px-4 py-2.5 rounded-lg text-sm">
+                If that email is registered, a reset link is on its way.
+              </div>
+            )}
+
             <button
               type="submit"
               disabled={isLoading}
@@ -506,6 +537,17 @@ const SignIn: React.FC = () => {
                   ? "Create Account"
                   : "Sign In"}
             </button>
+
+            {!isRegistering && (
+              <button
+                type="button"
+                onClick={handleForgotPassword}
+                disabled={isLoading}
+                className="w-full text-center text-sm text-neutral-400 hover:text-neutral-200 transition-colors"
+              >
+                Forgot password?
+              </button>
+            )}
           </form>
 
           {/* Divider */}

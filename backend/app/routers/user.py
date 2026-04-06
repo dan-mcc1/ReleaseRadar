@@ -55,7 +55,8 @@ def create_user_route(
         _validate_username(username)
         if not is_username_available(db, username):
             raise HTTPException(status_code=409, detail="Username already taken.")
-    return create_user(db, uid, email, username, random.choice(VALID_AVATAR_KEYS))
+    avatar = random.choice(VALID_AVATAR_KEYS) if username is not None else None
+    return create_user(db, uid, email, username, avatar)
 
 
 @router.get("/me")
