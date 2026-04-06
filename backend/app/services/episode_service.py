@@ -1,6 +1,7 @@
 # app/services/episode_service.py
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from datetime import date
 from sqlalchemy.orm import Session
 from app.models.episode import Episode
 from app.models.show import Show
@@ -255,3 +256,159 @@ def get_episodes_for_season(db: Session, show_id: int, season_number: int):
         .order_by(Episode.episode_number)
         .all()
     )
+
+
+def refresh_episodes_for_show(db: Session, show_id: int):
+    """
+    Re-fetch all seasons from TMDB for a show and upsert episode data.
+    Updates air_date, name, overview, runtime, and episode_type for existing
+    episodes. Inserts any new episodes that weren't stored yet.
+    Only fetches seasons that have at least one upcoming or unaired episode.
+    """
+    show = db.query(Show).filter_by(id=show_id).first()
+    if not show:
+        return
+
+    if show.seasons:
+        season_numbers = [s.season_number for s in show.seasons if s.season_number > 0]
+    else:
+        n = show.number_of_seasons or 0
+        season_numbers = list(range(1, n + 1))
+
+    if not season_numbers:
+        return
+
+    # Only refresh seasons that have upcoming episodes or unknown air dates
+    today = date.today()
+    active_seasons = set()
+    for (sn,) in (
+        db.query(Episode.season_number)
+        .filter(
+            Episode.show_id == show_id,
+            (Episode.air_date == None) | (Episode.air_date >= today),
+        )
+        .distinct()
+        .all()
+    ):
+        active_seasons.add(sn)
+
+    # Always include the latest season in case new episodes were added
+    if season_numbers:
+        active_seasons.add(max(season_numbers))
+
+    seasons_to_refresh = [sn for sn in season_numbers if sn in active_seasons]
+    if not seasons_to_refresh:
+        return
+
+    def _fetch_season(sn):
+        try:
+            return sn, get(f"/tv/{show_id}/season/{sn}")
+        except Exception:
+            return sn, None
+
+    max_workers = min(8, len(seasons_to_refresh))
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        season_results = dict(executor.map(_fetch_season, seasons_to_refresh))
+
+    existing = {
+        ep.id: ep
+        for ep in db.query(Episode).filter(
+            Episode.show_id == show_id,
+            Episode.season_number.in_(seasons_to_refresh),
+        ).all()
+    }
+
+    changed = False
+    for sn in seasons_to_refresh:
+        season_data = season_results.get(sn)
+        if not season_data:
+            continue
+
+        for ep in season_data.get("episodes", []):
+            ep_id = ep.get("id")
+            if not ep_id:
+                continue
+
+            ep_num = ep.get("episode_number")
+            new_air_date = ep.get("air_date") or None
+            new_name = ep.get("name")
+            new_overview = ep.get("overview")
+            new_runtime = ep.get("runtime")
+            new_still = ep.get("still_path")
+            new_vote = ep.get("vote_average")
+            new_type = _compute_episode_type(ep_num, sn, ep.get("episode_type"), show.in_production)
+
+            if ep_id in existing:
+                row = existing[ep_id]
+                if (
+                    str(row.air_date) != str(new_air_date)
+                    or row.name != new_name
+                    or row.overview != new_overview
+                    or row.runtime != new_runtime
+                    or row.episode_type != new_type
+                ):
+                    row.air_date = new_air_date
+                    row.name = new_name
+                    row.overview = new_overview
+                    row.runtime = new_runtime
+                    row.still_path = new_still
+                    row.vote_average = new_vote
+                    row.episode_type = new_type
+                    changed = True
+            else:
+                db.add(Episode(
+                    id=ep_id,
+                    show_id=show_id,
+                    season_number=sn,
+                    episode_number=ep_num,
+                    name=new_name,
+                    overview=new_overview,
+                    air_date=new_air_date,
+                    runtime=new_runtime,
+                    still_path=new_still,
+                    vote_average=new_vote,
+                    episode_type=new_type,
+                ))
+                changed = True
+
+    if changed:
+        db.commit()
+
+
+def refresh_episodes_for_active_shows(db: Session):
+    """
+    Refresh episode data for all tracked shows that are still in production.
+    Intended to run nightly.
+    """
+    from app.models.watchlist import Watchlist
+    from app.models.currently_watching import CurrentlyWatching
+
+    tracked_ids = {
+        r.content_id
+        for r in db.query(Watchlist.content_id)
+        .filter_by(content_type="tv")
+        .all()
+    } | {
+        r.content_id
+        for r in db.query(CurrentlyWatching.content_id)
+        .filter_by(content_type="tv")
+        .all()
+    }
+
+    if not tracked_ids:
+        return
+
+    # Only refresh shows that are in production (finished shows don't change)
+    shows = (
+        db.query(Show)
+        .filter(Show.id.in_(tracked_ids), Show.in_production == True)  # noqa: E712
+        .all()
+    )
+
+    print(f"[episode refresh] Refreshing {len(shows)} in-production shows...")
+    for show in shows:
+        try:
+            refresh_episodes_for_show(db, show.id)
+        except Exception as e:
+            print(f"[episode refresh] Failed for show {show.id} ({show.name}): {e}")
+    print("[episode refresh] Done")

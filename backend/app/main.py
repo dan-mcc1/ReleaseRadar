@@ -34,6 +34,7 @@ from app.routers.notifications import (
     send_season_premiere_alerts_to_all,
 )
 from app.services.vote_update_service import update_all_vote_averages
+from app.services.episode_service import refresh_episodes_for_active_shows
 
 
 async def _activity_cleanup_loop():
@@ -81,8 +82,8 @@ async def _daily_digest_loop():
         await asyncio.sleep(86400)  # sleep 24h before recalculating
 
 
-async def _vote_update_loop():
-    """Refresh TMDB vote_average for all shows and movies once a day at 3am."""
+async def _episode_update_loop():
+    """Refresh show's episodes and TMDB vote_average for all shows and movies once a day at 3am."""
     while True:
         now = datetime.now()
         next_run = now.replace(hour=3, minute=0, second=0, microsecond=0)
@@ -92,6 +93,7 @@ async def _vote_update_loop():
         print("[vote update] Starting daily vote_average refresh...")
         try:
             db = SessionLocal()
+            refresh_episodes_for_active_shows(db)
             await asyncio.to_thread(update_all_vote_averages, db)
         except Exception as e:
             print(f"[vote update] Error: {e}")
@@ -120,7 +122,7 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(engine)
     task = asyncio.create_task(_activity_cleanup_loop())
     digest_task = asyncio.create_task(_daily_digest_loop())
-    vote_task = asyncio.create_task(_vote_update_loop())
+    vote_task = asyncio.create_task(_episode_update_loop())
     yield
     task.cancel()
     digest_task.cancel()
