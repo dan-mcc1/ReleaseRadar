@@ -28,7 +28,9 @@ export default function BrowseGenres() {
   usePageTitle("Browse");
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = (searchParams.get("type") as ActiveTab) ?? "movie";
-  const selectedGenreId = searchParams.get("genre") ? Number(searchParams.get("genre")) : null;
+  const selectedGenreId = searchParams.get("genre")
+    ? Number(searchParams.get("genre"))
+    : null;
   const page = Number(searchParams.get("page") ?? "1");
 
   // Genre browsing state
@@ -42,10 +44,16 @@ export default function BrowseGenres() {
 
   // Fetch genre list once per session
   useEffect(() => {
-    if (genreCache) { setGenres(genreCache); return; }
+    if (genreCache) {
+      setGenres(genreCache);
+      return;
+    }
     fetch(`${API_URL}/search/genres`)
       .then((r) => r.json())
-      .then((data: GenreList) => { genreCache = data; setGenres(data); })
+      .then((data: GenreList) => {
+        genreCache = data;
+        setGenres(data);
+      })
       .catch(console.error);
   }, []);
 
@@ -97,7 +105,7 @@ export default function BrowseGenres() {
       <div className="mb-5">
         <h1 className="text-2xl font-bold text-white">Browse</h1>
         {selectedGenreName && !loading && total > 0 && (
-          <p className="text-slate-400 text-sm mt-1">
+          <p className="text-neutral-400 text-sm mt-1">
             {selectedGenreName} — page {page} of {totalPages}
           </p>
         )}
@@ -111,8 +119,8 @@ export default function BrowseGenres() {
             onClick={() => setSearchParams({ type: tab.value, page: "1" })}
             className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
               activeTab === tab.value
-                ? "bg-blue-600 text-white"
-                : "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white"
+                ? "bg-primary-600 text-white"
+                : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700 hover:text-white"
             }`}
           >
             {tab.label}
@@ -129,14 +137,16 @@ export default function BrowseGenres() {
             onClick={() =>
               setSearchParams({
                 type: activeTab,
-                ...(selectedGenreId === genre.id ? {} : { genre: String(genre.id) }),
+                ...(selectedGenreId === genre.id
+                  ? {}
+                  : { genre: String(genre.id) }),
                 page: "1",
               })
             }
             className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
               selectedGenreId === genre.id
-                ? "bg-blue-600 border-blue-600 text-white"
-                : "bg-slate-800 border-slate-600 text-slate-300 hover:border-slate-400 hover:text-white"
+                ? "bg-primary-600 border-primary-600 text-white"
+                : "bg-neutral-800 border-neutral-600 text-neutral-300 hover:border-neutral-400 hover:text-white"
             }`}
           >
             {genre.name}
@@ -147,15 +157,15 @@ export default function BrowseGenres() {
       {loading && (
         <div className="flex items-center justify-center py-20">
           <div className="flex flex-col items-center gap-3">
-            <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-            <p className="text-slate-400 text-sm">Loading…</p>
+            <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+            <p className="text-neutral-400 text-sm">Loading…</p>
           </div>
         </div>
       )}
 
       {!loading && !selectedGenreId && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <p className="text-slate-400">
+          <p className="text-neutral-400">
             Select a genre above to browse titles
           </p>
         </div>
@@ -163,8 +173,8 @@ export default function BrowseGenres() {
 
       {!loading && selectedGenreId && total === 0 && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <p className="text-slate-300 font-medium mb-1">No results found</p>
-          <p className="text-slate-500 text-sm">Try a different genre</p>
+          <p className="text-neutral-300 font-medium mb-1">No results found</p>
+          <p className="text-neutral-500 text-sm">Try a different genre</p>
         </div>
       )}
 
@@ -173,19 +183,31 @@ export default function BrowseGenres() {
       {!loading && selectedGenreId && totalPages > 1 && (
         <div className="flex items-center justify-center gap-4 mt-8">
           <button
-            onClick={() => setSearchParams({ type: activeTab, genre: String(selectedGenreId), page: String(Math.max(1, page - 1)) })}
+            onClick={() =>
+              setSearchParams({
+                type: activeTab,
+                genre: String(selectedGenreId),
+                page: String(Math.max(1, page - 1)),
+              })
+            }
             disabled={page === 1}
-            className="px-4 py-2 rounded-lg text-sm font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="px-4 py-2 rounded-lg text-sm font-medium bg-neutral-800 text-neutral-300 hover:bg-neutral-700 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             Previous
           </button>
-          <span className="text-slate-400 text-sm">
+          <span className="text-neutral-400 text-sm">
             Page {page} of {totalPages}
           </span>
           <button
-            onClick={() => setSearchParams({ type: activeTab, genre: String(selectedGenreId), page: String(Math.min(totalPages, page + 1)) })}
+            onClick={() =>
+              setSearchParams({
+                type: activeTab,
+                genre: String(selectedGenreId),
+                page: String(Math.min(totalPages, page + 1)),
+              })
+            }
             disabled={page === totalPages}
-            className="px-4 py-2 rounded-lg text-sm font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="px-4 py-2 rounded-lg text-sm font-medium bg-neutral-800 text-neutral-300 hover:bg-neutral-700 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             Next
           </button>

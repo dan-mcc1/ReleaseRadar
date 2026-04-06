@@ -6,7 +6,11 @@ interface StarRatingProps {
   saving?: boolean;
 }
 
-export default function StarRating({ rating, onRate, saving = false }: StarRatingProps) {
+export default function StarRating({
+  rating,
+  onRate,
+  saving = false,
+}: StarRatingProps) {
   const [hovered, setHovered] = useState<number | null>(null);
 
   const displayed = hovered ?? rating ?? 0;
@@ -25,7 +29,7 @@ export default function StarRating({ rating, onRate, saving = false }: StarRatin
         >
           <svg
             className={`w-5 h-5 transition-colors duration-100 ${
-              star <= displayed ? "text-yellow-400" : "text-slate-600"
+              star <= displayed ? "text-yellow-400" : "text-neutral-600"
             }`}
             viewBox="0 0 24 24"
             fill={star <= displayed ? "currentColor" : "none"}
@@ -41,7 +45,7 @@ export default function StarRating({ rating, onRate, saving = false }: StarRatin
         </button>
       ))}
       {rating !== null && (
-        <span className="text-xs text-slate-400 ml-1">{rating}/5</span>
+        <span className="text-xs text-neutral-400 ml-1">{rating}/5</span>
       )}
     </div>
   );

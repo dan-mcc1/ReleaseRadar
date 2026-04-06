@@ -26,8 +26,8 @@ import Unsubscribe from "./pages/Unsubscribe";
 function App() {
   return (
     <BrowserRouter>
-      {/* <div className="min-h-screen bg-slate-950 text-slate-100"> */}
-      <div className="flex flex-col min-h-screen bg-slate-950 text-slate-100 overflow-x-hidden">
+      {/* <div className="min-h-screen bg-neutral-950 text-neutral-100"> */}
+      <div className="flex flex-col min-h-screen bg-neutral-950 text-neutral-100 overflow-x-hidden">
         <NavBar />
         <InstallBanner />
         <Routes>

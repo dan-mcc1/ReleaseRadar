@@ -71,7 +71,7 @@ function MediaRow({
   const releaseDate = rawDate ? formatFullDate(rawDate) : null;
 
   return (
-    <div className="flex gap-4 bg-slate-800/60 border border-slate-700 hover:border-slate-600 rounded-xl transition-all duration-200 hover:bg-slate-800 hover:shadow-lg hover:shadow-black/30">
+    <div className="flex gap-4 bg-neutral-800/60 border border-neutral-700 hover:border-neutral-600 rounded-xl transition-all duration-200 hover:bg-neutral-800 hover:shadow-lg hover:shadow-black/30">
       {/* Thumbnail */}
       <Link
         to={href}
@@ -90,9 +90,9 @@ function MediaRow({
             className="h-full w-full object-cover object-top"
           />
         ) : (
-          <div className="h-full w-full min-h-[88px] bg-slate-700 flex items-center justify-center">
+          <div className="h-full w-full min-h-[88px] bg-neutral-700 flex items-center justify-center">
             <svg
-              className="w-8 h-8 text-slate-500"
+              className="w-8 h-8 text-neutral-500"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -111,7 +111,7 @@ function MediaRow({
           <span
             className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full backdrop-blur-sm ${
               type === "tv"
-                ? "bg-purple-600/80 text-purple-100"
+                ? "bg-highlight-600/80 text-highlight-100"
                 : "bg-amber-600/80 text-amber-100"
             }`}
           >
@@ -125,27 +125,27 @@ function MediaRow({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <Link to={href}>
-              <h3 className="font-semibold text-slate-100 hover:text-white transition-colors line-clamp-1 text-sm sm:text-base">
+              <h3 className="font-semibold text-neutral-100 hover:text-white transition-colors line-clamp-1 text-sm sm:text-base">
                 {title}
               </h3>
             </Link>
             <div className="flex items-center gap-2 mt-0.5 flex-wrap">
               {releaseDate ? (
-                <span className="text-xs text-slate-500">{releaseDate}</span>
+                <span className="text-xs text-neutral-500">{releaseDate}</span>
               ) : (
-                year && <span className="text-xs text-slate-500">{year}</span>
+                year && <span className="text-xs text-neutral-500">{year}</span>
               )}
               {genres.slice(0, 3).map((g, i) => (
                 <span key={g.id} className="flex items-center gap-2">
                   {i > 0 || year || releaseDate ? (
-                    <span className="text-slate-700">·</span>
+                    <span className="text-neutral-700">·</span>
                   ) : null}
-                  <span className="text-xs text-slate-500">{g.name}</span>
+                  <span className="text-xs text-neutral-500">{g.name}</span>
                 </span>
               ))}
               {item.vote_average != null && item.vote_average > 0 && (
-                <span className="flex items-center gap-1 text-xs text-yellow-400 font-medium">
-                  <span className="text-slate-700">·</span>
+                <span className="flex items-center gap-1 text-xs text-warning-400 font-medium">
+                  <span className="text-neutral-700">·</span>
                   <svg
                     className="w-3 h-3"
                     viewBox="0 0 24 24"
@@ -161,7 +161,7 @@ function MediaRow({
           {showWatchButton && (
             <div className="flex-shrink-0 hidden sm:block">
               {statusMap === undefined ? (
-                <div className="h-9 w-36 rounded-xl bg-slate-700 animate-pulse" />
+                <div className="h-9 w-36 rounded-xl bg-neutral-700 animate-pulse" />
               ) : (
                 <WatchButton
                   contentType={type}
@@ -175,7 +175,7 @@ function MediaRow({
         </div>
 
         {item.overview && (
-          <p className="text-slate-400 text-xs sm:text-sm line-clamp-2 leading-relaxed">
+          <p className="text-neutral-400 text-xs sm:text-sm line-clamp-2 leading-relaxed">
             {item.overview}
           </p>
         )}
@@ -184,7 +184,7 @@ function MediaRow({
         {showWatchButton && (
           <div className="sm:hidden mt-1">
             {statusMap === undefined ? (
-              <div className="h-9 w-36 rounded-xl bg-slate-700 animate-pulse" />
+              <div className="h-9 w-36 rounded-xl bg-neutral-700 animate-pulse" />
             ) : (
               <WatchButton
                 contentType={type}
@@ -206,9 +206,9 @@ function PersonRow({ person }: { person: Person }) {
   return (
     <Link
       to={`/person/${person.id}`}
-      className="flex gap-4 items-center bg-slate-800/60 border border-slate-700 hover:border-slate-600 rounded-xl overflow-hidden transition-all duration-200 hover:bg-slate-800 hover:shadow-lg hover:shadow-black/30 group"
+      className="flex gap-4 items-center bg-neutral-800/60 border border-neutral-700 hover:border-neutral-600 rounded-xl overflow-hidden transition-all duration-200 hover:bg-neutral-800 hover:shadow-lg hover:shadow-black/30 group"
     >
-      <div className="relative flex-shrink-0 w-16 h-16 sm:w-20 sm:h-20 m-2 rounded-full overflow-hidden bg-slate-700">
+      <div className="relative flex-shrink-0 w-16 h-16 sm:w-20 sm:h-20 m-2 rounded-full overflow-hidden bg-neutral-700">
         {person.profile_path ? (
           <img
             src={`${BASE_IMAGE_URL}/w185${person.profile_path}`}
@@ -218,7 +218,7 @@ function PersonRow({ person }: { person: Person }) {
         ) : (
           <div className="h-full w-full flex items-center justify-center">
             <svg
-              className="w-8 h-8 text-slate-500"
+              className="w-8 h-8 text-neutral-500"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -234,11 +234,11 @@ function PersonRow({ person }: { person: Person }) {
         )}
       </div>
       <div>
-        <p className="font-semibold text-slate-100 group-hover:text-white transition-colors text-sm sm:text-base">
+        <p className="font-semibold text-neutral-100 group-hover:text-white transition-colors text-sm sm:text-base">
           {person.name}
         </p>
         {person.known_for_department && (
-          <p className="text-xs text-slate-500 mt-0.5">
+          <p className="text-xs text-neutral-500 mt-0.5">
             {known_for_to_job[person.known_for_department] ??
               person.known_for_department}
           </p>
@@ -254,7 +254,7 @@ function CollectionRow({ collection }: { collection: CollectionResult }) {
   return (
     <Link
       to={`/collection/${collection.id}`}
-      className="flex gap-4 bg-slate-800/60 border border-slate-700 hover:border-slate-600 rounded-xl overflow-hidden transition-all duration-200 hover:bg-slate-800 hover:shadow-lg hover:shadow-black/30 group"
+      className="flex gap-4 bg-neutral-800/60 border border-neutral-700 hover:border-neutral-600 rounded-xl overflow-hidden transition-all duration-200 hover:bg-neutral-800 hover:shadow-lg hover:shadow-black/30 group"
     >
       <div className="relative flex-shrink-0 w-36 sm:w-44 overflow-hidden rounded-l-xl">
         {collection.backdrop_path ? (
@@ -270,24 +270,34 @@ function CollectionRow({ collection }: { collection: CollectionResult }) {
             className="h-full w-full object-cover object-top"
           />
         ) : (
-          <div className="h-full w-full min-h-[88px] bg-slate-700 flex items-center justify-center">
-            <svg className="w-8 h-8 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+          <div className="h-full w-full min-h-[88px] bg-neutral-700 flex items-center justify-center">
+            <svg
+              className="w-8 h-8 text-neutral-500"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1}
+                d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+              />
             </svg>
           </div>
         )}
         <div className="absolute top-2 left-2">
-          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full backdrop-blur-sm bg-blue-600/80 text-blue-100">
+          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full backdrop-blur-sm bg-primary-600/80 text-primary-100">
             Collection
           </span>
         </div>
       </div>
       <div className="flex flex-col justify-center gap-1.5 py-3 pr-3 flex-1 min-w-0">
-        <h3 className="font-semibold text-slate-100 group-hover:text-white transition-colors line-clamp-1 text-sm sm:text-base">
+        <h3 className="font-semibold text-neutral-100 group-hover:text-white transition-colors line-clamp-1 text-sm sm:text-base">
           {collection.name}
         </h3>
         {collection.overview && (
-          <p className="text-slate-400 text-xs sm:text-sm line-clamp-2 leading-relaxed">
+          <p className="text-neutral-400 text-xs sm:text-sm line-clamp-2 leading-relaxed">
             {collection.overview}
           </p>
         )}
@@ -319,11 +329,11 @@ function Section({
     <div>
       {/* Header */}
       <div className="flex items-center gap-3 mb-4">
-        <h2 className="text-lg font-bold text-slate-100">{title}</h2>
-        <span className="text-xs text-slate-500 bg-slate-800 border border-slate-700 px-2 py-0.5 rounded-full">
+        <h2 className="text-lg font-bold text-neutral-100">{title}</h2>
+        <span className="text-xs text-neutral-500 bg-neutral-800 border border-neutral-700 px-2 py-0.5 rounded-full">
           {total}
         </span>
-        <div className="flex-1 h-px bg-slate-800" />
+        <div className="flex-1 h-px bg-neutral-800" />
       </div>
 
       {/* Items */}
@@ -333,7 +343,7 @@ function Section({
       {!hideToggle && total > INITIAL_COUNT && (
         <button
           onClick={onToggle}
-          className="mt-4 flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-200 transition-colors"
+          className="mt-4 flex items-center gap-1.5 text-sm text-neutral-400 hover:text-neutral-200 transition-colors"
         >
           {isExpanded ? "Show less" : `Show ${total - visible} more`}
           <svg
@@ -397,7 +407,12 @@ export default function MediaList({
       }
       const { cached, missing } = getCachedStatuses(user.uid, items);
       if (!missing.length) {
-        setStatusMap(cached as Record<string, { status: WatchStatus; rating: number | null }>);
+        setStatusMap(
+          cached as Record<
+            string,
+            { status: WatchStatus; rating: number | null }
+          >,
+        );
         return;
       }
       user.getIdToken().then((token) =>
@@ -412,15 +427,30 @@ export default function MediaList({
           .then((r) => (r.ok ? r.json() : {}))
           .then((data) => {
             mergeCachedStatuses(user.uid, data);
-            setStatusMap({ ...cached, ...data } as Record<string, { status: WatchStatus; rating: number | null }>);
+            setStatusMap({ ...cached, ...data } as Record<
+              string,
+              { status: WatchStatus; rating: number | null }
+            >);
           })
-          .catch(() => setStatusMap(cached as Record<string, { status: WatchStatus; rating: number | null }>)),
+          .catch(() =>
+            setStatusMap(
+              cached as Record<
+                string,
+                { status: WatchStatus; rating: number | null }
+              >,
+            ),
+          ),
       );
     });
     return unsubscribe;
   }, [movies, shows, showWatchButton]);
 
-  if (movies.length === 0 && shows.length === 0 && people.length === 0 && collections.length === 0)
+  if (
+    movies.length === 0 &&
+    shows.length === 0 &&
+    people.length === 0 &&
+    collections.length === 0
+  )
     return null;
 
   const mediaSections = [
@@ -442,7 +472,9 @@ export default function MediaList({
   return (
     <div className="flex flex-col gap-10">
       {mediaSections.map((section) => {
-        const visible = paginated ? section.items.length : (visibleCounts[section.key] ?? INITIAL_COUNT);
+        const visible = paginated
+          ? section.items.length
+          : (visibleCounts[section.key] ?? INITIAL_COUNT);
         return (
           <Section
             key={section.key}
@@ -467,7 +499,9 @@ export default function MediaList({
 
       {people.length > 0 &&
         (() => {
-          const visible = paginated ? people.length : (visibleCounts["People"] ?? INITIAL_COUNT);
+          const visible = paginated
+            ? people.length
+            : (visibleCounts["People"] ?? INITIAL_COUNT);
           return (
             <Section
               title="People"
@@ -485,7 +519,9 @@ export default function MediaList({
 
       {collections.length > 0 &&
         (() => {
-          const visible = paginated ? collections.length : (visibleCounts["Collections"] ?? INITIAL_COUNT);
+          const visible = paginated
+            ? collections.length
+            : (visibleCounts["Collections"] ?? INITIAL_COUNT);
           return (
             <Section
               title="Collections"

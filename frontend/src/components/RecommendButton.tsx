@@ -117,7 +117,7 @@ export default function RecommendButton({
     <>
       <button
         onClick={handleOpen}
-        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm font-semibold transition-colors"
+        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-neutral-700 hover:bg-neutral-600 text-neutral-300 text-sm font-semibold transition-colors"
       >
         <svg
           className="w-4 h-4"
@@ -139,7 +139,7 @@ export default function RecommendButton({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
           <div
             ref={modalRef}
-            className="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-sm p-6 shadow-2xl"
+            className="bg-neutral-800 border border-neutral-700 rounded-2xl w-full max-w-sm p-6 shadow-2xl"
           >
             {sent ? (
               <div className="text-center py-4">
@@ -147,12 +147,12 @@ export default function RecommendButton({
                 <p className="text-white font-semibold text-lg mb-1">
                   Recommendation sent!
                 </p>
-                <p className="text-slate-400 text-sm mb-6">
+                <p className="text-neutral-400 text-sm mb-6">
                   {selected} will be notified.
                 </p>
                 <button
                   onClick={handleClose}
-                  className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-semibold"
+                  className="px-5 py-2 bg-primary-600 hover:bg-primary-500 text-white rounded-lg text-sm font-semibold"
                 >
                   Done
                 </button>
@@ -162,19 +162,19 @@ export default function RecommendButton({
                 <h2 className="text-white font-bold text-lg mb-1">
                   Recommend to a friend
                 </h2>
-                <p className="text-slate-400 text-sm mb-4 line-clamp-1">
+                <p className="text-neutral-400 text-sm mb-4 line-clamp-1">
                   {contentTitle}
                 </p>
 
                 {/* Friend list */}
                 <div className="mb-4">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-2">
                     Select a friend
                   </p>
                   {loadingFriends ? (
-                    <p className="text-slate-500 text-sm">Loading…</p>
+                    <p className="text-neutral-500 text-sm">Loading…</p>
                   ) : friends.length === 0 ? (
-                    <p className="text-slate-500 text-sm">No friends yet.</p>
+                    <p className="text-neutral-500 text-sm">No friends yet.</p>
                   ) : (
                     <div className="flex flex-col gap-1 max-h-40 overflow-y-auto">
                       {friends.map((f) => (
@@ -183,8 +183,8 @@ export default function RecommendButton({
                           onClick={() => setSelected(f.friend.username)}
                           className={`text-left px-3 py-2 rounded-lg text-sm transition-colors ${
                             selected === f.friend.username
-                              ? "bg-blue-600 text-white"
-                              : "bg-slate-700 text-slate-200 hover:bg-slate-600"
+                              ? "bg-primary-600 text-white"
+                              : "bg-neutral-700 text-neutral-200 hover:bg-neutral-600"
                           }`}
                         >
                           @{f.friend.username}
@@ -196,7 +196,7 @@ export default function RecommendButton({
 
                 {/* Optional message */}
                 <div className="mb-4">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-2">
                     Message (optional)
                   </p>
                   <textarea
@@ -205,23 +205,25 @@ export default function RecommendButton({
                     placeholder="Why do you recommend this?"
                     maxLength={300}
                     rows={3}
-                    className="w-full bg-slate-700 text-slate-100 text-sm px-3 py-2 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder-slate-500"
+                    className="w-full bg-neutral-700 text-neutral-100 text-sm px-3 py-2 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-primary-500 placeholder-neutral-500"
                   />
                 </div>
 
-                {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
+                {error && (
+                  <p className="text-error-400 text-sm mb-3">{error}</p>
+                )}
 
                 <div className="flex gap-2 justify-end">
                   <button
                     onClick={handleClose}
-                    className="px-4 py-2 text-sm text-slate-400 hover:text-slate-200"
+                    className="px-4 py-2 text-sm text-neutral-400 hover:text-neutral-200"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleSend}
                     disabled={!selected || sending}
-                    className="px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-sm font-semibold rounded-lg transition-colors"
+                    className="px-5 py-2 bg-primary-600 hover:bg-primary-500 disabled:opacity-40 text-white text-sm font-semibold rounded-lg transition-colors"
                   >
                     {sending ? "Sending…" : "Send"}
                   </button>

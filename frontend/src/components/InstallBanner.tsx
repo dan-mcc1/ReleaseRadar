@@ -47,7 +47,7 @@ export default function InstallBanner() {
 
   return (
     <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-sm">
-      <div className="bg-slate-800 border border-slate-600 rounded-xl shadow-2xl p-4 flex flex-col gap-3">
+      <div className="bg-neutral-800 border border-neutral-600 rounded-xl shadow-2xl p-4 flex flex-col gap-3">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
             <img
@@ -59,14 +59,14 @@ export default function InstallBanner() {
               <p className="text-white font-semibold text-sm">
                 Add to Home Screen
               </p>
-              <p className="text-slate-400 text-xs">
+              <p className="text-neutral-400 text-xs">
                 Use Release Radar like an app
               </p>
             </div>
           </div>
           <button
             onClick={dismiss}
-            className="text-slate-500 hover:text-slate-300 mt-0.5 flex-shrink-0"
+            className="text-neutral-500 hover:text-neutral-300 mt-0.5 flex-shrink-0"
           >
             <svg
               className="w-4 h-4"
@@ -85,9 +85,9 @@ export default function InstallBanner() {
         </div>
 
         {showIOS ? (
-          <p className="text-slate-300 text-xs leading-relaxed">
+          <p className="text-neutral-300 text-xs leading-relaxed">
             Tap the{" "}
-            <span className="inline-flex items-center gap-0.5 text-blue-400 font-medium">
+            <span className="inline-flex items-center gap-0.5 text-primary-400 font-medium">
               Share
               <svg
                 className="w-3.5 h-3.5"
@@ -110,7 +110,7 @@ export default function InstallBanner() {
         ) : (
           <button
             onClick={install}
-            className="w-full bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold py-2 rounded-lg transition-colors"
+            className="w-full bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold py-2 rounded-lg transition-colors"
           >
             Add to Home Screen
           </button>

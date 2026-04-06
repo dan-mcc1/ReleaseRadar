@@ -45,7 +45,7 @@ export default function ExpandableMediaList({
                 alt={item.title ?? item.name}
                 className="w-full h-auto rounded-md object-cover"
               />
-              <p className="mt-1 text-xs font-medium text-slate-300 text-center leading-tight line-clamp-2">
+              <p className="mt-1 text-xs font-medium text-neutral-300 text-center leading-tight line-clamp-2">
                 {item.title ?? item.name}
               </p>
             </Link>
@@ -56,7 +56,7 @@ export default function ExpandableMediaList({
       {hasMore && (
         <button
           onClick={() => setExpanded((e) => !e)}
-          className="mt-3 text-sm text-blue-400 hover:text-blue-300"
+          className="mt-3 text-sm text-primary-400 hover:text-primary-300"
         >
           {expanded ? "Show less" : `Show all ${items.length}`}
         </button>

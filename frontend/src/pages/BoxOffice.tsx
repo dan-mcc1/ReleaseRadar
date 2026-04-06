@@ -40,11 +40,11 @@ function formatProfit(
   revenue: number,
   budget: number,
 ): { text: string; color: string } {
-  if (budget <= 0) return { text: "—", color: "text-slate-400" };
+  if (budget <= 0) return { text: "—", color: "text-neutral-400" };
   const profit = revenue - budget;
   const text = formatMoney(Math.abs(profit));
   if (profit >= 0) return { text: `+${text}`, color: "text-emerald-400" };
-  return { text: `-${text}`, color: "text-red-400" };
+  return { text: `-${text}`, color: "text-error-400" };
 }
 
 const currentYear = new Date().getFullYear();
@@ -100,7 +100,7 @@ export default function BoxOffice() {
           <h1 className="text-3xl font-bold text-white">Box Office</h1>
           <span className="text-lg">🎬</span>
         </div>
-        <p className="text-slate-400">{subtitle}</p>
+        <p className="text-neutral-400">{subtitle}</p>
       </div>
 
       {/* Controls */}
@@ -113,8 +113,8 @@ export default function BoxOffice() {
             }
             className={`px-4 py-2 text-sm font-medium transition-colors ${
               mode === "yearly"
-                ? "bg-blue-600 text-white"
-                : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                ? "bg-primary-600 text-white"
+                : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700"
             }`}
           >
             Yearly
@@ -129,8 +129,8 @@ export default function BoxOffice() {
             }
             className={`px-4 py-2 text-sm font-medium transition-colors ${
               mode === "monthly"
-                ? "bg-blue-600 text-white"
-                : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                ? "bg-primary-600 text-white"
+                : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700"
             }`}
           >
             Monthly
@@ -147,7 +147,7 @@ export default function BoxOffice() {
                 : { mode, year: e.target.value },
             )
           }
-          className="bg-slate-800 border border-white/10 text-slate-200 text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="bg-neutral-800 border border-white/10 text-neutral-200 text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
         >
           {years.map((y) => (
             <option key={y} value={y}>
@@ -167,7 +167,7 @@ export default function BoxOffice() {
                 month: e.target.value,
               })
             }
-            className="bg-slate-800 border border-white/10 text-slate-200 text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="bg-neutral-800 border border-white/10 text-neutral-200 text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
           >
             {MONTH_NAMES.map((name, i) => (
               <option key={i + 1} value={i + 1}>
@@ -182,8 +182,8 @@ export default function BoxOffice() {
       {loading && (
         <div className="flex items-center justify-center py-20">
           <div className="flex flex-col items-center gap-3">
-            <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-            <p className="text-slate-400 text-sm">Loading…</p>
+            <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+            <p className="text-neutral-400 text-sm">Loading…</p>
           </div>
         </div>
       )}
@@ -191,14 +191,14 @@ export default function BoxOffice() {
       {/* Error */}
       {!loading && error && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <p className="text-red-400">{error}</p>
+          <p className="text-error-400">{error}</p>
         </div>
       )}
 
       {/* Empty */}
       {!loading && !error && movies.length === 0 && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <p className="text-slate-400">
+          <p className="text-neutral-400">
             No box office data available for this period.
           </p>
         </div>
@@ -208,7 +208,7 @@ export default function BoxOffice() {
       {!loading && !error && movies.length > 0 && (
         <div className="rounded-xl border border-white/10 overflow-hidden">
           {/* Table header */}
-          <div className="grid grid-cols-[2rem_2.5rem_1fr_auto] sm:grid-cols-[2.5rem_3rem_1fr_repeat(3,minmax(0,1fr))] gap-2 items-center px-3 sm:px-4 py-3 bg-slate-800/60 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+          <div className="grid grid-cols-[2rem_2.5rem_1fr_auto] sm:grid-cols-[2.5rem_3rem_1fr_repeat(3,minmax(0,1fr))] gap-2 items-center px-3 sm:px-4 py-3 bg-neutral-800/60 text-xs font-semibold text-neutral-400 uppercase tracking-wider">
             <span>#</span>
             <span></span>
             <span>Movie</span>
@@ -231,19 +231,19 @@ export default function BoxOffice() {
                   <span
                     className={`text-sm font-bold ${
                       movie.rank === 1
-                        ? "text-yellow-400"
+                        ? "text-warning-400"
                         : movie.rank === 2
-                          ? "text-slate-300"
+                          ? "text-neutral-300"
                           : movie.rank === 3
                             ? "text-amber-600"
-                            : "text-slate-500"
+                            : "text-neutral-500"
                     }`}
                   >
                     {movie.rank}
                   </span>
 
                   {/* Poster */}
-                  <div className="w-8 sm:w-9 h-[48px] sm:h-[54px] rounded overflow-hidden bg-slate-700 flex-shrink-0">
+                  <div className="w-8 sm:w-9 h-[48px] sm:h-[54px] rounded overflow-hidden bg-neutral-700 flex-shrink-0">
                     {movie.poster_path ? (
                       <img
                         src={`${BASE_IMAGE_URL}/w185${movie.poster_path}`}
@@ -251,7 +251,7 @@ export default function BoxOffice() {
                         className="w-full h-full object-cover"
                       />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-slate-500 text-xs">
+                      <div className="w-full h-full flex items-center justify-center text-neutral-500 text-xs">
                         ?
                       </div>
                     )}
@@ -263,7 +263,7 @@ export default function BoxOffice() {
                       {movie.title}
                     </p>
                     {movie.release_date && (
-                      <p className="text-xs text-slate-500 mt-0.5">
+                      <p className="text-xs text-neutral-500 mt-0.5">
                         {new Date(
                           movie.release_date + "T00:00:00",
                         ).toLocaleDateString(undefined, {
@@ -281,7 +281,7 @@ export default function BoxOffice() {
                   </span>
 
                   {/* Budget — hidden on mobile */}
-                  <span className="hidden sm:block text-sm text-slate-400 text-right">
+                  <span className="hidden sm:block text-sm text-neutral-400 text-right">
                     {formatMoney(movie.budget)}
                   </span>
 
@@ -298,7 +298,7 @@ export default function BoxOffice() {
         </div>
       )}
 
-      <p className="text-xs text-slate-600 mt-6 text-center">
+      <p className="text-xs text-neutral-600 mt-6 text-center">
         Revenue data sourced from TMDB. Some titles may have incomplete figures.
       </p>
     </div>

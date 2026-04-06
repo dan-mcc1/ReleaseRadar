@@ -18,7 +18,7 @@ function MiniStars({ rating }: { rating: number }) {
       {[1, 2, 3, 4, 5].map((s) => (
         <svg
           key={s}
-          className={`w-3 h-3 ${s <= rating ? "text-yellow-400" : "text-slate-600"}`}
+          className={`w-3 h-3 ${s <= rating ? "text-warning-400" : "text-neutral-600"}`}
           viewBox="0 0 24 24"
           fill={s <= rating ? "currentColor" : "none"}
           stroke="currentColor"
@@ -55,7 +55,11 @@ function timeAgo(dateStr: string): string {
   return `${Math.floor(months / 12)}y ago`;
 }
 
-export default function ReviewsSection({ contentType, contentId, user }: Props) {
+export default function ReviewsSection({
+  contentType,
+  contentId,
+  user,
+}: Props) {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState("");
@@ -64,12 +68,14 @@ export default function ReviewsSection({ contentType, contentId, user }: Props) 
   const [editing, setEditing] = useState(false);
 
   const myReview = user
-    ? reviews.find((r) => r.user_id === user.uid) ?? null
+    ? (reviews.find((r) => r.user_id === user.uid) ?? null)
     : null;
 
   useEffect(() => {
     setLoading(true);
-    fetch(`${API_URL}/reviews?content_type=${contentType}&content_id=${contentId}`)
+    fetch(
+      `${API_URL}/reviews?content_type=${contentType}&content_id=${contentId}`,
+    )
       .then((r) => r.json())
       .then((data) => {
         setReviews(Array.isArray(data) ? data : []);
@@ -128,7 +134,10 @@ export default function ReviewsSection({ contentType, contentId, user }: Props) 
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ content_type: contentType, content_id: contentId }),
+        body: JSON.stringify({
+          content_type: contentType,
+          content_id: contentId,
+        }),
       });
       if (res.ok) {
         setReviews((prev) => prev.filter((r) => r.user_id !== user.uid));
@@ -146,8 +155,13 @@ export default function ReviewsSection({ contentType, contentId, user }: Props) 
 
   return (
     <div>
-      <h2 className="text-slate-400 text-xs uppercase tracking-wider font-semibold mb-4">
-        Reviews {reviews.length > 0 && <span className="text-slate-600 normal-case tracking-normal">({reviews.length})</span>}
+      <h2 className="text-neutral-400 text-xs uppercase tracking-wider font-semibold mb-4">
+        Reviews{" "}
+        {reviews.length > 0 && (
+          <span className="text-neutral-600 normal-case tracking-normal">
+            ({reviews.length})
+          </span>
+        )}
       </h2>
 
       {/* Write / edit review */}
@@ -156,42 +170,60 @@ export default function ReviewsSection({ contentType, contentId, user }: Props) 
           {!myReview && !editing ? (
             <button
               onClick={() => setEditing(true)}
-              className="text-sm text-purple-400 hover:text-purple-300 transition-colors flex items-center gap-1.5"
+              className="text-sm text-highlight-400 hover:text-highlight-300 transition-colors flex items-center gap-1.5"
             >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-2a2 2 0 01.586-1.414z" />
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-2a2 2 0 01.586-1.414z"
+                />
               </svg>
               Write a review
             </button>
           ) : myReview && !editing ? (
             /* Existing review — show it with edit/delete controls */
-            <div className="bg-slate-800/80 border border-purple-500/30 rounded-xl p-4">
+            <div className="bg-neutral-800/80 border border-highlight-500/30 rounded-xl p-4">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <div className="w-6 h-6 rounded-full bg-purple-700 flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">
+                  <div className="w-6 h-6 rounded-full bg-highlight-700 flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">
                     {myReview.username[0]?.toUpperCase()}
                   </div>
-                  <span className="text-sm font-medium text-purple-300">@{myReview.username}</span>
-                  {myReview.rating != null && <MiniStars rating={myReview.rating} />}
-                  <span className="text-xs text-slate-500">{timeAgo(myReview.updated_at ?? myReview.created_at)}</span>
+                  <span className="text-sm font-medium text-highlight-300">
+                    @{myReview.username}
+                  </span>
+                  {myReview.rating != null && (
+                    <MiniStars rating={myReview.rating} />
+                  )}
+                  <span className="text-xs text-neutral-500">
+                    {timeAgo(myReview.updated_at ?? myReview.created_at)}
+                  </span>
                 </div>
                 <div className="flex gap-2">
                   <button
                     onClick={() => setEditing(true)}
-                    className="text-xs text-slate-400 hover:text-slate-200 transition-colors px-2 py-1 rounded"
+                    className="text-xs text-neutral-400 hover:text-neutral-200 transition-colors px-2 py-1 rounded"
                   >
                     Edit
                   </button>
                   <button
                     onClick={deleteReview}
                     disabled={deleting}
-                    className="text-xs text-red-400 hover:text-red-300 disabled:opacity-50 transition-colors px-2 py-1 rounded"
+                    className="text-xs text-error-400 hover:text-error-300 disabled:opacity-50 transition-colors px-2 py-1 rounded"
                   >
                     {deleting ? "Deleting…" : "Delete"}
                   </button>
                 </div>
               </div>
-              <p className="text-slate-300 text-sm leading-relaxed whitespace-pre-wrap">{myReview.review_text}</p>
+              <p className="text-neutral-300 text-sm leading-relaxed whitespace-pre-wrap">
+                {myReview.review_text}
+              </p>
             </div>
           ) : (
             /* Text editor */
@@ -202,21 +234,26 @@ export default function ReviewsSection({ contentType, contentId, user }: Props) 
                 placeholder="Share your thoughts…"
                 maxLength={2000}
                 rows={4}
-                className="w-full bg-slate-800 border border-slate-600 focus:border-purple-500 rounded-xl px-4 py-3 text-slate-200 text-sm placeholder-slate-500 focus:outline-none resize-none transition-colors"
+                className="w-full bg-neutral-800 border border-neutral-600 focus:border-highlight-500 rounded-xl px-4 py-3 text-neutral-200 text-sm placeholder-neutral-500 focus:outline-none resize-none transition-colors"
               />
               <div className="flex items-center justify-between mt-2">
-                <span className="text-xs text-slate-600">{draft.length}/2000</span>
+                <span className="text-xs text-neutral-600">
+                  {draft.length}/2000
+                </span>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => { setEditing(false); setDraft(""); }}
-                    className="text-sm text-slate-400 hover:text-slate-200 px-3 py-1.5 rounded-lg transition-colors"
+                    onClick={() => {
+                      setEditing(false);
+                      setDraft("");
+                    }}
+                    className="text-sm text-neutral-400 hover:text-neutral-200 px-3 py-1.5 rounded-lg transition-colors"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={submitReview}
                     disabled={saving || !draft.trim()}
-                    className="text-sm bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white px-4 py-1.5 rounded-lg transition-colors font-medium"
+                    className="text-sm bg-highlight-600 hover:bg-highlight-500 disabled:opacity-50 text-white px-4 py-1.5 rounded-lg transition-colors font-medium"
                   >
                     {saving ? "Saving…" : myReview ? "Update" : "Post"}
                   </button>
@@ -231,24 +268,38 @@ export default function ReviewsSection({ contentType, contentId, user }: Props) 
       {loading ? (
         <div className="space-y-3">
           {[1, 2].map((i) => (
-            <div key={i} className="h-20 rounded-xl bg-slate-800 animate-pulse" />
+            <div
+              key={i}
+              className="h-20 rounded-xl bg-neutral-800 animate-pulse"
+            />
           ))}
         </div>
       ) : othersReviews.length === 0 && !myReview ? (
-        <p className="text-slate-500 text-sm">No reviews yet. Be the first!</p>
+        <p className="text-neutral-500 text-sm">
+          No reviews yet. Be the first!
+        </p>
       ) : (
         <div className="space-y-3">
           {othersReviews.map((review) => (
-            <div key={review.id} className="bg-slate-800/60 border border-slate-700 rounded-xl p-4">
+            <div
+              key={review.id}
+              className="bg-neutral-800/60 border border-neutral-700 rounded-xl p-4"
+            >
               <div className="flex items-center gap-2 mb-2 flex-wrap">
-                <div className="w-6 h-6 rounded-full bg-slate-600 flex items-center justify-center text-[10px] font-bold text-slate-300 flex-shrink-0">
+                <div className="w-6 h-6 rounded-full bg-neutral-600 flex items-center justify-center text-[10px] font-bold text-neutral-300 flex-shrink-0">
                   {review.username[0]?.toUpperCase()}
                 </div>
-                <span className="text-sm font-medium text-slate-300">@{review.username}</span>
+                <span className="text-sm font-medium text-neutral-300">
+                  @{review.username}
+                </span>
                 {review.rating != null && <MiniStars rating={review.rating} />}
-                <span className="text-xs text-slate-600">{timeAgo(review.updated_at ?? review.created_at)}</span>
+                <span className="text-xs text-neutral-600">
+                  {timeAgo(review.updated_at ?? review.created_at)}
+                </span>
               </div>
-              <p className="text-slate-400 text-sm leading-relaxed whitespace-pre-wrap">{review.review_text}</p>
+              <p className="text-neutral-400 text-sm leading-relaxed whitespace-pre-wrap">
+                {review.review_text}
+              </p>
             </div>
           ))}
         </div>

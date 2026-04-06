@@ -94,37 +94,43 @@ export default function FriendSearch({
         value={query}
         onChange={handleQueryChange}
         placeholder="Search by username…"
-        className="w-full bg-slate-700 text-slate-100 placeholder-slate-400 px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="w-full bg-neutral-700 text-neutral-100 placeholder-neutral-400 px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
       />
 
-      {error && <p className="text-red-400 text-sm mt-2">{error}</p>}
+      {error && <p className="text-error-500 text-sm mt-2">{error}</p>}
 
       {results.length > 0 && (
         <ul className="mt-2 space-y-1">
           {results.map((user) => (
             <li
               key={user.id}
-              className="flex items-center justify-between bg-slate-700 px-3 py-2 rounded-lg"
+              className="flex items-center justify-between bg-neutral-700 px-3 py-2 rounded-lg"
             >
               <Link
                 to={`/user/${user.username}`}
-                className="text-slate-100 font-medium hover:text-blue-400 transition-colors"
+                className="text-neutral-100 font-medium hover:text-primary-400 transition-colors"
               >
                 <span>@{user.username}</span>
               </Link>
               {friendIds?.has(user.id) ? (
-                <span className="text-slate-400 text-sm">Already friends</span>
+                <span className="text-neutral-400 text-sm">
+                  Already friends
+                </span>
               ) : followedTo.has(user.username) ? (
-                <span className="text-green-400 text-sm">Following</span>
+                <span className="text-success-400 text-sm">Following</span>
               ) : sentTo.has(user.username) ? (
-                <span className="text-green-400 text-sm">Request sent</span>
+                <span className="text-success-400 text-sm">Request sent</span>
               ) : (
                 <button
                   onClick={() => sendRequest(user)}
                   disabled={sending === user.username}
-                  className="text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-3 py-1 rounded"
+                  className="text-sm bg-primary-600 hover:bg-primary-500 disabled:opacity-50 text-white px-3 py-1 rounded"
                 >
-                  {sending === user.username ? "Sending…" : user.profile_visibility === "public" ? "Follow" : "Add Friend"}
+                  {sending === user.username
+                    ? "Sending…"
+                    : user.profile_visibility === "public"
+                      ? "Follow"
+                      : "Add Friend"}
                 </button>
               )}
             </li>
@@ -133,7 +139,7 @@ export default function FriendSearch({
       )}
 
       {query.trim().length > 0 && results.length === 0 && (
-        <p className="text-slate-400 text-sm mt-2">No users found.</p>
+        <p className="text-neutral-400 text-sm mt-2">No users found.</p>
       )}
     </div>
   );

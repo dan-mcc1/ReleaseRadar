@@ -336,7 +336,7 @@ export default function Settings() {
 
   if (!user) {
     return (
-      <div className="p-6 text-center text-gray-600">
+      <div className="p-6 text-center text-neutral-600">
         You must be signed in to view this page.
       </div>
     );
@@ -349,23 +349,25 @@ export default function Settings() {
       <h1 className="text-2xl font-bold mb-4">Settings</h1>
 
       {error && (
-        <div className="bg-red-100 text-red-700 p-3 rounded">{error}</div>
+        <div className="bg-error-100 text-error-700 p-3 rounded">{error}</div>
       )}
 
       {/* ── Profile ── */}
-      <div className="bg-slate-800 shadow-md rounded-lg p-4 space-y-5">
-        <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">
+      <div className="bg-neutral-800 shadow-md rounded-lg p-4 space-y-5">
+        <h2 className="text-sm font-semibold text-neutral-400 uppercase tracking-wider">
           Profile
         </h2>
 
         <div>
-          <p className="text-gray-400 text-sm font-medium mb-1">Logged in as</p>
+          <p className="text-grneutralay-400 text-sm font-medium mb-1">
+            Logged in as
+          </p>
           <p className="text-white font-semibold">{user.email}</p>
         </div>
 
         {/* Username */}
         <div>
-          <p className="text-gray-400 text-sm font-medium mb-2">Username</p>
+          <p className="text-neutral-400 text-sm font-medium mb-2">Username</p>
           {editingUsername ? (
             <div className="flex flex-col gap-1">
               <div className="flex gap-2 items-center">
@@ -374,12 +376,12 @@ export default function Settings() {
                   value={newUsername}
                   onChange={handleUsernameInput}
                   placeholder="new_username"
-                  className="bg-slate-700 text-slate-100 px-3 py-1.5 rounded text-sm w-44 focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder-slate-500"
+                  className="bg-neutral-700 text-neutral-100 px-3 py-1.5 rounded text-sm w-44 focus:outline-none focus:ring-2 focus:ring-primary-400 placeholder-neutral-500"
                 />
                 <button
                   onClick={saveUsername}
                   disabled={usernameSaving || usernameAvailable === false}
-                  className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm px-3 py-1.5 rounded"
+                  className="bg-primary-600 hover:bg-primary-500 disabled:opacity-50 text-white text-sm px-3 py-1.5 rounded"
                 >
                   {usernameSaving ? "Saving…" : "Save"}
                 </button>
@@ -389,14 +391,14 @@ export default function Settings() {
                     setNewUsername("");
                     setUsernameError(null);
                   }}
-                  className="text-slate-400 hover:text-slate-200 text-sm"
+                  className="text-neutral-400 hover:text-neutral-200 text-sm"
                 >
                   Cancel
                 </button>
               </div>
               {newUsername.length >= 3 && (
                 <p
-                  className={`text-xs pl-1 ${usernameChecking ? "text-slate-400" : usernameAvailable === true ? "text-green-400" : usernameAvailable === false ? "text-red-400" : "text-slate-400"}`}
+                  className={`text-xs pl-1 ${usernameChecking ? "text-neutral-400" : usernameAvailable === true ? "text-success-400" : usernameAvailable === false ? "text-error-400" : "text-neutral-400"}`}
                 >
                   {usernameChecking
                     ? "Checking…"
@@ -408,7 +410,7 @@ export default function Settings() {
                 </p>
               )}
               {usernameError && (
-                <p className="text-red-400 text-xs pl-1">{usernameError}</p>
+                <p className="text-error-400 text-xs pl-1">{usernameError}</p>
               )}
             </div>
           ) : (
@@ -425,7 +427,7 @@ export default function Settings() {
                   setEditingUsername(true);
                   setNewUsername(dbUser?.username ?? "");
                 }}
-                className="text-xs text-blue-400 hover:text-blue-300"
+                className="text-xs text-primary-400 hover:text-primary-300"
               >
                 {dbUser?.username ? "Change" : "Set username"}
               </button>
@@ -435,14 +437,14 @@ export default function Settings() {
 
         {/* Avatar picker */}
         <div>
-          <p className="text-gray-400 text-sm font-medium mb-3">Avatar</p>
+          <p className="text-neutral-400 text-sm font-medium mb-3">Avatar</p>
           <div className="flex items-center gap-4 mb-3">
             <AvatarPreview
               avatarKey={selectedAvatar}
               photoURL={user.photoURL}
               size={64}
             />
-            <span className="text-slate-400 text-sm">
+            <span className="text-neutral-400 text-sm">
               {selectedAvatar
                 ? AVATAR_PRESETS.find((p) => p.key === selectedAvatar)?.label
                 : user.photoURL
@@ -458,7 +460,7 @@ export default function Settings() {
                 title="Use Google photo"
                 className={`w-9 h-9 rounded-full overflow-hidden transition-all ${
                   selectedAvatar === null
-                    ? "ring-2 ring-white ring-offset-2 ring-offset-slate-800 scale-110"
+                    ? "ring-2 ring-white ring-offset-2 ring-offset-neutral-800 scale-110"
                     : "opacity-70 hover:opacity-100 hover:scale-105"
                 }`}
               >
@@ -477,7 +479,7 @@ export default function Settings() {
                 style={{ backgroundColor: preset.color }}
                 className={`w-9 h-9 rounded-full transition-all ${
                   selectedAvatar === preset.key
-                    ? "ring-2 ring-white ring-offset-2 ring-offset-slate-800 scale-110"
+                    ? "ring-2 ring-white ring-offset-2 ring-offset-neutral-800 scale-110"
                     : "opacity-70 hover:opacity-100 hover:scale-105"
                 }`}
               />
@@ -486,7 +488,7 @@ export default function Settings() {
           <button
             onClick={saveAvatar}
             disabled={avatarSaving || !avatarChanged}
-            className="bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-sm px-4 py-1.5 rounded"
+            className="bg-primary-600 hover:bg-primary-500 disabled:opacity-40 text-white text-sm px-4 py-1.5 rounded"
           >
             {avatarSaving ? "Saving…" : avatarSaved ? "Saved!" : "Save Avatar"}
           </button>
@@ -494,21 +496,21 @@ export default function Settings() {
 
         {/* Bio */}
         <div>
-          <p className="text-gray-400 text-sm font-medium mb-2">Bio</p>
+          <p className="text-neutral-400 text-sm font-medium mb-2">Bio</p>
           <textarea
             value={bio}
             onChange={(e) => setBio(e.target.value)}
             maxLength={300}
             rows={3}
             placeholder="Tell people a little about yourself…"
-            className="w-full bg-slate-700 text-slate-100 placeholder-slate-500 px-3 py-2 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none"
+            className="w-full bg-neutral-700 text-neutral-100 placeholder-neutral-500 px-3 py-2 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 resize-none"
           />
           <div className="flex items-center justify-between mt-1.5">
-            <span className="text-xs text-slate-500">{bio.length}/300</span>
+            <span className="text-xs text-neutral-500">{bio.length}/300</span>
             <button
               onClick={saveBio}
               disabled={bioSaving || bio === (dbUser?.bio ?? "")}
-              className="bg-blue-600 enabled:hover:bg-blue-500 disabled:opacity-40 text-white text-sm px-4 py-1.5 rounded"
+              className="bg-primary-600 enabled:hover:bg-primary-500 disabled:opacity-40 text-white text-sm px-4 py-1.5 rounded"
             >
               {bioSaving ? "Saving…" : bioSaved ? "Saved!" : "Save Bio"}
             </button>
@@ -517,8 +519,11 @@ export default function Settings() {
       </div>
 
       {/* ── Notifications ── */}
-      <div id="notifications" className="bg-slate-800 shadow-md rounded-lg p-4 space-y-5">
-        <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">
+      <div
+        id="notifications"
+        className="bg-neutral-800 shadow-md rounded-lg p-4 space-y-5"
+      >
+        <h2 className="text-sm font-semibold text-neutral-400 uppercase tracking-wider">
           Notifications
         </h2>
 
@@ -526,7 +531,7 @@ export default function Settings() {
         <div className="flex items-center justify-between gap-6">
           <div>
             <p className="text-white font-medium">Email Notifications</p>
-            <p className="text-gray-400 text-sm">
+            <p className="text-neutral-400 text-sm">
               Digest of upcoming releases and emails when a friend sends a
               recommendation.
             </p>
@@ -535,7 +540,7 @@ export default function Settings() {
             onClick={toggleEmailNotifications}
             disabled={prefSaving || emailNotifications === null}
             className={`relative inline-flex h-6 w-12 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
-              emailNotifications ? "bg-blue-600" : "bg-slate-600"
+              emailNotifications ? "bg-primary-600" : "bg-neutral-600"
             }`}
           >
             <span
@@ -550,7 +555,7 @@ export default function Settings() {
         {emailNotifications && (
           <div>
             <p className="text-white font-medium mb-1">Digest Frequency</p>
-            <p className="text-gray-400 text-sm mb-3">
+            <p className="text-neutral-400 text-sm mb-3">
               How often to receive your release digest. Weekly emails cover the
               full upcoming week; monthly cover the whole month.
             </p>
@@ -564,8 +569,8 @@ export default function Settings() {
                   disabled={prefSaving}
                   className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors disabled:opacity-50 ${
                     notificationFrequency === freq
-                      ? "bg-blue-600 text-white"
-                      : "bg-slate-700 text-slate-300 hover:bg-slate-600"
+                      ? "bg-primary-600 text-white"
+                      : "bg-neutral-700 text-neutral-300 hover:bg-neutral-600"
                   }`}
                 >
                   {freq.charAt(0).toUpperCase() + freq.slice(1)}
@@ -577,13 +582,13 @@ export default function Settings() {
       </div>
 
       {/* ── Privacy ── */}
-      <div className="bg-slate-800 shadow-md rounded-lg p-4 space-y-3">
-        <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">
+      <div className="bg-neutral-800 shadow-md rounded-lg p-4 space-y-3">
+        <h2 className="text-sm font-semibold text-neutral-400 uppercase tracking-wider">
           Privacy
         </h2>
         <div>
           <p className="text-white font-medium mb-1">Profile Visibility</p>
-          <p className="text-gray-400 text-sm mb-3">
+          <p className="text-neutral-400 text-sm mb-3">
             Controls who can see your watchlist, ratings, and activity.
           </p>
           <div className="space-y-2">
@@ -612,26 +617,26 @@ export default function Settings() {
                 disabled={prefSaving}
                 className={`w-full flex items-start gap-3 px-3 py-2.5 rounded-lg border text-left transition-colors disabled:opacity-50 ${
                   profileVisibility === value
-                    ? "border-blue-500 bg-blue-600/10"
-                    : "border-slate-600 hover:border-slate-500"
+                    ? "border-primary-500 bg-primary-600/10"
+                    : "border-neutral-600 hover:border-neutral-500"
                 }`}
               >
                 <span
                   className={`mt-0.5 w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center ${
                     profileVisibility === value
-                      ? "border-blue-400"
-                      : "border-slate-500"
+                      ? "border-primary-400"
+                      : "border-neutral-500"
                   }`}
                 >
                   {profileVisibility === value && (
-                    <span className="w-2 h-2 rounded-full bg-blue-400" />
+                    <span className="w-2 h-2 rounded-full bg-primary-400" />
                   )}
                 </span>
                 <span>
                   <span className="block text-white text-sm font-medium">
                     {label}
                   </span>
-                  <span className="block text-slate-400 text-xs mt-0.5">
+                  <span className="block text-neutral-400 text-xs mt-0.5">
                     {desc}
                   </span>
                 </span>
@@ -642,19 +647,19 @@ export default function Settings() {
       </div>
 
       {/* ── Account ── */}
-      <div className="bg-slate-800 shadow-md rounded-lg p-4 space-y-3">
-        <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">
+      <div className="bg-neutral-800 shadow-md rounded-lg p-4 space-y-3">
+        <h2 className="text-sm font-semibold text-neutral-400 uppercase tracking-wider">
           Account
         </h2>
         <button
           onClick={handleSignOut}
-          className="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 rounded-lg"
+          className="w-full bg-neutral-200 hover:bg-neutral-300 text-neutral-800 py-2 rounded-lg"
         >
           Sign Out
         </button>
         <button
           onClick={handleDelete}
-          className="w-full bg-red-500 hover:bg-red-600 text-white py-2 rounded-lg"
+          className="w-full bg-error-500 hover:bg-error-600 text-white py-2 rounded-lg"
         >
           Delete Account
         </button>

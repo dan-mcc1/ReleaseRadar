@@ -242,7 +242,7 @@ const SignIn: React.FC = () => {
         {/* Logo / Branding */}
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-white mb-1">Release Radar</h1>
-          <p className="text-slate-400 text-sm">
+          <p className="text-neutral-400 text-sm">
             {isRegistering
               ? "Create your account to get started"
               : "Welcome back — sign in to continue"}
@@ -250,15 +250,15 @@ const SignIn: React.FC = () => {
         </div>
 
         {/* Card */}
-        <div className="bg-slate-800 border border-slate-700 rounded-2xl shadow-xl p-8">
+        <div className="bg-neutral-800 border border-neutral-700 rounded-2xl shadow-xl p-8">
           {/* Tab Toggle */}
-          <div className="flex bg-slate-900 rounded-lg p-1 mb-6">
+          <div className="flex bg-neutral-900 rounded-lg p-1 mb-6">
             <button
               onClick={() => switchMode(false)}
               className={`flex-1 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
                 !isRegistering
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-slate-400 hover:text-slate-200"
+                  ? "bg-primary-600 text-white shadow-sm"
+                  : "text-neutral-400 hover:text-neutral-200"
               }`}
             >
               Sign In
@@ -267,8 +267,8 @@ const SignIn: React.FC = () => {
               onClick={() => switchMode(true)}
               className={`flex-1 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
                 isRegistering
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-slate-400 hover:text-slate-200"
+                  ? "bg-primary-600 text-white shadow-sm"
+                  : "text-neutral-400 hover:text-neutral-200"
               }`}
             >
               Register
@@ -288,7 +288,7 @@ const SignIn: React.FC = () => {
             className="space-y-4"
           >
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1.5">
+              <label className="block text-sm font-medium text-neutral-300 mb-1.5">
                 Email
               </label>
               <input
@@ -297,12 +297,12 @@ const SignIn: React.FC = () => {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
                 required
-                className="w-full bg-slate-900 border border-slate-600 text-white placeholder-slate-500 px-4 py-2.5 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
+                className="w-full bg-neutral-900 border border-neutral-600 text-white placeholder-neutral-500 px-4 py-2.5 rounded-lg focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500 transition-colors"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1.5">
+              <label className="block text-sm font-medium text-neutral-300 mb-1.5">
                 Password
               </label>
               <input
@@ -315,13 +315,13 @@ const SignIn: React.FC = () => {
                     : "Enter your password"
                 }
                 required
-                className="w-full bg-slate-900 border border-slate-600 text-white placeholder-slate-500 px-4 py-2.5 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
+                className="w-full bg-neutral-900 border border-neutral-600 text-white placeholder-neutral-500 px-4 py-2.5 rounded-lg focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500 transition-colors"
               />
             </div>
 
             {isRegistering && (
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">
+                <label className="block text-sm font-medium text-neutral-300 mb-1.5">
                   Username
                 </label>
                 <input
@@ -330,26 +330,26 @@ const SignIn: React.FC = () => {
                   onChange={handleUsernameChange}
                   placeholder="letters, numbers, underscores"
                   required
-                  className={`w-full bg-slate-900 border text-white placeholder-slate-500 px-4 py-2.5 rounded-lg focus:outline-none focus:ring-1 transition-colors ${
+                  className={`w-full bg-neutral-900 border text-white placeholder-neutral-500 px-4 py-2.5 rounded-lg focus:outline-none focus:ring-1 transition-colors ${
                     username.length >= 3
                       ? usernameAvailable === true
-                        ? "border-green-500 focus:border-green-500 focus:ring-green-500"
+                        ? "border-success-500 focus:border-success-500 focus:ring-success-500"
                         : usernameAvailable === false
-                          ? "border-red-500 focus:border-red-500 focus:ring-red-500"
-                          : "border-slate-600 focus:border-blue-500 focus:ring-blue-500"
-                      : "border-slate-600 focus:border-blue-500 focus:ring-blue-500"
+                          ? "border-error-500 focus:border-error-500 focus:ring-error-500"
+                          : "border-neutral-600 focus:border-primary-500 focus:ring-primary-500"
+                      : "border-neutral-600 focus:border-primary-500 focus:ring-primary-500"
                   }`}
                 />
                 {username.length >= 3 && (
                   <p
                     className={`text-xs mt-1.5 ${
                       usernameChecking
-                        ? "text-slate-400"
+                        ? "text-neutral-400"
                         : usernameAvailable === true
-                          ? "text-green-400"
+                          ? "text-success-400"
                           : usernameAvailable === false
-                            ? "text-red-400"
-                            : "text-slate-400"
+                            ? "text-error-400"
+                            : "text-neutral-400"
                     }`}
                   >
                     {usernameChecking
@@ -367,7 +367,7 @@ const SignIn: React.FC = () => {
             )}
 
             {errorMessage && (
-              <div className="text-red-400 bg-red-950 border border-red-800 px-4 py-2.5 rounded-lg text-sm">
+              <div className="text-error-400 bg-error-950 border border-error-800 px-4 py-2.5 rounded-lg text-sm">
                 {errorMessage}
               </div>
             )}
@@ -375,7 +375,7 @@ const SignIn: React.FC = () => {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 disabled:cursor-not-allowed text-white font-semibold py-2.5 px-4 rounded-lg transition-colors duration-200 mt-2"
+              className="w-full bg-primary-600 hover:bg-primary-500 disabled:bg-primary-800 disabled:cursor-not-allowed text-white font-semibold py-2.5 px-4 rounded-lg transition-colors duration-200 mt-2"
             >
               {isLoading
                 ? isRegistering
@@ -388,10 +388,10 @@ const SignIn: React.FC = () => {
           </form>
 
           {/* Divider */}
-          <div className="flex items-center gap-3 text-slate-500 text-sm my-5">
-            <div className="flex-1 h-px bg-slate-700" />
+          <div className="flex items-center gap-3 text-neutral-500 text-sm my-5">
+            <div className="flex-1 h-px bg-neutral-700" />
             <span>or</span>
-            <div className="flex-1 h-px bg-slate-700" />
+            <div className="flex-1 h-px bg-neutral-700" />
           </div>
 
           <div className="flex flex-col gap-3">
@@ -399,7 +399,7 @@ const SignIn: React.FC = () => {
             <button
               type="button"
               onClick={handleGoogleSignIn}
-              className="w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-300 text-slate-800 font-medium px-4 py-2.5 rounded-lg transition-colors duration-200"
+              className="w-full flex items-center justify-center gap-3 bg-white hover:bg-neutral-300 text-neutral-800 font-medium px-4 py-2.5 rounded-lg transition-colors duration-200"
             >
               <svg
                 className="w-5 h-5 shrink-0"
@@ -430,7 +430,7 @@ const SignIn: React.FC = () => {
             <button
               type="button"
               onClick={handleMicrosoftSignIn}
-              className="w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-300 text-slate-800 font-medium px-4 py-2.5 rounded-lg transition-colors duration-200"
+              className="w-full flex items-center justify-center gap-3 bg-white hover:bg-neutral-300 text-neutral-800 font-medium px-4 py-2.5 rounded-lg transition-colors duration-200"
             >
               <svg
                 className="w-5 h-5 shrink-0"
@@ -448,7 +448,7 @@ const SignIn: React.FC = () => {
             <button
               type="button"
               onClick={handleFacebookSignIn}
-              className="w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-300 text-slate-800 font-medium px-4 py-2.5 rounded-lg transition-colors duration-200"
+              className="w-full flex items-center justify-center gap-3 bg-white hover:bg-neutral-300 text-neutral-800 font-medium px-4 py-2.5 rounded-lg transition-colors duration-200"
             >
               <svg
                 className="w-5 h-5 shrink-0"

@@ -152,12 +152,12 @@ export default function CalendarSyncModal({ isOpen, onClose }: Props) {
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="w-full max-w-lg bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+      <div className="w-full max-w-lg bg-neutral-900 border border-neutral-700 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-700">
           <div className="flex items-center gap-2.5">
             <svg
-              className="w-5 h-5 text-blue-400"
+              className="w-5 h-5 text-primary-400"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -175,7 +175,7 @@ export default function CalendarSyncModal({ isOpen, onClose }: Props) {
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-white transition-colors rounded-lg p-1 hover:bg-slate-700"
+            className="text-neutral-400 hover:text-white transition-colors rounded-lg p-1 hover:bg-neutral-700"
           >
             <svg
               className="w-5 h-5"
@@ -195,7 +195,7 @@ export default function CalendarSyncModal({ isOpen, onClose }: Props) {
 
         <div className="px-6 py-5 flex flex-col gap-5 overflow-y-auto">
           {/* Explanation */}
-          <p className="text-sm text-slate-400 leading-relaxed">
+          <p className="text-sm text-neutral-400 leading-relaxed">
             Subscribe to your personal calendar feed to see your tracked TV
             episodes and movies directly in Google Calendar, Outlook, Apple
             Calendar, or any app that supports iCal.
@@ -203,17 +203,17 @@ export default function CalendarSyncModal({ isOpen, onClose }: Props) {
 
           {/* URL box */}
           <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+            <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-2">
               Your feed URL
             </p>
             <div className="flex items-stretch gap-2">
-              <div className="flex-1 min-w-0 bg-slate-800 border border-slate-600 rounded-xl px-3 py-2.5 text-xs text-slate-300 font-mono truncate flex items-center">
+              <div className="flex-1 min-w-0 bg-neutral-800 border border-neutral-600 rounded-xl px-3 py-2.5 text-xs text-neutral-300 font-mono truncate flex items-center">
                 {loading ? (
-                  <span className="text-slate-500">Generating URL…</span>
+                  <span className="text-neutral-500">Generating URL…</span>
                 ) : feedUrl ? (
                   feedUrl
                 ) : (
-                  <span className="text-red-400">
+                  <span className="text-error-500">
                     Failed to load — please refresh
                   </span>
                 )}
@@ -224,7 +224,7 @@ export default function CalendarSyncModal({ isOpen, onClose }: Props) {
                 className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all border ${
                   copied
                     ? "bg-emerald-600/20 border-emerald-600/40 text-emerald-400"
-                    : "bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed"
+                    : "bg-neutral-700 border-neutral-600 text-neutral-200 hover:bg-neutral-600 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed"
                 }`}
               >
                 {copied ? (
@@ -264,21 +264,21 @@ export default function CalendarSyncModal({ isOpen, onClose }: Props) {
                 )}
               </button>
             </div>
-            <p className="mt-1.5 text-xs text-slate-500">
+            <p className="mt-1.5 text-xs text-neutral-500">
               Keep this URL private — it gives read access to your watchlist.
             </p>
           </div>
 
           {/* Per-app instructions */}
           <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+            <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-2">
               How to subscribe
             </p>
             <div className="flex flex-col gap-1.5">
               {INSTRUCTIONS.map((app) => (
                 <div
                   key={app.name}
-                  className="rounded-xl border border-slate-700 overflow-hidden"
+                  className="rounded-xl border border-neutral-700 overflow-hidden"
                 >
                   <button
                     onClick={() =>
@@ -286,7 +286,7 @@ export default function CalendarSyncModal({ isOpen, onClose }: Props) {
                         openInstructions === app.name ? null : app.name,
                       )
                     }
-                    className="w-full flex items-center justify-between px-4 py-3 bg-slate-800 hover:bg-slate-750 text-left transition-colors"
+                    className="w-full flex items-center justify-between px-4 py-3 bg-neutral-800 hover:bg-neutral-750 text-left transition-colors"
                     style={{
                       backgroundColor:
                         openInstructions === app.name
@@ -294,12 +294,12 @@ export default function CalendarSyncModal({ isOpen, onClose }: Props) {
                           : undefined,
                     }}
                   >
-                    <span className="flex items-center gap-2.5 text-sm font-medium text-slate-200">
-                      <span className="text-slate-400">{app.icon}</span>
+                    <span className="flex items-center gap-2.5 text-sm font-medium text-neutral-200">
+                      <span className="text-neutral-400">{app.icon}</span>
                       {app.name}
                     </span>
                     <svg
-                      className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
+                      className={`w-4 h-4 text-neutral-400 transition-transform duration-200 ${
                         openInstructions === app.name ? "rotate-180" : ""
                       }`}
                       fill="none"
@@ -315,13 +315,13 @@ export default function CalendarSyncModal({ isOpen, onClose }: Props) {
                     </svg>
                   </button>
                   {openInstructions === app.name && (
-                    <ol className="px-4 py-3 bg-slate-900 flex flex-col gap-2 border-t border-slate-700">
+                    <ol className="px-4 py-3 bg-neutral-900 flex flex-col gap-2 border-t border-neutral-700">
                       {app.steps.map((step, i) => (
                         <li
                           key={i}
-                          className="flex items-start gap-2.5 text-sm text-slate-300"
+                          className="flex items-start gap-2.5 text-sm text-neutral-300"
                         >
-                          <span className="flex-shrink-0 w-5 h-5 rounded-full bg-blue-600/20 text-blue-400 text-xs font-semibold flex items-center justify-center mt-0.5">
+                          <span className="flex-shrink-0 w-5 h-5 rounded-full bg-primary-600/20 text-primary-400 text-xs font-semibold flex items-center justify-center mt-0.5">
                             {i + 1}
                           </span>
                           {step}

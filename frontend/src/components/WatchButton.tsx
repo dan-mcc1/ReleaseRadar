@@ -243,7 +243,14 @@ export default function WatchButton({
       clearDashboardCache();
       clearWatchlistCache();
       clearForYouCache();
-      if (user) updateCachedStatus(user.uid, contentType, contentId, targetStatus, newRating);
+      if (user)
+        updateCachedStatus(
+          user.uid,
+          contentType,
+          contentId,
+          targetStatus,
+          newRating,
+        );
     } catch (err) {
       console.error(err);
       alert("Failed to update status");
@@ -273,7 +280,14 @@ export default function WatchButton({
       clearDashboardCache();
       clearWatchlistCache();
       clearForYouCache();
-      if (user) updateCachedStatus(user.uid, contentType, contentId, watchStatus, newRating);
+      if (user)
+        updateCachedStatus(
+          user.uid,
+          contentType,
+          contentId,
+          watchStatus,
+          newRating,
+        );
     } catch (err) {
       console.error(err);
     } finally {
@@ -286,33 +300,33 @@ export default function WatchButton({
   const config = {
     none: {
       mainClass:
-        "bg-blue-600 hover:bg-blue-500 text-white border border-blue-500",
+        "bg-primary-600 hover:bg-primary-500 text-white border border-primary-500",
       chevronClass:
-        "bg-blue-700 hover:bg-blue-600 border-l border-blue-500 text-white",
+        "bg-primary-700 hover:bg-primary-600 border-l border-primary-500 text-white",
       icon: <IconBookmarkPlus />,
       label: "Add to Watchlist",
     },
     "Want To Watch": {
       mainClass:
-        "bg-slate-700 hover:bg-slate-600 text-blue-300 border border-blue-500/60",
+        "bg-neutral-700 hover:bg-neutral-600 text-primary-300 border border-primary-500/60",
       chevronClass:
-        "bg-slate-700 hover:bg-slate-600 border-l border-blue-500/40 text-blue-400",
+        "bg-neutral-700 hover:bg-neutral-600 border-l border-primary-500/40 text-primary-400",
       icon: <IconBookmarkFilled />,
       label: "On Watchlist",
     },
     "Currently Watching": {
       mainClass:
-        "bg-purple-900/40 hover:bg-purple-900/60 text-purple-300 border border-purple-600/60",
+        "bg-highlight-900/40 hover:bg-highlight-900/60 text-highlight-300 border border-highlight-600/60",
       chevronClass:
-        "bg-purple-900/40 hover:bg-purple-900/60 border-l border-purple-600/40 text-purple-400",
+        "bg-highlight-900/40 hover:bg-highlight-900/60 border-l border-highlight-600/40 text-highlight-400",
       icon: <IconPlay />,
       label: "Watching",
     },
     Watched: {
       mainClass:
-        "bg-green-900/40 hover:bg-green-900/60 text-green-300 border border-green-600/60",
+        "bg-success-900/40 hover:bg-success-900/60 text-success-300 border border-success-600/60",
       chevronClass:
-        "bg-green-900/40 hover:bg-green-900/60 border-l border-green-600/40 text-green-400",
+        "bg-success-900/40 hover:bg-success-900/60 border-l border-success-600/40 text-success-400",
       icon: <IconCheckCircle />,
       label: "Watched",
     },
@@ -353,13 +367,13 @@ export default function WatchButton({
 
         {/* Dropdown menu */}
         {menuOpen && (
-          <div className="absolute left-0 top-full mt-2 w-52 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl shadow-black/60 z-30 overflow-hidden">
+          <div className="absolute left-0 top-full mt-2 w-52 bg-neutral-800 border border-neutral-700 rounded-xl shadow-2xl shadow-black/60 z-30 overflow-hidden">
             {watchStatus !== "Want To Watch" && (
               <button
                 onClick={() => updateWatchStatus("Want To Watch")}
-                className="flex items-center gap-3 w-full text-left px-4 py-3 text-sm text-slate-200 hover:bg-slate-700 transition-colors"
+                className="flex items-center gap-3 w-full text-left px-4 py-3 text-sm text-neutral-200 hover:bg-neutral-700 transition-colors"
               >
-                <span className="text-blue-400">
+                <span className="text-primary-400">
                   <IconBookmarkPlus />
                 </span>
                 Want to Watch
@@ -369,9 +383,9 @@ export default function WatchButton({
             {watchStatus !== "Currently Watching" && (
               <button
                 onClick={() => updateWatchStatus("Currently Watching")}
-                className="flex items-center gap-3 w-full text-left px-4 py-3 text-sm text-slate-200 hover:bg-slate-700 transition-colors"
+                className="flex items-center gap-3 w-full text-left px-4 py-3 text-sm text-neutral-200 hover:bg-neutral-700 transition-colors"
               >
-                <span className="text-purple-400">
+                <span className="text-highlight-400">
                   <IconPlay />
                 </span>
                 Currently Watching
@@ -381,9 +395,9 @@ export default function WatchButton({
             {watchStatus !== "Watched" && (
               <button
                 onClick={() => updateWatchStatus("Watched")}
-                className="flex items-center gap-3 w-full text-left px-4 py-3 text-sm text-slate-200 hover:bg-slate-700 transition-colors"
+                className="flex items-center gap-3 w-full text-left px-4 py-3 text-sm text-neutral-200 hover:bg-neutral-700 transition-colors"
               >
-                <span className="text-green-400">
+                <span className="text-success-400">
                   <IconCheckCircle />
                 </span>
                 Mark as Watched
@@ -392,10 +406,10 @@ export default function WatchButton({
 
             {watchStatus !== "none" && (
               <>
-                <div className="border-t border-slate-700 mx-3" />
+                <div className="border-t border-neutral-700 mx-3" />
                 <button
                   onClick={() => updateWatchStatus("none")}
-                  className="flex items-center gap-3 w-full text-left px-4 py-3 text-sm text-red-400 hover:bg-red-600/10 transition-colors"
+                  className="flex items-center gap-3 w-full text-left px-4 py-3 text-sm text-error-400 hover:bg-error-600/10 transition-colors"
                 >
                   <svg
                     className="w-4 h-4"

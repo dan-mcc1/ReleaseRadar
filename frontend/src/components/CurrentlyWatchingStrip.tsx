@@ -55,7 +55,12 @@ interface ShowCardProps {
   onEpisodeWatched: (showId: number, season: number, episode: number) => void;
 }
 
-function ShowCard({ show, token, initialNext, onEpisodeWatched }: ShowCardProps) {
+function ShowCard({
+  show,
+  token,
+  initialNext,
+  onEpisodeWatched,
+}: ShowCardProps) {
   const [next, setNext] = useState<NextEpisode | null>(initialNext);
   const [marking, setMarking] = useState(false);
   const navigate = useNavigate();
@@ -119,7 +124,7 @@ function ShowCard({ show, token, initialNext, onEpisodeWatched }: ShowCardProps)
   return (
     <div
       onClick={() => episodeUrl && navigate(episodeUrl)}
-      className={`flex-shrink-0 w-72 flex flex-col bg-slate-700/50 rounded-xl overflow-hidden border border-slate-600/50 ${episodeUrl ? "cursor-pointer hover:border-slate-500 transition-colors" : ""}`}
+      className={`flex-shrink-0 w-72 flex flex-col bg-neutral-700/50 rounded-xl overflow-hidden border border-neutral-600/50 ${episodeUrl ? "cursor-pointer hover:border-neutral-500 transition-colors" : ""}`}
     >
       <div className="flex gap-3 p-3 flex-1">
         {/* Poster — links to show, not episode */}
@@ -132,15 +137,15 @@ function ShowCard({ show, token, initialNext, onEpisodeWatched }: ShowCardProps)
             <img
               src={`${BASE_IMAGE_URL}/w342${show.poster_path}`}
               alt={show.name}
-              className="w-12 h-18 rounded-lg object-cover border border-purple-500/50"
+              className="w-12 h-18 rounded-lg object-cover border border-highlight-500/50"
               style={{ height: "72px" }}
             />
           ) : (
             <div
-              className="w-12 rounded-lg bg-slate-600 flex items-center justify-center"
+              className="w-12 rounded-lg bg-neutral-600 flex items-center justify-center"
               style={{ height: "72px" }}
             >
-              <span className="text-slate-400 text-[9px] text-center px-0.5">
+              <span className="text-neutral-400 text-[9px] text-center px-0.5">
                 {show.name}
               </span>
             </div>
@@ -154,28 +159,28 @@ function ShowCard({ show, token, initialNext, onEpisodeWatched }: ShowCardProps)
             <Link
               to={`/tv/${show.id}`}
               onClick={(e) => e.stopPropagation()}
-              className="text-sm font-semibold text-white hover:text-purple-300 transition-colors line-clamp-1"
+              className="text-sm font-semibold text-white hover:text-highlight-300 transition-colors line-clamp-1"
             >
               {show.name}
             </Link>
 
             {next === null && (
-              <p className="text-xs text-slate-500 mt-0.5">Loading…</p>
+              <p className="text-xs text-neutral-500 mt-0.5">Loading…</p>
             )}
 
             {next?.finished && (
-              <p className="text-xs text-green-400 mt-0.5 font-medium">
+              <p className="text-xs text-success-400 mt-0.5 font-medium">
                 All caught up!
               </p>
             )}
 
             {next && !next.finished && (
-              <p className="text-xs text-slate-400 mt-0.5 line-clamp-1">
-                <span className="text-purple-300 font-medium">
+              <p className="text-xs text-neutral-400 mt-0.5 line-clamp-1">
+                <span className="text-highlight-300 font-medium">
                   S{next.season_number}E{next.episode_number}
                 </span>
                 {next.name && (
-                  <span className="text-slate-400"> — {next.name}</span>
+                  <span className="text-neutral-400"> — {next.name}</span>
                 )}
               </p>
             )}
@@ -185,9 +190,9 @@ function ShowCard({ show, token, initialNext, onEpisodeWatched }: ShowCardProps)
             !next.finished &&
             (isUnreleased ? (
               todayStr === next.air_date ? (
-                <span className="mt-2 self-start inline-flex items-center gap-1 text-xs text-slate-400 bg-slate-600/50 border border-slate-600 px-2.5 py-1 rounded-md">
+                <span className="mt-2 self-start inline-flex items-center gap-1 text-xs text-neutral-400 bg-neutral-600/50 border border-neutral-600 px-2.5 py-1 rounded-md">
                   <svg
-                    className="w-3 h-3 text-slate-500"
+                    className="w-3 h-3 text-neutral-500"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -205,9 +210,9 @@ function ShowCard({ show, token, initialNext, onEpisodeWatched }: ShowCardProps)
                     : "soon"}
                 </span>
               ) : (
-                <span className="mt-2 self-start inline-flex items-center gap-1 text-xs text-slate-400 bg-slate-600/50 border border-slate-600 px-2.5 py-1 rounded-md">
+                <span className="mt-2 self-start inline-flex items-center gap-1 text-xs text-neutral-400 bg-neutral-600/50 border border-neutral-600 px-2.5 py-1 rounded-md">
                   <svg
-                    className="w-3 h-3 text-slate-500"
+                    className="w-3 h-3 text-neutral-500"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -229,7 +234,7 @@ function ShowCard({ show, token, initialNext, onEpisodeWatched }: ShowCardProps)
                   markWatched();
                 }}
                 disabled={marking}
-                className="mt-2 self-start inline-flex items-center gap-1.5 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-xs font-medium px-2.5 py-1 rounded-md transition-colors"
+                className="mt-2 self-start inline-flex items-center gap-1.5 bg-highlight-600 hover:bg-highlight-500 disabled:opacity-50 text-white text-xs font-medium px-2.5 py-1 rounded-md transition-colors"
               >
                 {marking ? (
                   <span className="w-3 h-3 border border-white/50 border-t-white rounded-full animate-spin" />
@@ -285,7 +290,9 @@ export default function CurrentlyWatchingStrip({
 }: Props) {
   const [open, setOpen] = useState(false);
   const [token, setToken] = useState<string | null>(null);
-  const [nextEpisodes, setNextEpisodes] = useState<Record<number, NextEpisode>>({});
+  const [nextEpisodes, setNextEpisodes] = useState<Record<number, NextEpisode>>(
+    {},
+  );
   const total = shows.length + movies.length;
 
   useEffect(() => {
@@ -315,16 +322,16 @@ export default function CurrentlyWatchingStrip({
   if (total === 0) return null;
 
   return (
-    <div className="flex flex-col border-b border-slate-700 bg-slate-800/60 max-w-7xl mx-auto">
+    <div className="flex flex-col border-b border-neutral-700 bg-neutral-800/60 max-w-7xl mx-auto">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center gap-2 px-4 sm:px-6 py-3 hover:bg-slate-700/40 transition-colors"
+        className="w-full flex items-center gap-2 px-4 sm:px-6 py-3 hover:bg-neutral-700/40 transition-colors"
       >
-        <span className="flex items-center justify-center w-2 h-2 rounded-full bg-purple-400 animate-pulse flex-shrink-0" />
-        <h2 className="text-sm font-semibold text-slate-200 uppercase tracking-wider">
+        <span className="flex items-center justify-center w-2 h-2 rounded-full bg-highlight-400 animate-pulse flex-shrink-0" />
+        <h2 className="text-sm font-semibold text-neutral-200 uppercase tracking-wider">
           Currently Watching
         </h2>
-        <span className="text-xs text-slate-500 font-normal normal-case tracking-normal">
+        <span className="text-xs text-neutral-500 font-normal normal-case tracking-normal">
           — {total} title{total !== 1 ? "s" : ""}
         </span>
         <svg
@@ -333,7 +340,7 @@ export default function CurrentlyWatchingStrip({
           fill="none"
           stroke="currentColor"
           strokeWidth={2.5}
-          className={`w-4 h-4 ml-auto text-slate-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+          className={`w-4 h-4 ml-auto text-neutral-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
         >
           <path
             strokeLinecap="round"
@@ -363,7 +370,7 @@ export default function CurrentlyWatchingStrip({
               <Link
                 key={`movie-${movie.id}`}
                 to={`/movie/${movie.id}`}
-                className="flex-shrink-0 w-72 flex flex-col bg-slate-700/50 rounded-xl overflow-hidden border border-slate-600/50 hover:border-slate-500 transition-colors"
+                className="flex-shrink-0 w-72 flex flex-col bg-neutral-700/50 rounded-xl overflow-hidden border border-neutral-600/50 hover:border-neutral-500 transition-colors"
               >
                 <div className="flex gap-3 p-3 flex-1">
                   {/* Poster */}
@@ -372,15 +379,15 @@ export default function CurrentlyWatchingStrip({
                       <img
                         src={`${BASE_IMAGE_URL}/w342${movie.poster_path}`}
                         alt={movie.title}
-                        className="w-12 rounded-lg object-cover border border-purple-500/50"
+                        className="w-12 rounded-lg object-cover border border-highlight-500/50"
                         style={{ height: "72px" }}
                       />
                     ) : (
                       <div
-                        className="w-12 rounded-lg bg-slate-600 flex items-center justify-center"
+                        className="w-12 rounded-lg bg-neutral-600 flex items-center justify-center"
                         style={{ height: "72px" }}
                       >
-                        <span className="text-slate-400 text-[9px] text-center px-0.5">
+                        <span className="text-neutral-400 text-[9px] text-center px-0.5">
                           {movie.title}
                         </span>
                       </div>
@@ -390,19 +397,33 @@ export default function CurrentlyWatchingStrip({
                   {/* Info */}
                   <div className="flex-1 min-w-0 flex flex-col justify-between">
                     <div>
-                      <p className="text-sm font-semibold text-white hover:text-purple-300 transition-colors line-clamp-1">
+                      <p className="text-sm font-semibold text-white hover:text-highlight-300 transition-colors line-clamp-1">
                         {movie.title}
                       </p>
-                      <p className="text-xs text-slate-400 mt-0.5">
+                      <p className="text-xs text-neutral-400 mt-0.5">
                         {movie.release_date
-                          ? new Date(movie.release_date + "T00:00:00").getFullYear()
+                          ? new Date(
+                              movie.release_date + "T00:00:00",
+                            ).getFullYear()
                           : ""}
-                        {movie.runtime ? ` · ${Math.floor(movie.runtime / 60) > 0 ? `${Math.floor(movie.runtime / 60)}h ` : ""}${movie.runtime % 60 > 0 ? `${movie.runtime % 60}m` : ""}` : ""}
+                        {movie.runtime
+                          ? ` · ${Math.floor(movie.runtime / 60) > 0 ? `${Math.floor(movie.runtime / 60)}h ` : ""}${movie.runtime % 60 > 0 ? `${movie.runtime % 60}m` : ""}`
+                          : ""}
                       </p>
                     </div>
-                    <span className="mt-2 self-start inline-flex items-center gap-1 text-xs text-slate-400 bg-slate-600/50 border border-slate-600 px-2.5 py-1 rounded-md">
-                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.36a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" />
+                    <span className="mt-2 self-start inline-flex items-center gap-1 text-xs text-neutral-400 bg-neutral-600/50 border border-neutral-600 px-2.5 py-1 rounded-md">
+                      <svg
+                        className="w-3 h-3"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.36a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"
+                        />
                       </svg>
                       Movie
                     </span>

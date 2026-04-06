@@ -31,14 +31,14 @@ interface Props {
 }
 
 const GENRE_COLORS = [
-  "#3b82f6",
-  "#8b5cf6",
-  "#10b981",
-  "#f59e0b",
-  "#ef4444",
-  "#06b6d4",
-  "#f97316",
-  "#ec4899",
+  "#10b981", // primary-500 (emerald)
+  "#8b5cf6", // highlight-500 (purple)
+  "#f59e0b", // warning-500 (yellow)
+  "#ef4444", // error-500 (red)
+  "#3b82f6", // info-500 (blue)
+  "#06b6d4", // cyan
+  "#f97316", // orange
+  "#ec4899", // pink
 ];
 
 const RATING_COLORS: Record<number, string> = {
@@ -59,10 +59,10 @@ function StatCard({
   sub?: string;
 }) {
   return (
-    <div className="bg-slate-700/50 rounded-lg p-4 flex flex-col items-center text-center">
+    <div className="bg-neutral-700/50 rounded-lg p-4 flex flex-col items-center text-center">
       <span className="text-2xl font-bold text-white">{value}</span>
-      <span className="text-sm text-slate-300 mt-1">{label}</span>
-      {sub && <span className="text-xs text-slate-500 mt-0.5">{sub}</span>}
+      <span className="text-sm text-neutral-300 mt-1">{label}</span>
+      {sub && <span className="text-xs text-neutral-500 mt-0.5">{sub}</span>}
     </div>
   );
 }
@@ -83,9 +83,9 @@ export default function StatsSection({ token }: Props) {
 
   if (loading) {
     return (
-      <div className="bg-slate-800 rounded-lg p-4">
+      <div className="bg-neutral-800 rounded-lg p-4">
         <h2 className="text-lg font-semibold mb-4 text-white">Stats</h2>
-        <div className="h-32 flex items-center justify-center text-slate-400 text-sm">
+        <div className="h-32 flex items-center justify-center text-neutral-400 text-sm">
           Loading stats…
         </div>
       </div>
@@ -100,7 +100,7 @@ export default function StatsSection({ token }: Props) {
   const hasGenres = top_genres.length > 0;
 
   return (
-    <div className="bg-slate-800 rounded-lg p-4 space-y-6">
+    <div className="bg-neutral-800 rounded-lg p-4 space-y-6">
       <h2 className="text-lg font-semibold text-white">Stats</h2>
 
       {/* Summary counts */}
@@ -124,20 +124,20 @@ export default function StatsSection({ token }: Props) {
       {(ratings.movie_avg !== null || ratings.show_avg !== null) && (
         <div className="flex gap-4 flex-wrap">
           {ratings.movie_avg !== null && (
-            <div className="flex items-center gap-2 bg-slate-700/50 rounded-lg px-4 py-2">
-              <span className="text-slate-400 text-sm">Avg movie rating</span>
+            <div className="flex items-center gap-2 bg-neutral-700/50 rounded-lg px-4 py-2">
+              <span className="text-neutral-400 text-sm">Avg movie rating</span>
               <span className="text-white font-semibold text-lg">
                 {ratings.movie_avg}
-                <span className="text-slate-400 text-sm">/5</span>
+                <span className="text-neutral-400 text-sm">/5</span>
               </span>
             </div>
           )}
           {ratings.show_avg !== null && (
-            <div className="flex items-center gap-2 bg-slate-700/50 rounded-lg px-4 py-2">
-              <span className="text-slate-400 text-sm">Avg show rating</span>
+            <div className="flex items-center gap-2 bg-neutral-700/50 rounded-lg px-4 py-2">
+              <span className="text-neutral-400 text-sm">Avg show rating</span>
               <span className="text-white font-semibold text-lg">
                 {ratings.show_avg}
-                <span className="text-slate-400 text-sm">/5</span>
+                <span className="text-neutral-400 text-sm">/5</span>
               </span>
             </div>
           )}
@@ -147,7 +147,7 @@ export default function StatsSection({ token }: Props) {
       {/* Rating distribution */}
       {hasRatings && (
         <div>
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-3">
+          <h3 className="text-sm font-semibold uppercase tracking-wider text-neutral-400 mb-3">
             Rating Distribution
           </h3>
           <ResponsiveContainer width="100%" height={160}>
@@ -178,7 +178,9 @@ export default function StatsSection({ token }: Props) {
                 labelStyle={{ color: "#f1f5f9", fontWeight: 600 }}
                 itemStyle={{ color: "#60a5fa" }}
                 formatter={(value) => [value ?? 0, "Ratings"]}
-                labelFormatter={(label) => `${label} ${"★".repeat(Number(label))}${"☆".repeat(5 - Number(label))}`}
+                labelFormatter={(label) =>
+                  `${label} ${"★".repeat(Number(label))}${"☆".repeat(5 - Number(label))}`
+                }
               />
               <Bar dataKey="count" radius={[4, 4, 0, 0]}>
                 {ratings.distribution.map((entry) => (
@@ -196,7 +198,7 @@ export default function StatsSection({ token }: Props) {
       {/* Top genres */}
       {hasGenres && (
         <div>
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-3">
+          <h3 className="text-sm font-semibold uppercase tracking-wider text-neutral-400 mb-3">
             Favorite Genres
           </h3>
           <div className="space-y-2">
@@ -205,10 +207,10 @@ export default function StatsSection({ token }: Props) {
               const pct = Math.round((genre.count / max) * 100);
               return (
                 <div key={genre.name} className="flex items-center gap-3">
-                  <span className="text-slate-300 text-sm w-28 shrink-0 truncate">
+                  <span className="text-neutral-300 text-sm w-28 shrink-0 truncate">
                     {genre.name}
                   </span>
-                  <div className="flex-1 bg-slate-700 rounded-full h-2.5 overflow-hidden">
+                  <div className="flex-1 bg-neutral-700 rounded-full h-2.5 overflow-hidden">
                     <div
                       className="h-full rounded-full transition-all duration-500"
                       style={{
@@ -217,7 +219,7 @@ export default function StatsSection({ token }: Props) {
                       }}
                     />
                   </div>
-                  <span className="text-slate-400 text-sm w-6 text-right shrink-0">
+                  <span className="text-neutral-400 text-sm w-6 text-right shrink-0">
                     {genre.count}
                   </span>
                 </div>
@@ -228,7 +230,7 @@ export default function StatsSection({ token }: Props) {
       )}
 
       {totalWatched === 0 && (
-        <p className="text-slate-400 text-sm text-center py-4">
+        <p className="text-neutral-400 text-sm text-center py-4">
           Watch some movies and shows to see your stats here.
         </p>
       )}

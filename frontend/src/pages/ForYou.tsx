@@ -10,7 +10,10 @@ import { Link } from "react-router-dom";
 type Tab = "movies" | "tv";
 type Mode = "recent" | "top_rated";
 
-const forYouCache = new Map<string, { movies: Movie[]; shows: Show[]; seedCount: number }>();
+const forYouCache = new Map<
+  string,
+  { movies: Movie[]; shows: Show[]; seedCount: number }
+>();
 
 export function clearForYouCache() {
   forYouCache.clear();
@@ -39,7 +42,8 @@ export default function ForYou() {
 
   const PAGE_SIZE = 10;
 
-  const [currentUser, setCurrentUser] = useState<ReturnType<typeof getAuth>["currentUser"]>(null);
+  const [currentUser, setCurrentUser] =
+    useState<ReturnType<typeof getAuth>["currentUser"]>(null);
 
   useEffect(() => {
     const auth = getAuth(firebaseApp);
@@ -71,7 +75,10 @@ export default function ForYou() {
       fetch(`${API_URL}/recommendations/for-you?mode=${mode}`, {
         headers: { Authorization: `Bearer ${token}` },
       })
-        .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
+        .then((r) => {
+          if (!r.ok) throw new Error();
+          return r.json();
+        })
         .then((data) => {
           const movies = data.movies ?? [];
           const shows = data.shows ?? [];
@@ -82,7 +89,7 @@ export default function ForYou() {
           forYouCache.set(cacheKey, { movies, shows, seedCount });
         })
         .catch(console.error)
-        .finally(() => setLoading(false))
+        .finally(() => setLoading(false)),
     );
   }, [currentUser, mode]);
 
@@ -104,9 +111,11 @@ export default function ForYou() {
     return (
       <div className="flex items-center justify-center py-32">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-slate-400 text-sm">
-            {mode === "top_rated" ? "Finding recommendations based on your top rated…" : "Building your recommendations…"}
+          <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+          <p className="text-neutral-400 text-sm">
+            {mode === "top_rated"
+              ? "Finding recommendations based on your top rated…"
+              : "Building your recommendations…"}
           </p>
         </div>
       </div>
@@ -116,8 +125,13 @@ export default function ForYou() {
   if (notSignedIn) {
     return (
       <div className="flex flex-col items-center justify-center py-32 text-center px-4">
-        <p className="text-slate-300 font-medium mb-2">Sign in to see recommendations</p>
-        <Link to="/signIn" className="text-blue-400 hover:text-blue-300 text-sm">
+        <p className="text-neutral-300 font-medium mb-2">
+          Sign in to see recommendations
+        </p>
+        <Link
+          to="/signIn"
+          className="text-primary-400 hover:text-primary-300 text-sm"
+        >
           Sign in →
         </Link>
       </div>
@@ -129,17 +143,30 @@ export default function ForYou() {
       <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 py-8 pb-16">
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-white">For You</h1>
-          <p className="text-slate-400 mt-1">Personalised recommendations</p>
+          <p className="text-neutral-400 mt-1">Personalised recommendations</p>
         </div>
         <div className="flex flex-col items-center justify-center py-24 text-center">
-          <div className="w-16 h-16 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center mb-4">
-            <svg className="w-8 h-8 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+          <div className="w-16 h-16 rounded-full bg-neutral-800 border border-neutral-700 flex items-center justify-center mb-4">
+            <svg
+              className="w-8 h-8 text-neutral-500"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
+              />
             </svg>
           </div>
-          <p className="text-slate-300 font-medium mb-1">Nothing to go on yet</p>
-          <p className="text-slate-500 text-sm max-w-xs">
-            Add some movies or shows to your watched list or watchlist and we'll suggest things you might like.
+          <p className="text-neutral-300 font-medium mb-1">
+            Nothing to go on yet
+          </p>
+          <p className="text-neutral-500 text-sm max-w-xs">
+            Add some movies or shows to your watched list or watchlist and we'll
+            suggest things you might like.
           </p>
         </div>
       </div>
@@ -152,7 +179,7 @@ export default function ForYou() {
       <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
         <div>
           <h1 className="text-3xl font-bold text-white">For You</h1>
-          <p className="text-slate-400 mt-1 text-sm">
+          <p className="text-neutral-400 mt-1 text-sm">
             {mode === "recent"
               ? `Based on your ${seedCount} most recent watched & watchlist items`
               : `Based on your ${seedCount} highest rated items`}
@@ -161,10 +188,12 @@ export default function ForYou() {
         <select
           value={mode}
           onChange={(e) => setMode(e.target.value as Mode)}
-          className="px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 transition cursor-pointer"
+          className="px-3 py-2 rounded-lg bg-neutral-800 border border-neutral-700 text-neutral-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600 transition cursor-pointer"
         >
           {MODES.map((m) => (
-            <option key={m.key} value={m.key}>{m.label}</option>
+            <option key={m.key} value={m.key}>
+              {m.label}
+            </option>
           ))}
         </select>
       </div>
@@ -179,16 +208,16 @@ export default function ForYou() {
               onClick={() => setActiveTab(tab.key)}
               className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                 activeTab === tab.key
-                  ? "bg-blue-600 text-white"
-                  : "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white"
+                  ? "bg-primary-600 text-white"
+                  : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700 hover:text-white"
               }`}
             >
               {tab.label}
               <span
                 className={`text-[11px] px-1.5 py-0.5 rounded-full font-semibold ${
                   activeTab === tab.key
-                    ? "bg-blue-500 text-white"
-                    : "bg-slate-700 text-slate-400"
+                    ? "bg-primary-500 text-white"
+                    : "bg-neutral-700 text-neutral-400"
                 }`}
               >
                 {count}
@@ -200,7 +229,10 @@ export default function ForYou() {
 
       {activeItems.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <p className="text-slate-400">No {activeTab === "movies" ? "movie" : "TV show"} recommendations found.</p>
+          <p className="text-neutral-400">
+            No {activeTab === "movies" ? "movie" : "TV show"} recommendations
+            found.
+          </p>
         </div>
       ) : (
         <>
@@ -211,17 +243,17 @@ export default function ForYou() {
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page === 1}
-                className="px-4 py-2 rounded-lg text-sm font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="px-4 py-2 rounded-lg text-sm font-medium bg-neutral-800 text-neutral-300 hover:bg-neutral-700 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 Previous
               </button>
-              <span className="text-slate-400 text-sm">
+              <span className="text-neutral-400 text-sm">
                 Page {page} of {totalPages}
               </span>
               <button
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}
-                className="px-4 py-2 rounded-lg text-sm font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="px-4 py-2 rounded-lg text-sm font-medium bg-neutral-800 text-neutral-300 hover:bg-neutral-700 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 Next
               </button>

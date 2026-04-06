@@ -59,17 +59,17 @@ function timeAgo(isoString: string) {
 
 function StarDisplay({ rating }: { rating: number }) {
   return (
-    <span className="inline-flex items-center gap-0.5 text-yellow-400 text-xs">
+    <span className="inline-flex items-center gap-0.5 text-warning-400 text-xs">
       {Array.from({ length: 5 }).map((_, i) => (
         <svg
           key={i}
-          className={`w-3 h-3 ${i < Math.round(rating) ? "fill-current" : "fill-slate-600"}`}
+          className={`w-3 h-3 ${i < Math.round(rating) ? "fill-current" : "fill-neutral-600"}`}
           viewBox="0 0 24 24"
         >
           <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
         </svg>
       ))}
-      <span className="text-slate-400 ml-1">{rating}/5</span>
+      <span className="text-neutral-400 ml-1">{rating}/5</span>
     </span>
   );
 }
@@ -90,18 +90,18 @@ function ActivityRow({
   const contentPath = `/${item.content_type === "movie" ? "movie" : "tv"}/${item.content_id}`;
 
   const badge = {
-    watched: { color: "text-green-400", icon: "✓", label: "watched" },
+    watched: { color: "text-success-400", icon: "✓", label: "watched" },
     currently_watching: {
-      color: "text-purple-400",
+      color: "text-highlight-400",
       icon: "▶",
       label: "started watching",
     },
     want_to_watch: {
-      color: "text-blue-400",
+      color: "text-primary-400",
       icon: "🔖",
       label: "added to watchlist",
     },
-    rated: { color: "text-yellow-400", icon: "★", label: "rated" },
+    rated: { color: "text-warning-400", icon: "★", label: "rated" },
     episode_watched: {
       color: "text-teal-400",
       icon: "▶",
@@ -110,7 +110,7 @@ function ActivityRow({
   }[item.activity_type];
 
   return (
-    <div className="flex items-start gap-4 bg-slate-800 border border-slate-700 rounded-xl p-4">
+    <div className="flex items-start gap-4 bg-neutral-800 border border-neutral-700 rounded-xl p-4">
       <Link to={contentPath} className="flex-shrink-0">
         {item.content_poster_path ? (
           <img
@@ -119,7 +119,7 @@ function ActivityRow({
             className="w-12 h-[72px] rounded-lg object-cover hover:opacity-80 transition-opacity"
           />
         ) : (
-          <div className="w-12 h-[72px] bg-slate-700 rounded-lg" />
+          <div className="w-12 h-[72px] bg-neutral-700 rounded-lg" />
         )}
       </Link>
 
@@ -128,12 +128,12 @@ function ActivityRow({
           <span className={`text-xs font-bold ${badge.color}`}>
             {badge.icon}
           </span>
-          <span className="text-xs text-slate-400">{badge.label}</span>
+          <span className="text-xs text-neutral-400">{badge.label}</span>
         </div>
 
         <Link
           to={contentPath}
-          className="font-semibold text-slate-100 hover:text-blue-400 transition-colors line-clamp-1 block"
+          className="font-semibold text-neutral-100 hover:text-primary-400 transition-colors line-clamp-1 block"
         >
           {item.content_title ?? "Unknown"}
         </Link>
@@ -141,7 +141,7 @@ function ActivityRow({
         {item.activity_type === "episode_watched" &&
           item.season_number != null &&
           item.episode_number != null && (
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-xs text-neutral-400 mt-0.5">
               S{String(item.season_number).padStart(2, "0")}E
               {String(item.episode_number).padStart(2, "0")}
             </p>
@@ -155,17 +155,17 @@ function ActivityRow({
 
         <div className="flex items-center gap-2 mt-1.5">
           {isMe ? (
-            <span className="text-sm font-semibold text-slate-300">You</span>
+            <span className="text-sm font-semibold text-neutral-300">You</span>
           ) : (
             <Link
               to={`/user/${item.username}`}
-              className="text-sm font-semibold text-blue-400 hover:underline"
+              className="text-sm font-semibold text-primary-400 hover:underline"
             >
               {nameLabel}
             </Link>
           )}
-          <span className="text-slate-600">·</span>
-          <span className="text-xs text-slate-500">
+          <span className="text-neutral-600">·</span>
+          <span className="text-xs text-neutral-500">
             {timeAgo(item.created_at)}
           </span>
         </div>
@@ -176,8 +176,12 @@ function ActivityRow({
           <WatchButton
             contentType={item.content_type}
             contentId={item.content_id}
-            initialStatus={statusMap[`${item.content_type}:${item.content_id}`]?.status}
-            initialRating={statusMap[`${item.content_type}:${item.content_id}`]?.rating}
+            initialStatus={
+              statusMap[`${item.content_type}:${item.content_id}`]?.status
+            }
+            initialRating={
+              statusMap[`${item.content_type}:${item.content_id}`]?.rating
+            }
           />
         </div>
       )}
@@ -208,8 +212,8 @@ function RecommendationRow({
     <div
       className={`relative flex items-start gap-4 border rounded-xl p-4 transition-colors ${
         item.is_read
-          ? "bg-slate-800 border-slate-700"
-          : "bg-slate-800 border-blue-600/50 ring-1 ring-blue-600/20"
+          ? "bg-neutral-800 border-neutral-700"
+          : "bg-neutral-800 border-primary-600/50 ring-1 ring-primary-600/20"
       }`}
     >
       <Link to={contentPath} onClick={handleRead} className="flex-shrink-0">
@@ -220,22 +224,22 @@ function RecommendationRow({
             className="w-12 h-[72px] rounded-lg object-cover hover:opacity-80 transition-opacity"
           />
         ) : (
-          <div className="w-12 h-[72px] bg-slate-700 rounded-lg" />
+          <div className="w-12 h-[72px] bg-neutral-700 rounded-lg" />
         )}
       </Link>
 
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5 mb-1">
           <span className="text-xs font-bold text-pink-400">♥</span>
-          <span className="text-xs text-slate-400">recommended by</span>
+          <span className="text-xs text-neutral-400">recommended by</span>
           <Link
             to={`/user/${item.sender_username}`}
-            className="text-xs font-semibold text-blue-400 hover:underline"
+            className="text-xs font-semibold text-primary-400 hover:underline"
           >
             @{item.sender_username ?? "someone"}
           </Link>
           {!item.is_read && (
-            <span className="ml-1 bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+            <span className="ml-1 bg-primary-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
               NEW
             </span>
           )}
@@ -244,25 +248,25 @@ function RecommendationRow({
         <Link
           to={contentPath}
           onClick={handleRead}
-          className="font-semibold text-slate-100 hover:text-blue-400 transition-colors line-clamp-1 block"
+          className="font-semibold text-neutral-100 hover:text-primary-400 transition-colors line-clamp-1 block"
         >
           {item.content_title ?? "Unknown"}
         </Link>
 
         {item.message && (
-          <p className="text-sm text-slate-400 mt-1 italic line-clamp-2">
+          <p className="text-sm text-neutral-400 mt-1 italic line-clamp-2">
             "{item.message}"
           </p>
         )}
 
         <div className="flex items-center gap-2 mt-1.5">
-          <span className="text-xs text-slate-500">
+          <span className="text-xs text-neutral-500">
             {timeAgo(item.created_at)}
           </span>
           {!item.is_read && (
             <button
               onClick={handleRead}
-              className="text-xs text-slate-500 hover:text-slate-300 underline"
+              className="text-xs text-neutral-500 hover:text-neutral-300 underline"
             >
               Mark read
             </button>
@@ -273,10 +277,20 @@ function RecommendationRow({
       <button
         onClick={() => onDelete(item.id)}
         title="Delete recommendation"
-        className="absolute top-2 right-2 text-slate-600 hover:text-red-400 transition-colors"
+        className="absolute top-2 right-2 text-neutral-600 hover:text-error-400 transition-colors"
       >
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+        <svg
+          className="w-4 h-4"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M6 18L18 6M6 6l12 12"
+          />
         </svg>
       </button>
 
@@ -285,8 +299,12 @@ function RecommendationRow({
           <WatchButton
             contentType={item.content_type}
             contentId={item.content_id}
-            initialStatus={statusMap[`${item.content_type}:${item.content_id}`]?.status}
-            initialRating={statusMap[`${item.content_type}:${item.content_id}`]?.rating}
+            initialStatus={
+              statusMap[`${item.content_type}:${item.content_id}`]?.status
+            }
+            initialRating={
+              statusMap[`${item.content_type}:${item.content_id}`]?.rating
+            }
             onStatusChange={(status) => {
               if (status !== "none") handleRead();
             }}
@@ -356,7 +374,10 @@ export default function ActivityFeedPage() {
 
   // Bulk-fetch watch statuses for friend items + recommendations
   useEffect(() => {
-    if (!currentUserId || (!friendItems.length && !recommendations.length)) { setStatusesReady(true); return; }
+    if (!currentUserId || (!friendItems.length && !recommendations.length)) {
+      setStatusesReady(true);
+      return;
+    }
     const user = auth.currentUser;
     if (!user) return;
     const seen = new Set<string>();
@@ -367,15 +388,24 @@ export default function ActivityFeedPage() {
         return seen.has(key) ? false : (seen.add(key), true);
       });
     const { cached, missing } = getCachedStatuses(user.uid, unique);
-    if (!missing.length) { setStatusMap(cached as StatusMap); return; }
+    if (!missing.length) {
+      setStatusMap(cached as StatusMap);
+      return;
+    }
     user.getIdToken().then((token) =>
       fetch(`${API_URL}/watchlist/status/bulk`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify(missing),
       })
         .then((r) => (r.ok ? r.json() : {}))
-        .then((data) => { mergeCachedStatuses(user.uid, data); setStatusMap({ ...cached, ...data } as StatusMap); })
+        .then((data) => {
+          mergeCachedStatuses(user.uid, data);
+          setStatusMap({ ...cached, ...data } as StatusMap);
+        })
         .catch(() => setStatusMap(cached as StatusMap))
         .finally(() => setStatusesReady(true)),
     );
@@ -440,13 +470,13 @@ export default function ActivityFeedPage() {
       <h1 className="text-2xl font-bold text-white mb-6">Activity</h1>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 border-b border-slate-700">
+      <div className="flex gap-1 mb-6 border-b border-neutral-700">
         <button
           onClick={() => setTab("mine")}
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
             tab === "mine"
-              ? "border-blue-500 text-blue-400"
-              : "border-transparent text-slate-400 hover:text-slate-200"
+              ? "border-primary-500 text-primary-400"
+              : "border-transparent text-neutral-400 hover:text-neutral-200"
           }`}
         >
           My Activity
@@ -455,8 +485,8 @@ export default function ActivityFeedPage() {
           onClick={() => setTab("friends")}
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
             tab === "friends"
-              ? "border-blue-500 text-blue-400"
-              : "border-transparent text-slate-400 hover:text-slate-200"
+              ? "border-primary-500 text-primary-400"
+              : "border-transparent text-neutral-400 hover:text-neutral-200"
           }`}
         >
           Friends' Activity
@@ -465,13 +495,13 @@ export default function ActivityFeedPage() {
           onClick={() => setTab("recommendations")}
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors relative ${
             tab === "recommendations"
-              ? "border-blue-500 text-blue-400"
-              : "border-transparent text-slate-400 hover:text-slate-200"
+              ? "border-primary-500 text-primary-400"
+              : "border-transparent text-neutral-400 hover:text-neutral-200"
           }`}
         >
           Recommendations
           {unreadCount > 0 && (
-            <span className="ml-1.5 bg-blue-600 text-white text-xs font-bold rounded-full px-1.5 py-0.5">
+            <span className="ml-1.5 bg-primary-600 text-white text-xs font-bold rounded-full px-1.5 py-0.5">
               {unreadCount}
             </span>
           )}
@@ -483,11 +513,11 @@ export default function ActivityFeedPage() {
         <>
           {myLoading && (
             <div className="flex items-center justify-center py-20">
-              <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+              <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
             </div>
           )}
           {!myLoading && myItems.length === 0 && (
-            <div className="text-center py-20 text-slate-400">
+            <div className="text-center py-20 text-neutral-400">
               <p className="text-lg mb-2">No activity yet</p>
               <p className="text-sm">
                 Start tracking shows and movies to see your history here.
@@ -515,18 +545,18 @@ export default function ActivityFeedPage() {
         <>
           {friendsLoading && (
             <div className="flex items-center justify-center py-20">
-              <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+              <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
             </div>
           )}
           {!friendsLoading && friendItems.length === 0 && (
-            <div className="text-center py-20 text-slate-400">
+            <div className="text-center py-20 text-neutral-400">
               <p className="text-lg mb-2">No friend activity yet</p>
               <p className="text-sm">
                 Add friends to see what they're watching.
               </p>
               <Link
                 to="/profile"
-                className="mt-4 inline-block text-blue-400 hover:underline text-sm"
+                className="mt-4 inline-block text-primary-400 hover:underline text-sm"
               >
                 Find friends →
               </Link>
@@ -553,19 +583,22 @@ export default function ActivityFeedPage() {
         <>
           {recsLoading && (
             <div className="flex items-center justify-center py-20">
-              <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+              <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
             </div>
           )}
 
           {!recsLoading && recommendations.length === 0 && (
-            <div className="text-center py-20 text-slate-400">
+            <div className="text-center py-20 text-neutral-400">
               <p className="text-lg mb-2">No recommendations yet</p>
               <p className="text-sm">
                 When a friend recommends a show or movie, it will appear here.
               </p>
               <p className="text-sm mt-1">
                 Visit a friend's profile to recommend something to them, or{" "}
-                <Link to="/profile" className="text-blue-400 hover:underline">
+                <Link
+                  to="/profile"
+                  className="text-primary-400 hover:underline"
+                >
                   find friends
                 </Link>{" "}
                 to get started.
@@ -576,7 +609,14 @@ export default function ActivityFeedPage() {
           {!recsLoading && recommendations.length > 0 && (
             <div className="flex flex-col gap-3">
               {recommendations.map((rec) => (
-                <RecommendationRow key={rec.id} item={rec} onRead={markRead} onDelete={deleteRec} statusMap={statusMap} statusesReady={statusesReady} />
+                <RecommendationRow
+                  key={rec.id}
+                  item={rec}
+                  onRead={markRead}
+                  onDelete={deleteRec}
+                  statusMap={statusMap}
+                  statusesReady={statusesReady}
+                />
               ))}
             </div>
           )}

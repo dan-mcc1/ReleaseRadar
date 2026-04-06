@@ -31,7 +31,7 @@ function ExternalLink({ href, label }: { href: string; label: string }) {
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center text-sm text-slate-400 hover:text-blue-400 bg-slate-800 border border-slate-700 hover:border-blue-600/50 px-3 py-1.5 rounded-lg transition-all duration-150"
+      className="inline-flex items-center text-sm text-neutral-400 hover:text-primary-400 bg-neutral-800 border border-neutral-700 hover:border-primary-600/50 px-3 py-1.5 rounded-lg transition-all duration-150"
     >
       {label}
     </a>
@@ -55,7 +55,7 @@ function CreditList({
 
   return (
     <div>
-      <h2 className="text-xl font-semibold text-slate-100 mb-4">{title}</h2>
+      <h2 className="text-xl font-semibold text-neutral-100 mb-4">{title}</h2>
       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
         {displayed.map((item) => {
           const name = "title" in item ? item.title : item.name;
@@ -72,16 +72,22 @@ function CreditList({
                 <img
                   src={`${BASE_IMAGE_URL}/w342${poster}`}
                   alt={name}
-                  className="w-full rounded-lg object-cover border border-slate-700 group-hover:border-slate-500 transition-all duration-200 group-hover:scale-105"
+                  className="w-full rounded-lg object-cover border border-neutral-700 group-hover:border-neutral-500 transition-all duration-200 group-hover:scale-105"
                 />
               ) : (
-                <div className="w-full aspect-[2/3] bg-slate-800 border border-slate-700 rounded-lg flex items-center justify-center">
-                  <span className="text-slate-500 text-xs text-center px-1">{name}</span>
+                <div className="w-full aspect-[2/3] bg-neutral-800 border border-neutral-700 rounded-lg flex items-center justify-center">
+                  <span className="text-neutral-500 text-xs text-center px-1">
+                    {name}
+                  </span>
                 </div>
               )}
-              <p className="text-xs mt-1.5 text-center text-slate-400 group-hover:text-slate-200 transition-colors line-clamp-1">{name}</p>
+              <p className="text-xs mt-1.5 text-center text-neutral-400 group-hover:text-neutral-200 transition-colors line-clamp-1">
+                {name}
+              </p>
               {role && (
-                <p className="text-xs text-center text-slate-600 truncate">{role}</p>
+                <p className="text-xs text-center text-neutral-600 truncate">
+                  {role}
+                </p>
               )}
             </Link>
           );
@@ -91,7 +97,7 @@ function CreditList({
       {credits.length > limit && (
         <button
           onClick={() => setShowAll(!showAll)}
-          className="mt-4 text-sm text-blue-400 hover:text-blue-300 hover:underline"
+          className="mt-4 text-sm text-primary-400 hover:text-primary-300 hover:underline"
         >
           {showAll ? "Show Less" : `Show ${credits.length - limit} more`}
         </button>
@@ -124,22 +130,25 @@ export default function PersonInfo() {
     getData();
   }, [id]);
 
-  if (loading) return (
-    <div className="flex items-center justify-center min-h-64">
-      <div className="flex flex-col items-center gap-3">
-        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-        <p className="text-slate-400 text-sm">Loading…</p>
+  if (loading)
+    return (
+      <div className="flex items-center justify-center min-h-64">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+          <p className="text-neutral-400 text-sm">Loading…</p>
+        </div>
       </div>
-    </div>
-  );
-  if (error) return <p className="text-red-400 p-6">{error}</p>;
-  if (!person) return <p className="text-slate-400 p-6">Person not found.</p>;
+    );
+  if (error) return <p className="text-error-400 p-6">{error}</p>;
+  if (!person) return <p className="text-neutral-400 p-6">Person not found.</p>;
 
   const BIO_TRUNCATE = 400;
-  const bioIsTruncatable = person.biography && person.biography.length > BIO_TRUNCATE;
-  const displayedBio = bioIsTruncatable && !bioExpanded
-    ? person.biography.slice(0, BIO_TRUNCATE) + "…"
-    : person.biography;
+  const bioIsTruncatable =
+    person.biography && person.biography.length > BIO_TRUNCATE;
+  const displayedBio =
+    bioIsTruncatable && !bioExpanded
+      ? person.biography.slice(0, BIO_TRUNCATE) + "…"
+      : person.biography;
 
   return (
     <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 py-8 pb-16 space-y-10">
@@ -151,7 +160,7 @@ export default function PersonInfo() {
             <img
               src={`${BASE_IMAGE_URL}/w500${person.profile_path}`}
               alt={person.name}
-              className="w-40 sm:w-48 rounded-2xl object-cover border border-slate-700 shadow-2xl shadow-black/50"
+              className="w-40 sm:w-48 rounded-2xl object-cover border border-neutral-700 shadow-2xl shadow-black/50"
             />
           </div>
         )}
@@ -161,30 +170,42 @@ export default function PersonInfo() {
           <div>
             <h1 className="text-3xl font-bold text-white">{person.name}</h1>
             {person.known_for_department && (
-              <p className="text-slate-400 mt-1">{person.known_for_department}</p>
+              <p className="text-neutral-400 mt-1">
+                {person.known_for_department}
+              </p>
             )}
           </div>
 
           {/* Bio facts */}
           <div className="grid grid-cols-2 gap-3 text-sm">
             {person.birthday && (
-              <div className="bg-slate-800 border border-slate-700 rounded-xl px-4 py-3">
-                <div className="text-slate-500 text-xs uppercase tracking-wide mb-0.5">Born</div>
-                <div className="text-slate-200">
-                  {formatLocalDate(person.birthday, { year: "numeric", month: "long", day: "numeric" })}
+              <div className="bg-neutral-800 border border-neutral-700 rounded-xl px-4 py-3">
+                <div className="text-neutral-500 text-xs uppercase tracking-wide mb-0.5">
+                  Born
+                </div>
+                <div className="text-neutral-200">
+                  {formatLocalDate(person.birthday, {
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric",
+                  })}
                 </div>
               </div>
             )}
             {person.deathday && (
-              <div className="bg-slate-800 border border-slate-700 rounded-xl px-4 py-3">
-                <div className="text-slate-500 text-xs uppercase tracking-wide mb-0.5">Died</div>
-                <div className="text-slate-200">{person.deathday}</div>
+              <div className="bg-neutral-800 border border-neutral-700 rounded-xl px-4 py-3">
+                <div className="text-neutral-500 text-xs uppercase tracking-wide mb-0.5">
+                  Died
+                </div>
+                <div className="text-neutral-200">{person.deathday}</div>
               </div>
             )}
             {person.place_of_birth && (
-              <div className="bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 col-span-2">
-                <div className="text-slate-500 text-xs uppercase tracking-wide mb-0.5">Place of Birth</div>
-                <div className="text-slate-200">{person.place_of_birth}</div>
+              <div className="bg-neutral-800 border border-neutral-700 rounded-xl px-4 py-3 col-span-2">
+                <div className="text-neutral-500 text-xs uppercase tracking-wide mb-0.5">
+                  Place of Birth
+                </div>
+                <div className="text-neutral-200">{person.place_of_birth}</div>
               </div>
             )}
           </div>
@@ -192,11 +213,36 @@ export default function PersonInfo() {
           {/* External links */}
           {person.external_ids && (
             <div className="flex flex-wrap gap-2">
-              {person.external_ids.imdb_id && <ExternalLink href={`https://www.imdb.com/name/${person.external_ids.imdb_id}`} label="IMDb" />}
-              {person.external_ids.instagram_id && <ExternalLink href={`https://www.instagram.com/${person.external_ids.instagram_id}`} label="Instagram" />}
-              {person.external_ids.twitter_id && <ExternalLink href={`https://twitter.com/${person.external_ids.twitter_id}`} label="Twitter / X" />}
-              {person.external_ids.facebook_id && <ExternalLink href={`https://www.facebook.com/${person.external_ids.facebook_id}`} label="Facebook" />}
-              {person.external_ids.wikidata_id && <ExternalLink href={`https://www.wikidata.org/wiki/${person.external_ids.wikidata_id}`} label="Wikidata" />}
+              {person.external_ids.imdb_id && (
+                <ExternalLink
+                  href={`https://www.imdb.com/name/${person.external_ids.imdb_id}`}
+                  label="IMDb"
+                />
+              )}
+              {person.external_ids.instagram_id && (
+                <ExternalLink
+                  href={`https://www.instagram.com/${person.external_ids.instagram_id}`}
+                  label="Instagram"
+                />
+              )}
+              {person.external_ids.twitter_id && (
+                <ExternalLink
+                  href={`https://twitter.com/${person.external_ids.twitter_id}`}
+                  label="Twitter / X"
+                />
+              )}
+              {person.external_ids.facebook_id && (
+                <ExternalLink
+                  href={`https://www.facebook.com/${person.external_ids.facebook_id}`}
+                  label="Facebook"
+                />
+              )}
+              {person.external_ids.wikidata_id && (
+                <ExternalLink
+                  href={`https://www.wikidata.org/wiki/${person.external_ids.wikidata_id}`}
+                  label="Wikidata"
+                />
+              )}
             </div>
           )}
         </div>
@@ -205,12 +251,14 @@ export default function PersonInfo() {
       {/* Biography */}
       {person.biography && (
         <div>
-          <h2 className="text-slate-400 text-xs uppercase tracking-wider font-semibold mb-3">Biography</h2>
-          <p className="text-slate-300 leading-relaxed">{displayedBio}</p>
+          <h2 className="text-neutral-400 text-xs uppercase tracking-wider font-semibold mb-3">
+            Biography
+          </h2>
+          <p className="text-neutral-300 leading-relaxed">{displayedBio}</p>
           {bioIsTruncatable && (
             <button
               onClick={() => setBioExpanded(!bioExpanded)}
-              className="mt-2 text-sm text-blue-400 hover:text-blue-300 hover:underline"
+              className="mt-2 text-sm text-primary-400 hover:text-primary-300 hover:underline"
             >
               {bioExpanded ? "Show less" : "Read more"}
             </button>

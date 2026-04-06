@@ -75,12 +75,12 @@ function RatingBadge({
 }) {
   return (
     <div
-      className={`flex flex-col items-center bg-slate-800 border rounded-xl px-4 py-3 min-w-[80px] ${color}`}
+      className={`flex flex-col items-center bg-neutral-800 border rounded-xl px-4 py-3 min-w-[80px] ${color}`}
     >
-      <span className="text-slate-100 font-bold text-lg leading-tight">
+      <span className="text-neutral-100 font-bold text-lg leading-tight">
         {value}
       </span>
-      <span className="text-slate-500 text-xs mt-0.5 whitespace-nowrap">
+      <span className="text-neutral-500 text-xs mt-0.5 whitespace-nowrap">
         {label}
       </span>
     </div>
@@ -96,11 +96,11 @@ function StatBox({
 }) {
   if (!value && value !== 0) return null;
   return (
-    <div className="flex flex-col items-center bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 min-w-[80px]">
-      <span className="text-slate-100 font-bold text-lg leading-tight">
+    <div className="flex flex-col items-center bg-neutral-800 border border-neutral-700 rounded-xl px-4 py-3 min-w-[80px]">
+      <span className="text-neutral-100 font-bold text-lg leading-tight">
         {value}
       </span>
-      <span className="text-slate-500 text-xs mt-0.5 whitespace-nowrap">
+      <span className="text-neutral-500 text-xs mt-0.5 whitespace-nowrap">
         {label}
       </span>
     </div>
@@ -113,7 +113,7 @@ function ExternalLink({ href, label }: { href: string; label: string }) {
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-blue-400 bg-slate-800 border border-slate-700 hover:border-blue-600/50 px-3 py-1.5 rounded-lg transition-all duration-150"
+      className="inline-flex items-center gap-1.5 text-sm text-neutral-400 hover:text-primary-400 bg-neutral-800 border border-neutral-700 hover:border-primary-600/50 px-3 py-1.5 rounded-lg transition-all duration-150"
     >
       {label}
     </a>
@@ -229,13 +229,13 @@ export default function ShowInfo() {
     return (
       <div className="flex items-center justify-center min-h-64">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-slate-400 text-sm">Loading show info…</p>
+          <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+          <p className="text-neutral-400 text-sm">Loading show info…</p>
         </div>
       </div>
     );
-  if (error) return <p className="text-red-400 p-6">{error}</p>;
-  if (!show) return <p className="text-slate-400 p-6">Show not found.</p>;
+  if (error) return <p className="text-error-400 p-6">{error}</p>;
+  if (!show) return <p className="text-neutral-400 p-6">Show not found.</p>;
 
   const year = show.first_air_date
     ? parseLocalDate(show.first_air_date).getFullYear()
@@ -256,11 +256,11 @@ export default function ShowInfo() {
             className="w-full h-80 md:h-96 object-cover object-top"
           />
         ) : (
-          <div className="w-full h-64 bg-gradient-to-br from-slate-800 to-slate-900" />
+          <div className="w-full h-64 bg-gradient-to-br from-neutral-800 to-neutral-900" />
         )}
         {/* Gradient overlays */}
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-slate-950/10" />
-        <div className="absolute inset-0 bg-gradient-to-r from-slate-950/60 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-neutral-950/40 to-neutral-950/10" />
+        <div className="absolute inset-0 bg-gradient-to-r from-neutral-950/60 to-transparent" />
 
         {/* Hero content */}
         <div className="absolute bottom-0 left-0 right-0 px-6 pb-6 flex items-end gap-5">
@@ -287,7 +287,7 @@ export default function ShowInfo() {
               </h1>
             )}
             {show.tagline && (
-              <p className="text-slate-300 italic text-sm mt-1">
+              <p className="text-neutral-300 italic text-sm mt-1">
                 {show.tagline}
               </p>
             )}
@@ -322,7 +322,7 @@ export default function ShowInfo() {
               href={`https://www.youtube.com/watch?v=${trailer.key}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm font-semibold transition-colors"
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-error-600 hover:bg-error-500 text-white text-sm font-semibold transition-colors"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -342,7 +342,7 @@ export default function ShowInfo() {
             {show.genres.map((genre) => (
               <span
                 key={genre.id}
-                className="px-3 py-1 text-sm rounded-full bg-slate-700/60 border border-slate-600 text-slate-300"
+                className="px-3 py-1 text-sm rounded-full bg-neutral-700/60 border border-neutral-600 text-neutral-300"
               >
                 {genre.name}
               </span>
@@ -362,7 +362,7 @@ export default function ShowInfo() {
         {/* Ratings row */}
         {(show.vote_average || externalScores || aggRating?.average) && (
           <div>
-            <h2 className="text-slate-400 text-xs uppercase tracking-wider font-semibold mb-3">
+            <h2 className="text-neutral-400 text-xs uppercase tracking-wider font-semibold mb-3">
               Ratings
             </h2>
             <div className="flex flex-wrap gap-3">
@@ -370,7 +370,7 @@ export default function ShowInfo() {
                 <RatingBadge
                   label="TMDb"
                   value={`${show.vote_average.toFixed(1)}/10`}
-                  color="border-2 border-blue-800"
+                  color="border-2 border-primary-800"
                 />
               )}
               {externalScores?.imdb && (
@@ -379,8 +379,8 @@ export default function ShowInfo() {
                   value={externalScores.imdb}
                   color={
                     parseInt(externalScores.imdb) >= 6.0
-                      ? "border-2 border-green-800"
-                      : "border-2 border-red-800"
+                      ? "border-2 border-success-800"
+                      : "border-2 border-error-800"
                   }
                 />
               )}
@@ -390,8 +390,8 @@ export default function ShowInfo() {
                   value={externalScores.rotten_tomatoes}
                   color={
                     parseInt(externalScores.rotten_tomatoes) >= 60
-                      ? "border-2 border-green-800"
-                      : "border-2 border-red-800"
+                      ? "border-2 border-success-800"
+                      : "border-2 border-error-800"
                   }
                 />
               )}
@@ -399,14 +399,14 @@ export default function ShowInfo() {
                 <RatingBadge
                   label="Metacritic"
                   value={externalScores.metacritic.replace("/100", "")}
-                  color="border-yellow-800/50"
+                  color="border-warning-800/50"
                 />
               )}
               {aggRating?.average && (
                 <RatingBadge
                   label={`Users (${aggRating.count})`}
                   value={`${aggRating.average}/5 ★`}
-                  color="border-purple-800/50"
+                  color="border-highlight-800/50"
                 />
               )}
             </div>
@@ -416,8 +416,8 @@ export default function ShowInfo() {
         {/* Created by */}
         {show.created_by && show.created_by.length > 0 && (
           <div>
-            <span className="text-slate-400 text-sm">Created by </span>
-            <span className="text-slate-200 font-medium">
+            <span className="text-neutral-400 text-sm">Created by </span>
+            <span className="text-neutral-200 font-medium">
               {show.created_by.map((c) => c.name).join(", ")}
             </span>
           </div>
@@ -426,10 +426,10 @@ export default function ShowInfo() {
         {/* Overview */}
         {show.overview && (
           <div>
-            <h2 className="text-slate-400 text-xs uppercase tracking-wider font-semibold mb-2">
+            <h2 className="text-neutral-400 text-xs uppercase tracking-wider font-semibold mb-2">
               Overview
             </h2>
-            <p className="text-slate-300 leading-relaxed">{show.overview}</p>
+            <p className="text-neutral-300 leading-relaxed">{show.overview}</p>
           </div>
         )}
 
@@ -437,10 +437,10 @@ export default function ShowInfo() {
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
           {show.first_air_date && (
             <div>
-              <div className="text-slate-500 text-xs uppercase tracking-wide mb-0.5">
+              <div className="text-neutral-500 text-xs uppercase tracking-wide mb-0.5">
                 First Aired
               </div>
-              <div className="text-slate-200">
+              <div className="text-neutral-200">
                 {formatLocalDate(show.first_air_date, {
                   year: "numeric",
                   month: "long",
@@ -451,10 +451,10 @@ export default function ShowInfo() {
           )}
           {show.last_air_date && (
             <div>
-              <div className="text-slate-500 text-xs uppercase tracking-wide mb-0.5">
+              <div className="text-neutral-500 text-xs uppercase tracking-wide mb-0.5">
                 Last Aired
               </div>
-              <div className="text-slate-200">
+              <div className="text-neutral-200">
                 {formatLocalDate(show.last_air_date, {
                   year: "numeric",
                   month: "long",
@@ -465,14 +465,14 @@ export default function ShowInfo() {
           )}
           {show.homepage && (
             <div>
-              <div className="text-slate-500 text-xs uppercase tracking-wide mb-0.5">
+              <div className="text-neutral-500 text-xs uppercase tracking-wide mb-0.5">
                 Homepage
               </div>
               <a
                 href={show.homepage}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-blue-400 hover:underline truncate block"
+                className="text-primary-400 hover:underline truncate block"
               >
                 Official Site
               </a>
@@ -498,7 +498,7 @@ export default function ShowInfo() {
         {/* External Links */}
         {show.external_ids && (
           <div>
-            <h2 className="text-slate-400 text-xs uppercase tracking-wider font-semibold mb-3">
+            <h2 className="text-neutral-400 text-xs uppercase tracking-wider font-semibold mb-3">
               External Links
             </h2>
             <div className="flex flex-wrap gap-2">
@@ -548,7 +548,7 @@ export default function ShowInfo() {
         {/* Recommendations */}
         {show.recommendations?.results.length > 0 && (
           <div>
-            <h2 className="text-xl font-semibold text-slate-100 mb-4">
+            <h2 className="text-xl font-semibold text-neutral-100 mb-4">
               You Might Also Like
             </h2>
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
@@ -558,16 +558,16 @@ export default function ShowInfo() {
                     <img
                       src={`${BASE_IMAGE_URL}/w342${rec.poster_path}`}
                       alt={rec.name}
-                      className="w-full rounded-lg object-cover border border-slate-700 group-hover:border-slate-500 transition-all duration-200 group-hover:scale-105"
+                      className="w-full rounded-lg object-cover border border-neutral-700 group-hover:border-neutral-500 transition-all duration-200 group-hover:scale-105"
                     />
                   ) : (
-                    <div className="w-full aspect-[2/3] bg-slate-800 border border-slate-700 rounded-lg flex items-center justify-center">
-                      <span className="text-slate-500 text-xs text-center px-1">
+                    <div className="w-full aspect-[2/3] bg-neutral-800 border border-neutral-700 rounded-lg flex items-center justify-center">
+                      <span className="text-neutral-500 text-xs text-center px-1">
                         {rec.name}
                       </span>
                     </div>
                   )}
-                  <p className="text-xs mt-1.5 text-slate-400 group-hover:text-slate-200 transition-colors text-center line-clamp-1">
+                  <p className="text-xs mt-1.5 text-neutral-400 group-hover:text-neutral-200 transition-colors text-center line-clamp-1">
                     {rec.name}
                   </p>
                 </Link>

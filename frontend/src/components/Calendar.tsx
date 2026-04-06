@@ -375,20 +375,15 @@ export default function CalendarComponent({
     return (
       <div
         onClick={() => setItemsForDay(day.date)}
-        className={`relative px-1 sm:px-2 py-1 sm:py-2 overflow-y-auto border border-slate-700/50 cursor-pointer transition-colors duration-150 ${
+        className={`relative px-1 sm:px-2 py-1 sm:py-2 overflow-y-auto border border-neutral-700/50 cursor-pointer transition-colors duration-150 ${
           isCompact ? "min-h-20 sm:min-h-32" : "min-h-32 sm:min-h-48"
         } ${
           isToday
-            ? "bg-blue-700 font-bold"
+            ? "bg-primary-900 font-bold"
             : isSelected
-              ? "bg-slate-700 ring-2 ring-inset ring-blue-500"
-              : "bg-slate-800 hover:bg-slate-750"
+              ? "bg-neutral-700 ring-2 ring-inset ring-primary-500"
+              : "bg-neutral-800 hover:bg-neutral-750"
         }`}
-        style={
-          !isToday && !isSelected
-            ? { backgroundColor: "rgb(28 36 52)" }
-            : undefined
-        }
       >
         <time
           dateTime={isoDate}
@@ -396,8 +391,8 @@ export default function CalendarComponent({
             isToday
               ? "text-white"
               : isSelected
-                ? "text-blue-300"
-                : "text-slate-300"
+                ? "text-primary-300"
+                : "text-neutral-300"
           }`}
         >
           {day.date.getDate()}
@@ -408,7 +403,7 @@ export default function CalendarComponent({
               (_, idx) => (
                 <div
                   key={idx}
-                  className="mt-1 h-8 sm:h-14 rounded-md bg-slate-700 animate-pulse"
+                  className="mt-1 h-8 sm:h-14 rounded-md bg-neutral-700 animate-pulse"
                 />
               ),
             )
@@ -466,32 +461,32 @@ export default function CalendarComponent({
   return (
     <div className="lg:flex lg:h-full lg:flex-col max-w-7xl mx-auto">
       {/* Header */}
-      <header className="flex items-center justify-between border-b border-slate-700 px-4 sm:px-6 py-3 sm:py-4 bg-slate-900">
+      <header className="flex items-center justify-between border-b border-neutral-700 px-4 sm:px-6 py-3 sm:py-4 bg-neutral-900">
         <div className="flex items-center gap-3">
           <span className="text-lg sm:text-2xl font-bold text-white">
             Release Radar
           </span>
           {viewMode === "month" && upcomingThisMonth > 0 && (
-            <span className="hidden sm:inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-600/20 text-blue-400 border border-blue-600/30">
+            <span className="hidden sm:inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-600/20 text-primary-400 border border-primary-600/30">
               {upcomingThisMonth} upcoming
             </span>
           )}
         </div>
         <button
           onClick={handleGoToToday}
-          className="rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-blue-500 transition-colors"
+          className="rounded-lg bg-primary-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-primary-500 transition-colors"
         >
           Today
         </button>
       </header>
 
       {/* Controls bar */}
-      <div className="border-b border-slate-700 bg-slate-900">
+      <div className="border-b border-neutral-700 bg-neutral-900">
         {/* Mobile-only: period navigation row */}
         <div className="flex lg:hidden items-center justify-between px-4 pt-2 pb-1">
           <button
             onClick={handlePrev}
-            className="h-8 w-8 flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
+            className="h-8 w-8 flex items-center justify-center text-neutral-400 hover:text-white hover:bg-neutral-700 rounded-lg transition-colors"
           >
             <svg
               className="w-4 h-4"
@@ -507,12 +502,12 @@ export default function CalendarComponent({
               />
             </svg>
           </button>
-          <div className="text-sm font-semibold text-slate-100 text-center">
+          <div className="text-sm font-semibold text-neutral-100 text-center">
             {getCenterLabel()}
           </div>
           <button
             onClick={handleNext}
-            className="h-8 w-8 flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
+            className="h-8 w-8 flex items-center justify-center text-neutral-400 hover:text-white hover:bg-neutral-700 rounded-lg transition-colors"
           >
             <svg
               className="w-4 h-4"
@@ -535,15 +530,15 @@ export default function CalendarComponent({
           {/* LEFT: view toggle + filter dropdown */}
           <div className="flex items-center gap-2">
             {/* View mode */}
-            <div className="inline-flex rounded-lg border border-slate-600 overflow-hidden">
+            <div className="inline-flex rounded-lg border border-neutral-600 overflow-hidden">
               {(["day", "week", "month"] as ViewMode[]).map(
                 (mode, idx, arr) => (
                   <button
                     key={mode}
                     onClick={() => setViewMode(mode)}
                     className={`py-1.5 text-xs sm:text-sm font-medium capitalize transition-colors px-2 sm:px-3
-                    ${viewMode === mode ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white"}
-                    ${idx < arr.length - 1 ? "border-r border-slate-600" : ""}
+                    ${viewMode === mode ? "bg-primary-600 text-white" : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700 hover:text-white"}
+                    ${idx < arr.length - 1 ? "border-r border-neutral-600" : ""}
                   `}
                   >
                     <span className="sm:hidden">
@@ -562,7 +557,7 @@ export default function CalendarComponent({
               <button
                 onClick={() => setShowFilters((v) => !v)}
                 className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg border transition-colors
-                  ${showFilters ? "bg-slate-700 border-slate-500 text-white" : "bg-slate-800 border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white"}
+                  ${showFilters ? "bg-neutral-700 border-neutral-500 text-white" : "bg-neutral-800 border-neutral-600 text-neutral-300 hover:bg-neutral-700 hover:text-white"}
                 `}
               >
                 <svg
@@ -580,17 +575,17 @@ export default function CalendarComponent({
                 </svg>
                 <span className="hidden sm:inline">Filter</span>
                 {(filterType !== "all" || watchFilter !== "all") && (
-                  <span className="w-2 h-2 rounded-full bg-blue-400" />
+                  <span className="w-2 h-2 rounded-full bg-primary-400" />
                 )}
               </button>
 
               {showFilters && (
-                <div className="absolute left-0 top-full mt-1.5 z-20 w-56 rounded-xl border border-slate-600 bg-slate-800 shadow-xl p-3 flex flex-col gap-3">
+                <div className="absolute left-0 top-full mt-1.5 z-20 w-56 rounded-xl border border-neutral-600 bg-neutral-800 shadow-xl p-3 flex flex-col gap-3">
                   <div>
-                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                    <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-1.5">
                       Type
                     </p>
-                    <div className="inline-flex rounded-lg border border-slate-600 overflow-hidden w-full">
+                    <div className="inline-flex rounded-lg border border-neutral-600 overflow-hidden w-full">
                       {(["all", "movie", "tv"] as const).map(
                         (value, idx, arr) => {
                           const label =
@@ -607,8 +602,8 @@ export default function CalendarComponent({
                                 setItemsForDay(selectedDate.date);
                               }}
                               className={`flex-1 py-1.5 text-sm font-medium transition-colors
-                              ${filterType === value ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white"}
-                              ${idx < arr.length - 1 ? "border-r border-slate-600" : ""}
+                              ${filterType === value ? "bg-primary-600 text-white" : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700 hover:text-white"}
+                              ${idx < arr.length - 1 ? "border-r border-neutral-600" : ""}
                             `}
                             >
                               {label}
@@ -620,10 +615,10 @@ export default function CalendarComponent({
                   </div>
 
                   <div>
-                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                    <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-1.5">
                       Status
                     </p>
-                    <div className="inline-flex rounded-lg border border-slate-600 overflow-hidden w-full">
+                    <div className="inline-flex rounded-lg border border-neutral-600 overflow-hidden w-full">
                       {(["all", "unwatched", "watched"] as const).map(
                         (value, idx, arr) => {
                           const label =
@@ -640,8 +635,8 @@ export default function CalendarComponent({
                                 setItemsForDay(selectedDate.date);
                               }}
                               className={`flex-1 py-1.5 text-sm font-medium transition-colors
-                              ${watchFilter === value ? "bg-emerald-600 text-white" : "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white"}
-                              ${idx < arr.length - 1 ? "border-r border-slate-600" : ""}
+                              ${watchFilter === value ? "bg-emerald-600 text-white" : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700 hover:text-white"}
+                              ${idx < arr.length - 1 ? "border-r border-neutral-600" : ""}
                             `}
                             >
                               {label}
@@ -659,7 +654,7 @@ export default function CalendarComponent({
                         setWatchFilter("all");
                         setItemsForDay(selectedDate.date);
                       }}
-                      className="text-xs text-slate-400 hover:text-white transition-colors text-left"
+                      className="text-xs text-neutral-400 hover:text-white transition-colors text-left"
                     >
                       Clear filters
                     </button>
@@ -673,7 +668,7 @@ export default function CalendarComponent({
           <div className="hidden lg:flex absolute left-1/2 -translate-x-1/2 items-center gap-1">
             <button
               onClick={handlePrev}
-              className="h-8 w-8 flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
+              className="h-8 w-8 flex items-center justify-center text-neutral-400 hover:text-white hover:bg-neutral-700 rounded-lg transition-colors"
             >
               <svg
                 className="w-4 h-4"
@@ -689,12 +684,12 @@ export default function CalendarComponent({
                 />
               </svg>
             </button>
-            <div className="px-3 text-base font-semibold text-slate-100 whitespace-nowrap min-w-[180px] text-center">
+            <div className="px-3 text-base font-semibold text-neutral-100 whitespace-nowrap min-w-[180px] text-center">
               {getCenterLabel()}
             </div>
             <button
               onClick={handleNext}
-              className="h-8 w-8 flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
+              className="h-8 w-8 flex items-center justify-center text-neutral-400 hover:text-white hover:bg-neutral-700 rounded-lg transition-colors"
             >
               <svg
                 className="w-4 h-4"
@@ -718,7 +713,7 @@ export default function CalendarComponent({
               <button
                 onClick={onSyncCalendar}
                 title="Sync with Google Calendar, Outlook, or Apple Calendar"
-                className="rounded-lg bg-slate-700 border border-slate-600 px-3 py-1.5 text-xs sm:text-sm font-medium text-slate-200 hover:bg-slate-600 hover:text-white transition-colors flex items-center gap-1.5"
+                className="rounded-lg bg-neutral-700 border border-neutral-600 px-3 py-1.5 text-xs sm:text-sm font-medium text-neutral-200 hover:bg-neutral-600 hover:text-white transition-colors flex items-center gap-1.5"
               >
                 <svg
                   className="w-4 h-4 flex-shrink-0"
@@ -740,7 +735,7 @@ export default function CalendarComponent({
               <>
                 <button
                   onClick={() => setShowWatchlist(true)}
-                  className="rounded-lg bg-slate-700 border border-slate-600 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium text-slate-200 hover:bg-slate-600 hover:text-white transition-colors"
+                  className="rounded-lg bg-neutral-700 border border-neutral-600 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium text-neutral-200 hover:bg-neutral-600 hover:text-white transition-colors"
                 >
                   <span className="sm:hidden">List</span>
                   <span className="hidden sm:inline">Watchlist</span>
@@ -758,9 +753,9 @@ export default function CalendarComponent({
       </div>
 
       {/* Initial-release disclaimer */}
-      <div className="px-4 py-1.5 bg-slate-900/60 border-b border-slate-700/50 flex items-center gap-1.5">
+      <div className="px-4 py-1.5 bg-neutral-900/60 border-b border-neutral-700/50 flex items-center gap-1.5">
         <svg
-          className="w-3 h-3 text-slate-500 flex-shrink-0"
+          className="w-3 h-3 text-neutral-500 flex-shrink-0"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -772,7 +767,7 @@ export default function CalendarComponent({
             d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
           />
         </svg>
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-neutral-500">
           Shows initial air dates only — reruns are not included.
         </p>
       </div>
@@ -780,7 +775,7 @@ export default function CalendarComponent({
       {/* ── MONTH VIEW ── */}
       {viewMode === "month" && (
         <div className="flex flex-auto flex-col">
-          <div className="grid grid-cols-7 text-center text-xs font-semibold uppercase tracking-wider text-slate-500 bg-slate-900 border-b border-slate-700">
+          <div className="grid grid-cols-7 text-center text-xs font-semibold uppercase tracking-wider text-neutral-500 bg-neutral-900 border-b border-neutral-700">
             {dayNames.map(([letter, full], i) => (
               <div key={i} className="py-2.5">
                 <span className="sm:hidden">{letter}</span>
@@ -792,12 +787,12 @@ export default function CalendarComponent({
             ))}
           </div>
 
-          <div className="flex-auto bg-slate-700 grid-rows-auto">
+          <div className="flex-auto bg-neutral-700 grid-rows-auto">
             <div className="w-full grid grid-cols-7 gap-px">
               {emptyCells.map((_, idx) => (
                 <div
                   key={`empty-${idx}`}
-                  className="bg-slate-950 min-h-[5rem] sm:min-h-[8rem] max-h-[14rem]"
+                  className="bg-neutral-950 min-h-[5rem] sm:min-h-[8rem] max-h-[14rem]"
                 />
               ))}
               {daysOfMonth.map((day) => (
@@ -811,24 +806,24 @@ export default function CalendarComponent({
       {/* ── WEEK VIEW ── */}
       {viewMode === "week" && (
         <div className="flex flex-auto flex-col">
-          <div className="grid grid-cols-7 border-b border-slate-700 bg-slate-900">
+          <div className="grid grid-cols-7 border-b border-neutral-700 bg-neutral-900">
             {getWeekDays().map((day, i) => {
               const isToday = day.date.toDateString() === today.toDateString();
               return (
                 <div
                   key={i}
-                  className={`flex flex-col items-center py-3 border-r border-slate-700 last:border-r-0 ${
-                    isToday ? "bg-blue-600/20" : ""
+                  className={`flex flex-col items-center py-3 border-r border-neutral-700 last:border-r-0 ${
+                    isToday ? "bg-primary-600/20" : ""
                   }`}
                 >
                   <span
-                    className={`text-xs uppercase tracking-wide font-medium ${isToday ? "text-blue-400" : "text-slate-500"}`}
+                    className={`text-xs uppercase tracking-wide font-medium ${isToday ? "text-primary-400" : "text-neutral-500"}`}
                   >
                     {dayNames[i][0]}
                     {dayNames[i][1]}
                   </span>
                   <span
-                    className={`mt-1 text-xl font-bold ${isToday ? "text-blue-400" : "text-slate-200"}`}
+                    className={`mt-1 text-xl font-bold ${isToday ? "text-primary-400" : "text-neutral-200"}`}
                   >
                     {day.date.getDate()}
                   </span>
@@ -837,7 +832,7 @@ export default function CalendarComponent({
             })}
           </div>
 
-          <div className="flex-auto bg-slate-700">
+          <div className="flex-auto bg-neutral-700">
             <div className="w-full grid grid-cols-7 gap-px">
               {getWeekDays().map((day) => (
                 <DayCell key={day.date.toISOString()} day={day} />
@@ -849,9 +844,9 @@ export default function CalendarComponent({
 
       {/* ── SELECTED DAY DETAIL (month & week views) ── */}
       {viewMode !== "day" && (
-        <div className="border-t border-slate-700 bg-slate-900/50 px-4 sm:px-6 py-4 sm:py-6">
+        <div className="border-t border-neutral-700 bg-neutral-900/50 px-4 sm:px-6 py-4 sm:py-6">
           <div className="flex items-center gap-3 mb-4">
-            <h2 className="text-lg font-semibold text-slate-100">
+            <h2 className="text-lg font-semibold text-neutral-100">
               {selectedDate.date.toLocaleDateString(undefined, {
                 weekday: "long",
                 year: "numeric",
@@ -860,7 +855,7 @@ export default function CalendarComponent({
               })}
             </h2>
             {selectedDate.items && selectedDate.items.length > 0 && (
-              <span className="text-xs text-slate-400 bg-slate-800 border border-slate-700 px-2 py-0.5 rounded-full">
+              <span className="text-xs text-neutral-400 bg-neutral-800 border border-neutral-700 px-2 py-0.5 rounded-full">
                 {getFilteredItems(selectedDate.items).length} item
                 {getFilteredItems(selectedDate.items).length !== 1 ? "s" : ""}
               </span>
@@ -875,7 +870,7 @@ export default function CalendarComponent({
                 onMarkWatched={onMarkEpisodeWatched}
               />
             ) : (
-              <p className="text-slate-500 italic">
+              <p className="text-neutral-500 italic">
                 Nothing scheduled for this day.
               </p>
             )}
@@ -887,7 +882,7 @@ export default function CalendarComponent({
       {viewMode === "day" && (
         <div className="px-4 sm:px-6 py-4 sm:py-6">
           <div className="flex items-center gap-3 mb-4">
-            <h2 className="text-xl font-semibold text-slate-100">
+            <h2 className="text-xl font-semibold text-neutral-100">
               {selectedDate.date.toLocaleDateString(undefined, {
                 weekday: "long",
                 year: "numeric",
@@ -896,7 +891,7 @@ export default function CalendarComponent({
               })}
             </h2>
             {selectedDate.items && selectedDate.items.length > 0 && (
-              <span className="text-xs text-slate-400 bg-slate-800 border border-slate-700 px-2 py-0.5 rounded-full">
+              <span className="text-xs text-neutral-400 bg-neutral-800 border border-neutral-700 px-2 py-0.5 rounded-full">
                 {getFilteredItems(selectedDate.items).length} item
                 {getFilteredItems(selectedDate.items).length !== 1 ? "s" : ""}
               </span>
@@ -911,7 +906,7 @@ export default function CalendarComponent({
                 onMarkWatched={onMarkEpisodeWatched}
               />
             ) : (
-              <p className="text-slate-500 italic">
+              <p className="text-neutral-500 italic">
                 Nothing scheduled for this day.
               </p>
             )}

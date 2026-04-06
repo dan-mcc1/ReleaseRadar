@@ -82,27 +82,31 @@ function getEpisodeTag(
     case "show_premiere":
       return {
         label: "Series Premiere",
-        classes: "bg-purple-600/80 text-purple-100 border border-purple-400/50",
+        classes:
+          "bg-highlight-600/80 text-highlight-100 border border-highlight-400/50",
       };
     case "season_premiere":
       return {
         label: "Season Premiere",
-        classes: "bg-blue-600/80 text-blue-100 border border-blue-400/50",
+        classes:
+          "bg-primary-600/80 text-primary-100 border border-primary-400/50",
       };
     case "season_finale":
       return {
         label: "Season Finale",
-        classes: "bg-orange-600/80 text-orange-100 border border-orange-400/50",
+        classes:
+          "bg-warning-600/80 text-warning-100 border border-warning-400/50",
       };
     case "series_finale":
       return {
         label: "Series Finale",
-        classes: "bg-red-700/80 text-red-100 border border-red-500/50",
+        classes: "bg-error-700/80 text-error-100 border border-error-500/50",
       };
     case "mid_season":
       return {
         label: "Mid-Season Finale",
-        classes: "bg-yellow-600/80 text-yellow-100 border border-yellow-400/50",
+        classes:
+          "bg-warning-600/80 text-warning-100 border border-warning-400/50",
       };
     default:
       return null;
@@ -114,7 +118,7 @@ function TypeBadge({ type }: { type: "tv" | "movie" }) {
     <span
       className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
         type === "tv"
-          ? "bg-purple-600/20 text-purple-400 border border-purple-600/30"
+          ? "bg-highlight-600/20 text-highlight-400 border border-highlight-600/30"
           : "bg-amber-600/20 text-amber-400 border border-amber-600/30"
       }`}
     >
@@ -221,7 +225,7 @@ function ItemCard({ item, isWatched, token, onMarkWatched }: ItemCardProps) {
   return (
     <Link
       to={contentPath}
-      className="group flex gap-0 bg-slate-800 rounded-xl overflow-hidden border border-slate-700 hover:border-slate-500 transition-all duration-200 hover:shadow-lg hover:shadow-black/30"
+      className="group flex gap-0 bg-neutral-800 rounded-xl overflow-hidden border border-neutral-700 hover:border-neutral-500 transition-all duration-200 hover:shadow-lg hover:shadow-black/30"
     >
       {imageSrc && (
         <div
@@ -232,7 +236,7 @@ function ItemCard({ item, isWatched, token, onMarkWatched }: ItemCardProps) {
             alt={title}
             className="h-full w-full object-cover"
           />
-          <div className="absolute inset-0 bg-gradient-to-r from-transparent to-slate-800/20" />
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent to-neutral-800/20" />
           {episodeTag && (
             <span
               className={`absolute bottom-1.5 left-1.5 text-[10px] font-semibold px-1.5 py-0.5 rounded backdrop-blur-sm ${episodeTag.classes}`}
@@ -246,7 +250,7 @@ function ItemCard({ item, isWatched, token, onMarkWatched }: ItemCardProps) {
         <div className="flex items-center gap-2 mb-1 flex-wrap">
           <TypeBadge type={item.type} />
           {isTv && (
-            <span className="text-slate-500 text-xs">
+            <span className="text-neutral-500 text-xs">
               S{(item as Episode & { type: "tv" }).season_number}E
               {(item as Episode & { type: "tv" }).episode_number}
             </span>
@@ -259,21 +263,21 @@ function ItemCard({ item, isWatched, token, onMarkWatched }: ItemCardProps) {
             </span>
           )}
         </div>
-        <div className="font-semibold text-slate-100 group-hover:text-blue-300 transition-colors line-clamp-1">
+        <div className="font-semibold text-neutral-100 group-hover:text-primary-300 transition-colors line-clamp-1">
           {title}
         </div>
         {episodeName && (
-          <div className="text-slate-400 text-sm mt-0.5 line-clamp-1">
+          <div className="text-neutral-400 text-sm mt-0.5 line-clamp-1">
             {episodeName}
           </div>
         )}
         {overview && (
-          <p className="text-slate-500 text-xs mt-1.5 line-clamp-2 hidden sm:block">
+          <p className="text-neutral-500 text-xs mt-1.5 line-clamp-2 hidden sm:block">
             {overview}
           </p>
         )}
         {runtime != null && runtime > 0 && (
-          <div className="text-slate-500 text-xs mt-2">
+          <div className="text-neutral-500 text-xs mt-2">
             <RuntimeBadge minutes={runtime} />
           </div>
         )}
@@ -282,7 +286,7 @@ function ItemCard({ item, isWatched, token, onMarkWatched }: ItemCardProps) {
         {isTv && token && isReleased && (
           <div className="mt-2">
             {localWatched ? (
-              <span className="inline-flex items-center gap-1 text-xs text-green-400 font-medium">
+              <span className="inline-flex items-center gap-1 text-xs text-success-400 font-medium">
                 <svg
                   className="w-3.5 h-3.5"
                   viewBox="0 0 24 24"
@@ -302,7 +306,7 @@ function ItemCard({ item, isWatched, token, onMarkWatched }: ItemCardProps) {
               <button
                 onClick={handleMarkWatched}
                 disabled={marking}
-                className="inline-flex items-center gap-1 bg-slate-700 hover:bg-purple-600 disabled:opacity-50 text-slate-300 hover:text-white text-xs font-medium px-2.5 py-1 rounded-md transition-colors"
+                className="inline-flex items-center gap-1 bg-neutral-700 hover:bg-highlight-600 disabled:opacity-50 text-neutral-300 hover:text-white text-xs font-medium px-2.5 py-1 rounded-md transition-colors"
               >
                 {marking ? (
                   <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
@@ -339,7 +343,7 @@ export default function DayScheduleView({
 }: Props) {
   if (items.length === 0) {
     return (
-      <p className="text-slate-500 italic">Nothing scheduled for this day.</p>
+      <p className="text-neutral-500 italic">Nothing scheduled for this day.</p>
     );
   }
 
@@ -405,10 +409,10 @@ export default function DayScheduleView({
       {timedGroups.map(({ label, items: groupItems }) => (
         <div key={label}>
           <div className="flex items-center gap-3 mb-3">
-            <span className="text-sm font-semibold text-blue-400 whitespace-nowrap">
+            <span className="text-sm font-semibold text-primary-400 whitespace-nowrap">
               {label}
             </span>
-            <div className="flex-1 h-px bg-slate-700" />
+            <div className="flex-1 h-px bg-neutral-700" />
           </div>
           <div className="flex flex-col gap-3">
             {groupItems.map((item) => (

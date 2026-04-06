@@ -209,12 +209,12 @@ export default function FriendProfilePage() {
   }
 
   if (loading) {
-    return <div className="p-8 text-center text-slate-400">Loading…</div>;
+    return <div className="p-8 text-center text-neutral-400">Loading…</div>;
   }
 
   if (error || !profile) {
     return (
-      <div className="p-8 text-center text-slate-400">
+      <div className="p-8 text-center text-neutral-400">
         {error ?? "Something went wrong."}
       </div>
     );
@@ -244,25 +244,25 @@ export default function FriendProfilePage() {
   return (
     <div className="w-full max-w-6xl mx-auto px-4 py-8 space-y-8">
       {/* Header */}
-      <div className="bg-[#2d4e63] rounded-lg text-white overflow-hidden">
+      <div className="bg-primary-700 rounded-lg text-white overflow-hidden">
         <div className="flex items-center gap-6 p-6">
-          <div className="w-24 h-24 rounded-full bg-slate-600 flex items-center justify-center text-3xl font-bold text-slate-300 border-2 border-white/20">
+          <div className="w-24 h-24 rounded-full bg-neutral-600 flex items-center justify-center text-3xl font-bold text-neutral-300 border-2 border-white/20">
             {profile.username[0].toUpperCase()}
           </div>
           <div className="flex-1">
             <h1 className="text-2xl font-bold">@{profile.username}</h1>
             {profile.bio && (
-              <p className="text-slate-300 text-sm mt-1">{profile.bio}</p>
+              <p className="text-neutral-300 text-sm mt-1">{profile.bio}</p>
             )}
             {!profile.is_friend &&
               !profile.is_following &&
               profile.profile_visibility === "friends_only" && (
-                <p className="text-slate-300 text-sm mt-1">
+                <p className="text-neutral-300 text-sm mt-1">
                   Add this person as a friend to see their lists.
                 </p>
               )}
             {!profile.is_friend && profile.profile_visibility === "private" && (
-              <p className="text-slate-300 text-sm mt-1">
+              <p className="text-neutral-300 text-sm mt-1">
                 This account is private.
               </p>
             )}
@@ -274,7 +274,7 @@ export default function FriendProfilePage() {
                 <button
                   onClick={() => respondToRequest(true)}
                   disabled={requesting}
-                  className="flex items-center gap-2 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+                  className="flex items-center gap-2 bg-success-600 hover:bg-success-500 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
                 >
                   {requesting ? (
                     <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
@@ -284,7 +284,7 @@ export default function FriendProfilePage() {
                 <button
                   onClick={() => respondToRequest(false)}
                   disabled={requesting}
-                  className="flex items-center gap-2 bg-slate-600 hover:bg-slate-500 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+                  className="flex items-center gap-2 bg-neutral-600 hover:bg-neutral-500 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
                 >
                   Decline
                 </button>
@@ -293,7 +293,7 @@ export default function FriendProfilePage() {
               <button
                 onClick={unfollow}
                 disabled={requesting}
-                className="flex items-center gap-2 bg-slate-600 hover:bg-slate-500 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+                className="flex items-center gap-2 bg-neutral-600 hover:bg-neutral-500 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
               >
                 {requesting ? (
                   <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
@@ -318,7 +318,7 @@ export default function FriendProfilePage() {
               <button
                 onClick={cancelRequest}
                 disabled={requesting}
-                className="flex items-center gap-2 bg-slate-600 hover:bg-slate-500 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+                className="flex items-center gap-2 bg-neutral-600 hover:bg-neutral-500 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
               >
                 {requesting ? (
                   <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
@@ -343,7 +343,7 @@ export default function FriendProfilePage() {
               <button
                 onClick={sendRequest}
                 disabled={requesting}
-                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+                className="flex items-center gap-2 bg-primary-600 hover:bg-primary-500 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
               >
                 {requesting ? (
                   <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
@@ -382,7 +382,7 @@ export default function FriendProfilePage() {
             ].map(({ label, value }) => (
               <div key={label} className="flex-1 py-3 text-center">
                 <p className="text-lg font-bold text-white">{value}</p>
-                <p className="text-xs text-slate-400">{label}</p>
+                <p className="text-xs text-neutral-400">{label}</p>
               </div>
             ))}
           </div>
@@ -393,12 +393,12 @@ export default function FriendProfilePage() {
       {canSeeDetails &&
         favorites &&
         (favorites.movies.length > 0 || favorites.shows.length > 0) && (
-          <div className="bg-slate-800 rounded-lg p-4 space-y-4">
+          <div className="bg-neutral-800 rounded-lg p-4 space-y-4">
             <h2 className="text-lg font-semibold text-white">Favorites</h2>
 
             {favorites.movies.length > 0 && (
               <div>
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-3">
                   Movies ({favorites.movies.length})
                 </h3>
                 <ExpandableMediaList
@@ -411,7 +411,7 @@ export default function FriendProfilePage() {
 
             {favorites.shows.length > 0 && (
               <div>
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-3">
                   TV Shows ({favorites.shows.length})
                 </h3>
                 <ExpandableMediaList
@@ -426,10 +426,10 @@ export default function FriendProfilePage() {
 
       {/* Friends list — shown to friends (non-private) and on public profiles */}
       {canSeeDetails && friends.length > 0 && (
-        <div className="bg-slate-800 rounded-lg p-4">
+        <div className="bg-neutral-800 rounded-lg p-4">
           <h2 className="text-lg font-semibold text-white mb-3">
             Friends{" "}
-            <span className="text-slate-400 text-sm font-normal">
+            <span className="text-neutral-400 text-sm font-normal">
               ({friends.length})
             </span>
           </h2>
@@ -438,12 +438,12 @@ export default function FriendProfilePage() {
               <Link
                 key={friendship_id}
                 to={`/user/${friend.username}`}
-                className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 transition-colors px-3 py-2 rounded-lg"
+                className="flex items-center gap-2 bg-neutral-700 hover:bg-neutral-600 transition-colors px-3 py-2 rounded-lg"
               >
-                <div className="w-7 h-7 rounded-full bg-slate-500 flex items-center justify-center text-xs font-bold text-slate-200 flex-shrink-0">
+                <div className="w-7 h-7 rounded-full bg-neutral-500 flex items-center justify-center text-xs font-bold text-neutral-200 flex-shrink-0">
                   {friend.username[0].toUpperCase()}
                 </div>
-                <span className="text-sm text-slate-200">
+                <span className="text-sm text-neutral-200">
                   @{friend.username}
                 </span>
               </Link>
@@ -456,12 +456,12 @@ export default function FriendProfilePage() {
       {canSeeDetails && watchlist && watched && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Watchlist */}
-          <div className="bg-slate-800 rounded-lg p-4 space-y-4">
+          <div className="bg-neutral-800 rounded-lg p-4 space-y-4">
             <h2 className="text-lg font-semibold text-white">Watchlist</h2>
 
             {watchlist.movies.length > 0 && (
               <div>
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-3">
                   Movies ({watchlist.movies.length})
                 </h3>
                 <ExpandableMediaList
@@ -474,7 +474,7 @@ export default function FriendProfilePage() {
 
             {watchlist.shows.length > 0 && (
               <div>
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-3">
                   TV Shows ({watchlist.shows.length})
                 </h3>
                 <ExpandableMediaList
@@ -486,19 +486,19 @@ export default function FriendProfilePage() {
             )}
 
             {watchlist.movies.length === 0 && watchlist.shows.length === 0 && (
-              <p className="text-slate-400 text-sm">
+              <p className="text-neutral-400 text-sm">
                 Nothing on their watchlist.
               </p>
             )}
           </div>
 
           {/* Watched */}
-          <div className="bg-slate-800 rounded-lg p-4 space-y-4">
+          <div className="bg-neutral-800 rounded-lg p-4 space-y-4">
             <h2 className="text-lg font-semibold text-white">Watched</h2>
 
             {watched.movies.length > 0 && (
               <div>
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-3">
                   Movies ({watched.movies.length})
                 </h3>
                 <ExpandableMediaList
@@ -511,7 +511,7 @@ export default function FriendProfilePage() {
 
             {watched.shows.length > 0 && (
               <div>
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-3">
                   TV Shows ({watched.shows.length})
                 </h3>
                 <ExpandableMediaList
@@ -523,7 +523,7 @@ export default function FriendProfilePage() {
             )}
 
             {watched.movies.length === 0 && watched.shows.length === 0 && (
-              <p className="text-slate-400 text-sm">Nothing watched yet.</p>
+              <p className="text-neutral-400 text-sm">Nothing watched yet.</p>
             )}
           </div>
         </div>

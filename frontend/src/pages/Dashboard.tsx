@@ -17,7 +17,6 @@ import { usePageTitle } from "../hooks/usePageTitle";
 import { Link } from "react-router-dom";
 import { getDashboardCache, setDashboardCache } from "../utils/dashboardCache";
 
-
 export default function Dashboard() {
   usePageTitle();
   const [user, setUser] = useState<User | null>(null);
@@ -258,7 +257,7 @@ export default function Dashboard() {
   if (authLoading) {
     return (
       <div className="flex items-center justify-center py-32">
-        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -271,16 +270,16 @@ export default function Dashboard() {
           <h1 className="text-4xl font-bold text-white mb-3">
             Track What You Watch
           </h1>
-          <p className="text-slate-400 mb-6 max-w-md mx-auto">
+          <p className="text-neutral-400 mb-6 max-w-md mx-auto">
             Keep up with your favourite shows and movies. Log what you've
             watched, build your watchlist, and never miss a release.
           </p>
-          <p className="text-xs text-slate-600 mb-6 max-w-sm mx-auto">
+          <p className="text-xs text-neutral-600 mb-6 max-w-sm mx-auto">
             Calendar shows initial air dates only — reruns are not included.
           </p>
           <Link
             to="/signIn"
-            className="inline-block bg-blue-600 hover:bg-blue-500 text-white font-semibold px-6 py-2.5 rounded-lg transition-colors"
+            className="inline-block bg-primary-600 hover:bg-primary-500 text-white font-semibold px-6 py-2.5 rounded-lg transition-colors"
           >
             Sign in to get started
           </Link>
@@ -288,7 +287,7 @@ export default function Dashboard() {
 
         {guestLoading && (
           <div className="flex items-center justify-center py-20">
-            <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
           </div>
         )}
 
@@ -306,7 +305,7 @@ export default function Dashboard() {
                   </div>
                   <Link
                     to="/trending"
-                    className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
+                    className="text-sm text-primary-400 hover:text-primary-300 transition-colors"
                   >
                     See all →
                   </Link>
@@ -329,7 +328,7 @@ export default function Dashboard() {
                   <h2 className="text-2xl font-bold text-white">Coming Soon</h2>
                   <Link
                     to="/upcoming"
-                    className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
+                    className="text-sm text-primary-400 hover:text-primary-300 transition-colors"
                   >
                     See all →
                   </Link>
@@ -351,10 +350,10 @@ export default function Dashboard() {
               </h2>
               <Link
                 to="/search-genres"
-                className="inline-flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-slate-600 text-slate-200 font-medium px-5 py-3 rounded-xl transition-colors"
+                className="inline-flex items-center gap-2 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 hover:border-neutral-600 text-neutral-200 font-medium px-5 py-3 rounded-xl transition-colors"
               >
                 <svg
-                  className="w-5 h-5 text-slate-400"
+                  className="w-5 h-5 text-neutral-400"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -415,7 +414,7 @@ export default function Dashboard() {
             <h2 className="text-xl font-bold text-white">For You</h2>
             <Link
               to="/for-you"
-              className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
+              className="text-sm text-primary-400 hover:text-primary-300 transition-colors"
             >
               See all →
             </Link>

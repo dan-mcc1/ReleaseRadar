@@ -9,7 +9,12 @@ import FriendRequests from "../components/FriendRequests";
 import FriendsList from "../components/FriendsList";
 import StatsSection from "../components/StatsSection";
 import { usePageTitle } from "../hooks/usePageTitle";
-import { getCachedWatchlist, setCachedWatchlist, getCachedWatched, setCachedWatched } from "../utils/watchlistCache";
+import {
+  getCachedWatchlist,
+  setCachedWatchlist,
+  getCachedWatched,
+  setCachedWatched,
+} from "../utils/watchlistCache";
 
 interface DBUser {
   id: string;
@@ -136,20 +141,21 @@ export default function ProfilePage() {
   const [addingBack, setAddingBack] = useState<string | null>(null);
 
   async function fetchFriends(tok: string) {
-    const [friendsRes, incomingRes, outgoingRes, followersRes] = await Promise.all([
-      fetch(`${API_URL}/friends/`, {
-        headers: { Authorization: `Bearer ${tok}` },
-      }),
-      fetch(`${API_URL}/friends/requests/incoming`, {
-        headers: { Authorization: `Bearer ${tok}` },
-      }),
-      fetch(`${API_URL}/friends/requests/outgoing`, {
-        headers: { Authorization: `Bearer ${tok}` },
-      }),
-      fetch(`${API_URL}/friends/followers`, {
-        headers: { Authorization: `Bearer ${tok}` },
-      }),
-    ]);
+    const [friendsRes, incomingRes, outgoingRes, followersRes] =
+      await Promise.all([
+        fetch(`${API_URL}/friends/`, {
+          headers: { Authorization: `Bearer ${tok}` },
+        }),
+        fetch(`${API_URL}/friends/requests/incoming`, {
+          headers: { Authorization: `Bearer ${tok}` },
+        }),
+        fetch(`${API_URL}/friends/requests/outgoing`, {
+          headers: { Authorization: `Bearer ${tok}` },
+        }),
+        fetch(`${API_URL}/friends/followers`, {
+          headers: { Authorization: `Bearer ${tok}` },
+        }),
+      ]);
     setFriends(friendsRes.ok ? await friendsRes.json() : []);
     setIncoming(incomingRes.ok ? await incomingRes.json() : []);
     setOutgoing(outgoingRes.ok ? await outgoingRes.json() : []);
@@ -162,12 +168,17 @@ export default function ProfilePage() {
     try {
       const res = await fetch(`${API_URL}/friends/request`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({ addressee_username: follower.username }),
       });
       if (res.ok) {
         // Upgrade from follower → mutual friend
-        setFollowers((prev) => prev.filter((f) => f.follower.id !== follower.id));
+        setFollowers((prev) =>
+          prev.filter((f) => f.follower.id !== follower.id),
+        );
         setFriends((prev) => [...prev, { friendship_id: 0, friend: follower }]);
       }
     } finally {
@@ -185,15 +196,31 @@ export default function ProfilePage() {
       const cachedWatchlist = getCachedWatchlist(uid);
       const cachedWatched = getCachedWatched(uid);
 
-      const [meRes, favoritesRes, watchlistRes, watchedRes] = await Promise.all([
-        fetch(`${API_URL}/user/me`, { headers: { Authorization: `Bearer ${tok}` } }),
-        fetch(`${API_URL}/favorites`, { headers: { Authorization: `Bearer ${tok}` } }),
-        cachedWatchlist ? Promise.resolve(null) : fetch(`${API_URL}/watchlist`, { headers: { Authorization: `Bearer ${tok}` } }),
-        cachedWatched ? Promise.resolve(null) : fetch(`${API_URL}/watched`, { headers: { Authorization: `Bearer ${tok}` } }),
-      ]);
+      const [meRes, favoritesRes, watchlistRes, watchedRes] = await Promise.all(
+        [
+          fetch(`${API_URL}/user/me`, {
+            headers: { Authorization: `Bearer ${tok}` },
+          }),
+          fetch(`${API_URL}/favorites`, {
+            headers: { Authorization: `Bearer ${tok}` },
+          }),
+          cachedWatchlist
+            ? Promise.resolve(null)
+            : fetch(`${API_URL}/watchlist`, {
+                headers: { Authorization: `Bearer ${tok}` },
+              }),
+          cachedWatched
+            ? Promise.resolve(null)
+            : fetch(`${API_URL}/watched`, {
+                headers: { Authorization: `Bearer ${tok}` },
+              }),
+        ],
+      );
 
       setDbUser(meRes.ok ? await meRes.json() : null);
-      setFavorites(favoritesRes.ok ? await favoritesRes.json() : { movies: [], shows: [] });
+      setFavorites(
+        favoritesRes.ok ? await favoritesRes.json() : { movies: [], shows: [] },
+      );
 
       if (cachedWatchlist) {
         setWatchlist(cachedWatchlist);
@@ -240,7 +267,7 @@ export default function ProfilePage() {
 
   if (!user) {
     return (
-      <div className="p-8 text-center text-gray-400">
+      <div className="p-8 text-center text-neutral-400">
         You must be signed in to view your profile.
       </div>
     );
@@ -254,7 +281,7 @@ export default function ProfilePage() {
   return (
     <div className="w-full max-w-6xl mx-auto px-4 py-8 space-y-6">
       {/* ── Hero banner ── */}
-      <div className="rounded-2xl overflow-hidden bg-gradient-to-br from-[#1f3b4d] via-[#2d4e63] to-[#1a3040]">
+      <div className="rounded-2xl overflow-hidden bg-gradient-to-br from-primary-800 via-primary-700 to-primary-900">
         <div className="px-6 pt-8 pb-6 flex flex-col sm:flex-row items-center sm:items-end gap-5">
           <HeroAvatar avatarKey={dbUser?.avatar_key} photoURL={user.photoURL} />
           <div className="flex-1 text-center sm:text-left">
@@ -263,19 +290,19 @@ export default function ProfilePage() {
             </h1>
             <div className="mt-1 flex items-center gap-2 justify-center sm:justify-start">
               {dbUser?.username ? (
-                <span className="text-slate-300 text-sm">
+                <span className="text-neutral-300 text-sm">
                   @{dbUser.username}
                 </span>
               ) : (
                 <span className="text-amber-400 text-sm">No username set</span>
               )}
             </div>
-            <p className="text-slate-400 text-sm mt-1">{user.email}</p>
-            <p className="text-slate-500 text-xs mt-0.5">
+            <p className="text-neutral-400 text-sm mt-1">{user.email}</p>
+            <p className="text-neutral-500 text-xs mt-0.5">
               Joined {user.metadata?.creationTime?.split("T")[0]}
             </p>
             {dbUser?.bio && (
-              <p className="text-slate-300 text-sm mt-2">{dbUser.bio}</p>
+              <p className="text-neutral-300 text-sm mt-2">{dbUser.bio}</p>
             )}
           </div>
         </div>
@@ -290,7 +317,7 @@ export default function ProfilePage() {
           ].map(({ label, value }) => (
             <div key={label} className="flex-1 py-3 text-center">
               <p className="text-lg font-bold text-white">{value}</p>
-              <p className="text-xs text-slate-400">{label}</p>
+              <p className="text-xs text-neutral-400">{label}</p>
             </div>
           ))}
         </div>
@@ -302,13 +329,13 @@ export default function ProfilePage() {
         <div className="lg:col-span-2 space-y-4">
           {/* Favorites */}
           {(favorites.movies.length > 0 || favorites.shows.length > 0) && (
-            <div className="bg-slate-800 rounded-xl p-4">
+            <div className="bg-neutral-800 rounded-xl p-4">
               <h2 className="text-base font-semibold text-white mb-3">
                 Favorites
               </h2>
               {favorites.movies.length > 0 && (
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-2">
                     Movies
                   </p>
                   <div className="flex gap-3 overflow-x-auto pb-1">
@@ -324,7 +351,7 @@ export default function ProfilePage() {
                             alt={movie.title}
                             className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity"
                           />
-                          <p className="mt-1 text-xs font-medium text-slate-300 text-center line-clamp-1">
+                          <p className="mt-1 text-xs font-medium text-neutral-300 text-center line-clamp-1">
                             {movie.title}
                           </p>
                         </Link>
@@ -335,7 +362,7 @@ export default function ProfilePage() {
               )}
               {favorites.shows.length > 0 && (
                 <div className={favorites.movies.length > 0 ? "mt-3" : ""}>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-2">
                     TV Shows
                   </p>
                   <div className="flex gap-3 overflow-x-auto pb-1">
@@ -351,7 +378,7 @@ export default function ProfilePage() {
                             alt={show.name}
                             className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity"
                           />
-                          <p className="mt-1 text-xs font-medium text-slate-300 text-center line-clamp-1">
+                          <p className="mt-1 text-xs font-medium text-neutral-300 text-center line-clamp-1">
                             {show.name}
                           </p>
                         </Link>
@@ -364,23 +391,23 @@ export default function ProfilePage() {
           )}
 
           {/* Watchlist + Watched */}
-          <div className="bg-slate-800 rounded-xl overflow-hidden divide-y divide-slate-700">
+          <div className="bg-neutral-800 rounded-xl overflow-hidden divide-y divide-neutral-700">
             {/* Watchlist */}
             <div>
               <button
                 onClick={() => setWatchlistOpen((o) => !o)}
-                className="w-full flex items-center justify-between px-4 py-3.5 text-left hover:bg-slate-700/50 transition-colors"
+                className="w-full flex items-center justify-between px-4 py-3.5 text-left hover:bg-neutral-700/50 transition-colors"
               >
                 <div className="flex items-center gap-2">
                   <span className="text-base font-semibold text-white">
                     Watchlist
                   </span>
-                  <span className="text-xs text-slate-400 bg-slate-700 px-1.5 py-0.5 rounded-full">
+                  <span className="text-xs text-neutral-400 bg-neutral-700 px-1.5 py-0.5 rounded-full">
                     {totalWatchlist}
                   </span>
                 </div>
                 <svg
-                  className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${watchlistOpen ? "rotate-180" : ""}`}
+                  className={`w-4 h-4 text-neutral-400 transition-transform duration-200 ${watchlistOpen ? "rotate-180" : ""}`}
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -397,7 +424,7 @@ export default function ProfilePage() {
                 <div className="px-4 pb-4">
                   {watchlist.movies.length > 0 && (
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-2">
                         Movies
                       </p>
                       <div className="flex gap-3 overflow-x-auto pb-1">
@@ -413,7 +440,7 @@ export default function ProfilePage() {
                                 alt={movie.title}
                                 className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity"
                               />
-                              <p className="mt-1 text-xs font-medium text-slate-300 text-center line-clamp-1">
+                              <p className="mt-1 text-xs font-medium text-neutral-300 text-center line-clamp-1">
                                 {movie.title}
                               </p>
                             </Link>
@@ -424,7 +451,7 @@ export default function ProfilePage() {
                   )}
                   {watchlist.shows.length > 0 && (
                     <div className={watchlist.movies.length > 0 ? "mt-3" : ""}>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-2">
                         TV Shows
                       </p>
                       <div className="flex gap-3 overflow-x-auto pb-1">
@@ -440,7 +467,7 @@ export default function ProfilePage() {
                                 alt={show.name}
                                 className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity"
                               />
-                              <p className="mt-1 text-xs font-medium text-slate-300 text-center line-clamp-1">
+                              <p className="mt-1 text-xs font-medium text-neutral-300 text-center line-clamp-1">
                                 {show.name}
                               </p>
                             </Link>
@@ -449,14 +476,14 @@ export default function ProfilePage() {
                       </div>
                       <Link
                         to="/watchlist"
-                        className="text-blue-400 hover:text-blue-300 text-sm mt-2 inline-block"
+                        className="text-primary-400 hover:text-primary-300 text-sm mt-2 inline-block"
                       >
                         View full watchlist →
                       </Link>
                     </div>
                   )}
                   {totalWatchlist === 0 && !loading && (
-                    <p className="text-slate-400 text-sm">
+                    <p className="text-neutral-400 text-sm">
                       Your watchlist is empty.
                     </p>
                   )}
@@ -468,18 +495,18 @@ export default function ProfilePage() {
             <div>
               <button
                 onClick={() => setWatchedOpen((o) => !o)}
-                className="w-full flex items-center justify-between px-4 py-3.5 text-left hover:bg-slate-700/50 transition-colors"
+                className="w-full flex items-center justify-between px-4 py-3.5 text-left hover:bg-neutral-700/50 transition-colors"
               >
                 <div className="flex items-center gap-2">
                   <span className="text-base font-semibold text-white">
                     Watched
                   </span>
-                  <span className="text-xs text-slate-400 bg-slate-700 px-1.5 py-0.5 rounded-full">
+                  <span className="text-xs text-neutral-400 bg-neutral-700 px-1.5 py-0.5 rounded-full">
                     {totalWatched}
                   </span>
                 </div>
                 <svg
-                  className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${watchedOpen ? "rotate-180" : ""}`}
+                  className={`w-4 h-4 text-neutral-400 transition-transform duration-200 ${watchedOpen ? "rotate-180" : ""}`}
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -496,7 +523,7 @@ export default function ProfilePage() {
                 <div className="px-4 pb-4">
                   {watched.movies.length > 0 && (
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-2">
                         Movies
                       </p>
                       <div className="flex gap-3 overflow-x-auto pb-1">
@@ -512,7 +539,7 @@ export default function ProfilePage() {
                                 alt={movie.title}
                                 className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity"
                               />
-                              <p className="mt-1 text-xs font-medium text-slate-300 text-center line-clamp-1">
+                              <p className="mt-1 text-xs font-medium text-neutral-300 text-center line-clamp-1">
                                 {movie.title}
                               </p>
                             </Link>
@@ -523,7 +550,7 @@ export default function ProfilePage() {
                   )}
                   {watched.shows.length > 0 && (
                     <div className={watched.movies.length > 0 ? "mt-3" : ""}>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-2">
                         TV Shows
                       </p>
                       <div className="flex gap-3 overflow-x-auto pb-1">
@@ -539,7 +566,7 @@ export default function ProfilePage() {
                                 alt={show.name}
                                 className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity"
                               />
-                              <p className="mt-1 text-xs font-medium text-slate-300 text-center line-clamp-1">
+                              <p className="mt-1 text-xs font-medium text-neutral-300 text-center line-clamp-1">
                                 {show.name}
                               </p>
                             </Link>
@@ -548,14 +575,14 @@ export default function ProfilePage() {
                       </div>
                       <Link
                         to="/watched"
-                        className="text-blue-400 hover:text-blue-300 text-sm mt-2 inline-block"
+                        className="text-primary-400 hover:text-primary-300 text-sm mt-2 inline-block"
                       >
                         View full watched list →
                       </Link>
                     </div>
                   )}
                   {totalWatched === 0 && !loading && (
-                    <p className="text-slate-400 text-sm">
+                    <p className="text-neutral-400 text-sm">
                       Nothing watched yet.
                     </p>
                   )}
@@ -566,16 +593,16 @@ export default function ProfilePage() {
 
           {/* Stats */}
           {token && (
-            <div className="bg-slate-800 rounded-xl overflow-hidden">
+            <div className="bg-neutral-800 rounded-xl overflow-hidden">
               <button
                 onClick={() => setStatsOpen((o) => !o)}
-                className="w-full flex items-center justify-between px-4 py-3.5 text-left hover:bg-slate-700/50 transition-colors"
+                className="w-full flex items-center justify-between px-4 py-3.5 text-left hover:bg-neutral-700/50 transition-colors"
               >
                 <span className="text-base font-semibold text-white">
                   Stats
                 </span>
                 <svg
-                  className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${statsOpen ? "rotate-180" : ""}`}
+                  className={`w-4 h-4 text-neutral-400 transition-transform duration-200 ${statsOpen ? "rotate-180" : ""}`}
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -589,7 +616,7 @@ export default function ProfilePage() {
                 </svg>
               </button>
               {statsOpen && (
-                <div className="px-4 pb-4 border-t border-slate-700">
+                <div className="px-4 pb-4 border-t border-neutral-700">
                   <StatsSection token={token} />
                 </div>
               )}
@@ -598,24 +625,24 @@ export default function ProfilePage() {
         </div>
 
         {/* Right: Friends (1/3) */}
-        <div className="bg-slate-800 rounded-xl p-4">
+        <div className="bg-neutral-800 rounded-xl p-4">
           <h2 className="text-base font-semibold text-white mb-3">Friends</h2>
 
-          <div className="flex gap-1 mb-4 border-b border-slate-700 flex-wrap">
+          <div className="flex gap-1 mb-4 border-b border-neutral-700 flex-wrap">
             <button
               onClick={() => setFriendsTab("friends")}
-              className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${friendsTab === "friends" ? "border-blue-500 text-blue-400" : "border-transparent text-slate-400 hover:text-slate-200"}`}
+              className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${friendsTab === "friends" ? "border-primary-500 text-primary-400" : "border-transparent text-neutral-400 hover:text-neutral-200"}`}
             >
               Friends ({friends.length})
             </button>
             {dbUser?.profile_visibility === "public" && (
               <button
                 onClick={() => setFriendsTab("followers")}
-                className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${friendsTab === "followers" ? "border-blue-500 text-blue-400" : "border-transparent text-slate-400 hover:text-slate-200"}`}
+                className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${friendsTab === "followers" ? "border-primary-500 text-primary-400" : "border-transparent text-neutral-400 hover:text-neutral-200"}`}
               >
                 Followers
                 {followers.length > 0 && (
-                  <span className="ml-1.5 bg-slate-600 text-slate-300 text-xs font-bold rounded-full px-1.5 py-0.5">
+                  <span className="ml-1.5 bg-neutral-600 text-neutral-300 text-xs font-bold rounded-full px-1.5 py-0.5">
                     {followers.length}
                   </span>
                 )}
@@ -623,18 +650,18 @@ export default function ProfilePage() {
             )}
             <button
               onClick={() => setFriendsTab("requests")}
-              className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${friendsTab === "requests" ? "border-blue-500 text-blue-400" : "border-transparent text-slate-400 hover:text-slate-200"}`}
+              className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${friendsTab === "requests" ? "border-primary-500 text-primary-400" : "border-transparent text-neutral-400 hover:text-neutral-200"}`}
             >
               Requests
               {incomingCount > 0 && (
-                <span className="ml-1.5 bg-red-500 text-white text-xs font-bold rounded-full px-1.5 py-0.5">
+                <span className="ml-1.5 bg-error-500 text-white text-xs font-bold rounded-full px-1.5 py-0.5">
                   {incomingCount}
                 </span>
               )}
             </button>
             <button
               onClick={() => setFriendsTab("add")}
-              className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${friendsTab === "add" ? "border-blue-500 text-blue-400" : "border-transparent text-slate-400 hover:text-slate-200"}`}
+              className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${friendsTab === "add" ? "border-primary-500 text-primary-400" : "border-transparent text-neutral-400 hover:text-neutral-200"}`}
             >
               Add
             </button>
@@ -645,43 +672,51 @@ export default function ProfilePage() {
               token={token}
               friends={friends}
               onFriendRemoved={(friendId) =>
-                setFriends((prev) => prev.filter((f) => f.friend.id !== friendId))
+                setFriends((prev) =>
+                  prev.filter((f) => f.friend.id !== friendId),
+                )
               }
               onFindFriends={() => setFriendsTab("add")}
             />
           )}
-          {friendsTab === "followers" && dbUser?.profile_visibility === "public" && (
-            <div className="space-y-2">
-              {followers.length === 0 ? (
-                <p className="text-slate-400 text-sm">No followers yet.</p>
-              ) : (
-                followers.map(({ friendship_id, follower }) => (
-                  <div key={friendship_id} className="flex items-center justify-between bg-slate-700 px-3 py-2 rounded-lg">
-                    <Link
-                      to={`/user/${follower.username}`}
-                      className="text-slate-200 text-sm font-medium hover:text-blue-400 transition-colors"
+          {friendsTab === "followers" &&
+            dbUser?.profile_visibility === "public" && (
+              <div className="space-y-2">
+                {followers.length === 0 ? (
+                  <p className="text-neutral-400 text-sm">No followers yet.</p>
+                ) : (
+                  followers.map(({ friendship_id, follower }) => (
+                    <div
+                      key={friendship_id}
+                      className="flex items-center justify-between bg-neutral-700 px-3 py-2 rounded-lg"
                     >
-                      @{follower.username}
-                    </Link>
-                    <button
-                      onClick={() => addBack(follower)}
-                      disabled={addingBack === follower.id}
-                      className="text-xs bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-3 py-1 rounded transition-colors"
-                    >
-                      {addingBack === follower.id ? "Adding…" : "Add back"}
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-          )}
+                      <Link
+                        to={`/user/${follower.username}`}
+                        className="text-neutral-200 text-sm font-medium hover:text-primary-400 transition-colors"
+                      >
+                        @{follower.username}
+                      </Link>
+                      <button
+                        onClick={() => addBack(follower)}
+                        disabled={addingBack === follower.id}
+                        className="text-xs bg-primary-600 hover:bg-primary-500 disabled:opacity-50 text-white px-3 py-1 rounded transition-colors"
+                      >
+                        {addingBack === follower.id ? "Adding…" : "Add back"}
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
           {friendsTab === "requests" && token && (
             <FriendRequests
               token={token}
               incoming={incoming}
               outgoing={outgoing}
               onResponded={(friendshipId, accepted, req) => {
-                setIncoming((prev) => prev.filter((r) => r.friendship_id !== friendshipId));
+                setIncoming((prev) =>
+                  prev.filter((r) => r.friendship_id !== friendshipId),
+                );
                 if (accepted) {
                   setFriends((prev) => [
                     ...prev,
@@ -690,7 +725,9 @@ export default function ProfilePage() {
                 }
               }}
               onCancelled={(friendshipId) =>
-                setOutgoing((prev) => prev.filter((r) => r.friendship_id !== friendshipId))
+                setOutgoing((prev) =>
+                  prev.filter((r) => r.friendship_id !== friendshipId),
+                )
               }
             />
           )}

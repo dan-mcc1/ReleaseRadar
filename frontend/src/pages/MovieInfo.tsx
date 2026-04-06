@@ -81,12 +81,12 @@ function RatingBadge({
 }) {
   return (
     <div
-      className={`flex flex-col items-center bg-slate-800 border rounded-xl px-4 py-3 min-w-[80px] ${color}`}
+      className={`flex flex-col items-center bg-neutral-800 border rounded-xl px-4 py-3 min-w-[80px] ${color}`}
     >
-      <span className="text-slate-100 font-bold text-lg leading-tight">
+      <span className="text-neutral-100 font-bold text-lg leading-tight">
         {value}
       </span>
-      <span className="text-slate-500 text-xs mt-0.5 whitespace-nowrap">
+      <span className="text-neutral-500 text-xs mt-0.5 whitespace-nowrap">
         {label}
       </span>
     </div>
@@ -102,11 +102,11 @@ function StatBox({
 }) {
   if (!value && value !== 0) return null;
   return (
-    <div className="flex flex-col items-center bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 min-w-[80px]">
-      <span className="text-slate-100 font-bold text-lg leading-tight">
+    <div className="flex flex-col items-center bg-neutral-800 border border-neutral-700 rounded-xl px-4 py-3 min-w-[80px]">
+      <span className="text-neutral-100 font-bold text-lg leading-tight">
         {value}
       </span>
-      <span className="text-slate-500 text-xs mt-0.5 whitespace-nowrap">
+      <span className="text-neutral-500 text-xs mt-0.5 whitespace-nowrap">
         {label}
       </span>
     </div>
@@ -119,7 +119,7 @@ function ExternalLink({ href, label }: { href: string; label: string }) {
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-blue-400 bg-slate-800 border border-slate-700 hover:border-blue-600/50 px-3 py-1.5 rounded-lg transition-all duration-150"
+      className="inline-flex items-center gap-1.5 text-sm text-neutral-400 hover:text-primary-400 bg-neutral-800 border border-neutral-700 hover:border-primary-600/50 px-3 py-1.5 rounded-lg transition-all duration-150"
     >
       {label}
     </a>
@@ -142,8 +142,12 @@ export default function MovieInfo() {
   usePageTitle(movie?.title);
   const auth = getAuth(firebaseApp);
   const [user, setUser] = useState(auth.currentUser);
-  const [initialStatus, setInitialStatus] = useState<WatchStatus | undefined>(undefined);
-  const [initialRating, setInitialRating] = useState<number | null | undefined>(undefined);
+  const [initialStatus, setInitialStatus] = useState<WatchStatus | undefined>(
+    undefined,
+  );
+  const [initialRating, setInitialRating] = useState<number | null | undefined>(
+    undefined,
+  );
   const [statusReady, setStatusReady] = useState(false);
   const [externalScores, setExternalScores] = useState<ExternalScores | null>(
     null,
@@ -170,17 +174,22 @@ export default function MovieInfo() {
     user.getIdToken().then((token) =>
       fetch(`${API_URL}/watchlist/status/bulk`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify(missing),
       })
         .then((r) => (r.ok ? r.json() : {}))
-        .then((data: Record<string, { status: string; rating: number | null }>) => {
-          mergeCachedStatuses(user.uid, data);
-          setInitialStatus(data[`movie:${movie.id}`]?.status as WatchStatus);
-          setInitialRating(data[`movie:${movie.id}`]?.rating ?? null);
-        })
+        .then(
+          (data: Record<string, { status: string; rating: number | null }>) => {
+            mergeCachedStatuses(user.uid, data);
+            setInitialStatus(data[`movie:${movie.id}`]?.status as WatchStatus);
+            setInitialRating(data[`movie:${movie.id}`]?.rating ?? null);
+          },
+        )
         .catch(() => {})
-        .finally(() => setStatusReady(true))
+        .finally(() => setStatusReady(true)),
     );
   }, [user, movie]);
 
@@ -234,13 +243,13 @@ export default function MovieInfo() {
     return (
       <div className="flex items-center justify-center min-h-64">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-slate-400 text-sm">Loading movie info…</p>
+          <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+          <p className="text-neutral-400 text-sm">Loading movie info…</p>
         </div>
       </div>
     );
-  if (error) return <p className="text-red-400 p-6">{error}</p>;
-  if (!movie) return <p className="text-slate-400 p-6">Movie not found.</p>;
+  if (error) return <p className="text-error-400 p-6">{error}</p>;
+  if (!movie) return <p className="text-neutral-400 p-6">Movie not found.</p>;
 
   const year = movie.release_date
     ? parseLocalDate(movie.release_date).getFullYear()
@@ -261,10 +270,10 @@ export default function MovieInfo() {
             className="w-full h-72 md:h-96 object-cover object-top"
           />
         ) : (
-          <div className="w-full h-64 bg-gradient-to-br from-slate-800 to-slate-900" />
+          <div className="w-full h-64 bg-gradient-to-br from-neutral-800 to-neutral-900" />
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-slate-950/10" />
-        <div className="absolute inset-0 bg-gradient-to-r from-slate-950/60 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-neutral-950/40 to-neutral-950/10" />
+        <div className="absolute inset-0 bg-gradient-to-r from-neutral-950/60 to-transparent" />
 
         <div className="absolute bottom-0 left-0 right-0 px-6 pb-6 flex items-end gap-5">
           {movie.poster_path && (
@@ -288,7 +297,7 @@ export default function MovieInfo() {
               </h1>
             )}
             {movie.tagline && (
-              <p className="text-slate-300 italic text-sm mt-1">
+              <p className="text-neutral-300 italic text-sm mt-1">
                 {movie.tagline}
               </p>
             )}
@@ -300,7 +309,14 @@ export default function MovieInfo() {
       <div className="px-4 sm:px-6 mt-6 space-y-8">
         {/* Buttons row */}
         <div className="flex flex-wrap items-center gap-2">
-          {user && statusReady && <WatchButton contentType="movie" contentId={movie.id} initialStatus={initialStatus} initialRating={initialRating} />}
+          {user && statusReady && (
+            <WatchButton
+              contentType="movie"
+              contentId={movie.id}
+              initialStatus={initialStatus}
+              initialRating={initialRating}
+            />
+          )}
           {user && <FavoriteButton contentType="movie" contentId={movie.id} />}
           {user && (
             <RecommendButton
@@ -315,9 +331,14 @@ export default function MovieInfo() {
               href={`https://www.youtube.com/watch?v=${trailer.key}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm font-semibold transition-colors"
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-error-600 hover:bg-error-500 text-white text-sm font-semibold transition-colors"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                className="w-4 h-4"
+              >
                 <path d="M8 5v14l11-7z" />
               </svg>
               Trailer
@@ -330,7 +351,7 @@ export default function MovieInfo() {
             {movie.genres.map((genre) => (
               <span
                 key={genre.id}
-                className="px-3 py-1 text-sm rounded-full bg-slate-700/60 border border-slate-600 text-slate-300"
+                className="px-3 py-1 text-sm rounded-full bg-neutral-700/60 border border-neutral-600 text-neutral-300"
               >
                 {genre.name}
               </span>
@@ -370,7 +391,7 @@ export default function MovieInfo() {
         {/* Ratings row */}
         {(movie.vote_average || externalScores || aggRating?.average) && (
           <div>
-            <h2 className="text-slate-400 text-xs uppercase tracking-wider font-semibold mb-3">
+            <h2 className="text-neutral-400 text-xs uppercase tracking-wider font-semibold mb-3">
               Ratings
             </h2>
             <div className="flex flex-wrap gap-3">
@@ -378,7 +399,7 @@ export default function MovieInfo() {
                 <RatingBadge
                   label="TMDb"
                   value={`${movie.vote_average.toFixed(1)}/10`}
-                  color="border-2 border-blue-800"
+                  color="border-2 border-primary-800"
                 />
               )}
               {externalScores?.imdb && (
@@ -387,8 +408,8 @@ export default function MovieInfo() {
                   value={externalScores.imdb}
                   color={
                     parseInt(externalScores.imdb) >= 6.0
-                      ? "border-2 border-green-800"
-                      : "border-2 border-red-800"
+                      ? "border-2 border-success-800"
+                      : "border-2 border-error-800"
                   }
                 />
               )}
@@ -398,8 +419,8 @@ export default function MovieInfo() {
                   value={externalScores.rotten_tomatoes}
                   color={
                     parseInt(externalScores.rotten_tomatoes) >= 60
-                      ? "border-2 border-green-800"
-                      : "border-2 border-red-800"
+                      ? "border-2 border-success-800"
+                      : "border-2 border-error-800"
                   }
                 />
               )}
@@ -407,14 +428,14 @@ export default function MovieInfo() {
                 <RatingBadge
                   label="Metacritic"
                   value={externalScores.metacritic.replace("/100", "")}
-                  color="border-2 border-yellow-800/50"
+                  color="border-2 border-warning-800/50"
                 />
               )}
               {aggRating?.average && (
                 <RatingBadge
                   label={`Users (${aggRating.count})`}
                   value={`${aggRating.average}/5 ★`}
-                  color="border-2 border-purple-800"
+                  color="border-2 border-highlight-800"
                 />
               )}
             </div>
@@ -424,8 +445,8 @@ export default function MovieInfo() {
         {/* Created by */}
         {movie.created_by && movie.created_by.length > 0 && (
           <div>
-            <span className="text-slate-400 text-sm">Directed by </span>
-            <span className="text-slate-200 font-medium">
+            <span className="text-neutral-400 text-sm">Directed by </span>
+            <span className="text-neutral-200 font-medium">
               {movie.created_by.map((m) => m.name).join(", ")}
             </span>
           </div>
@@ -434,25 +455,35 @@ export default function MovieInfo() {
         {/* Overview */}
         {movie.overview && (
           <div>
-            <h2 className="text-slate-400 text-xs uppercase tracking-wider font-semibold mb-2">
+            <h2 className="text-neutral-400 text-xs uppercase tracking-wider font-semibold mb-2">
               Overview
             </h2>
-            <p className="text-slate-300 leading-relaxed">{movie.overview}</p>
+            <p className="text-neutral-300 leading-relaxed">{movie.overview}</p>
           </div>
         )}
 
         {/* Part of collection */}
         {movie.belongs_to_collection && (
           <div>
-            <h2 className="text-slate-400 text-xs uppercase tracking-wider font-semibold mb-2">
+            <h2 className="text-neutral-400 text-xs uppercase tracking-wider font-semibold mb-2">
               Part of a Collection
             </h2>
             <Link
               to={`/collection/${movie.belongs_to_collection.id}`}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 hover:border-blue-600/50 hover:bg-slate-700 transition-all duration-150 text-slate-200 text-sm font-medium"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-neutral-800 border border-neutral-700 hover:border-primary-600/50 hover:bg-neutral-700 transition-all duration-150 text-neutral-200 text-sm font-medium"
             >
-              <svg className="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+              <svg
+                className="w-4 h-4 text-primary-400"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+                />
               </svg>
               {movie.belongs_to_collection.name}
             </Link>
@@ -463,10 +494,10 @@ export default function MovieInfo() {
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
           {movie.release_date && (
             <div>
-              <div className="text-slate-500 text-xs uppercase tracking-wide mb-0.5">
+              <div className="text-neutral-500 text-xs uppercase tracking-wide mb-0.5">
                 Release Date
               </div>
-              <div className="text-slate-200">
+              <div className="text-neutral-200">
                 {formatLocalDate(movie.release_date, {
                   year: "numeric",
                   month: "long",
@@ -477,14 +508,14 @@ export default function MovieInfo() {
           )}
           {movie.homepage && (
             <div>
-              <div className="text-slate-500 text-xs uppercase tracking-wide mb-0.5">
+              <div className="text-neutral-500 text-xs uppercase tracking-wide mb-0.5">
                 Homepage
               </div>
               <a
                 href={movie.homepage}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-blue-400 hover:underline"
+                className="text-primary-400 hover:underline"
               >
                 Official Site
               </a>
@@ -503,7 +534,7 @@ export default function MovieInfo() {
         {/* External Links */}
         {movie.external_ids && (
           <div>
-            <h2 className="text-slate-400 text-xs uppercase tracking-wider font-semibold mb-3">
+            <h2 className="text-neutral-400 text-xs uppercase tracking-wider font-semibold mb-3">
               External Links
             </h2>
             <div className="flex flex-wrap gap-2">
@@ -553,7 +584,7 @@ export default function MovieInfo() {
         {/* Recommendations */}
         {movie.recommendations?.results.length > 0 && (
           <div>
-            <h2 className="text-xl font-semibold text-slate-100 mb-4">
+            <h2 className="text-xl font-semibold text-neutral-100 mb-4">
               You Might Also Like
             </h2>
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
@@ -563,16 +594,16 @@ export default function MovieInfo() {
                     <img
                       src={`${BASE_IMAGE_URL}/w342${rec.poster_path}`}
                       alt={rec.title}
-                      className="w-full rounded-lg object-cover border border-slate-700 group-hover:border-slate-500 transition-all duration-200 group-hover:scale-105"
+                      className="w-full rounded-lg object-cover border border-neutral-700 group-hover:border-neutral-500 transition-all duration-200 group-hover:scale-105"
                     />
                   ) : (
-                    <div className="w-full aspect-[2/3] bg-slate-800 border border-slate-700 rounded-lg flex items-center justify-center">
-                      <span className="text-slate-500 text-xs text-center px-1">
+                    <div className="w-full aspect-[2/3] bg-neutral-800 border border-neutral-700 rounded-lg flex items-center justify-center">
+                      <span className="text-neutral-500 text-xs text-center px-1">
                         {rec.title}
                       </span>
                     </div>
                   )}
-                  <p className="text-xs mt-1.5 text-slate-400 group-hover:text-slate-200 transition-colors text-center line-clamp-1">
+                  <p className="text-xs mt-1.5 text-neutral-400 group-hover:text-neutral-200 transition-colors text-center line-clamp-1">
                     {rec.title}
                   </p>
                 </Link>

@@ -40,7 +40,7 @@ function classNames(...classes: string[]) {
 function Badge({ count }: { count: number }) {
   if (count <= 0) return null;
   return (
-    <span className="ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 bg-red-500 text-white text-[10px] font-bold rounded-full leading-none">
+    <span className="ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 bg-error-500 text-white text-[10px] font-bold rounded-full leading-none">
       {count > 9 ? "9+" : count}
     </span>
   );
@@ -67,8 +67,8 @@ function NavDropdown({
       <MenuButton
         className={classNames(
           isActive
-            ? "bg-gray-950/50 text-white"
-            : "text-gray-300 hover:bg-white/5 hover:text-white",
+            ? "bg-neutral-950/50 text-white"
+            : "text-neutral-300 hover:bg-white/5 hover:text-white",
           "inline-flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium transition-colors",
         )}
       >
@@ -88,7 +88,7 @@ function NavDropdown({
           />
         </svg>
       </MenuButton>
-      <MenuItems className="absolute left-0 z-20 mt-1 w-44 origin-top-left rounded-lg bg-gray-800 border border-white/10 py-1 shadow-xl transition data-closed:scale-95 data-closed:opacity-0 data-enter:duration-100 data-enter:ease-out data-leave:duration-75 data-leave:ease-in">
+      <MenuItems className="absolute left-0 z-20 mt-1 w-44 origin-top-left rounded-lg bg-neutral-800 border border-white/10 py-1 shadow-xl transition data-closed:scale-95 data-closed:opacity-0 data-enter:duration-100 data-enter:ease-out data-leave:duration-75 data-leave:ease-in">
         {links.map((link) => {
           const badge = badges?.[link.href] ?? 0;
           return (
@@ -98,7 +98,7 @@ function NavDropdown({
                 className={classNames(
                   currentPath === link.href
                     ? "text-white bg-white/10"
-                    : "text-gray-300",
+                    : "text-neutral-300",
                   "flex items-center justify-between px-4 py-2 text-sm hover:bg-white/5 hover:text-white data-focus:bg-white/5 data-focus:outline-hidden",
                 )}
               >
@@ -383,7 +383,7 @@ export default function NavBar() {
   return (
     <Disclosure
       as="nav"
-      className="relative bg-[#1f3b4d] after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-white/10"
+      className="relative bg-primary-800 after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-white/10"
     >
       <div className="mx-auto max-w-7xl px-4 lg:px-8">
         <div className="relative flex h-16 items-center justify-between">
@@ -392,7 +392,7 @@ export default function NavBar() {
             {location.pathname !== "/" && (
               <button
                 onClick={() => navigate(-1)}
-                className="inline-flex items-center justify-center rounded-md p-2 text-gray-400 hover:bg-white/5 hover:text-white"
+                className="inline-flex items-center justify-center rounded-md p-2 text-neutral-400 hover:bg-white/5 hover:text-white"
                 aria-label="Go back"
               >
                 <svg
@@ -410,7 +410,7 @@ export default function NavBar() {
                 </svg>
               </button>
             )}
-            <DisclosureButton className="group relative inline-flex items-center justify-center rounded-md p-2 text-gray-400 hover:bg-white/5 hover:text-white focus:outline-2 focus:-outline-offset-1 focus:outline-indigo-500">
+            <DisclosureButton className="group relative inline-flex items-center justify-center rounded-md p-2 bg-neutral-700 text-neutral-400 hover:bg-white/5 hover:text-white focus:outline-2 focus:-outline-offset-1 focus:outline-indigo-500">
               <span className="absolute -inset-0.5" />
               <span className="sr-only">Open main menu</span>
               <Bars3Icon
@@ -443,8 +443,8 @@ export default function NavBar() {
                 to="/"
                 className={classNames(
                   location.pathname === "/"
-                    ? "bg-gray-950/50 text-white"
-                    : "text-gray-300 hover:bg-white/5 hover:text-white",
+                    ? "bg-neutral-950/50 text-white"
+                    : "text-neutral-300 hover:bg-white/5 hover:text-white",
                   "rounded-md px-3 py-2 text-sm font-medium",
                 )}
               >
@@ -473,7 +473,7 @@ export default function NavBar() {
           {/* Right side: search + avatar/sign in */}
           <div className="absolute inset-y-0 right-0 flex items-center pr-2 lg:static lg:inset-auto lg:ml-6 lg:pr-0 space-x-2">
             <div ref={searchContainerRef} className="relative hidden lg:block">
-              <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none z-10">
+              <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-400 pointer-events-none z-10">
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
                   viewBox="0 0 24 24"
@@ -492,18 +492,18 @@ export default function NavBar() {
                   dropdownResults.length > 0 && setDropdownOpen(true)
                 }
                 placeholder="Search..."
-                className="pl-10 w-56 py-1.5 rounded-md bg-[#2d4e63] border border-[#1f3b4d]/50 text-white text-sm placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-950/50 transition"
+                className="pl-10 w-56 py-1.5 rounded-md bg-primary-700 border border-primary-800/50 text-white text-sm placeholder-neutral-300 focus:outline-none focus:ring-2 focus:ring-neutral-950/50 transition"
               />
 
               {/* Search dropdown */}
               {dropdownOpen && (
-                <div className="absolute top-full mt-1 right-0 w-72 bg-gray-800 border border-white/10 rounded-lg shadow-xl z-50 overflow-hidden">
+                <div className="absolute top-full mt-1 right-0 w-72 bg-neutral-800 border border-white/10 rounded-lg shadow-xl z-50 overflow-hidden">
                   {dropdownLoading && dropdownResults.length === 0 ? (
-                    <div className="px-4 py-3 text-sm text-slate-400">
+                    <div className="px-4 py-3 text-sm text-neutral-400">
                       Searching…
                     </div>
                   ) : dropdownResults.length === 0 ? (
-                    <div className="px-4 py-3 text-sm text-slate-400">
+                    <div className="px-4 py-3 text-sm text-neutral-400">
                       No results found.
                     </div>
                   ) : (
@@ -536,7 +536,7 @@ export default function NavBar() {
                             }}
                             className="flex items-center gap-3 px-3 py-2 hover:bg-white/5 transition-colors"
                           >
-                            <div className="flex-shrink-0 w-8 h-12 rounded overflow-hidden bg-slate-700">
+                            <div className="flex-shrink-0 w-8 h-12 rounded overflow-hidden bg-neutral-700">
                               {imgPath ? (
                                 <img
                                   src={`${BASE_IMAGE_URL}/w185${imgPath}`}
@@ -544,7 +544,7 @@ export default function NavBar() {
                                   className="w-full h-full object-cover"
                                 />
                               ) : (
-                                <div className="w-full h-full flex items-center justify-center text-slate-500 text-[9px] text-center leading-tight px-0.5">
+                                <div className="w-full h-full flex items-center justify-center text-neutral-500 text-[9px] text-center leading-tight px-0.5">
                                   {label}
                                 </div>
                               )}
@@ -553,7 +553,7 @@ export default function NavBar() {
                               <p className="text-sm text-white truncate">
                                 {label}
                               </p>
-                              <p className="text-xs text-slate-400">
+                              <p className="text-xs text-neutral-400">
                                 {typeLabel}
                               </p>
                             </div>
@@ -566,7 +566,7 @@ export default function NavBar() {
                           setDropdownOpen(false);
                           setSearchQuery("");
                         }}
-                        className="flex items-center justify-center px-3 py-2 border-t border-white/10 text-xs text-purple-400 hover:text-purple-300 hover:bg-white/5 transition-colors"
+                        className="flex items-center justify-center px-3 py-2 border-t border-white/10 text-xs text-highlight-400 hover:text-highlight-300 hover:bg-white/5 transition-colors"
                       >
                         See all results →
                       </Link>
@@ -601,11 +601,11 @@ export default function NavBar() {
                       <img
                         src={user.photoURL ?? "/avatar-placeholder.png"}
                         alt={user.displayName ?? "User Avatar"}
-                        className="size-8 rounded-full bg-gray-800 outline -outline-offset-1 outline-white/10"
+                        className="size-8 rounded-full bg-neutral-800 outline -outline-offset-1 outline-white/10"
                       />
                     )}
                     {pendingRequests > 0 && (
-                      <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white ring-2 ring-[#1f3b4d]">
+                      <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-error-500 text-[9px] font-bold text-white ring-2 ring-primary-800">
                         {pendingRequests > 9 ? "9+" : pendingRequests}
                       </span>
                     )}
@@ -613,12 +613,12 @@ export default function NavBar() {
                 </MenuButton>
                 <MenuItems
                   transition
-                  className="absolute right-0 z-20 mt-2 w-48 origin-top-right rounded-md bg-gray-800 py-1 outline -outline-offset-1 outline-white/10 transition data-closed:scale-95 data-closed:transform data-closed:opacity-0 data-enter:duration-100 data-enter:ease-out data-leave:duration-75 data-leave:ease-in"
+                  className="absolute right-0 z-20 mt-2 w-48 origin-top-right rounded-md bg-neutral-800 py-1 outline -outline-offset-1 outline-white/10 transition data-closed:scale-95 data-closed:transform data-closed:opacity-0 data-enter:duration-100 data-enter:ease-out data-leave:duration-75 data-leave:ease-in"
                 >
                   <MenuItem>
                     <a
                       href="/profile"
-                      className="flex items-center justify-between px-4 py-2 text-sm text-gray-300 data-focus:bg-white/5 data-focus:outline-hidden"
+                      className="flex items-center justify-between px-4 py-2 text-sm text-neutral-300 data-focus:bg-white/5 data-focus:outline-hidden"
                     >
                       Your profile
                       {pendingRequests > 0 && <Badge count={pendingRequests} />}
@@ -627,7 +627,7 @@ export default function NavBar() {
                   <MenuItem>
                     <a
                       href="/settings"
-                      className="block px-4 py-2 text-sm text-gray-300 data-focus:bg-white/5 data-focus:outline-hidden"
+                      className="block px-4 py-2 text-sm text-neutral-300 data-focus:bg-white/5 data-focus:outline-hidden"
                     >
                       Settings
                     </a>
@@ -638,7 +638,7 @@ export default function NavBar() {
                         await signOut(auth);
                         navigate("/");
                       }}
-                      className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-white/5 focus:outline-none"
+                      className="w-full text-left px-4 py-2 text-sm text-neutral-300 hover:bg-white/5 focus:outline-none"
                     >
                       Sign out
                     </button>
@@ -650,7 +650,7 @@ export default function NavBar() {
             {!user && (
               <Link
                 to="/signIn"
-                className="text-gray-300 hover:bg-white/5 hover:text-white rounded-md px-3 py-2 text-sm font-medium"
+                className="text-neutral-300 hover:bg-white/5 hover:text-white rounded-md px-3 py-2 text-sm font-medium"
               >
                 Sign In
               </Link>
@@ -681,7 +681,7 @@ export default function NavBar() {
               navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
             }}
           >
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 viewBox="0 0 24 24"
@@ -698,7 +698,7 @@ export default function NavBar() {
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Escape" && setDropdownOpen(false)}
               placeholder="Search..."
-              className="pl-9 w-full py-2 rounded-md bg-[#2d4e63] border border-[#1f3b4d]/50 text-white text-sm placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-950/50 transition"
+              className="pl-9 w-full py-2 rounded-md bg-primary-700 border border-primary-800/50 text-white text-sm placeholder-neutral-300 focus:outline-none focus:ring-2 focus:ring-neutral-950/50 transition"
             />
           </form>
 
@@ -708,8 +708,8 @@ export default function NavBar() {
             href="/"
             className={classNames(
               location.pathname === "/"
-                ? "bg-gray-950/50 text-white"
-                : "text-gray-300 hover:bg-white/5 hover:text-white",
+                ? "bg-neutral-950/50 text-white"
+                : "text-neutral-300 hover:bg-white/5 hover:text-white",
               "block rounded-md px-3 py-2 text-base font-medium",
             )}
           >
@@ -719,7 +719,7 @@ export default function NavBar() {
           {/* Discover accordion */}
           <button
             onClick={() => setMobileDiscoverOpen((o) => !o)}
-            className="flex w-full items-center justify-between rounded-md px-3 py-2 text-base font-medium text-gray-300 hover:bg-white/5 hover:text-white"
+            className="flex w-full items-center justify-between rounded-md px-3 py-2 text-base font-medium text-neutral-300 hover:bg-white/5 hover:text-white"
           >
             Discover
             <svg
@@ -745,8 +745,8 @@ export default function NavBar() {
                   href={item.href}
                   className={classNames(
                     location.pathname === item.href
-                      ? "bg-gray-950/50 text-white"
-                      : "text-gray-300 hover:bg-white/5 hover:text-white",
+                      ? "bg-neutral-950/50 text-white"
+                      : "text-neutral-300 hover:bg-white/5 hover:text-white",
                     "block rounded-md px-3 py-2 text-sm font-medium",
                   )}
                 >
@@ -761,7 +761,7 @@ export default function NavBar() {
             <>
               <button
                 onClick={() => setMobileLibraryOpen((o) => !o)}
-                className="flex w-full items-center justify-between rounded-md px-3 py-2 text-base font-medium text-gray-300 hover:bg-white/5 hover:text-white"
+                className="flex w-full items-center justify-between rounded-md px-3 py-2 text-base font-medium text-neutral-300 hover:bg-white/5 hover:text-white"
               >
                 <span className="flex items-center gap-1">
                   My Library
@@ -803,8 +803,8 @@ export default function NavBar() {
                         href={item.href}
                         className={classNames(
                           location.pathname === item.href
-                            ? "bg-gray-950/50 text-white"
-                            : "text-gray-300 hover:bg-white/5 hover:text-white",
+                            ? "bg-neutral-950/50 text-white"
+                            : "text-neutral-300 hover:bg-white/5 hover:text-white",
                           "flex items-center justify-between rounded-md px-3 py-2 text-sm font-medium",
                         )}
                       >
@@ -818,8 +818,8 @@ export default function NavBar() {
                     href="/profile"
                     className={classNames(
                       location.pathname === "/profile"
-                        ? "bg-gray-950/50 text-white"
-                        : "text-gray-300 hover:bg-white/5 hover:text-white",
+                        ? "bg-neutral-950/50 text-white"
+                        : "text-neutral-300 hover:bg-white/5 hover:text-white",
                       "flex items-center justify-between rounded-md px-3 py-2 text-sm font-medium",
                     )}
                   >

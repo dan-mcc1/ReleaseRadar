@@ -72,7 +72,7 @@ export default function Upcoming() {
       {/* Page header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-white mb-1">Coming Soon</h1>
-        <p className="text-slate-400 text-sm">{formatDateRange()}</p>
+        <p className="text-neutral-400 text-sm">{formatDateRange()}</p>
       </div>
 
       {/* Type tabs */}
@@ -83,8 +83,8 @@ export default function Upcoming() {
             onClick={() => setSearchParams({ type: tab.value, page: "1" })}
             className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
               activeType === tab.value
-                ? "bg-blue-600 text-white"
-                : "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white"
+                ? "bg-primary-600 text-white"
+                : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700 hover:text-white"
             }`}
           >
             {tab.label}
@@ -96,15 +96,15 @@ export default function Upcoming() {
       {loading && (
         <div className="flex items-center justify-center py-20">
           <div className="flex flex-col items-center gap-3">
-            <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-            <p className="text-slate-400 text-sm">Loading…</p>
+            <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+            <p className="text-neutral-400 text-sm">Loading…</p>
           </div>
         </div>
       )}
 
       {/* Results count */}
       {!loading && total > 0 && (
-        <p className="text-slate-500 text-sm mb-4">
+        <p className="text-neutral-500 text-sm mb-4">
           {activeType === "movie" ? "Movies" : "TV shows"} releasing in the next
           30 days — page {page} of {totalPages}
         </p>
@@ -113,9 +113,9 @@ export default function Upcoming() {
       {/* Empty state */}
       {!loading && total === 0 && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="w-16 h-16 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center mb-4">
+          <div className="w-16 h-16 rounded-full bg-neutral-800 border border-neutral-700 flex items-center justify-center mb-4">
             <svg
-              className="w-8 h-8 text-slate-500"
+              className="w-8 h-8 text-neutral-500"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -128,8 +128,10 @@ export default function Upcoming() {
               />
             </svg>
           </div>
-          <h3 className="text-slate-300 font-medium mb-1">Nothing coming up</h3>
-          <p className="text-slate-500 text-sm">
+          <h3 className="text-neutral-300 font-medium mb-1">
+            Nothing coming up
+          </h3>
+          <p className="text-neutral-500 text-sm">
             No releases found for the next 30 days
           </p>
         </div>
@@ -146,19 +148,29 @@ export default function Upcoming() {
       {!loading && totalPages > 1 && (
         <div className="flex items-center justify-center gap-4 mt-8">
           <button
-            onClick={() => setSearchParams({ type: activeType, page: String(Math.max(1, page - 1)) })}
+            onClick={() =>
+              setSearchParams({
+                type: activeType,
+                page: String(Math.max(1, page - 1)),
+              })
+            }
             disabled={page === 1}
-            className="px-4 py-2 rounded-lg text-sm font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="px-4 py-2 rounded-lg text-sm font-medium bg-neutral-800 text-neutral-300 hover:bg-neutral-700 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             Previous
           </button>
-          <span className="text-slate-400 text-sm">
+          <span className="text-neutral-400 text-sm">
             Page {page} of {totalPages}
           </span>
           <button
-            onClick={() => setSearchParams({ type: activeType, page: String(Math.min(totalPages, page + 1)) })}
+            onClick={() =>
+              setSearchParams({
+                type: activeType,
+                page: String(Math.min(totalPages, page + 1)),
+              })
+            }
             disabled={page === totalPages}
-            className="px-4 py-2 rounded-lg text-sm font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="px-4 py-2 rounded-lg text-sm font-medium bg-neutral-800 text-neutral-300 hover:bg-neutral-700 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             Next
           </button>

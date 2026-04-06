@@ -38,7 +38,9 @@ export default function Search() {
     async function fetchResults() {
       setLoading(true);
       try {
-        const res = await fetch(`${API_URL}/search?query=${encodeURIComponent(query)}`);
+        const res = await fetch(
+          `${API_URL}/search?query=${encodeURIComponent(query)}`,
+        );
         if (!res.ok) throw new Error("Failed to fetch search results");
         const data = await res.json();
         setResults({
@@ -57,7 +59,8 @@ export default function Search() {
   }, [query]);
 
   const { movies, shows, people, collections } = results;
-  const total = movies.length + shows.length + people.length + collections.length;
+  const total =
+    movies.length + shows.length + people.length + collections.length;
 
   // Build tabs — only show ones with results
   const allTabs: { key: Tab; label: string; count: number }[] = [
@@ -98,7 +101,7 @@ export default function Search() {
       <div className="mb-5">
         {query ? (
           <h1 className="text-2xl font-bold text-white">
-            Results for <span className="text-blue-400">"{query}"</span>
+            Results for <span className="text-primary-400">"{query}"</span>
           </h1>
         ) : (
           <h1 className="text-2xl font-bold text-white">Search</h1>
@@ -114,8 +117,8 @@ export default function Search() {
               onClick={() => setActiveTab(tab.key)}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                 activeTab === tab.key
-                  ? "bg-blue-600 text-white"
-                  : "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white"
+                  ? "bg-primary-600 text-white"
+                  : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700 hover:text-white"
               }`}
             >
               {tab.label}
@@ -123,8 +126,8 @@ export default function Search() {
                 <span
                   className={`text-[11px] px-1.5 py-0.5 rounded-full font-semibold ${
                     activeTab === tab.key
-                      ? "bg-blue-500 text-white"
-                      : "bg-slate-700 text-slate-400"
+                      ? "bg-primary-500 text-white"
+                      : "bg-neutral-700 text-neutral-400"
                   }`}
                 >
                   {tab.count}
@@ -138,21 +141,35 @@ export default function Search() {
       {loading && (
         <div className="flex items-center justify-center py-20">
           <div className="flex flex-col items-center gap-3">
-            <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-            <p className="text-slate-400 text-sm">Searching…</p>
+            <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+            <p className="text-neutral-400 text-sm">Searching…</p>
           </div>
         </div>
       )}
 
       {!loading && query && total === 0 && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="w-16 h-16 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center mb-4">
-            <svg className="w-8 h-8 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          <div className="w-16 h-16 rounded-full bg-neutral-800 border border-neutral-700 flex items-center justify-center mb-4">
+            <svg
+              className="w-8 h-8 text-neutral-500"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+              />
             </svg>
           </div>
-          <h3 className="text-slate-300 font-medium mb-1">No results found</h3>
-          <p className="text-slate-500 text-sm">Try a different search term</p>
+          <h3 className="text-neutral-300 font-medium mb-1">
+            No results found
+          </h3>
+          <p className="text-neutral-500 text-sm">
+            Try a different search term
+          </p>
         </div>
       )}
 

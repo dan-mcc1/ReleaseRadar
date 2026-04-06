@@ -78,7 +78,7 @@ export default function FriendRequests({
 
   if (incoming.length === 0 && outgoing.length === 0) {
     return (
-      <p className="text-slate-400 text-sm">No pending friend requests.</p>
+      <p className="text-neutral-400 text-sm">No pending friend requests.</p>
     );
   }
 
@@ -86,18 +86,18 @@ export default function FriendRequests({
     <div className="space-y-4">
       {incoming.length > 0 && (
         <div>
-          <h4 className="text-xs uppercase tracking-wider text-slate-400 mb-2">
+          <h4 className="text-xs uppercase tracking-wider text-neutral-400 mb-2">
             Incoming
           </h4>
           <ul className="space-y-2">
             {incoming.map((req) => (
               <li
                 key={req.friendship_id}
-                className="flex items-center justify-between bg-slate-700 px-3 py-2 rounded-lg"
+                className="flex items-center justify-between bg-neutral-700 px-3 py-2 rounded-lg"
               >
                 <Link
                   to={`/user/${req.from_user.username}`}
-                  className="text-slate-100 font-medium hover:text-blue-400 transition-colors"
+                  className="text-neutral-100 font-medium hover:text-primary-400 transition-colors"
                 >
                   <span>@{req.from_user.username}</span>
                 </Link>
@@ -105,14 +105,14 @@ export default function FriendRequests({
                   <button
                     onClick={() => respond(req.friendship_id, true)}
                     disabled={responding === req.friendship_id}
-                    className="text-sm bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white px-3 py-1 rounded"
+                    className="text-sm bg-success-600 hover:bg-success-500 disabled:opacity-50 text-white px-3 py-1 rounded"
                   >
                     Accept
                   </button>
                   <button
                     onClick={() => respond(req.friendship_id, false)}
                     disabled={responding === req.friendship_id}
-                    className="text-sm bg-slate-600 hover:bg-slate-500 disabled:opacity-50 text-slate-200 px-3 py-1 rounded"
+                    className="text-sm bg-neutral-600 hover:bg-neutral-500 disabled:opacity-50 text-neutral-200 px-3 py-1 rounded"
                   >
                     Decline
                   </button>
@@ -125,25 +125,25 @@ export default function FriendRequests({
 
       {outgoing.length > 0 && (
         <div>
-          <h4 className="text-xs uppercase tracking-wider text-slate-400 mb-2">
+          <h4 className="text-xs uppercase tracking-wider text-neutral-400 mb-2">
             Sent ({outgoing.length}/25)
           </h4>
           <ul className="space-y-2">
             {outgoing.map((req) => (
               <li
                 key={req.friendship_id}
-                className="flex items-center justify-between bg-slate-700 px-3 py-2 rounded-lg"
+                className="flex items-center justify-between bg-neutral-700 px-3 py-2 rounded-lg"
               >
                 <Link
                   to={`/user/${req.to_user.username}`}
-                  className="text-slate-100 font-medium hover:text-blue-400 transition-colors"
+                  className="text-neutral-100 font-medium hover:text-primary-400 transition-colors"
                 >
                   <span>@{req.to_user.username}</span>
                 </Link>
                 <button
                   onClick={() => cancel(req.friendship_id)}
                   disabled={cancelling === req.friendship_id}
-                  className="text-sm text-slate-400 hover:text-red-400 disabled:opacity-50"
+                  className="text-sm text-neutral-400 hover:text-error-500 disabled:opacity-50"
                 >
                   {cancelling === req.friendship_id ? "Cancelling…" : "Cancel"}
                 </button>

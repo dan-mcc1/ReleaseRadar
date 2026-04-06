@@ -20,27 +20,31 @@ function getEpisodeTag(
     case "show_premiere":
       return {
         label: "Series Premiere",
-        classes: "bg-purple-600/20 text-purple-300 border border-purple-500/40",
+        classes:
+          "bg-highlight-600/20 text-highlight-300 border border-highlight-500/40",
       };
     case "season_premiere":
       return {
         label: "Season Premiere",
-        classes: "bg-blue-600/20 text-blue-300 border border-blue-500/40",
+        classes:
+          "bg-primary-600/20 text-primary-300 border border-primary-500/40",
       };
     case "season_finale":
       return {
         label: "Season Finale",
-        classes: "bg-orange-600/20 text-orange-300 border border-orange-500/40",
+        classes:
+          "bg-warning-600/20 text-warning-300 border border-warning-500/40",
       };
     case "series_finale":
       return {
         label: "Series Finale",
-        classes: "bg-red-700/20 text-red-300 border border-red-500/40",
+        classes: "bg-error-700/20 text-error-300 border border-error-500/40",
       };
     case "mid_season":
       return {
         label: "Mid-Season Finale",
-        classes: "bg-yellow-600/20 text-yellow-300 border border-yellow-500/40",
+        classes:
+          "bg-warning-600/20 text-warning-300 border border-warning-500/40",
       };
     default:
       return null;
@@ -235,7 +239,7 @@ export default function SeasonInfo({
           return (
             <div
               key={season.id}
-              className="border border-slate-700 rounded-md p-2"
+              className="border border-neutral-700 rounded-md p-2"
             >
               <div className="flex items-start gap-3">
                 {season.poster_path && (
@@ -247,7 +251,7 @@ export default function SeasonInfo({
                 )}
                 <div className="flex-1 min-w-0">
                   <h3 className="font-semibold">{season.name}</h3>
-                  <p className="text-slate-400 text-sm">
+                  <p className="text-neutral-400 text-sm">
                     {season.air_date
                       ? new Date(
                           season.air_date + "T00:00:00",
@@ -261,15 +265,15 @@ export default function SeasonInfo({
                   </p>
                   {isLoggedIn && totalCount > 0 && (
                     <div className="flex items-center gap-2 mt-1">
-                      <div className="flex-1 max-w-[120px] h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                      <div className="flex-1 max-w-[120px] h-1.5 bg-neutral-700 rounded-full overflow-hidden">
                         <div
-                          className="h-full bg-green-500 rounded-full transition-all duration-300"
+                          className="h-full bg-success-500 rounded-full transition-all duration-300"
                           style={{
                             width: `${(watchedCount / totalCount) * 100}%`,
                           }}
                         />
                       </div>
-                      <span className="text-xs text-slate-400">
+                      <span className="text-xs text-neutral-400">
                         {watchedCount}/{totalCount}
                       </span>
                     </div>
@@ -285,8 +289,8 @@ export default function SeasonInfo({
                       }
                       className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-medium transition-all duration-150 disabled:opacity-50 ${
                         allWatched
-                          ? "bg-green-700/40 border border-green-600/60 text-green-400 hover:bg-red-900/30 hover:border-red-600/40 hover:text-red-400"
-                          : "bg-slate-700 border border-slate-600 text-slate-400 hover:bg-green-900/30 hover:border-green-600/40 hover:text-green-400"
+                          ? "bg-success-700/40 border border-success-600/60 text-success-400 hover:bg-error-900/30 hover:border-error-600/40 hover:text-error-400"
+                          : "bg-neutral-700 border border-neutral-600 text-neutral-400 hover:bg-success-900/30 hover:border-success-600/40 hover:text-success-400"
                       }`}
                     >
                       {seasonToggling ? (
@@ -344,7 +348,7 @@ export default function SeasonInfo({
                   )}
                   <button
                     onClick={() => toggleSeason(season)}
-                    className="text-slate-400 hover:text-slate-200 focus:outline-none"
+                    className="text-neutral-400 hover:text-neutral-200 focus:outline-none"
                     title={expandedSeason ? "Collapse" : "Expand"}
                   >
                     {loadingSeason ? (
@@ -380,15 +384,15 @@ export default function SeasonInfo({
 
               {/* Expanded season info */}
               {expandedSeason && (
-                <div className="mt-4 pl-2 border-t border-slate-700">
+                <div className="mt-4 pl-2 border-t border-neutral-700">
                   {expandedSeason.overview && (
-                    <p className="mb-3 mt-2 text-slate-300 text-sm">
+                    <p className="mb-3 mt-2 text-neutral-300 text-sm">
                       {expandedSeason.overview}
                     </p>
                   )}
                   {expandedSeason.episodes &&
                     expandedSeason.episodes.length === 0 && (
-                      <p className="text-slate-500 text-sm mt-2">
+                      <p className="text-neutral-500 text-sm mt-2">
                         No episodes available yet.
                       </p>
                     )}
@@ -432,7 +436,7 @@ export default function SeasonInfo({
                                 ) : null}
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                                    <p className="font-medium text-slate-100 hover:text-blue-300 transition-colors">
+                                    <p className="font-medium text-neutral-100 hover:text-primary-300 transition-colors">
                                       {ep.episode_number}. {ep.name}
                                     </p>
                                     {(() => {
@@ -448,7 +452,7 @@ export default function SeasonInfo({
                                       ) : null;
                                     })()}
                                   </div>
-                                  <p className="text-slate-400 text-sm">
+                                  <p className="text-neutral-400 text-sm">
                                     {ep.air_date
                                       ? new Date(
                                           ep.air_date + "T00:00:00",
@@ -470,7 +474,7 @@ export default function SeasonInfo({
                                       "N/A"
                                     )}
                                   </p>
-                                  <p className="text-sm text-slate-300 mt-1">
+                                  <p className="text-sm text-neutral-300 mt-1">
                                     {ep.overview}
                                   </p>
                                 </div>
@@ -491,8 +495,8 @@ export default function SeasonInfo({
                                   }
                                   className={`flex-shrink-0 mt-0.5 w-8 h-8 rounded-full flex items-center justify-center transition-all duration-150 disabled:opacity-50 ${
                                     watched
-                                      ? "bg-green-700/40 border border-green-600/60 text-green-400 hover:bg-red-900/30 hover:border-red-600/40 hover:text-red-400"
-                                      : "bg-slate-700 border border-slate-600 text-slate-400 hover:bg-green-900/30 hover:border-green-600/40 hover:text-green-400"
+                                      ? "bg-success-700/40 border border-success-600/60 text-success-400 hover:bg-error-900/30 hover:border-error-600/40 hover:text-error-400"
+                                      : "bg-neutral-700 border border-neutral-600 text-neutral-400 hover:bg-success-900/30 hover:border-success-600/40 hover:text-success-400"
                                   }`}
                                 >
                                   {toggling ? (

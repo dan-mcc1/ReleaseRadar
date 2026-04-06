@@ -8,14 +8,26 @@ import MediaCard from "../components/MediaCard";
 import { usePageTitle } from "../hooks/usePageTitle";
 
 type TabType = "all" | "movies" | "tv";
-type SortType = "default" | "title_asc" | "title_desc" | "date_desc" | "date_asc" | "popularity_desc" | "rating_desc" | "rating_asc" | "tmdb_rating_desc" | "tmdb_rating_asc";
+type SortType =
+  | "default"
+  | "title_asc"
+  | "title_desc"
+  | "date_desc"
+  | "date_asc"
+  | "popularity_desc"
+  | "rating_desc"
+  | "rating_asc"
+  | "tmdb_rating_desc"
+  | "tmdb_rating_asc";
 
 function getTitle(item: Movie | Show) {
   return "title" in item ? item.title : item.name;
 }
 
 function getDate(item: Movie | Show): string {
-  return ("release_date" in item ? item.release_date : item.first_air_date) ?? "";
+  return (
+    ("release_date" in item ? item.release_date : item.first_air_date) ?? ""
+  );
 }
 
 function applySort<T extends Movie | Show>(items: T[], sort: SortType): T[] {
@@ -50,9 +62,13 @@ function applySort<T extends Movie | Show>(items: T[], sort: SortType): T[] {
         return ra - rb;
       });
     case "tmdb_rating_desc":
-      return sorted.sort((a, b) => (b.vote_average ?? 0) - (a.vote_average ?? 0));
+      return sorted.sort(
+        (a, b) => (b.vote_average ?? 0) - (a.vote_average ?? 0),
+      );
     case "tmdb_rating_asc":
-      return sorted.sort((a, b) => (a.vote_average ?? 0) - (b.vote_average ?? 0));
+      return sorted.sort(
+        (a, b) => (a.vote_average ?? 0) - (b.vote_average ?? 0),
+      );
     default:
       return sorted;
   }
@@ -73,7 +89,10 @@ export default function Watched() {
 
   async function onRemove(type: "tv" | "movie", content_id: number) {
     const user = auth.currentUser;
-    if (!user) { alert("You must be signed in."); return; }
+    if (!user) {
+      alert("You must be signed in.");
+      return;
+    }
 
     try {
       const res = await fetch(`${API_URL}/watched/remove`, {
@@ -86,8 +105,14 @@ export default function Watched() {
       });
       if (!res.ok) throw new Error("Failed to remove item");
       setResults((prev) => ({
-        movies: type === "movie" ? prev.movies.filter((m) => m.id !== content_id) : prev.movies,
-        shows: type === "tv" ? prev.shows.filter((s) => s.id !== content_id) : prev.shows,
+        movies:
+          type === "movie"
+            ? prev.movies.filter((m) => m.id !== content_id)
+            : prev.movies,
+        shows:
+          type === "tv"
+            ? prev.shows.filter((s) => s.id !== content_id)
+            : prev.shows,
       }));
     } catch (err) {
       console.error(err);
@@ -96,7 +121,10 @@ export default function Watched() {
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (user) => {
-      if (!user) { alert("You must be signed in."); return; }
+      if (!user) {
+        alert("You must be signed in.");
+        return;
+      }
       try {
         const res = await fetch(`${API_URL}/watched`, {
           headers: {
@@ -130,11 +158,11 @@ export default function Watched() {
   const q = query.toLowerCase();
   const filteredMovies = applySort(
     results.movies.filter((m) => m.title.toLowerCase().includes(q)),
-    sort
+    sort,
   );
   const filteredShows = applySort(
     results.shows.filter((s) => s.name.toLowerCase().includes(q)),
-    sort
+    sort,
   );
 
   return (
@@ -143,67 +171,91 @@ export default function Watched() {
       <div className="mb-8">
         <div className="flex items-center gap-3 mb-1">
           <h1 className="text-3xl font-bold text-white">Watched</h1>
-          <span className="bg-green-600/20 text-green-400 border border-green-600/30 text-sm font-medium px-2.5 py-0.5 rounded-full">
+          <span className="bg-success-600/20 text-success-400 border border-success-600/30 text-sm font-medium px-2.5 py-0.5 rounded-full">
             {totalCount}
           </span>
         </div>
-        <p className="text-slate-400">Everything you've already seen</p>
+        <p className="text-neutral-400">Everything you've already seen</p>
       </div>
 
       {/* Loading */}
       {loading && (
         <div className="flex items-center justify-center py-20">
-          <div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+          <div className="w-8 h-8 border-2 border-success-500 border-t-transparent rounded-full animate-spin" />
         </div>
       )}
 
       {/* Tabs */}
       {!loading && (
-      <div className="flex gap-1 border-b border-slate-700 mb-6">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`px-4 py-2.5 text-sm font-medium transition-all duration-150 border-b-2 -mb-px ${
-              activeTab === tab.id
-                ? "border-green-500 text-green-400"
-                : "border-transparent text-slate-400 hover:text-slate-200"
-            }`}
-          >
-            {tab.label}
-            {tab.count > 0 && (
-              <span className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-full ${
-                activeTab === tab.id ? "bg-green-600/30 text-green-300" : "bg-slate-700 text-slate-400"
-              }`}>
-                {tab.count}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
+        <div className="flex gap-1 border-b border-neutral-700 mb-6">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-4 py-2.5 text-sm font-medium transition-all duration-150 border-b-2 -mb-px ${
+                activeTab === tab.id
+                  ? "border-success-500 text-success-400"
+                  : "border-transparent text-neutral-400 hover:text-neutral-200"
+              }`}
+            >
+              {tab.label}
+              {tab.count > 0 && (
+                <span
+                  className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-full ${
+                    activeTab === tab.id
+                      ? "bg-success-600/30 text-success-300"
+                      : "bg-neutral-700 text-neutral-400"
+                  }`}
+                >
+                  {tab.count}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
       )}
 
       {/* Search + Sort */}
       {totalCount > 0 && (
         <div className="flex gap-3 mb-6">
           <div className="relative flex-1">
-            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            <svg
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+              />
             </svg>
             <input
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search watched…"
-              className="w-full bg-slate-800 border border-slate-700 text-slate-200 placeholder-slate-500 rounded-lg pl-9 pr-4 py-2 text-sm focus:outline-none focus:border-slate-500"
+              className="w-full bg-neutral-800 border border-neutral-700 text-neutral-200 placeholder-neutral-500 rounded-lg pl-9 pr-4 py-2 text-sm focus:outline-none focus:border-neutral-500"
             />
             {query && (
               <button
                 onClick={() => setQuery("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-300"
               >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M6 18L18 6M6 6l12 12"
+                  />
                 </svg>
               </button>
             )}
@@ -211,7 +263,7 @@ export default function Watched() {
           <select
             value={sort}
             onChange={(e) => setSort(e.target.value as SortType)}
-            className="text-sm bg-slate-800 border border-slate-700 text-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:border-slate-500"
+            className="text-sm bg-neutral-800 border border-neutral-700 text-neutral-300 rounded-lg px-3 py-2 focus:outline-none focus:border-neutral-500"
           >
             <option value="default">Sort: Default</option>
             <option value="title_asc">Title: A → Z</option>
@@ -230,16 +282,30 @@ export default function Watched() {
       {/* Empty state */}
       {!loading && totalCount === 0 && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="w-16 h-16 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center mb-4">
-            <svg className="w-8 h-8 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          <div className="w-16 h-16 rounded-full bg-neutral-800 border border-neutral-700 flex items-center justify-center mb-4">
+            <svg
+              className="w-8 h-8 text-neutral-500"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
             </svg>
           </div>
-          <h3 className="text-slate-300 font-medium mb-1">Nothing watched yet</h3>
-          <p className="text-slate-500 text-sm mb-4">Find something to watch and mark it as watched from its detail page</p>
+          <h3 className="text-neutral-300 font-medium mb-1">
+            Nothing watched yet
+          </h3>
+          <p className="text-neutral-500 text-sm mb-4">
+            Find something to watch and mark it as watched from its detail page
+          </p>
           <button
             onClick={() => navigate("/trending")}
-            className="bg-green-600 hover:bg-green-500 text-white text-sm font-medium px-5 py-2 rounded-lg transition-colors"
+            className="bg-success-600 hover:bg-success-500 text-white text-sm font-medium px-5 py-2 rounded-lg transition-colors"
           >
             Browse Trending
           </button>
@@ -247,27 +313,39 @@ export default function Watched() {
       )}
 
       {/* No search results */}
-      {totalCount > 0 && query && filteredMovies.length === 0 && filteredShows.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-20 text-center">
-          <p className="text-slate-400 font-medium mb-1">No results for "{query}"</p>
-          <p className="text-slate-500 text-sm">Try a different search term</p>
-        </div>
-      )}
+      {totalCount > 0 &&
+        query &&
+        filteredMovies.length === 0 &&
+        filteredShows.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <p className="text-neutral-400 font-medium mb-1">
+              No results for "{query}"
+            </p>
+            <p className="text-neutral-500 text-sm">
+              Try a different search term
+            </p>
+          </div>
+        )}
 
       {/* Movies */}
       {showMovies && filteredMovies.length > 0 && (
         <div className="mb-10">
           {activeTab === "all" && (
-            <h2 className="text-lg font-semibold text-slate-200 mb-4 flex items-center gap-2">
+            <h2 className="text-lg font-semibold text-neutral-200 mb-4 flex items-center gap-2">
               Movies
-              <span className="text-xs text-slate-500 font-normal bg-slate-800 border border-slate-700 px-2 py-0.5 rounded-full">
+              <span className="text-xs text-neutral-500 font-normal bg-neutral-800 border border-neutral-700 px-2 py-0.5 rounded-full">
                 {filteredMovies.length}
               </span>
             </h2>
           )}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {filteredMovies.map((item) => (
-              <MediaCard key={`movie-${item.id}`} type="movie" item={item} onRemove={onRemove} />
+              <MediaCard
+                key={`movie-${item.id}`}
+                type="movie"
+                item={item}
+                onRemove={onRemove}
+              />
             ))}
           </div>
         </div>
@@ -277,16 +355,21 @@ export default function Watched() {
       {showTV && filteredShows.length > 0 && (
         <div>
           {activeTab === "all" && (
-            <h2 className="text-lg font-semibold text-slate-200 mb-4 flex items-center gap-2">
+            <h2 className="text-lg font-semibold text-neutral-200 mb-4 flex items-center gap-2">
               TV Shows
-              <span className="text-xs text-slate-500 font-normal bg-slate-800 border border-slate-700 px-2 py-0.5 rounded-full">
+              <span className="text-xs text-neutral-500 font-normal bg-neutral-800 border border-neutral-700 px-2 py-0.5 rounded-full">
                 {filteredShows.length}
               </span>
             </h2>
           )}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {filteredShows.map((item) => (
-              <MediaCard key={`tv-${item.id}`} type="tv" item={item} onRemove={onRemove} />
+              <MediaCard
+                key={`tv-${item.id}`}
+                type="tv"
+                item={item}
+                onRemove={onRemove}
+              />
             ))}
           </div>
         </div>
