@@ -96,9 +96,12 @@ The release calendar pulls upcoming release dates and displays them day-by-day. 
 
 ## Roadmap
 
-- [ ] Granular episode-level watch tracking
-- [ ] Filter dashboard by unwatched episodes
-- [ ] Social features (share watchlists, see what friends are watching)
+- [x] Granular episode-level watch tracking
+- [x] Filter dashboard by unwatched episodes
+- [x] Social features (share watchlists, see what friends are watching)
+- [ ] Make iOS app
+- [ ] Add more social features
+- [ ] Add additional functionality
 
 ## License
 
