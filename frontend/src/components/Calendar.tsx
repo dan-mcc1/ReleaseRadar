@@ -124,6 +124,7 @@ export default function CalendarComponent({
     })),
   ];
 
+  const episodeListRef = useRef<HTMLDivElement>(null);
   const [token, setToken] = useState<string | null>(null);
   useEffect(() => {
     if (!user) return;
@@ -341,6 +342,15 @@ export default function CalendarComponent({
 
   const emptyCells = Array(firstDayOfWeek).fill(null);
 
+  const todayIso = toLocalISODate(today);
+  const todayItemCount = getFilteredItems(
+    allItems.filter(
+      (item) =>
+        (item.type === "tv" && item.air_date === todayIso) ||
+        (item.type === "movie" && item.release_date === todayIso),
+    ),
+  ).length;
+
   // Count upcoming items this month for the header stat
   const upcomingThisMonth = allItems.filter((item) => {
     const dateStr = item.type === "tv" ? item.air_date : item.release_date;
@@ -470,6 +480,29 @@ export default function CalendarComponent({
             <span className="hidden sm:inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-600/20 text-primary-400 border border-primary-600/30">
               {upcomingThisMonth} upcoming
             </span>
+          )}
+          {todayItemCount > 0 && (
+            <button
+              onClick={() => {
+                handleGoToToday();
+                setTimeout(() => {
+                  const el = episodeListRef.current;
+                  if (!el) return;
+                  const navHeight = 64; // sticky navbar h-16
+                  const top =
+                    el.getBoundingClientRect().top +
+                    window.scrollY -
+                    navHeight;
+                  window.scrollTo({ top, behavior: "smooth" });
+                }, 50);
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-primary-600 text-white hover:bg-primary-500 active:bg-primary-700 transition-colors shadow-sm"
+            >
+              {todayItemCount} airing today
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
           )}
         </div>
         <button
@@ -844,7 +877,7 @@ export default function CalendarComponent({
 
       {/* ── SELECTED DAY DETAIL (month & week views) ── */}
       {viewMode !== "day" && (
-        <div className="border-t border-neutral-700 bg-neutral-900/50 px-4 sm:px-6 py-4 sm:py-6">
+        <div ref={episodeListRef} className="border-t border-neutral-700 bg-neutral-900/50 px-4 sm:px-6 py-4 sm:py-6">
           <div className="flex items-center gap-3 mb-4">
             <h2 className="text-lg font-semibold text-neutral-100">
               {selectedDate.date.toLocaleDateString(undefined, {
@@ -880,7 +913,7 @@ export default function CalendarComponent({
 
       {/* ── DAY VIEW ── */}
       {viewMode === "day" && (
-        <div className="px-4 sm:px-6 py-4 sm:py-6">
+        <div ref={episodeListRef} className="px-4 sm:px-6 py-4 sm:py-6">
           <div className="flex items-center gap-3 mb-4">
             <h2 className="text-xl font-semibold text-neutral-100">
               {selectedDate.date.toLocaleDateString(undefined, {
