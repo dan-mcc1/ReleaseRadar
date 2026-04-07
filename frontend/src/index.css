@@ -92,6 +92,10 @@
   --color-highlight-950: #2e1065;
 }
 
+body {
+  overflow-x: hidden;
+}
+
 .datepicker-input-wrapper .datepicker-input-icon {
     display: none !important;
 }

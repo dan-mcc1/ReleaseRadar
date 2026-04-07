@@ -383,7 +383,7 @@ export default function NavBar() {
   return (
     <Disclosure
       as="nav"
-      className="relative bg-primary-800 after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-white/10"
+      className="sticky top-0 z-50 bg-primary-800 after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-white/10"
     >
       <div className="mx-auto max-w-7xl px-4 lg:px-8">
         <div className="relative flex h-16 items-center justify-between">
