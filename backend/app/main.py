@@ -188,7 +188,13 @@ async def log_request_time(request: Request, call_next):
 
 app.add_middleware(
     TrustedHostMiddleware,
-    allowed_hosts=["releaseradar.co", "www.releaseradar.co", "localhost", "127.0.0.1"],
+    allowed_hosts=[
+        "api.releaseradar.co",
+        "releaseradar.co",
+        "www.releaseradar.co",
+        "localhost",
+        "127.0.0.1",
+    ],
 )
 app.add_middleware(
     CORSMiddleware,
