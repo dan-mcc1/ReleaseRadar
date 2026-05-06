@@ -10,7 +10,10 @@ class Settings(BaseSettings):
     @field_validator("CORS_ORIGINS", mode="before")
     def parse_json(cls, v):
         if isinstance(v, str):
-            return json.loads(v)
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                return [origin.strip() for origin in v.split(",")]
         return v
 
     TMDB_BEARER_TOKEN: str
