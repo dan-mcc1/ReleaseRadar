@@ -1,5 +1,5 @@
 # app/routers/episode_watched.py
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.services.watched_episode_service import (
@@ -13,13 +13,16 @@ from app.services.watched_episode_service import (
     remove_season_watched,
 )
 from app.dependencies.auth import get_current_user
+from app.core.limiter import limiter
 
 router = APIRouter()
 
 
 # Add an episode as watched
 @router.post("/add")
+@limiter.limit("60/minute")
 def add_episode(
+    request: Request,
     show_id: int,
     season_number: int,
     episode_number: int,
@@ -42,7 +45,7 @@ def remove_episode(
 
 
 # Get all watched episodes for the current user
-@router.get("/")
+@router.get("")
 def get_user_watched_episodes(
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
@@ -52,7 +55,9 @@ def get_user_watched_episodes(
 
 # Mark all episodes in a season as watched
 @router.post("/season/add")
+@limiter.limit("30/minute")
 def add_season(
+    request: Request,
     show_id: int,
     season_number: int,
     db: Session = Depends(get_db),
@@ -80,7 +85,7 @@ def get_next_episodes_bulk(
     uid: str = Depends(get_current_user),
 ):
     """Comma-separated show_ids, e.g. ?show_ids=1,2,3"""
-    ids = [int(x) for x in show_ids.split(",") if x.strip().isdigit()]
+    ids = [int(x) for x in show_ids.split(",") if x.strip().isdigit()][:200]
     return get_next_unwatched_episodes_bulk(db, uid, ids)
 
 

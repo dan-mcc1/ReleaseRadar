@@ -17,7 +17,7 @@ def _utcnow():
 
 
 def _serialize_user(user: User) -> dict:
-    return {"id": user.id, "username": user.username, "email": user.email}
+    return {"id": user.id, "username": user.username}
 
 
 def _get_friendship(db: Session, user_a: str, user_b: str) -> Friendship | None:
@@ -26,8 +26,12 @@ def _get_friendship(db: Session, user_a: str, user_b: str) -> Friendship | None:
         db.query(Friendship)
         .filter(
             or_(
-                and_(Friendship.requester_id == user_a, Friendship.addressee_id == user_b),
-                and_(Friendship.requester_id == user_b, Friendship.addressee_id == user_a),
+                and_(
+                    Friendship.requester_id == user_a, Friendship.addressee_id == user_b
+                ),
+                and_(
+                    Friendship.requester_id == user_b, Friendship.addressee_id == user_a
+                ),
             )
         )
         .first()
@@ -47,7 +51,9 @@ def send_friend_request(db: Session, requester_id: str, addressee_username: str)
         raise HTTPException(status_code=404, detail="User not found.")
 
     if addressee.id == requester_id:
-        raise HTTPException(status_code=400, detail="You cannot send a friend request to yourself.")
+        raise HTTPException(
+            status_code=400, detail="You cannot send a friend request to yourself."
+        )
 
     is_public = (addressee.profile_visibility or "friends_only") == "public"
 
@@ -59,7 +65,9 @@ def send_friend_request(db: Session, requester_id: str, addressee_username: str)
         if existing.status == "following":
             if existing.requester_id == requester_id:
                 # Requester is already following this person
-                raise HTTPException(status_code=409, detail="You are already following this user.")
+                raise HTTPException(
+                    status_code=409, detail="You are already following this user."
+                )
             else:
                 # The target is already following the requester — add back → mutual friends
                 existing.status = "accepted"
@@ -75,9 +83,13 @@ def send_friend_request(db: Session, requester_id: str, addressee_username: str)
                 db.commit()
                 db.refresh(existing)
                 return existing
-            raise HTTPException(status_code=409, detail="A friend request already exists between you.")
+            raise HTTPException(
+                status_code=409, detail="A friend request already exists between you."
+            )
         if existing.status == "declined":
-            cooldown_end = existing.updated_at.replace(tzinfo=timezone.utc) + timedelta(days=DECLINED_COOLDOWN_DAYS)
+            cooldown_end = existing.updated_at.replace(tzinfo=timezone.utc) + timedelta(
+                days=DECLINED_COOLDOWN_DAYS
+            )
             if _utcnow() < cooldown_end:
                 days_left = (cooldown_end - _utcnow()).days + 1
                 raise HTTPException(
@@ -97,7 +109,9 @@ def send_friend_request(db: Session, requester_id: str, addressee_username: str)
     if not is_public:
         pending_count = (
             db.query(Friendship)
-            .filter(Friendship.requester_id == requester_id, Friendship.status == "pending")
+            .filter(
+                Friendship.requester_id == requester_id, Friendship.status == "pending"
+            )
             .count()
         )
         if pending_count >= MAX_PENDING_OUTGOING:
@@ -117,7 +131,9 @@ def send_friend_request(db: Session, requester_id: str, addressee_username: str)
     return friendship
 
 
-def respond_to_request(db: Session, addressee_id: str, friendship_id: int, accept: bool):
+def respond_to_request(
+    db: Session, addressee_id: str, friendship_id: int, accept: bool
+):
     """
     Accept or decline an incoming friend request.
     """
@@ -172,9 +188,12 @@ def get_friends(db: Session, user_id: str) -> list[dict]:
     users = {u.id: u for u in db.query(User).filter(User.id.in_(friend_ids)).all()}
 
     return [
-        {"friendship_id": f.id, "friend": _serialize_user(users[
-            f.addressee_id if f.requester_id == user_id else f.requester_id
-        ])}
+        {
+            "friendship_id": f.id,
+            "friend": _serialize_user(
+                users[f.addressee_id if f.requester_id == user_id else f.requester_id]
+            ),
+        }
         for f in friendships
         if (f.addressee_id if f.requester_id == user_id else f.requester_id) in users
     ]
@@ -195,7 +214,11 @@ def get_incoming_requests(db: Session, user_id: str) -> list[dict]:
     users = {u.id: u for u in db.query(User).filter(User.id.in_(requester_ids)).all()}
 
     return [
-        {"friendship_id": f.id, "from_user": _serialize_user(users[f.requester_id]), "created_at": f.created_at}
+        {
+            "friendship_id": f.id,
+            "from_user": _serialize_user(users[f.requester_id]),
+            "created_at": f.created_at,
+        }
         for f in friendships
         if f.requester_id in users
     ]
@@ -216,7 +239,11 @@ def get_outgoing_requests(db: Session, user_id: str) -> list[dict]:
     users = {u.id: u for u in db.query(User).filter(User.id.in_(addressee_ids)).all()}
 
     return [
-        {"friendship_id": f.id, "to_user": _serialize_user(users[f.addressee_id]), "created_at": f.created_at}
+        {
+            "friendship_id": f.id,
+            "to_user": _serialize_user(users[f.addressee_id]),
+            "created_at": f.created_at,
+        }
         for f in friendships
         if f.addressee_id in users
     ]

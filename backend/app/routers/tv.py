@@ -2,9 +2,6 @@ from fastapi import APIRouter, Query, HTTPException, Depends
 from sqlalchemy.orm import Session, selectinload
 from app.services.tmdb_tv import (
     fetch_show_from_tmdb,
-    get_popular_shows,
-    get_active_popular_shows,
-    get_shows_by_actor,
     fetch_season_data_from_tmdb,
     get_full_season_info,
 )
@@ -14,21 +11,6 @@ from app.db.session import get_db
 from app.services.watchlist_service import serialize_show, _show_query_options
 
 router = APIRouter()
-
-
-@router.get("/popular")
-def popular_shows():
-    return get_popular_shows()
-
-
-@router.get("/popular_this_month")
-def active_popular_shows(curr_month: int = Query(...), curr_year: int = Query(...)):
-    return get_active_popular_shows(curr_month, curr_year)
-
-
-@router.get("/by_actor")
-def by_actor(query: str):
-    return get_shows_by_actor(query)
 
 
 # --- DB-first single show endpoint ---

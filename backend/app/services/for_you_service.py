@@ -1,6 +1,8 @@
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import defaultdict
 
+from sqlalchemy import union_all, select
 from sqlalchemy.orm import Session
 
 from app.models.watched import Watched
@@ -10,17 +12,28 @@ from app.services.tmdb_client import get
 _SOURCE_LIMIT = 25   # most recent watched + watchlist items to seed from
 _MAX_WORKERS = 10
 _RETURN_LIMIT = 40   # max results returned
+_CACHE_TTL = 6 * 3600  # TMDB rec results are user-agnostic and stable
+
+# In-memory cache: (content_type, content_id) → (results, monotonic_timestamp)
+_rec_cache: dict[tuple[str, int], tuple[list, float]] = {}
 
 
 def _fetch_tmdb_recommendations(content_type: str, content_id: int) -> list[dict]:
-    """Fetch TMDB recommendations for a single movie or TV show."""
+    """Fetch TMDB recommendations for a single movie or TV show, with TTL cache."""
+    key = (content_type, content_id)
+    cached = _rec_cache.get(key)
+    if cached:
+        results, ts = cached
+        if time.monotonic() - ts < _CACHE_TTL:
+            return results
+
     try:
         path = f"/{'movie' if content_type == 'movie' else 'tv'}/{content_id}/recommendations"
         data = get(path)
         results = data.get("results", [])
-        # Tag each result with media_type so we know what it is downstream
         for r in results:
             r.setdefault("media_type", content_type)
+        _rec_cache[key] = (results, time.monotonic())
         return results
     except Exception:
         return []
@@ -29,14 +42,14 @@ def _fetch_tmdb_recommendations(content_type: str, content_id: int) -> list[dict
 def _get_seeds_recent(db: Session, uid: str) -> list[tuple[str, int]]:
     """25 most recently watched + watchlist items, deduped."""
     watched_rows = (
-        db.query(Watched)
+        db.query(Watched.content_type, Watched.content_id)
         .filter(Watched.user_id == uid)
         .order_by(Watched.watched_at.desc())
         .limit(_SOURCE_LIMIT)
         .all()
     )
     watchlist_rows = (
-        db.query(Watchlist)
+        db.query(Watchlist.content_type, Watchlist.content_id)
         .filter(Watchlist.user_id == uid)
         .order_by(Watchlist.added_at.desc())
         .limit(_SOURCE_LIMIT)
@@ -55,13 +68,21 @@ def _get_seeds_recent(db: Session, uid: str) -> list[tuple[str, int]]:
 def _get_seeds_top_rated(db: Session, uid: str) -> list[tuple[str, int]]:
     """25 highest-rated watched items (rating not null), desc by rating then recency."""
     rows = (
-        db.query(Watched)
+        db.query(Watched.content_type, Watched.content_id)
         .filter(Watched.user_id == uid, Watched.rating.isnot(None))
         .order_by(Watched.rating.desc(), Watched.watched_at.desc())
         .limit(_SOURCE_LIMIT)
         .all()
     )
     return [(row.content_type, row.content_id) for row in rows]
+
+
+def _get_excluded(db: Session, uid: str) -> set[tuple[str, int]]:
+    """All (content_type, content_id) the user already has — column-only, single union query."""
+    watched_q = select(Watched.content_type, Watched.content_id).where(Watched.user_id == uid)
+    watchlist_q = select(Watchlist.content_type, Watchlist.content_id).where(Watchlist.user_id == uid)
+    rows = db.execute(union_all(watched_q, watchlist_q)).all()
+    return {(r[0], r[1]) for r in rows}
 
 
 def get_for_you_recommendations(db: Session, uid: str, mode: str = "recent") -> dict:
@@ -81,13 +102,7 @@ def get_for_you_recommendations(db: Session, uid: str, mode: str = "recent") -> 
         return {"movies": [], "shows": []}
 
     # ── Step 2: build exclusion set (everything the user already has) ──────
-    all_watched = db.query(Watched).filter(Watched.user_id == uid).all()
-    all_watchlist = db.query(Watchlist).filter(Watchlist.user_id == uid).all()
-    excluded: set[tuple[str, int]] = set()
-    for row in all_watched:
-        excluded.add((row.content_type, row.content_id))
-    for row in all_watchlist:
-        excluded.add((row.content_type, row.content_id))
+    excluded = _get_excluded(db, uid)
 
     # ── Step 3: fetch recommendations concurrently ─────────────────────────
     # score_map: (content_type, content_id) → {"score": int, "item": dict}

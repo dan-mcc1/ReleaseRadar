@@ -7,3 +7,6 @@ firebase_admin
 psycopg2-binary
 icalendar
 resend
+slowapi
+pydantic[email]
+cachetools

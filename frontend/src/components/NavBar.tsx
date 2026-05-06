@@ -11,11 +11,13 @@ import {
 import { Bars3Icon, XMarkIcon } from "@heroicons/react/24/outline";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation, Link, useNavigate } from "react-router-dom";
-import { onIdTokenChanged, getAuth, signOut } from "firebase/auth";
-import { firebaseApp } from "../firebase";
+import { onIdTokenChanged, signOut } from "firebase/auth";
+import { useQueryClient } from "@tanstack/react-query";
+import { auth } from "../firebase";
 import { API_URL, BASE_IMAGE_URL, getAvatarColor } from "../constants";
-
-const NAV_BAR_REFRESH_TIME = 30; // amount of time between each GET for recommendations and friend requests
+import { apiFetch } from "../utils/apiFetch";
+import { useNavCounts, useNavAvatar } from "../hooks/api/useNavCounts";
+import { queryKeys } from "../hooks/api/queryKeys";
 
 interface SearchResult {
   id: number;
@@ -88,7 +90,10 @@ function NavDropdown({
           />
         </svg>
       </MenuButton>
-      <MenuItems className="absolute left-0 z-20 mt-1 w-44 origin-top-left rounded-lg bg-neutral-800 border border-white/10 py-1 shadow-xl transition data-closed:scale-95 data-closed:opacity-0 data-enter:duration-100 data-enter:ease-out data-leave:duration-75 data-leave:ease-in">
+      <MenuItems
+        modal={false}
+        className="absolute left-0 z-20 mt-1 w-44 origin-top-left rounded-lg bg-neutral-800 border border-white/10 py-1 shadow-xl transition data-closed:scale-95 data-closed:opacity-0 data-enter:duration-100 data-enter:ease-out data-leave:duration-75 data-leave:ease-in"
+      >
         {links.map((link) => {
           const badge = badges?.[link.href] ?? 0;
           return (
@@ -116,23 +121,24 @@ function NavDropdown({
 export default function NavBar() {
   const location = useLocation();
   const navigate = useNavigate();
-  const auth = getAuth(firebaseApp);
+  const queryClient = useQueryClient();
   const [user, setUser] = useState(auth.currentUser);
   const [mobileDiscoverOpen, setMobileDiscoverOpen] = useState(false);
   const [mobileLibraryOpen, setMobileLibraryOpen] = useState(false);
   const mobileCloseRef = useRef<HTMLButtonElement>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [pendingRequests, setPendingRequests] = useState(0);
-  const [unreadRecs, setUnreadRecs] = useState(0);
-  const [avatarKey, setAvatarKey] = useState<string | null>(null);
   const [dropdownResults, setDropdownResults] = useState<SearchResult[]>([]);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [dropdownLoading, setDropdownLoading] = useState(false);
   const esRef = useRef<EventSource | null>(null);
-  const lastCountsFetchRef = useRef<number>(0);
   const searchContainerRef = useRef<HTMLDivElement>(null);
   const dropdownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dropdownAbortRef = useRef<AbortController | null>(null);
+
+  const { data: navCounts } = useNavCounts();
+  const { data: avatarKey } = useNavAvatar();
+  const pendingRequests = navCounts?.pendingRequests ?? 0;
+  const unreadRecs = navCounts?.unreadRecs ?? 0;
 
   function cancelPendingDropdown() {
     if (dropdownTimerRef.current) clearTimeout(dropdownTimerRef.current);
@@ -161,22 +167,20 @@ export default function NavBar() {
       setDropdownOpen(false);
       return;
     }
-    setDropdownLoading(true);
     const abort = new AbortController();
     dropdownAbortRef.current = abort;
     const timer = setTimeout(async () => {
+      setDropdownLoading(true);
       try {
-        const res = await fetch(
-          `${API_URL}/search?query=${encodeURIComponent(q)}`,
-          { signal: abort.signal },
-        );
+        const res = await apiFetch(`/search?query=${encodeURIComponent(q)}`, {
+          signal: abort.signal,
+        });
         if (res.ok) {
           const data: {
             movies: SearchResult[];
             shows: SearchResult[];
             people: SearchResult[];
           } = await res.json();
-          // Tag each with media_type then interleave: up to 3 shows, 2 movies, 1 person
           const shows = (data.shows ?? [])
             .slice(0, 3)
             .map((r) => ({ ...r, media_type: "tv" as const }));
@@ -223,42 +227,54 @@ export default function NavBar() {
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  const fetchCounts = useCallback(async (token: string) => {
-    try {
-      const headers = { Authorization: `Bearer ${token}` };
-      const [friendsRes, recsRes] = await Promise.all([
-        fetch(`${API_URL}/friends/requests/incoming`, { headers }),
-        fetch(`${API_URL}/recommendations/unread-count`, { headers }),
-      ]);
-      if (friendsRes.ok) {
-        const data: { friendship_id: number }[] = await friendsRes.json();
-        setPendingRequests(data.length);
-      }
-      if (recsRes.ok) {
-        const data: { count: number } = await recsRes.json();
-        setUnreadRecs(data.count);
-      }
-    } catch {
-      // non-critical — silently ignore
-    }
-  }, []);
+  const connectSSE = useCallback(async (uid: string) => {
+    if (esRef.current?.readyState === EventSource.OPEN) return;
+    esRef.current?.close();
+    esRef.current = null;
 
-  const fetchAvatar = useCallback(async (token: string) => {
-    try {
-      const res = await fetch(`${API_URL}/user/me`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setAvatarKey(data.avatar_key ?? null);
-      }
-    } catch {
-      // non-critical
-    }
-  }, []);
+    if (!auth.currentUser) return;
 
-  // onIdTokenChanged fires on login, logout, and token refresh (~every hour).
-  // We close and reopen the SSE connection each time so the token stays valid.
+    const tokenRes = await apiFetch("/events/token", { method: "POST" });
+    if (!tokenRes.ok) return;
+    const { session_token } = await tokenRes.json();
+    const es = new EventSource(
+      `${API_URL}/events/stream?token=${encodeURIComponent(session_token)}`,
+    );
+    esRef.current = es;
+
+    es.onmessage = (e) => {
+      try {
+        const data: {
+          type: string;
+          pending_requests?: number;
+          unread_recs?: number;
+        } = JSON.parse(e.data);
+        if (data.type === "counts_update") {
+          queryClient.setQueryData(
+            queryKeys.navCounts(uid),
+            (old: { pendingRequests: number; unreadRecs: number } | undefined) => ({
+              pendingRequests: data.pending_requests ?? old?.pendingRequests ?? 0,
+              unreadRecs: data.unread_recs ?? old?.unreadRecs ?? 0,
+            }),
+          );
+        }
+      } catch {
+        // ignore malformed events
+      }
+    };
+
+    es.onerror = () => {
+      esRef.current?.close();
+      esRef.current = null;
+
+      queryClient.invalidateQueries({ queryKey: queryKeys.navCounts(uid) });
+
+      setTimeout(() => {
+        connectSSE(uid);
+      }, 2000);
+    };
+  }, [queryClient]);
+
   useEffect(() => {
     const unsubscribe = onIdTokenChanged(auth, async (currentUser) => {
       esRef.current?.close();
@@ -266,108 +282,20 @@ export default function NavBar() {
 
       if (!currentUser) {
         setUser(null);
-        setPendingRequests(0);
-        setUnreadRecs(0);
         return;
       }
 
       setUser(currentUser);
-      const token = await currentUser.getIdToken();
-      fetchCounts(token);
-      fetchAvatar(token);
-
-      // EventSource can't send custom headers, so token goes in the query string
-      const es = new EventSource(
-        `${API_URL}/events/stream?token=${encodeURIComponent(token)}`,
-      );
-      esRef.current = es;
-      es.onmessage = (e) => {
-        try {
-          const data: { type: string } = JSON.parse(e.data);
-          if (data.type === "friend_request") {
-            setPendingRequests((n) => n + 1);
-            window.dispatchEvent(new CustomEvent("friend-request-received"));
-          }
-          if (data.type === "recommendation") {
-            setUnreadRecs((n) => n + 1);
-            window.dispatchEvent(new CustomEvent("recommendation-received"));
-          }
-        } catch {
-          // ignore malformed events
-        }
-      };
+      queryClient.invalidateQueries({ queryKey: queryKeys.navCounts(currentUser.uid) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.navAvatar(currentUser.uid) });
+      connectSSE(currentUser.uid);
     });
 
     return () => {
       unsubscribe();
       esRef.current?.close();
     };
-  }, [fetchCounts]);
-
-  // Re-sync counts on navigation, throttled to at most once every 30 s
-  // useEffect(() => {
-  //   const currentUser = auth.currentUser;
-  //   if (!currentUser) return;
-  //   const now = Date.now();
-  //   if (now - lastCountsFetchRef.current < 30_000) return;
-  //   lastCountsFetchRef.current = now;
-  //   currentUser
-  //     .getIdToken()
-  //     .then(fetchCounts)
-  //     .catch(() => {});
-  // }, [location.pathname, fetchCounts]);
-  useEffect(() => {
-    const currentUser = auth.currentUser;
-    if (!currentUser) return;
-
-    let isMounted = true;
-
-    const interval = setInterval(() => {
-      currentUser
-        .getIdToken()
-        .then((token) => {
-          if (isMounted) fetchCounts(token);
-        })
-        .catch(() => {});
-    }, NAV_BAR_REFRESH_TIME * 1000); // every 30s (same as your throttle)
-
-    return () => {
-      isMounted = false;
-      clearInterval(interval);
-    };
-  }, [fetchCounts]);
-
-  // Decrement immediately when a recommendation is marked read on the same page
-  useEffect(() => {
-    function handler() {
-      setUnreadRecs((n) => Math.max(0, n - 1));
-    }
-    window.addEventListener("rec-marked-read", handler);
-    return () => window.removeEventListener("rec-marked-read", handler);
-  }, []);
-
-  // Re-fetch avatar when the user saves a new one from Settings
-  useEffect(() => {
-    function handler() {
-      const currentUser = auth.currentUser;
-      if (!currentUser) return;
-      currentUser
-        .getIdToken()
-        .then(fetchAvatar)
-        .catch(() => {});
-    }
-    window.addEventListener("avatar-updated", handler);
-    return () => window.removeEventListener("avatar-updated", handler);
-  }, [fetchAvatar]);
-
-  // Decrement immediately when a friend request is accepted or declined on the same page
-  useEffect(() => {
-    function handler() {
-      setPendingRequests((n) => Math.max(0, n - 1));
-    }
-    window.addEventListener("friend-request-handled", handler);
-    return () => window.removeEventListener("friend-request-handled", handler);
-  }, []);
+  }, [connectSSE, queryClient]);
 
   const libraryBadges: Record<string, number> = {
     "/activity": unreadRecs,
@@ -383,7 +311,7 @@ export default function NavBar() {
   return (
     <Disclosure
       as="nav"
-      className="sticky top-0 z-50 bg-primary-800 after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-white/10"
+      className="fixed top-0 left-0 right-0 z-50 bg-primary-800 after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-white/10"
     >
       <div className="mx-auto max-w-7xl px-4 lg:px-8">
         <div className="relative flex h-16 items-center justify-between">
@@ -427,7 +355,7 @@ export default function NavBar() {
           {/* Logo + desktop nav */}
           <div className="flex flex-1 items-center justify-center lg:items-stretch lg:justify-start">
             <div className="flex shrink-0 items-center text-white">
-              <a href="/" className="flex items-center gap-2 shrink-0">
+              <a href="/calendar" className="flex items-center gap-2 shrink-0">
                 <img
                   src="/favicon-1024.png"
                   className="h-15 w-auto"
@@ -438,11 +366,10 @@ export default function NavBar() {
             </div>
 
             <div className="hidden lg:ml-6 lg:flex lg:items-center lg:gap-1">
-              {/* Calendar */}
               <Link
-                to="/"
+                to="/calendar"
                 className={classNames(
-                  location.pathname === "/"
+                  location.pathname === "/calendar"
                     ? "bg-neutral-950/50 text-white"
                     : "text-neutral-300 hover:bg-white/5 hover:text-white",
                   "rounded-md px-3 py-2 text-sm font-medium",
@@ -451,14 +378,12 @@ export default function NavBar() {
                 Calendar
               </Link>
 
-              {/* Discover dropdown */}
               <NavDropdown
                 label="Discover"
                 links={discoverLinks}
                 currentPath={location.pathname}
               />
 
-              {/* My Library dropdown — signed in only */}
               {user && (
                 <NavDropdown
                   label="My Library"
@@ -495,7 +420,6 @@ export default function NavBar() {
                 className="pl-10 w-56 py-1.5 rounded-md bg-primary-700 border border-primary-800/50 text-white text-sm placeholder-neutral-300 focus:outline-none focus:ring-2 focus:ring-neutral-950/50 transition"
               />
 
-              {/* Search dropdown */}
               {dropdownOpen && (
                 <div className="absolute top-full mt-1 right-0 w-72 bg-neutral-800 border border-white/10 rounded-lg shadow-xl z-50 overflow-hidden">
                   {dropdownLoading && dropdownResults.length === 0 ? (
@@ -612,6 +536,7 @@ export default function NavBar() {
                   </div>
                 </MenuButton>
                 <MenuItems
+                  modal={false}
                   transition
                   className="absolute right-0 z-20 mt-2 w-48 origin-top-right rounded-md bg-neutral-800 py-1 outline -outline-offset-1 outline-white/10 transition data-closed:scale-95 data-closed:transform data-closed:opacity-0 data-enter:duration-100 data-enter:ease-out data-leave:duration-75 data-leave:ease-in"
                 >
@@ -712,18 +637,18 @@ export default function NavBar() {
             )}
           </form>
 
-          {/* Dashboard */}
+          {/* Calendar */}
           <DisclosureButton
             as="a"
-            href="/"
+            href="/calendar"
             className={classNames(
-              location.pathname === "/"
+              location.pathname === "/calendar"
                 ? "bg-neutral-950/50 text-white"
                 : "text-neutral-300 hover:bg-white/5 hover:text-white",
               "block rounded-md px-3 py-2 text-base font-medium",
             )}
           >
-            Dashboard
+            Calendar
           </DisclosureButton>
 
           {/* Discover accordion */}
@@ -751,8 +676,8 @@ export default function NavBar() {
               {discoverLinks.map((item) => (
                 <DisclosureButton
                   key={item.name}
-                  as="a"
-                  href={item.href}
+                  as={Link}
+                  to={item.href}
                   className={classNames(
                     location.pathname === item.href
                       ? "bg-neutral-950/50 text-white"
@@ -809,8 +734,8 @@ export default function NavBar() {
                     return (
                       <DisclosureButton
                         key={item.name}
-                        as="a"
-                        href={item.href}
+                        as={Link}
+                        to={item.href}
                         className={classNames(
                           location.pathname === item.href
                             ? "bg-neutral-950/50 text-white"
@@ -823,19 +748,6 @@ export default function NavBar() {
                       </DisclosureButton>
                     );
                   })}
-                  <DisclosureButton
-                    as="a"
-                    href="/profile"
-                    className={classNames(
-                      location.pathname === "/profile"
-                        ? "bg-neutral-950/50 text-white"
-                        : "text-neutral-300 hover:bg-white/5 hover:text-white",
-                      "flex items-center justify-between rounded-md px-3 py-2 text-sm font-medium",
-                    )}
-                  >
-                    Profile
-                    {pendingRequests > 0 && <Badge count={pendingRequests} />}
-                  </DisclosureButton>
                 </div>
               )}
             </>

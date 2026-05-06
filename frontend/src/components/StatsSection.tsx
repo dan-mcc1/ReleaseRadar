@@ -1,5 +1,4 @@
-import { useEffect, useState } from "react";
-import { API_URL } from "../constants";
+import { useUserStats } from "../hooks/api/useUser";
 import {
   BarChart,
   Bar,
@@ -24,10 +23,6 @@ interface Stats {
     distribution: { rating: number; count: number }[];
   };
   top_genres: { name: string; count: number }[];
-}
-
-interface Props {
-  token: string;
 }
 
 const GENRE_COLORS = [
@@ -67,21 +62,11 @@ function StatCard({
   );
 }
 
-export default function StatsSection({ token }: Props) {
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [loading, setLoading] = useState(true);
+export default function StatsSection() {
+  const { data, isLoading } = useUserStats();
+  const stats = data as Stats | undefined;
 
-  useEffect(() => {
-    fetch(`${API_URL}/user/stats`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => setStats(data))
-      .catch(() => setStats(null))
-      .finally(() => setLoading(false));
-  }, [token]);
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="bg-neutral-800 rounded-lg p-4">
         <h2 className="text-lg font-semibold mb-4 text-white">Stats</h2>

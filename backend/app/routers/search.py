@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Query
 from app.services.tmdb_search import (
-    get_multi_search_results,
     get_tv_search_results,
     get_movie_search_results,
     get_multi_trending_results,
@@ -18,7 +17,7 @@ from app.services.tmdb_search import (
 router = APIRouter()
 
 
-@router.get("/")
+@router.get("")
 def search(query: str = "", genre_id: int = None, type: str = Query(None), page: int = Query(1, ge=1)):
     # Genre mode: use TMDB /discover sorted by popularity
     if genre_id:
@@ -44,26 +43,6 @@ def search(query: str = "", genre_id: int = None, type: str = Query(None), page:
 @router.get("/genres")
 def genres():
     return get_genre_list()
-
-
-@router.get("/multi")
-def multi_search(query: str):
-    return get_multi_search_results(query)
-
-
-@router.get("/tv")
-def tv_search(query: str):
-    return get_tv_search_results(query)
-
-
-@router.get("/movie")
-def movie_search(query: str):
-    return get_movie_search_results(query)
-
-
-@router.get("/person")
-def person_search(query: str):
-    return get_person_search_results(query)
 
 
 @router.get("/multi/trending")

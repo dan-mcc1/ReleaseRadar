@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { BASE_IMAGE_URL, API_URL } from "../constants";
+import { BASE_IMAGE_URL } from "../constants";
 import type { Movie, Show } from "../types/calendar";
 import { formatLocalDate } from "../utils/date";
 import { usePageTitle } from "../hooks/usePageTitle";
+import { usePersonInfo } from "../hooks/api/usePersonInfo";
 
 type FullPersonData = {
   id: number;
@@ -108,27 +109,9 @@ function CreditList({
 
 export default function PersonInfo() {
   const { id } = useParams<{ id: string }>();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [person, setPerson] = useState<FullPersonData | null>(null);
+  const { data: person, isPending: loading, error } = usePersonInfo<FullPersonData>(id);
   usePageTitle(person?.name);
   const [bioExpanded, setBioExpanded] = useState(false);
-
-  useEffect(() => {
-    async function getData() {
-      try {
-        setLoading(true);
-        const res = await fetch(`${API_URL}/person/${id}/info`);
-        if (!res.ok) throw new Error("Failed to fetch person");
-        setPerson(await res.json());
-      } catch (err: any) {
-        setError(err.message || "Something went wrong");
-      } finally {
-        setLoading(false);
-      }
-    }
-    getData();
-  }, [id]);
 
   if (loading)
     return (
@@ -139,7 +122,7 @@ export default function PersonInfo() {
         </div>
       </div>
     );
-  if (error) return <p className="text-error-400 p-6">{error}</p>;
+  if (error) return <p className="text-error-400 p-6">{error?.message}</p>;
   if (!person) return <p className="text-neutral-400 p-6">Person not found.</p>;
 
   const BIO_TRUNCATE = 400;

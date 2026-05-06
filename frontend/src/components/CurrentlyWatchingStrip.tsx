@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { BASE_IMAGE_URL, API_URL } from "../constants";
+import { BASE_IMAGE_URL } from "../constants";
 import type { Show, Movie } from "../types/calendar";
-import type { User } from "firebase/auth";
+import { useCurrentlyWatching } from "../hooks/api/useLists";
+import { useNextEpisodesBulk, useToggleEpisode } from "../hooks/api/useEpisodes";
 
 interface NextEpisode {
   finished: boolean;
@@ -21,10 +22,7 @@ function formatAirDate(dateStr: string): string {
 
 function formatToLocalTime(time24: string, sourceTimeZone: string): string {
   const [hour, minute] = time24.split(":").map(Number);
-
-  // Create a date in the SOURCE timezone
   const now = new Date();
-
   const sourceDate = new Date(
     new Intl.DateTimeFormat("en-US", {
       timeZone: sourceTimeZone,
@@ -36,11 +34,7 @@ function formatToLocalTime(time24: string, sourceTimeZone: string): string {
       hour12: false,
     }).format(now),
   );
-
-  // Set correct time
   sourceDate.setHours(hour, minute, 0, 0);
-
-  // Convert to user's local timezone automatically
   return sourceDate.toLocaleTimeString(undefined, {
     hour: "numeric",
     minute: "2-digit",
@@ -50,43 +44,27 @@ function formatToLocalTime(time24: string, sourceTimeZone: string): string {
 
 interface ShowCardProps {
   show: Show;
-  token: string;
   initialNext: NextEpisode | null;
-  onEpisodeWatched: (showId: number, season: number, episode: number) => void;
 }
 
-function ShowCard({
-  show,
-  token,
-  initialNext,
-  onEpisodeWatched,
-}: ShowCardProps) {
-  const [next, setNext] = useState<NextEpisode | null>(initialNext);
+function ShowCard({ show, initialNext }: ShowCardProps) {
   const [marking, setMarking] = useState(false);
   const navigate = useNavigate();
-  const todayStr = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD local
+  const toggleEpisodeMutation = useToggleEpisode();
+  const todayStr = new Date().toLocaleDateString("en-CA");
 
-  // Sync when bulk data arrives after initial render
-  useEffect(() => {
-    setNext(initialNext);
-  }, [initialNext]);
+  const next = initialNext;
 
   async function markWatched() {
     if (!next || next.finished || marking) return;
     setMarking(true);
     try {
-      await fetch(
-        `${API_URL}/watched-episode/add?show_id=${show.id}&season_number=${next.season_number}&episode_number=${next.episode_number}`,
-        { method: "POST", headers: { Authorization: `Bearer ${token}` } },
-      );
-      onEpisodeWatched(show.id, next.season_number!, next.episode_number!);
-      // Fetch next episode after marking
-      const r = await fetch(`${API_URL}/watched-episode/${show.id}/next`, {
-        headers: { Authorization: `Bearer ${token}` },
+      await toggleEpisodeMutation.mutateAsync({
+        showId: show.id,
+        seasonNumber: next.season_number!,
+        episodeNumber: next.episode_number!,
+        watched: false,
       });
-      setNext(await r.json());
-    } catch {
-      // ignore
     } finally {
       setMarking(false);
     }
@@ -96,10 +74,9 @@ function ShowCard({
     if (!next || next.finished || !next.air_date) return false;
     if (next.air_date > todayStr) return true;
     if (next.air_date < todayStr) return false;
-    // Same day — check air time in show's timezone if available
     const airTime = show.air_time;
     const airTimezone = show.air_timezone;
-    if (!airTime) return false; // no time info, assume it's aired
+    if (!airTime) return false;
     try {
       const [h, m] = airTime.split(":").map(Number);
       const tz = airTimezone ?? "UTC";
@@ -127,7 +104,6 @@ function ShowCard({
       className={`flex-shrink-0 w-72 flex flex-col bg-neutral-700/50 rounded-xl overflow-hidden border border-neutral-600/50 ${episodeUrl ? "cursor-pointer hover:border-neutral-500 transition-colors" : ""}`}
     >
       <div className="flex gap-3 p-3 flex-1">
-        {/* Poster — links to show, not episode */}
         <Link
           to={`/tv/${show.id}`}
           onClick={(e) => e.stopPropagation()}
@@ -152,10 +128,8 @@ function ShowCard({
           )}
         </Link>
 
-        {/* Info */}
         <div className="flex-1 min-w-0 flex flex-col justify-between">
           <div>
-            {/* Show name — links to show, not episode */}
             <Link
               to={`/tv/${show.id}`}
               onClick={(e) => e.stopPropagation()}
@@ -259,7 +233,6 @@ function ShowCard({
         </div>
       </div>
 
-      {/* Episode still — falls back to show backdrop then poster */}
       {next &&
         !next.finished &&
         (next.still_path ?? show.backdrop_path ?? show.poster_path) && (
@@ -275,49 +248,22 @@ function ShowCard({
   );
 }
 
-interface Props {
-  shows: Show[];
-  movies: Movie[];
-  user: User | null;
-  onEpisodeWatched?: (showId: number, season: number, episode: number) => void;
-}
-
-export default function CurrentlyWatchingStrip({
-  shows,
-  movies,
-  user,
-  onEpisodeWatched,
-}: Props) {
+export default function CurrentlyWatchingStrip() {
   const [open, setOpen] = useState(false);
-  const [token, setToken] = useState<string | null>(null);
-  const [nextEpisodes, setNextEpisodes] = useState<Record<number, NextEpisode>>(
-    {},
-  );
+
+  const { data } = useCurrentlyWatching();
+  const shows = ((data as any)?.shows ?? []) as Show[];
+  const movies = ((data as any)?.movies ?? []) as Movie[];
   const total = shows.length + movies.length;
 
-  useEffect(() => {
-    if (!user) return;
-    user
-      .getIdToken()
-      .then(setToken)
-      .catch(() => {});
-  }, [user]);
-
-  // Fetch all next-episodes in one bulk request when the strip opens
-  useEffect(() => {
-    if (!open || !token || shows.length === 0) return;
-    const ids = shows.map((s) => s.id).join(",");
-    fetch(`${API_URL}/watched-episode/next/bulk?show_ids=${ids}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => r.json())
-      .then((data: Record<string, NextEpisode>) => {
-        const parsed: Record<number, NextEpisode> = {};
-        for (const [k, v] of Object.entries(data)) parsed[Number(k)] = v;
-        setNextEpisodes(parsed);
-      })
-      .catch(() => {});
-  }, [open, token, shows]);
+  const showIds = shows.map((s) => s.id);
+  const { data: bulkNextData } = useNextEpisodesBulk(open ? showIds : []);
+  const nextEpisodes: Record<number, NextEpisode> = {};
+  if (bulkNextData) {
+    for (const [k, v] of Object.entries(bulkNextData as Record<string, NextEpisode>)) {
+      nextEpisodes[Number(k)] = v;
+    }
+  }
 
   if (total === 0) return null;
 
@@ -353,19 +299,14 @@ export default function CurrentlyWatchingStrip({
       {open && (
         <div className="px-4 sm:px-6 pb-4 pt-1">
           <div className="flex gap-4 overflow-x-auto pb-2">
-            {/* TV shows with next-episode info */}
-            {token &&
-              shows.map((show) => (
-                <ShowCard
-                  key={`tv-${show.id}`}
-                  show={show}
-                  token={token}
-                  initialNext={nextEpisodes[show.id] ?? null}
-                  onEpisodeWatched={onEpisodeWatched ?? (() => {})}
-                />
-              ))}
+            {shows.map((show) => (
+              <ShowCard
+                key={`tv-${show.id}`}
+                show={show}
+                initialNext={nextEpisodes[show.id] ?? null}
+              />
+            ))}
 
-            {/* Movies */}
             {movies.map((movie) => (
               <Link
                 key={`movie-${movie.id}`}
@@ -373,7 +314,6 @@ export default function CurrentlyWatchingStrip({
                 className="flex-shrink-0 w-72 flex flex-col bg-neutral-700/50 rounded-xl overflow-hidden border border-neutral-600/50 hover:border-neutral-500 transition-colors"
               >
                 <div className="flex gap-3 p-3 flex-1">
-                  {/* Poster */}
                   <div className="flex-shrink-0">
                     {movie.poster_path ? (
                       <img
@@ -394,7 +334,6 @@ export default function CurrentlyWatchingStrip({
                     )}
                   </div>
 
-                  {/* Info */}
                   <div className="flex-1 min-w-0 flex flex-col justify-between">
                     <div>
                       <p className="text-sm font-semibold text-white hover:text-highlight-300 transition-colors line-clamp-1">
@@ -430,7 +369,6 @@ export default function CurrentlyWatchingStrip({
                   </div>
                 </div>
 
-                {/* Backdrop */}
                 {(movie.backdrop_path ?? movie.poster_path) && (
                   <div className="aspect-video w-full overflow-hidden">
                     <img

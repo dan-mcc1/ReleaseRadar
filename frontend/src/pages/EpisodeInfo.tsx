@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { getAuth, onAuthStateChanged } from "firebase/auth";
-import { firebaseApp } from "../firebase";
-import { API_URL, BASE_IMAGE_URL } from "../constants";
+import { BASE_IMAGE_URL } from "../constants";
 import { usePageTitle } from "../hooks/usePageTitle";
+import { useQuery } from "@tanstack/react-query";
+import { queryKeys } from "../hooks/api/queryKeys";
+import { queryFetch } from "../hooks/api/queryFetch";
+import { useWatchedEpisodes, useToggleEpisode } from "../hooks/api/useEpisodes";
 
 interface CastMember {
   id: number;
@@ -126,99 +127,44 @@ export default function EpisodeInfo() {
     season: string;
     episode: string;
   }>();
-  const [data, setData] = useState<EpisodeData | null>(null);
-  const [showName, setShowName] = useState<string | null>(null);
-  const [showInProduction, setShowInProduction] = useState<boolean | null>(
-    null,
-  );
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [watched, setWatched] = useState(false);
-  const [toggling, setToggling] = useState(false);
-  const [token, setToken] = useState<string | null>(null);
 
-  usePageTitle(data ? `${data.name}` : "Episode");
+  const episodeQuery = useQuery<EpisodeData>({
+    queryKey: queryKeys.episodeDetail(showId ?? "", season ?? "", episode ?? ""),
+    queryFn: () =>
+      queryFetch<EpisodeData>(`/tv/${showId}/season/${season}/episode/${episode}`),
+    enabled: !!showId && !!season && !!episode,
+  });
 
-  const auth = getAuth(firebaseApp);
+  const showQuery = useQuery<{ name: string; in_production: boolean | null }>({
+    queryKey: queryKeys.mediaDetail("tv", showId ?? ""),
+    queryFn: () =>
+      queryFetch(`/tv/${showId}`),
+    enabled: !!showId,
+  });
 
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (u) => {
-      if (!u) {
-        setToken(null);
-        return;
-      }
-      const tok = await u.getIdToken();
-      setToken(tok);
+  const watchedEpisodesQuery = useWatchedEpisodes(Number(showId ?? 0));
+  const toggleEpisode = useToggleEpisode();
+
+  const data = episodeQuery.data;
+  const showName = showQuery.data?.name ?? null;
+  const showInProduction = showQuery.data?.in_production ?? null;
+  const isWatched = watchedEpisodesQuery.data?.some(
+    (e) => e.season_number === Number(season) && e.episode_number === Number(episode),
+  ) ?? false;
+
+  usePageTitle(data ? data.name : "Episode");
+
+  function toggleWatched() {
+    if (!showId) return;
+    toggleEpisode.mutate({
+      showId: Number(showId),
+      seasonNumber: Number(season),
+      episodeNumber: Number(episode),
+      watched: isWatched,
     });
-    return unsub;
-  }, []);
-
-  // Fetch episode details + show name in parallel
-  useEffect(() => {
-    if (!showId || !season || !episode) return;
-    setLoading(true);
-    setError(null);
-
-    Promise.all([
-      fetch(`${API_URL}/tv/${showId}/season/${season}/episode/${episode}`).then(
-        (r) => {
-          if (!r.ok) throw new Error("Episode not found");
-          return r.json();
-        },
-      ),
-      fetch(`${API_URL}/tv/${showId}`).then((r) => (r.ok ? r.json() : null)),
-    ])
-      .then(([epData, showData]) => {
-        setData(epData);
-        setShowName(showData?.name ?? null);
-        setShowInProduction(showData?.in_production ?? null);
-      })
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, [showId, season, episode]);
-
-  // Check if this episode is already watched
-  useEffect(() => {
-    if (!token || !showId) return;
-    fetch(`${API_URL}/watched-episode/${showId}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => (r.ok ? r.json() : []))
-      .then((eps: { season_number: number; episode_number: number }[]) => {
-        setWatched(
-          eps.some(
-            (e) =>
-              e.season_number === Number(season) &&
-              e.episode_number === Number(episode),
-          ),
-        );
-      })
-      .catch(() => {});
-  }, [token, showId, season, episode]);
-
-  async function toggleWatched() {
-    if (!token || !showId || toggling) return;
-    setToggling(true);
-    const wasWatched = watched;
-    setWatched(!wasWatched);
-    try {
-      const url = wasWatched
-        ? `${API_URL}/watched-episode/remove`
-        : `${API_URL}/watched-episode/add`;
-      const method = wasWatched ? "DELETE" : "POST";
-      const res = await fetch(
-        `${url}?show_id=${showId}&season_number=${season}&episode_number=${episode}`,
-        { method, headers: { Authorization: `Bearer ${token}` } },
-      );
-      if (!res.ok) throw new Error();
-    } catch {
-      setWatched(wasWatched); // revert on failure
-    } finally {
-      setToggling(false);
-    }
   }
 
-  if (loading) {
+  if (episodeQuery.isPending) {
     return (
       <div className="flex items-center justify-center py-32">
         <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
@@ -226,11 +172,11 @@ export default function EpisodeInfo() {
     );
   }
 
-  if (error || !data) {
+  if (episodeQuery.isError || !data) {
     return (
       <div className="w-full max-w-3xl mx-auto px-4 py-16 text-center">
         <p className="text-error-400 text-lg">
-          {error ?? "Episode not found."}
+          {episodeQuery.error?.message ?? "Episode not found."}
         </p>
         {showId && (
           <Link
@@ -351,51 +297,49 @@ export default function EpisodeInfo() {
           </div>
 
           {/* Watched toggle */}
-          {token && (
-            <button
-              onClick={toggleWatched}
-              disabled={toggling}
-              className={`flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl font-medium text-sm transition-all disabled:opacity-50 ${
-                watched
-                  ? "bg-success-700/30 border border-success-600/50 text-success-400 hover:bg-error-900/30 hover:border-error-600/40 hover:text-error-400"
-                  : "bg-neutral-800 border border-neutral-600 text-neutral-300 hover:bg-success-900/30 hover:border-success-600/40 hover:text-success-400"
-              }`}
-            >
-              {toggling ? (
-                <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-              ) : watched ? (
-                <svg
-                  className="w-4 h-4"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={2.5}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-              ) : (
-                <svg
-                  className="w-4 h-4"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <circle cx="12" cy="12" r="9" />
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-              )}
-              {watched ? "Watched" : "Mark Watched"}
-            </button>
-          )}
+          <button
+            onClick={toggleWatched}
+            disabled={toggleEpisode.isPending}
+            className={`flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl font-medium text-sm transition-all disabled:opacity-50 ${
+              isWatched
+                ? "bg-success-700/30 border border-success-600/50 text-success-400 hover:bg-error-900/30 hover:border-error-600/40 hover:text-error-400"
+                : "bg-neutral-800 border border-neutral-600 text-neutral-300 hover:bg-success-900/30 hover:border-success-600/40 hover:text-success-400"
+            }`}
+          >
+            {toggleEpisode.isPending ? (
+              <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+            ) : isWatched ? (
+              <svg
+                className="w-4 h-4"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2.5}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M5 13l4 4L19 7"
+                />
+              </svg>
+            ) : (
+              <svg
+                className="w-4 h-4"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <circle cx="12" cy="12" r="9" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M5 13l4 4L19 7"
+                />
+              </svg>
+            )}
+            {isWatched ? "Watched" : "Mark Watched"}
+          </button>
         </div>
       </div>
 

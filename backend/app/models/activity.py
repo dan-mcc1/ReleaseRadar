@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Text, Float
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Text, Float, Index
 from sqlalchemy.sql import func
 from app.db.base import Base
 
@@ -18,3 +18,8 @@ class Activity(Base):
     season_number = Column(Integer, nullable=True)  # for 'episode_watched' events
     episode_number = Column(Integer, nullable=True) # for 'episode_watched' events
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_activity_user_created_at", "user_id", "created_at"),
+        Index("ix_activity_created_at", "created_at"),
+    )

@@ -1,26 +1,25 @@
-import { useState, useEffect, useCallback } from "react";
-import {
-  getAuth,
-  onAuthStateChanged,
-  deleteUser,
-  signOut,
-} from "firebase/auth";
-import { firebaseApp } from "../firebase";
+import { useState, useEffect } from "react";
+import { deleteUser, signOut } from "firebase/auth";
+import { auth } from "../firebase";
+import { useAuthUser } from "../hooks/useAuthUser";
 import { useNavigate } from "react-router-dom";
-import { API_URL, AVATAR_PRESETS, getAvatarColor } from "../constants";
+import { AVATAR_PRESETS, getAvatarColor } from "../constants";
 import { usePageTitle } from "../hooks/usePageTitle";
+import {
+  useUserMe,
+  useCheckUsername,
+  useUpdateUsername,
+  useUpdateBio,
+  useUpdateAvatar,
+  useDeleteAccount,
+} from "../hooks/api/useUser";
+import {
+  useNotificationPrefs,
+  useUpdateNotificationPrefs,
+} from "../hooks/api/useNotifications";
 
 const USERNAME_RE = /^[a-zA-Z0-9_]{3,30}$/;
 
-interface DBUser {
-  id: string;
-  email: string | null;
-  username: string | null;
-  avatar_key: string | null;
-  bio: string | null;
-}
-
-/** Renders the current avatar: color preset, Google photo, or grey fallback. */
 function AvatarPreview({
   avatarKey,
   photoURL,
@@ -73,139 +72,68 @@ function AvatarPreview({
 
 export default function Settings() {
   usePageTitle("Settings");
-  const auth = getAuth(firebaseApp);
-  const [user, setUser] = useState(auth.currentUser);
-  const [dbUser, setDbUser] = useState<DBUser | null>(null);
-  const [token, setToken] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const user = useAuthUser();
   const navigate = useNavigate();
+  const [error, setError] = useState<string | null>(null);
 
-  // Notifications / privacy preferences
-  const [emailNotifications, setEmailNotifications] = useState<boolean | null>(
-    null,
-  );
-  const [notificationFrequency, setNotificationFrequency] =
-    useState<string>("daily");
-  const [profileVisibility, setProfileVisibility] =
-    useState<string>("friends_only");
-  const [prefSaving, setPrefSaving] = useState(false);
+  const { data: userMe } = useUserMe();
+  const { data: prefs } = useNotificationPrefs();
+  const updatePrefsMutation = useUpdateNotificationPrefs();
+  const updateUsernameMutation = useUpdateUsername();
+  const updateBioMutation = useUpdateBio();
+  const updateAvatarMutation = useUpdateAvatar();
+  const deleteAccountMutation = useDeleteAccount();
 
   // Username editing
   const [editingUsername, setEditingUsername] = useState(false);
   const [newUsername, setNewUsername] = useState("");
-  const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(
-    null,
-  );
-  const [usernameChecking, setUsernameChecking] = useState(false);
+  const [debouncedUsername, setDebouncedUsername] = useState("");
   const [usernameError, setUsernameError] = useState<string | null>(null);
-  const [usernameSaving, setUsernameSaving] = useState(false);
-
-  // Bio
-  const [bio, setBio] = useState("");
-  const [bioSaving, setBioSaving] = useState(false);
-  const [bioSaved, setBioSaved] = useState(false);
-
-  // Avatar
-  const [selectedAvatar, setSelectedAvatar] = useState<string | null>(null);
-  const [avatarSaving, setAvatarSaving] = useState(false);
-  const [avatarSaved, setAvatarSaved] = useState(false);
-
-  const fetchUserData = useCallback(async (tok: string) => {
-    try {
-      const [meRes, notifRes] = await Promise.all([
-        fetch(`${API_URL}/user/me`, {
-          headers: { Authorization: `Bearer ${tok}` },
-        }),
-        fetch(`${API_URL}/notifications/preferences`, {
-          headers: { Authorization: `Bearer ${tok}` },
-        }),
-      ]);
-      if (meRes.ok) {
-        const data: DBUser = await meRes.json();
-        setDbUser(data);
-        setSelectedAvatar(data.avatar_key);
-        setBio(data.bio ?? "");
-      }
-      if (notifRes.ok) {
-        const data = await notifRes.json();
-        setEmailNotifications(data.email_notifications);
-        setNotificationFrequency(data.notification_frequency ?? "daily");
-        setProfileVisibility(data.profile_visibility ?? "friends_only");
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  }, []);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (u) => {
-      setUser(u);
-      if (u) {
-        const tok = await u.getIdToken();
-        setToken(tok);
-        fetchUserData(tok);
-      }
-    });
-    return () => unsub();
-  }, [fetchUserData]);
-
-  // ── Preferences (email toggle, frequency, visibility) ───────────────────
-  const patchPreferences = async (patch: Record<string, unknown>) => {
-    if (!token || prefSaving) return;
-    setPrefSaving(true);
-    try {
-      const res = await fetch(`${API_URL}/notifications/preferences`, {
-        method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(patch),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setEmailNotifications(data.email_notifications);
-        setNotificationFrequency(data.notification_frequency ?? "daily");
-        setProfileVisibility(data.profile_visibility ?? "friends_only");
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setPrefSaving(false);
-    }
-  };
-
-  const toggleEmailNotifications = () => {
-    if (emailNotifications === null) return;
-    patchPreferences({ email_notifications: !emailNotifications });
-  };
-
-  // ── Username ─────────────────────────────────────────────────────────────
-  async function checkUsername(value: string) {
-    if (!USERNAME_RE.test(value)) {
-      setUsernameAvailable(null);
+    if (newUsername.length < 3) {
+      setDebouncedUsername("");
       return;
     }
-    setUsernameChecking(true);
-    try {
-      const res = await fetch(
-        `${API_URL}/user/check-username?username=${encodeURIComponent(value)}`,
-      );
-      const data = await res.json();
-      setUsernameAvailable(data.available);
-    } catch {
-      setUsernameAvailable(null);
-    } finally {
-      setUsernameChecking(false);
-    }
+    const t = setTimeout(() => setDebouncedUsername(newUsername), 400);
+    return () => clearTimeout(t);
+  }, [newUsername]);
+
+  const { data: usernameCheck, isFetching: usernameChecking } = useCheckUsername(
+    debouncedUsername,
+  );
+  const usernameAvailable =
+    debouncedUsername.length >= 3 ? (usernameCheck?.available ?? null) : null;
+
+  // Bio — local state for form editing, synced from query data on load
+  const [bio, setBio] = useState("");
+  const [bioSaved, setBioSaved] = useState(false);
+  useEffect(() => {
+    if (userMe) setBio(userMe.bio ?? "");
+  }, [userMe?.bio]);
+
+  // Avatar — local state for picker, synced from query data on load
+  const [selectedAvatar, setSelectedAvatar] = useState<string | null | undefined>(undefined);
+  const [avatarSaved, setAvatarSaved] = useState(false);
+  useEffect(() => {
+    if (userMe && selectedAvatar === undefined) setSelectedAvatar(userMe.avatar_key);
+  }, [userMe]);
+
+  // Derived from query data
+  const emailNotifications = prefs?.email_notifications ?? null;
+  const notificationFrequency = prefs?.notification_frequency ?? "daily";
+  const profileVisibility = prefs?.profile_visibility ?? "friends_only";
+  const prefSaving = updatePrefsMutation.isPending;
+
+  function patchPreferences(patch: Record<string, unknown>) {
+    if (prefSaving) return;
+    updatePrefsMutation.mutate(patch as any);
   }
 
   function handleUsernameInput(e: React.ChangeEvent<HTMLInputElement>) {
     const value = e.target.value;
     setNewUsername(value);
-    setUsernameAvailable(null);
     setUsernameError(null);
-    if (value.length >= 3) checkUsername(value);
   }
 
   async function saveUsername() {
@@ -217,88 +145,29 @@ export default function Settings() {
       setUsernameError("That username is already taken.");
       return;
     }
-    setUsernameSaving(true);
     setUsernameError(null);
     try {
-      const res = await fetch(`${API_URL}/user/update-username`, {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ new_username: newUsername }),
-      });
-      if (res.ok) {
-        const updated = await res.json();
-        setDbUser(updated);
-        setEditingUsername(false);
-        setNewUsername("");
-      } else {
-        const err = await res.json().catch(() => ({}));
-        setUsernameError(err.detail ?? "Could not save username.");
-      }
-    } finally {
-      setUsernameSaving(false);
+      await updateUsernameMutation.mutateAsync(newUsername);
+      setEditingUsername(false);
+      setNewUsername("");
+    } catch (err: any) {
+      setUsernameError(err?.detail ?? "Could not save username.");
     }
   }
 
-  // ── Bio ──────────────────────────────────────────────────────────────────
   async function saveBio() {
-    if (!token || bioSaving) return;
-    setBioSaving(true);
-    setBioSaved(false);
-    try {
-      const res = await fetch(`${API_URL}/user/update-bio`, {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ bio: bio.trim() || null }),
-      });
-      if (res.ok) {
-        const updated: DBUser = await res.json();
-        setDbUser(updated);
-        setBio(updated.bio ?? "");
-        setBioSaved(true);
-        setTimeout(() => setBioSaved(false), 2000);
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setBioSaving(false);
-    }
+    await updateBioMutation.mutateAsync(bio.trim() || null);
+    setBioSaved(true);
+    setTimeout(() => setBioSaved(false), 2000);
   }
 
-  // ── Avatar ───────────────────────────────────────────────────────────────
   async function saveAvatar() {
-    if (!token || selectedAvatar === dbUser?.avatar_key) return;
-    setAvatarSaving(true);
-    setAvatarSaved(false);
-    try {
-      const res = await fetch(`${API_URL}/user/update-avatar`, {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ avatar_key: selectedAvatar }),
-      });
-      if (res.ok) {
-        const updated = await res.json();
-        setDbUser(updated);
-        setAvatarSaved(true);
-        setTimeout(() => setAvatarSaved(false), 2000);
-        window.dispatchEvent(new CustomEvent("avatar-updated"));
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setAvatarSaving(false);
-    }
+    if (selectedAvatar === userMe?.avatar_key) return;
+    await updateAvatarMutation.mutateAsync(selectedAvatar ?? null);
+    setAvatarSaved(true);
+    setTimeout(() => setAvatarSaved(false), 2000);
   }
 
-  // ── Account actions ──────────────────────────────────────────────────────
   const handleDelete = async () => {
     if (!user) return;
     if (
@@ -309,16 +178,10 @@ export default function Settings() {
       return;
     setError(null);
     try {
-      const tok = await user.getIdToken();
-      const res = await fetch(`${API_URL}/user/account`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${tok}` },
-      });
-      if (!res.ok) throw new Error("Failed to delete account data");
+      await deleteAccountMutation.mutateAsync();
       await deleteUser(user);
       navigate("/signIn");
     } catch (err: any) {
-      console.error("Error deleting account:", err);
       if (err.code === "auth/requires-recent-login") {
         setError(
           "Please sign out and sign back in before deleting your account.",
@@ -342,7 +205,7 @@ export default function Settings() {
     );
   }
 
-  const avatarChanged = selectedAvatar !== dbUser?.avatar_key;
+  const avatarChanged = selectedAvatar !== userMe?.avatar_key;
 
   return (
     <div className="p-6 max-w-lg mx-auto space-y-4">
@@ -380,10 +243,13 @@ export default function Settings() {
                 />
                 <button
                   onClick={saveUsername}
-                  disabled={usernameSaving || usernameAvailable === false}
+                  disabled={
+                    updateUsernameMutation.isPending ||
+                    usernameAvailable === false
+                  }
                   className="bg-primary-600 hover:bg-primary-500 disabled:opacity-50 text-white text-sm px-3 py-1.5 rounded"
                 >
-                  {usernameSaving ? "Saving…" : "Save"}
+                  {updateUsernameMutation.isPending ? "Saving…" : "Save"}
                 </button>
                 <button
                   onClick={() => {
@@ -415,9 +281,9 @@ export default function Settings() {
             </div>
           ) : (
             <div className="flex items-center gap-3">
-              {dbUser?.username ? (
+              {userMe?.username ? (
                 <span className="text-white font-medium">
-                  @{dbUser.username}
+                  @{userMe.username}
                 </span>
               ) : (
                 <span className="text-amber-400 text-sm">No username set</span>
@@ -425,11 +291,11 @@ export default function Settings() {
               <button
                 onClick={() => {
                   setEditingUsername(true);
-                  setNewUsername(dbUser?.username ?? "");
+                  setNewUsername(userMe?.username ?? "");
                 }}
                 className="text-xs text-primary-400 hover:text-primary-300"
               >
-                {dbUser?.username ? "Change" : "Set username"}
+                {userMe?.username ? "Change" : "Set username"}
               </button>
             </div>
           )}
@@ -453,7 +319,6 @@ export default function Settings() {
             </span>
           </div>
           <div className="flex flex-wrap gap-2 mb-3">
-            {/* Google photo option — only shown for Google sign-in users */}
             {user.photoURL && (
               <button
                 onClick={() => setSelectedAvatar(null)}
@@ -487,10 +352,14 @@ export default function Settings() {
           </div>
           <button
             onClick={saveAvatar}
-            disabled={avatarSaving || !avatarChanged}
+            disabled={updateAvatarMutation.isPending || !avatarChanged}
             className="bg-primary-600 hover:bg-primary-500 disabled:opacity-40 text-white text-sm px-4 py-1.5 rounded"
           >
-            {avatarSaving ? "Saving…" : avatarSaved ? "Saved!" : "Save Avatar"}
+            {updateAvatarMutation.isPending
+              ? "Saving…"
+              : avatarSaved
+                ? "Saved!"
+                : "Save Avatar"}
           </button>
         </div>
 
@@ -509,10 +378,14 @@ export default function Settings() {
             <span className="text-xs text-neutral-500">{bio.length}/300</span>
             <button
               onClick={saveBio}
-              disabled={bioSaving || bio === (dbUser?.bio ?? "")}
+              disabled={updateBioMutation.isPending || bio === (userMe?.bio ?? "")}
               className="bg-primary-600 enabled:hover:bg-primary-500 disabled:opacity-40 text-white text-sm px-4 py-1.5 rounded"
             >
-              {bioSaving ? "Saving…" : bioSaved ? "Saved!" : "Save Bio"}
+              {updateBioMutation.isPending
+                ? "Saving…"
+                : bioSaved
+                  ? "Saved!"
+                  : "Save Bio"}
             </button>
           </div>
         </div>
@@ -527,7 +400,6 @@ export default function Settings() {
           Notifications
         </h2>
 
-        {/* Email toggle */}
         <div className="flex items-center justify-between gap-6">
           <div>
             <p className="text-white font-medium">Email Notifications</p>
@@ -537,7 +409,10 @@ export default function Settings() {
             </p>
           </div>
           <button
-            onClick={toggleEmailNotifications}
+            onClick={() => {
+              if (emailNotifications === null) return;
+              patchPreferences({ email_notifications: !emailNotifications });
+            }}
             disabled={prefSaving || emailNotifications === null}
             className={`relative inline-flex h-6 w-12 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
               emailNotifications ? "bg-primary-600" : "bg-neutral-600"
@@ -551,7 +426,6 @@ export default function Settings() {
           </button>
         </div>
 
-        {/* Frequency — only shown when emails are on */}
         {emailNotifications && (
           <div>
             <p className="text-white font-medium mb-1">Digest Frequency</p>

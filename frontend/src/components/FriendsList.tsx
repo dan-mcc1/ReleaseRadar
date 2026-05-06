@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { API_URL } from "../constants";
+import { useRemoveFriend } from "../hooks/api/useFriends";
 
 interface Friend {
   id: string;
   username: string;
-  email: string;
+  email?: string;
 }
 
 interface FriendEntry {
@@ -14,34 +14,32 @@ interface FriendEntry {
 }
 
 interface Props {
-  token: string;
   friends: FriendEntry[];
   onFriendRemoved: (friendId: string) => void;
   onFindFriends?: () => void;
 }
 
 export default function FriendsList({
-  token,
   friends,
   onFriendRemoved,
   onFindFriends,
 }: Props) {
-  const [removing, setRemoving] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  const removeMutation = useRemoveFriend();
 
   async function removeFriend(friendId: string) {
-    setRemoving(friendId);
     try {
-      await fetch(`${API_URL}/friends/remove/${friendId}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      await removeMutation.mutateAsync(friendId);
       onFriendRemoved(friendId);
     } finally {
-      setRemoving(null);
       setConfirmId(null);
     }
   }
+
+  const removingId =
+    removeMutation.isPending && typeof removeMutation.variables === "string"
+      ? (removeMutation.variables as string)
+      : null;
 
   if (friends.length === 0) {
     return (
@@ -80,10 +78,10 @@ export default function FriendsList({
               <span className="text-neutral-400 text-sm">Remove friend?</span>
               <button
                 onClick={() => removeFriend(friend.id)}
-                disabled={removing === friend.id}
+                disabled={removingId === friend.id}
                 className="text-sm bg-error-500 hover:bg-error-500 disabled:opacity-50 text-white px-3 py-1 rounded"
               >
-                {removing === friend.id ? "Removing…" : "Yes"}
+                {removingId === friend.id ? "Removing…" : "Yes"}
               </button>
               <button
                 onClick={() => setConfirmId(null)}

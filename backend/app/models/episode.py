@@ -1,5 +1,5 @@
 # app/models/episode.py
-from sqlalchemy import Column, Integer, String, Date, Text, Float, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Date, Text, Float, ForeignKey, UniqueConstraint, Index
 from app.db.base import Base
 
 
@@ -20,4 +20,6 @@ class Episode(Base):
 
     __table_args__ = (
         UniqueConstraint("show_id", "season_number", "episode_number", name="uq_show_season_episode"),
+        Index("ix_episode_show_air_date", "show_id", "air_date"),
+        Index("ix_episode_air_date", "air_date"),
     )

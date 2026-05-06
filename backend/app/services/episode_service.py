@@ -1,5 +1,4 @@
 # app/services/episode_service.py
-import threading
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from sqlalchemy.orm import Session
@@ -181,21 +180,18 @@ def maybe_sync_show_episodes(db: Session, show_id: int):
 
 def sync_show_episodes_background(show_id: int):
     """
-    Fire-and-forget: sync all episodes for a show in a daemon thread.
-    The calling request returns immediately; episodes appear in the DB shortly after.
+    Background task: sync all episodes for a show using its own DB session.
+    Intended to be called via FastAPI BackgroundTasks, not directly.
     """
     from app.db.session import SessionLocal
 
-    def _run():
-        db = SessionLocal()
-        try:
-            maybe_sync_show_episodes(db, show_id)
-        except Exception as e:
-            print(f"[episode sync] Error syncing show {show_id}: {e}")
-        finally:
-            db.close()
-
-    threading.Thread(target=_run, daemon=True).start()
+    db = SessionLocal()
+    try:
+        maybe_sync_show_episodes(db, show_id)
+    except Exception as e:
+        print(f"[episode sync] Error syncing show {show_id}: {e}")
+    finally:
+        db.close()
 
 
 def get_or_create_episode(
@@ -332,14 +328,18 @@ def refresh_episodes_for_show(db: Session, show_id: int):
     if not season_numbers:
         return
 
-    # Only refresh seasons that have upcoming episodes or unknown air dates
+    # Only refresh seasons that have upcoming episodes, unknown air dates,
+    # or episodes with missing metadata (name/still_path not yet filled in by TMDB)
     today = date.today()
     active_seasons = set()
     for (sn,) in (
         db.query(Episode.season_number)
         .filter(
             Episode.show_id == show_id,
-            (Episode.air_date == None) | (Episode.air_date >= today),
+            (Episode.air_date == None)
+            | (Episode.air_date >= today)
+            | (Episode.name == None)
+            | (Episode.still_path == None),
         )
         .distinct()
         .all()
@@ -399,6 +399,8 @@ def refresh_episodes_for_show(db: Session, show_id: int):
                     or row.name != new_name
                     or row.overview != new_overview
                     or row.runtime != new_runtime
+                    or row.still_path != new_still
+                    or row.vote_average != new_vote
                     or row.episode_type != new_type
                 ):
                     row.air_date = new_air_date
@@ -484,6 +486,7 @@ def check_and_reactivate_watched_shows(db: Session):
     Intended to run nightly after refresh_episodes_for_active_shows.
     """
     from datetime import datetime
+    from collections import defaultdict
     from sqlalchemy import and_
     from app.models.watched import Watched
     from app.models.watchlist import Watchlist
@@ -499,32 +502,68 @@ def check_and_reactivate_watched_shows(db: Session):
         .all()
     )
 
+    if not watched_rows:
+        return
+
+    show_ids = list({row.content_id for row in watched_rows})
+    user_ids = list({row.user_id for row in watched_rows})
+
+    # Bulk-load all episodes for relevant shows (keyed by show_id)
+    all_episodes_by_show: dict[int, list[Episode]] = defaultdict(list)
+    for ep in (
+        db.query(Episode)
+        .filter(Episode.show_id.in_(show_ids), Episode.season_number > 0)
+        .all()
+    ):
+        all_episodes_by_show[ep.show_id].append(ep)
+
+    # Bulk-load all watched episode keys per (user_id, show_id)
+    watched_keys_by_user_show: dict[tuple, set] = defaultdict(set)
+    for ew in (
+        db.query(EpisodeWatched)
+        .filter(EpisodeWatched.user_id.in_(user_ids), EpisodeWatched.show_id.in_(show_ids))
+        .all()
+    ):
+        watched_keys_by_user_show[(ew.user_id, ew.show_id)].add((ew.season_number, ew.episode_number))
+
+    # Bulk-load shows and users
+    shows_by_id = {s.id: s for s in db.query(Show).filter(Show.id.in_(show_ids)).all()}
+    users_by_id = {u.id: u for u in db.query(User).filter(User.id.in_(user_ids)).all()}
+
+    # Bulk-load existing watchlist entries to avoid duplicate inserts
+    existing_watchlist = {
+        (w.user_id, w.content_id)
+        for w in db.query(Watchlist.user_id, Watchlist.content_id)
+        .filter(Watchlist.user_id.in_(user_ids), Watchlist.content_id.in_(show_ids), Watchlist.content_type == "tv")
+        .all()
+    }
+
     reactivated = 0
     for row in watched_rows:
         user_id = row.user_id
         show_id = row.content_id
 
-        all_episodes = (
-            db.query(Episode)
-            .filter(Episode.show_id == show_id, Episode.season_number > 0)
-            .all()
-        )
-        watched_keys = {
-            (ew.season_number, ew.episode_number)
-            for ew in db.query(EpisodeWatched)
-            .filter_by(user_id=user_id, show_id=show_id)
-            .all()
-        }
+        all_episodes = all_episodes_by_show[show_id]
+        watched_keys = watched_keys_by_user_show[(user_id, show_id)]
 
+        # Determine the highest season the user has watched any episode of
+        max_watched_season = max((sn for sn, _ in watched_keys), default=0)
+
+        today = date.today()
         new_episodes = [
             ep for ep in all_episodes
             if (ep.season_number, ep.episode_number) not in watched_keys
+            and (
+                # New season: always reactivate (enables advance notifications)
+                ep.season_number > max_watched_season
+                # Same season already in progress: only reactivate once the episode has aired
+                or (ep.air_date is not None and ep.air_date <= today)
+            )
         ]
 
         if not new_episodes:
-            continue  # All episodes accounted for, nothing to reactivate
+            continue
 
-        # Find the earliest new season and its premiere date (episode 1 air_date)
         new_season_number = min(ep.season_number for ep in new_episodes)
         season_eps = sorted(
             [ep for ep in new_episodes if ep.season_number == new_season_number],
@@ -534,25 +573,18 @@ def check_and_reactivate_watched_shows(db: Session):
             str(season_eps[0].air_date) if season_eps and season_eps[0].air_date else None
         )
 
-        show = db.query(Show).filter_by(id=show_id).first()
+        show = shows_by_id.get(show_id)
 
-        # Add to Watchlist first (while still in Watched, tracking_count is unchanged)
-        if not db.query(Watchlist).filter_by(
-            user_id=user_id, content_type="tv", content_id=show_id
-        ).first():
-            db.add(
-                Watchlist(
-                    user_id=user_id,
-                    content_type="tv",
-                    content_id=show_id,
-                    added_at=datetime.utcnow(),
-                )
-            )
+        if (user_id, show_id) not in existing_watchlist:
+            db.add(Watchlist(
+                user_id=user_id,
+                content_type="tv",
+                content_id=show_id,
+                added_at=datetime.utcnow(),
+            ))
+            existing_watchlist.add((user_id, show_id))
             db.flush()
 
-        # Delete the Watched row directly — do NOT use remove_from_watched because
-        # that would clear episode_watched history. tracking_count stays the same
-        # since the show is now on the watchlist.
         db.delete(row)
         db.commit()
 
@@ -563,8 +595,7 @@ def check_and_reactivate_watched_shows(db: Session):
             f"Season {new_season_number} premieres {premiere_date or 'TBD'}"
         )
 
-        # Notify the user if email notifications are enabled
-        user = db.query(User).filter_by(id=user_id).first()
+        user = users_by_id.get(user_id)
         if user and user.email_notifications and user.email:
             try:
                 send_new_season_available_email(

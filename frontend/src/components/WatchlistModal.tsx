@@ -1,52 +1,42 @@
-// src/pages/Watchlist.tsx
-import { useEffect, useState } from "react";
-import { getAuth, onAuthStateChanged, User } from "firebase/auth";
-import { firebaseApp } from "../firebase";
-import { BASE_IMAGE_URL, API_URL } from "../constants";
+// src/components/WatchlistModal.tsx
+import { useState } from "react";
+import { BASE_IMAGE_URL } from "../constants";
 import { useNavigate } from "react-router-dom";
-import { CalendarData } from "../types/calendar";
-import { FaPencilAlt } from "react-icons/fa";
 import { Link } from "react-router-dom";
-import WatchButton from "./WatchButton";
+import { apiFetch } from "../utils/apiFetch";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { calendarQueryKey } from "../hooks/useCalendarData";
+import { useAuthUser } from "../hooks/useAuthUser";
+import type { CalendarData } from "../types/calendar";
 
 interface WatchlistModalProps {
   isOpen: boolean;
   onClose: () => void;
-  calendarData: CalendarData;
-  setCalendarData: React.Dispatch<React.SetStateAction<CalendarData>>;
 }
 
-export default function WatchlistModal({
-  isOpen,
-  onClose,
-  calendarData,
-  setCalendarData,
-}: WatchlistModalProps) {
+export default function WatchlistModal({ isOpen, onClose }: WatchlistModalProps) {
   if (!isOpen) return null;
 
+  const user = useAuthUser();
+  const queryClient = useQueryClient();
   const [filter, setFilter] = useState<"all" | "tv" | "movies">("all");
   const navigate = useNavigate();
-  const auth = getAuth(firebaseApp);
+
+  const { data } = useQuery<CalendarData>({
+    queryKey: calendarQueryKey(user?.uid ?? ""),
+    enabled: !!user,
+  });
 
   const showsToDisplay =
-    filter === "all" || filter === "tv" ? calendarData.shows : [];
+    filter === "all" || filter === "tv" ? (data?.shows ?? []) : [];
   const moviesToDisplay =
-    filter === "all" || filter === "movies" ? calendarData.movies : [];
+    filter === "all" || filter === "movies" ? (data?.movies ?? []) : [];
 
-  // Remove a show from watchlist
   const handleRemove = async (contentType: "tv" | "movie", id: number) => {
     try {
-      // Get the current user's token for authentication
-      const token = await auth.currentUser?.getIdToken();
-      if (!token) return;
-
-      // Call backend API to remove show
-      const res = await fetch(`${API_URL}/watchlist/remove`, {
+      const res = await apiFetch("/watchlist/remove", {
         method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           content_type: contentType,
           content_id: id,
@@ -54,24 +44,15 @@ export default function WatchlistModal({
       });
 
       if (!res.ok) {
-        console.error(`Failed to remove show ${id} from watchlist`);
+        console.error(`Failed to remove ${contentType} ${id} from watchlist`);
         return;
       }
 
-      // Update local calendar data
-      setCalendarData((prev) => ({
-        ...prev,
-        shows:
-          contentType === "tv"
-            ? prev.shows.filter((s) => s.show.id !== id)
-            : prev.shows,
-        movies:
-          contentType === "movie"
-            ? prev.movies.filter((m) => m.id !== id)
-            : prev.movies,
-      }));
+      if (user) {
+        queryClient.invalidateQueries({ queryKey: calendarQueryKey(user.uid) });
+      }
     } catch (err) {
-      console.error("Error removing show:", err);
+      console.error("Error removing from watchlist:", err);
     }
   };
 

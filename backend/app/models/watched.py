@@ -1,5 +1,5 @@
 # src/models/movie_watched.py
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Float, Index
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Float, Index, UniqueConstraint
 from sqlalchemy.sql import func
 from app.db.base import Base
 
@@ -15,5 +15,6 @@ class Watched(Base):
     rating = Column(Float, nullable=True)
 
     __table_args__ = (
+        UniqueConstraint("user_id", "content_type", "content_id", name="uq_watched_user_content"),
         Index("ix_watched_user_content", "user_id", "content_type", "content_id"),
     )

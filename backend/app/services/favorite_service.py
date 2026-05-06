@@ -4,10 +4,10 @@ from app.models.favorite import Favorite
 from app.models.movie import Movie
 from app.models.show import Show
 from app.services.watchlist_service import (
-    serialize_movie,
-    serialize_show,
-    _movie_query_options,
-    _show_query_options,
+    serialize_movie_list,
+    serialize_show_list,
+    _movie_query_options_list,
+    _show_query_options_list,
 )
 
 
@@ -43,7 +43,7 @@ def remove_from_favorites(db: Session, user_id: str, content_type: str, content_
 def get_favorites(db: Session, user_id: str):
     movies = (
         db.query(Movie)
-        .options(*_movie_query_options())
+        .options(*_movie_query_options_list())
         .select_from(Favorite)
         .join(
             Movie,
@@ -57,7 +57,7 @@ def get_favorites(db: Session, user_id: str):
     )
     shows = (
         db.query(Show)
-        .options(*_show_query_options())
+        .options(*_show_query_options_list())
         .select_from(Favorite)
         .join(
             Show,
@@ -70,8 +70,8 @@ def get_favorites(db: Session, user_id: str):
         .all()
     )
     return {
-        "movies": [serialize_movie(m) for m in movies],
-        "shows": [serialize_show(s) for s in shows],
+        "movies": [serialize_movie_list(m) for m in movies],
+        "shows": [serialize_show_list(s) for s in shows],
     }
 
 

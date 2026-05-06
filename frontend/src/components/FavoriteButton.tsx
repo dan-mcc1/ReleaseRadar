@@ -1,7 +1,5 @@
-import { useState, useEffect } from "react";
-import { getAuth } from "firebase/auth";
-import { firebaseApp } from "../firebase";
-import { API_URL } from "../constants";
+import { useAuthUser } from "../hooks/useAuthUser";
+import { useFavoriteStatus, useToggleFavorite } from "../hooks/api/useLists";
 
 interface FavoriteButtonProps {
   contentType: "movie" | "tv";
@@ -9,48 +7,18 @@ interface FavoriteButtonProps {
 }
 
 export default function FavoriteButton({ contentType, contentId }: FavoriteButtonProps) {
-  const auth = getAuth(firebaseApp);
-  const [favorited, setFavorited] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const user = useAuthUser();
+  const { data, isLoading } = useFavoriteStatus(contentType, contentId);
+  const toggleMutation = useToggleFavorite();
 
-  useEffect(() => {
-    const user = auth.currentUser;
-    if (!user) { setLoading(false); return; }
+  const favorited = data?.favorited ?? false;
 
-    user.getIdToken().then((token) => {
-      fetch(
-        `${API_URL}/favorites/status?content_type=${contentType}&content_id=${contentId}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      )
-        .then((r) => r.json())
-        .then((data) => setFavorited(data.favorited ?? false))
-        .catch(() => {})
-        .finally(() => setLoading(false));
-    });
-  }, [contentType, contentId]);
-
-  async function toggle() {
-    const user = auth.currentUser;
+  function toggle() {
     if (!user) return;
-    const token = await user.getIdToken();
-    const next = !favorited;
-    setFavorited(next);
-
-    try {
-      await fetch(`${API_URL}/favorites/${next ? "add" : "remove"}`, {
-        method: next ? "POST" : "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ content_type: contentType, content_id: contentId }),
-      });
-    } catch {
-      setFavorited(!next); // revert on error
-    }
+    toggleMutation.mutate({ contentType, contentId, favorited });
   }
 
-  if (loading) return null;
+  if (isLoading) return null;
 
   return (
     <button

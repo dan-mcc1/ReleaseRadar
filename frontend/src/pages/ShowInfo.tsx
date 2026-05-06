@@ -1,230 +1,41 @@
 import { useParams } from "react-router-dom";
-import { useEffect, useState } from "react";
-import { BASE_IMAGE_URL, API_URL } from "../constants";
 import type { Show } from "../types/calendar";
+import type { MediaExternalIds, MediaVideo } from "../types/media";
 import { parseLocalDate, formatLocalDate } from "../utils/date";
 import SeasonInfo from "../components/SeasonInfo";
 import WhereToWatch from "../components/WhereToWatch";
 import CastBar from "../components/CastBar";
-import { Link } from "react-router-dom";
-import WatchButton, { WatchStatus } from "../components/WatchButton";
-import { getCachedStatuses, mergeCachedStatuses } from "../utils/statusCache";
+import WatchButton from "../components/WatchButton";
 import FavoriteButton from "../components/FavoriteButton";
 import RecommendButton from "../components/RecommendButton";
 import ReviewsSection from "../components/ReviewsSection";
-import { firebaseApp } from "../firebase";
-import { getAuth, onAuthStateChanged } from "firebase/auth";
+import { useAuthUser } from "../hooks/useAuthUser";
 import { usePageTitle } from "../hooks/usePageTitle";
+import { useMediaInfo } from "../hooks/useMediaInfo";
+import { StatBox } from "../components/InfoPageWidgets";
+import MediaHero from "../components/media/MediaHero";
+import RatingsRow from "../components/media/RatingsRow";
+import ExternalLinksSection from "../components/media/ExternalLinksSection";
+import RecommendationsGrid from "../components/media/RecommendationsGrid";
+import TrailerButton from "../components/media/TrailerButton";
 
 type FullShowData = Show & {
   vote_average?: number;
   vote_count?: number;
-  created_by: {
-    id: number;
-    credit_id: string;
-    name: string;
-    profile_path: string | null;
-  }[];
-  credits: {
-    cast: {
-      id: number;
-      name: string;
-      profile_path: string;
-      character: string;
-    }[];
-  };
-  external_ids: {
-    imdb_id: string;
-    tvdb_id: string;
-    wikidata_id: string;
-    facebook_id: string;
-    instagram_id: string;
-    twitter_id: string;
-  };
+  created_by: { id: number; credit_id: string; name: string; profile_path: string | null; }[];
+  credits: { cast: { id: number; name: string; profile_path: string; character: string; }[]; };
+  external_ids: MediaExternalIds;
   recommendations: { results: Show[] };
-  videos: {
-    results: {
-      id: string;
-      key: string;
-      site: string;
-      type: string;
-      official: boolean;
-    }[];
-  };
+  videos: { results: MediaVideo[]; };
 };
-
-interface ExternalScores {
-  imdb?: string;
-  rotten_tomatoes?: string;
-  metacritic?: string;
-}
-
-interface AggregateRating {
-  average: number | null;
-  count: number;
-}
-
-function RatingBadge({
-  label,
-  value,
-  color,
-}: {
-  label: string;
-  value: string;
-  color: string;
-}) {
-  return (
-    <div
-      className={`flex flex-col items-center bg-neutral-800 border rounded-xl px-4 py-3 min-w-[80px] ${color}`}
-    >
-      <span className="text-neutral-100 font-bold text-lg leading-tight">
-        {value}
-      </span>
-      <span className="text-neutral-500 text-xs mt-0.5 whitespace-nowrap">
-        {label}
-      </span>
-    </div>
-  );
-}
-
-function StatBox({
-  label,
-  value,
-}: {
-  label: string;
-  value: string | number | null | undefined;
-}) {
-  if (!value && value !== 0) return null;
-  return (
-    <div className="flex flex-col items-center bg-neutral-800 border border-neutral-700 rounded-xl px-4 py-3 min-w-[80px]">
-      <span className="text-neutral-100 font-bold text-lg leading-tight">
-        {value}
-      </span>
-      <span className="text-neutral-500 text-xs mt-0.5 whitespace-nowrap">
-        {label}
-      </span>
-    </div>
-  );
-}
-
-function ExternalLink({ href, label }: { href: string; label: string }) {
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="inline-flex items-center gap-1.5 text-sm text-neutral-400 hover:text-primary-400 bg-neutral-800 border border-neutral-700 hover:border-primary-600/50 px-3 py-1.5 rounded-lg transition-all duration-150"
-    >
-      {label}
-    </a>
-  );
-}
 
 export default function ShowInfo() {
   const { id } = useParams<{ id: string }>();
-  const [show, setShow] = useState<FullShowData | null>(null);
+  const { data: show, loading, error, initialStatus, initialRating, statusReady, externalScores, aggRating } =
+    useMediaInfo<FullShowData>({ contentType: "tv", id, fetchUrl: `/tv/${id}/full` });
+  const user = useAuthUser();
   usePageTitle(show?.name);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const auth = getAuth(firebaseApp);
-  const [user, setUser] = useState(auth.currentUser);
-  const [initialStatus, setInitialStatus] = useState<WatchStatus | undefined>(
-    undefined,
-  );
-  const [initialRating, setInitialRating] = useState<number | null | undefined>(
-    undefined,
-  );
-  const [statusReady, setStatusReady] = useState(false);
-  const [externalScores, setExternalScores] = useState<ExternalScores | null>(
-    null,
-  );
-  const [aggRating, setAggRating] = useState<AggregateRating | null>(null);
-  const [episodeRefreshKey, setEpisodeRefreshKey] = useState(0);
-  const [watchButtonRefreshKey, setWatchButtonRefreshKey] = useState(0);
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-    });
-    return unsubscribe;
-  }, [auth]);
-
-  useEffect(() => {
-    if (!user || !show) return;
-    const items = [{ content_type: "tv", content_id: show.id }];
-    const { cached, missing } = getCachedStatuses(user.uid, items);
-    if (!missing.length) {
-      setInitialStatus(cached[`tv:${show.id}`]?.status as WatchStatus);
-      setInitialRating(cached[`tv:${show.id}`]?.rating ?? null);
-      setStatusReady(true);
-      return;
-    }
-    user.getIdToken().then((token) =>
-      fetch(`${API_URL}/watchlist/status/bulk`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(missing),
-      })
-        .then((r) => (r.ok ? r.json() : {}))
-        .then(
-          (data: Record<string, { status: string; rating: number | null }>) => {
-            mergeCachedStatuses(user.uid, data);
-            setInitialStatus(data[`tv:${show.id}`]?.status as WatchStatus);
-            setInitialRating(data[`tv:${show.id}`]?.rating ?? null);
-          },
-        )
-        .catch(() => {})
-        .finally(() => setStatusReady(true)),
-    );
-  }, [user, show]);
-
-  useEffect(() => {
-    if (!id) return;
-    async function fetchShow() {
-      try {
-        setLoading(true);
-        const res = await fetch(`${API_URL}/tv/${id}/full`);
-        if (!res.ok) throw new Error("Failed to fetch show info");
-        const rawData = await res.json();
-        let data: FullShowData;
-        if (rawData["watch/providers"]["results"]["US"]) {
-          data = {
-            ...rawData,
-            providers: rawData["watch/providers"]["results"]["US"] || null,
-          };
-        } else {
-          data = rawData;
-        }
-        setShow(data);
-        // Fetch aggregate ratings
-        fetch(`${API_URL}/reviews/aggregate?content_type=tv&content_id=${id}`)
-          .then((r) => r.json())
-          .then(setAggRating)
-          .catch(() => {});
-        // Fetch RT/Metacritic via OMDB if we have an imdb_id
-        const imdbId = data.external_ids?.imdb_id;
-        if (imdbId) {
-          fetch(
-            `${API_URL}/reviews/external-scores?imdb_id=${encodeURIComponent(imdbId)}`,
-          )
-            .then((r) => r.json())
-            .then(
-              (scores) =>
-                Object.keys(scores).length > 0 && setExternalScores(scores),
-            )
-            .catch(() => {});
-        }
-      } catch (err: any) {
-        setError(err.message || "Something went wrong");
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchShow();
-  }, [id]);
 
   if (loading)
     return (
@@ -238,65 +49,22 @@ export default function ShowInfo() {
   if (error) return <p className="text-error-400 p-6">{error}</p>;
   if (!show) return <p className="text-neutral-400 p-6">Show not found.</p>;
 
-  const year = show.first_air_date
-    ? parseLocalDate(show.first_air_date).getFullYear()
-    : null;
+  const year = show.first_air_date ? parseLocalDate(show.first_air_date).getFullYear() : null;
   const trailer =
-    show.videos?.results?.find(
-      (v) => v.type === "Trailer" && v.site === "YouTube",
-    ) ?? show.videos?.results?.find((v) => v.site === "YouTube");
+    show.videos?.results?.find((v) => v.type === "Trailer" && v.site === "YouTube") ??
+    show.videos?.results?.find((v) => v.site === "YouTube");
 
   return (
     <div className="max-w-5xl mx-auto pb-16 w-full overflow-x-hidden">
-      {/* ── HERO BANNER ── */}
-      <div className="relative overflow-hidden" style={{ minHeight: "320px" }}>
-        {show.backdrop_path ? (
-          <img
-            src={`${BASE_IMAGE_URL}/original${show.backdrop_path}`}
-            alt=""
-            className="w-full h-80 md:h-96 object-cover object-top"
-          />
-        ) : (
-          <div className="w-full h-64 bg-gradient-to-br from-neutral-800 to-neutral-900" />
-        )}
-        {/* Gradient overlays */}
-        <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-neutral-950/40 to-neutral-950/10" />
-        <div className="absolute inset-0 bg-gradient-to-r from-neutral-950/60 to-transparent" />
+      <MediaHero
+        backdropPath={show.backdrop_path}
+        posterPath={show.poster_path}
+        logoPath={show.logo_path}
+        title={show.name}
+        tagline={show.tagline}
+        minHeight="320px"
+      />
 
-        {/* Hero content */}
-        <div className="absolute bottom-0 left-0 right-0 px-6 pb-6 flex items-end gap-5">
-          {/* Poster */}
-          {show.poster_path && (
-            <img
-              src={`${BASE_IMAGE_URL}/w500${show.poster_path}`}
-              alt={show.name}
-              className="hidden md:block w-28 lg:w-36 rounded-xl shadow-2xl border border-white/10 flex-shrink-0 -mb-1"
-            />
-          )}
-
-          {/* Title / logo */}
-          <div className="min-w-0">
-            {show.logo_path ? (
-              <img
-                src={`${BASE_IMAGE_URL}/w500${show.logo_path}`}
-                alt={show.name}
-                className="max-h-16 max-w-[280px] object-contain drop-shadow-2xl mb-1"
-              />
-            ) : (
-              <h1 className="text-3xl md:text-4xl font-bold text-white drop-shadow-lg">
-                {show.name}
-              </h1>
-            )}
-            {show.tagline && (
-              <p className="text-neutral-300 italic text-sm mt-1">
-                {show.tagline}
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* ── CONTENT ── */}
       <div className="px-4 sm:px-6 mt-6 space-y-8">
         {/* Buttons row */}
         <div className="flex flex-wrap items-center gap-2">
@@ -306,9 +74,7 @@ export default function ShowInfo() {
               contentId={show.id}
               initialStatus={initialStatus}
               initialRating={initialRating}
-              onStatusChange={() => setEpisodeRefreshKey((k) => k + 1)}
-              refreshKey={watchButtonRefreshKey}
-            />
+              />
           )}
           {user && <FavoriteButton contentType="tv" contentId={show.id} />}
           {user && (
@@ -319,25 +85,9 @@ export default function ShowInfo() {
               contentPosterPath={show.poster_path ?? null}
             />
           )}
-          {trailer && (
-            <a
-              href={`https://www.youtube.com/watch?v=${trailer.key}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-error-600 hover:bg-error-500 text-white text-sm font-semibold transition-colors"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-                className="w-4 h-4"
-              >
-                <path d="M8 5v14l11-7z" />
-              </svg>
-              Trailer
-            </a>
-          )}
+          {trailer && <TrailerButton trailerKey={trailer.key} />}
         </div>
+
         {/* Genre pills */}
         {show.genres && show.genres.length > 0 && (
           <div className="flex flex-wrap gap-2">
@@ -361,59 +111,7 @@ export default function ShowInfo() {
           {show.in_production && <StatBox label="In Production" value="Yes" />}
         </div>
 
-        {/* Ratings row */}
-        {(show.vote_average || externalScores || aggRating?.average) && (
-          <div>
-            <h2 className="text-neutral-400 text-xs uppercase tracking-wider font-semibold mb-3">
-              Ratings
-            </h2>
-            <div className="flex flex-wrap gap-3">
-              {show.vote_average != null && show.vote_average > 0 && (
-                <RatingBadge
-                  label="TMDb"
-                  value={`${show.vote_average.toFixed(1)}/10`}
-                  color="border-2 border-primary-800"
-                />
-              )}
-              {externalScores?.imdb && (
-                <RatingBadge
-                  label="IMDB"
-                  value={externalScores.imdb}
-                  color={
-                    parseInt(externalScores.imdb) >= 6.0
-                      ? "border-2 border-success-800"
-                      : "border-2 border-error-800"
-                  }
-                />
-              )}
-              {externalScores?.rotten_tomatoes && (
-                <RatingBadge
-                  label="Rotten Tomatoes"
-                  value={externalScores.rotten_tomatoes}
-                  color={
-                    parseInt(externalScores.rotten_tomatoes) >= 60
-                      ? "border-2 border-success-800"
-                      : "border-2 border-error-800"
-                  }
-                />
-              )}
-              {externalScores?.metacritic && (
-                <RatingBadge
-                  label="Metacritic"
-                  value={externalScores.metacritic.replace("/100", "")}
-                  color="border-warning-800/50"
-                />
-              )}
-              {aggRating?.average && (
-                <RatingBadge
-                  label={`Users (${aggRating.count})`}
-                  value={`${aggRating.average}/5 ★`}
-                  color="border-highlight-800/50"
-                />
-              )}
-            </div>
-          </div>
-        )}
+        <RatingsRow voteAverage={show.vote_average} externalScores={externalScores} aggRating={aggRating} />
 
         {/* Created by */}
         {show.created_by && show.created_by.length > 0 && (
@@ -428,9 +126,7 @@ export default function ShowInfo() {
         {/* Overview */}
         {show.overview && (
           <div>
-            <h2 className="text-neutral-400 text-xs uppercase tracking-wider font-semibold mb-2">
-              Overview
-            </h2>
+            <h2 className="text-neutral-400 text-xs uppercase tracking-wider font-semibold mb-2">Overview</h2>
             <p className="text-neutral-300 leading-relaxed">{show.overview}</p>
           </div>
         )}
@@ -439,37 +135,23 @@ export default function ShowInfo() {
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
           {show.first_air_date && (
             <div>
-              <div className="text-neutral-500 text-xs uppercase tracking-wide mb-0.5">
-                First Aired
-              </div>
+              <div className="text-neutral-500 text-xs uppercase tracking-wide mb-0.5">First Aired</div>
               <div className="text-neutral-200">
-                {formatLocalDate(show.first_air_date, {
-                  year: "numeric",
-                  month: "long",
-                  day: "numeric",
-                })}
+                {formatLocalDate(show.first_air_date, { year: "numeric", month: "long", day: "numeric" })}
               </div>
             </div>
           )}
           {show.last_air_date && (
             <div>
-              <div className="text-neutral-500 text-xs uppercase tracking-wide mb-0.5">
-                Last Aired
-              </div>
+              <div className="text-neutral-500 text-xs uppercase tracking-wide mb-0.5">Last Aired</div>
               <div className="text-neutral-200">
-                {formatLocalDate(show.last_air_date, {
-                  year: "numeric",
-                  month: "long",
-                  day: "numeric",
-                })}
+                {formatLocalDate(show.last_air_date, { year: "numeric", month: "long", day: "numeric" })}
               </div>
             </div>
           )}
           {show.homepage && (
             <div>
-              <div className="text-neutral-500 text-xs uppercase tracking-wide mb-0.5">
-                Homepage
-              </div>
+              <div className="text-neutral-500 text-xs uppercase tracking-wide mb-0.5">Homepage</div>
               <a
                 href={show.homepage}
                 target="_blank"
@@ -482,101 +164,23 @@ export default function ShowInfo() {
           )}
         </div>
 
-        {/* Where to Watch */}
         {show.providers && <WhereToWatch providers={show.providers} />}
 
-        {/* Seasons */}
         {show.seasons?.length > 0 && (
           <SeasonInfo
             showId={show.id}
             seasons={show.seasons}
-            refreshKey={episodeRefreshKey}
-            onEpisodeToggle={() => setWatchButtonRefreshKey((k) => k + 1)}
           />
         )}
 
-        {/* Cast */}
         {show.credits?.cast.length > 0 && <CastBar cast={show.credits.cast} />}
 
-        {/* External Links */}
-        {show.external_ids && (
-          <div>
-            <h2 className="text-neutral-400 text-xs uppercase tracking-wider font-semibold mb-3">
-              External Links
-            </h2>
-            <div className="flex flex-wrap gap-2">
-              {show.external_ids.imdb_id && (
-                <ExternalLink
-                  href={`https://www.imdb.com/title/${show.external_ids.imdb_id}`}
-                  label="IMDb"
-                />
-              )}
-              {show.external_ids.tvdb_id && (
-                <ExternalLink
-                  href={`https://www.thetvdb.com/?id=${show.external_ids.tvdb_id}`}
-                  label="TVDB"
-                />
-              )}
-              {show.external_ids.wikidata_id && (
-                <ExternalLink
-                  href={`https://www.wikidata.org/wiki/${show.external_ids.wikidata_id}`}
-                  label="Wikidata"
-                />
-              )}
-              {show.external_ids.facebook_id && (
-                <ExternalLink
-                  href={`https://www.facebook.com/${show.external_ids.facebook_id}`}
-                  label="Facebook"
-                />
-              )}
-              {show.external_ids.instagram_id && (
-                <ExternalLink
-                  href={`https://www.instagram.com/${show.external_ids.instagram_id}`}
-                  label="Instagram"
-                />
-              )}
-              {show.external_ids.twitter_id && (
-                <ExternalLink
-                  href={`https://twitter.com/${show.external_ids.twitter_id}`}
-                  label="Twitter / X"
-                />
-              )}
-            </div>
-          </div>
-        )}
+        {show.external_ids && <ExternalLinksSection externalIds={show.external_ids} />}
 
-        {/* Reviews */}
         <ReviewsSection contentType="tv" contentId={show.id} user={user} />
 
-        {/* Recommendations */}
         {show.recommendations?.results.length > 0 && (
-          <div>
-            <h2 className="text-xl font-semibold text-neutral-100 mb-4">
-              You Might Also Like
-            </h2>
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
-              {show.recommendations.results.slice(0, 12).map((rec) => (
-                <Link key={rec.id} to={`/tv/${rec.id}`} className="group">
-                  {rec.poster_path ? (
-                    <img
-                      src={`${BASE_IMAGE_URL}/w342${rec.poster_path}`}
-                      alt={rec.name}
-                      className="w-full rounded-lg object-cover border border-neutral-700 group-hover:border-neutral-500 transition-all duration-200 group-hover:scale-105"
-                    />
-                  ) : (
-                    <div className="w-full aspect-[2/3] bg-neutral-800 border border-neutral-700 rounded-lg flex items-center justify-center">
-                      <span className="text-neutral-500 text-xs text-center px-1">
-                        {rec.name}
-                      </span>
-                    </div>
-                  )}
-                  <p className="text-xs mt-1.5 text-neutral-400 group-hover:text-neutral-200 transition-colors text-center line-clamp-1">
-                    {rec.name}
-                  </p>
-                </Link>
-              ))}
-            </div>
-          </div>
+          <RecommendationsGrid items={show.recommendations.results} linkPrefix="/tv" />
         )}
       </div>
     </div>

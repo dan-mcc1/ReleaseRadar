@@ -1,6 +1,6 @@
-import { useState, useRef } from "react";
-import { API_URL } from "../constants";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
+import { useFriendSearch, useSendFriendRequest } from "../hooks/api/useFriends";
 
 interface SearchResult {
   id: string;
@@ -9,99 +9,64 @@ interface SearchResult {
 }
 
 interface Props {
-  token: string;
   onRequestSent: () => void;
   friendIds?: Set<string>;
 }
 
-export default function FriendSearch({
-  token,
-  onRequestSent,
-  friendIds,
-}: Props) {
+export default function FriendSearch({ onRequestSent, friendIds }: Props) {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<SearchResult[]>([]);
-  const [sending, setSending] = useState<string | null>(null); // username being sent to
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [sentTo, setSentTo] = useState<Set<string>>(new Set());
   const [followedTo, setFollowedTo] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  function handleQueryChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const value = e.target.value;
-    setQuery(value);
-    setError(null);
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query), 300);
+    return () => clearTimeout(t);
+  }, [query]);
 
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-
-    if (value.trim().length === 0) {
-      setResults([]);
-      return;
-    }
-
-    debounceRef.current = setTimeout(async () => {
-      try {
-        const res = await fetch(
-          `${API_URL}/friends/search?q=${encodeURIComponent(value.trim())}`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          },
-        );
-        if (res.ok) {
-          setResults(await res.json());
-        }
-      } catch {
-        // silently ignore search errors
-      }
-    }, 300);
-  }
+  const { data: results = [] } = useFriendSearch(debouncedQuery);
+  const sendMutation = useSendFriendRequest();
 
   async function sendRequest(user: SearchResult) {
-    setSending(user.username);
     setError(null);
     try {
-      const res = await fetch(`${API_URL}/friends/request`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ addressee_username: user.username }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.status === "following") {
-          setFollowedTo((prev) => new Set(prev).add(user.username));
-        } else {
-          setSentTo((prev) => new Set(prev).add(user.username));
-        }
-        onRequestSent();
+      const data = await sendMutation.mutateAsync(user.username);
+      if (data.status === "following") {
+        setFollowedTo((prev) => new Set(prev).add(user.username));
       } else {
-        const data = await res.json().catch(() => ({}));
-        setError(data.detail ?? "Could not send request.");
+        setSentTo((prev) => new Set(prev).add(user.username));
       }
-    } catch {
-      setError("Network error. Please try again.");
-    } finally {
-      setSending(null);
+      onRequestSent();
+    } catch (e) {
+      setError(
+        e instanceof Error && e.message
+          ? e.message
+          : "Could not send request.",
+      );
     }
   }
+
+  const typedResults = results as SearchResult[];
 
   return (
     <div>
       <input
         type="text"
         value={query}
-        onChange={handleQueryChange}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          setError(null);
+        }}
         placeholder="Search by username…"
         className="w-full bg-neutral-700 text-neutral-100 placeholder-neutral-400 px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
       />
 
       {error && <p className="text-error-500 text-sm mt-2">{error}</p>}
 
-      {results.length > 0 && (
+      {typedResults.length > 0 && (
         <ul className="mt-2 space-y-1">
-          {results.map((user) => (
+          {typedResults.map((user) => (
             <li
               key={user.id}
               className="flex items-center justify-between bg-neutral-700 px-3 py-2 rounded-lg"
@@ -123,10 +88,14 @@ export default function FriendSearch({
               ) : (
                 <button
                   onClick={() => sendRequest(user)}
-                  disabled={sending === user.username}
+                  disabled={
+                    sendMutation.isPending &&
+                    sendMutation.variables === user.username
+                  }
                   className="text-sm bg-primary-600 hover:bg-primary-500 disabled:opacity-50 text-white px-3 py-1 rounded"
                 >
-                  {sending === user.username
+                  {sendMutation.isPending &&
+                  sendMutation.variables === user.username
                     ? "Sending…"
                     : user.profile_visibility === "public"
                       ? "Follow"
@@ -138,7 +107,7 @@ export default function FriendSearch({
         </ul>
       )}
 
-      {query.trim().length > 0 && results.length === 0 && (
+      {query.trim().length > 0 && typedResults.length === 0 && (
         <p className="text-neutral-400 text-sm mt-2">No users found.</p>
       )}
     </div>

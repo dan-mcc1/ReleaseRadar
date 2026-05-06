@@ -120,7 +120,6 @@ def get_movies_by_actor(actor: str):
     return credits.get("cast", [])
 
 
-@lru_cache(maxsize=1024)
 def fetch_movie_from_tmdb(movie_id: int, append: str = None):
     params = {}
     if append:

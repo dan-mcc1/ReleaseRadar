@@ -147,6 +147,73 @@ def get_profile_watchlist(db: Session, user_id: str) -> dict:
     }
 
 
+def get_profile_watchlist_preview(db: Session, user_id: str, limit: int = 5) -> dict:
+    """
+    Return a preview of a user's watchlist with limited items and total counts.
+    Returns lightweight objects (id, title/name, poster_path, added_at) only.
+    """
+    total_movies = (
+        db.query(Watchlist)
+        .filter_by(user_id=user_id, content_type="movie")
+        .count()
+    )
+    total_shows = (
+        db.query(Watchlist)
+        .filter_by(user_id=user_id, content_type="tv")
+        .count()
+    )
+    movies = (
+        db.query(Movie.id, Movie.title, Movie.poster_path, Watchlist.added_at)
+        .join(
+            Watchlist,
+            and_(
+                Watchlist.content_id == Movie.id,
+                Watchlist.content_type == "movie",
+                Watchlist.user_id == user_id,
+            ),
+        )
+        .order_by(Watchlist.added_at.desc())
+        .limit(limit)
+        .all()
+    )
+    shows = (
+        db.query(Show.id, Show.name, Show.poster_path, Watchlist.added_at)
+        .join(
+            Watchlist,
+            and_(
+                Watchlist.content_id == Show.id,
+                Watchlist.content_type == "tv",
+                Watchlist.user_id == user_id,
+            ),
+        )
+        .order_by(Watchlist.added_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return {
+        "movies": [
+            {
+                "id": r.id,
+                "title": r.title,
+                "poster_path": r.poster_path,
+                "added_at": r.added_at,
+            }
+            for r in movies
+        ],
+        "shows": [
+            {
+                "id": r.id,
+                "name": r.name,
+                "poster_path": r.poster_path,
+                "added_at": r.added_at,
+            }
+            for r in shows
+        ],
+        "total_movies": total_movies,
+        "total_shows": total_shows,
+    }
+
+
 def get_profile_watched(db: Session, user_id: str) -> dict:
     """
     Return a user's watched list sorted by most recently watched.
@@ -197,6 +264,73 @@ def get_profile_watched(db: Session, user_id: str) -> dict:
             }
             for r in shows
         ],
+    }
+
+
+def get_profile_watched_preview(db: Session, user_id: str, limit: int = 5) -> dict:
+    """
+    Return a preview of a user's watched list with limited items and total counts.
+    Returns lightweight objects (id, title/name, poster_path, watched_at) only.
+    """
+    total_movies = (
+        db.query(Watched)
+        .filter_by(user_id=user_id, content_type="movie")
+        .count()
+    )
+    total_shows = (
+        db.query(Watched)
+        .filter_by(user_id=user_id, content_type="tv")
+        .count()
+    )
+    movies = (
+        db.query(Movie.id, Movie.title, Movie.poster_path, Watched.watched_at)
+        .join(
+            Watched,
+            and_(
+                Watched.content_id == Movie.id,
+                Watched.content_type == "movie",
+                Watched.user_id == user_id,
+            ),
+        )
+        .order_by(Watched.watched_at.desc())
+        .limit(limit)
+        .all()
+    )
+    shows = (
+        db.query(Show.id, Show.name, Show.poster_path, Watched.watched_at)
+        .join(
+            Watched,
+            and_(
+                Watched.content_id == Show.id,
+                Watched.content_type == "tv",
+                Watched.user_id == user_id,
+            ),
+        )
+        .order_by(Watched.watched_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return {
+        "movies": [
+            {
+                "id": r.id,
+                "title": r.title,
+                "poster_path": r.poster_path,
+                "watched_at": r.watched_at,
+            }
+            for r in movies
+        ],
+        "shows": [
+            {
+                "id": r.id,
+                "name": r.name,
+                "poster_path": r.poster_path,
+                "watched_at": r.watched_at,
+            }
+            for r in shows
+        ],
+        "total_movies": total_movies,
+        "total_shows": total_shows,
     }
 
 

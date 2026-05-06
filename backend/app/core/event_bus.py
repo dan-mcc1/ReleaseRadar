@@ -27,10 +27,10 @@ def unsubscribe(user_id: str, q: asyncio.Queue) -> None:
         del _subscribers[user_id]
 
 
-def publish(user_id: str, event_type: str) -> None:
+def publish(user_id: str, event: dict) -> None:
     """Push a notification event to all open connections for this user."""
     for q in list(_subscribers.get(user_id, [])):
         try:
-            q.put_nowait({"type": event_type})
+            q.put_nowait(event)
         except asyncio.QueueFull:
             pass  # drop silently — client will resync on next navigation

@@ -1,28 +1,29 @@
-import { useEffect, useState } from "react";
 import { useSearchParams, Link } from "react-router-dom";
-import { API_URL } from "../constants";
 import { usePageTitle } from "../hooks/usePageTitle";
+import { useQuery } from "@tanstack/react-query";
+import { apiFetch } from "../utils/apiFetch";
 
 export default function Unsubscribe() {
   usePageTitle("Unsubscribe");
   const [params] = useSearchParams();
-  const [status, setStatus] = useState<"loading" | "success" | "error">(
-    "loading",
-  );
+  const uid = params.get("uid");
+  const token = params.get("token");
 
-  useEffect(() => {
-    const uid = params.get("uid");
-    const token = params.get("token");
-    if (!uid || !token) {
-      setStatus("error");
-      return;
-    }
-    fetch(
-      `${API_URL}/notifications/unsubscribe?uid=${encodeURIComponent(uid)}&token=${encodeURIComponent(token)}`,
-    )
-      .then((r) => (r.ok ? setStatus("success") : setStatus("error")))
-      .catch(() => setStatus("error"));
-  }, []);
+  const { isLoading, isSuccess } = useQuery({
+    queryKey: ["unsubscribe", uid, token],
+    queryFn: async () => {
+      const res = await apiFetch(
+        `/notifications/unsubscribe?uid=${encodeURIComponent(uid!)}&token=${encodeURIComponent(token!)}`,
+      );
+      if (!res.ok) throw new Error("invalid");
+      return true;
+    },
+    enabled: !!uid && !!token,
+    retry: false,
+    staleTime: Infinity,
+  });
+
+  const status = !uid || !token ? "error" : isLoading ? "loading" : isSuccess ? "success" : "error";
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] px-4 text-center">

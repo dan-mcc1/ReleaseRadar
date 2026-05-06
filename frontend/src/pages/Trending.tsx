@@ -1,9 +1,8 @@
-import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import type { Show, Movie } from "../types/calendar";
-import { API_URL } from "../constants";
+import type { Movie, Show } from "../types/calendar";
 import MediaList from "../components/MediaList";
 import { usePageTitle } from "../hooks/usePageTitle";
+import { useTrending } from "../hooks/api/useSearch";
 
 type MediaType = "movie" | "tv";
 
@@ -17,41 +16,15 @@ export default function Trending() {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeType = (searchParams.get("type") as MediaType) ?? "movie";
   const page = Number(searchParams.get("page") ?? "1");
-  const [totalPages, setTotalPages] = useState(1);
-  const [movies, setMovies] = useState<Movie[]>([]);
-  const [shows, setShows] = useState<Show[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    async function fetchResults() {
-      setLoading(true);
-      try {
-        const endpoint =
-          activeType === "movie"
-            ? `${API_URL}/search/movie/trending?page=${page}`
-            : `${API_URL}/search/tv/trending?page=${page}`;
-        const res = await fetch(endpoint);
-        if (!res.ok) throw new Error("Failed to fetch trending");
-        const data = await res.json();
-        if (activeType === "movie") {
-          setMovies(data.results ?? []);
-          setShows([]);
-        } else {
-          setShows(data.results ?? []);
-          setMovies([]);
-        }
-        setTotalPages(data.total_pages ?? 1);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchResults();
-  }, [activeType, page]);
+  const { data, isPending: loading } = useTrending(activeType, page);
+  const items = data?.results ?? [];
+  const totalPages = data?.total_pages ?? 1;
 
+  const movies = activeType === "movie" ? (items as Movie[]) : [];
+  const shows = activeType === "tv" ? (items as Show[]) : [];
   const results = { movies, shows, people: [] };
-  const total = movies.length + shows.length;
+  const total = items.length;
 
   return (
     <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 py-8 pb-16">

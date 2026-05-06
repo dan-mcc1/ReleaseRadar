@@ -1,8 +1,11 @@
 # app/routers/user.py
 import re
 import random
-from fastapi import APIRouter, Depends, HTTPException, Body, Query
+from fastapi import APIRouter, Depends, HTTPException, Body, Query, Request
+from app.core.limiter import limiter
+from pydantic import EmailStr
 from sqlalchemy.orm import Session
+from sqlalchemy import or_, and_
 from app.db.session import get_db
 from app.services.user_service import (
     create_user,
@@ -11,8 +14,10 @@ from app.services.user_service import (
     update_username,
     update_avatar_key,
     is_username_available,
+    get_profile_watchlist_preview,
+    get_profile_watched_preview,
 )
-from app.services.friends_service import are_friends, get_friends
+from app.services.friends_service import get_friends, get_incoming_requests, get_outgoing_requests, get_followers
 from app.models.friendship import Friendship
 from app.services.user_service import get_profile_watchlist, get_profile_watched
 from app.services.favorite_service import get_favorites
@@ -24,7 +29,6 @@ from app.models.watched import Watched
 from app.models.episode_watched import EpisodeWatched
 from app.models.currently_watching import CurrentlyWatching
 from app.models.activity import Activity
-from app.models.friendship import Friendship
 from app.models.favorite import Favorite
 from app.models.recommendation import Recommendation
 from app.models.show import Show
@@ -45,9 +49,11 @@ def _validate_username(username: str):
 
 
 @router.post("/create")
+@limiter.limit("10/minute")
 def create_user_route(
+    request: Request,
     db: Session = Depends(get_db),
-    uid: str = Body(...),
+    uid: str = Depends(get_current_user),
     email: str | None = Body(None),
     username: str | None = Body(None),
 ):
@@ -71,7 +77,9 @@ def get_current_user_route(
 
 @router.put("/update-email")
 def update_email_route(
-    new_email: str, db: Session = Depends(get_db), uid: str = Depends(get_current_user)
+    new_email: EmailStr = Query(...),
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
 ):
     user = update_user_email(db, uid, new_email)
     if not user:
@@ -125,7 +133,9 @@ def update_bio_route(
     uid: str = Depends(get_current_user),
 ):
     if bio is not None and len(bio) > 300:
-        raise HTTPException(status_code=422, detail="Bio must be 300 characters or fewer.")
+        raise HTTPException(
+            status_code=422, detail="Bio must be 300 characters or fewer."
+        )
     user = db.query(User).filter_by(id=uid).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found.")
@@ -136,7 +146,9 @@ def update_bio_route(
 
 
 @router.get("/check-username")
+@limiter.limit("30/minute")
 def check_username_route(
+    request: Request,
     username: str = Query(...),
     db: Session = Depends(get_db),
 ):
@@ -152,6 +164,35 @@ def get_stats_route(
 ):
     """Return aggregated stats for the current user."""
     return get_user_stats(db, uid)
+
+
+@router.get("/profile-summary")
+def get_profile_summary(
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    """Return all data needed for the own-profile page in a single request."""
+    user = get_user(db, uid)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "username": user.username,
+            "avatar_key": user.avatar_key,
+            "bio": user.bio,
+            "profile_visibility": user.profile_visibility,
+            "created_at": user.created_at,
+        },
+        "favorites": get_favorites(db, uid),
+        "watchlist": get_profile_watchlist_preview(db, uid),
+        "watched": get_profile_watched_preview(db, uid),
+        "friends": get_friends(db, uid),
+        "incoming_requests": get_incoming_requests(db, uid),
+        "outgoing_requests": get_outgoing_requests(db, uid),
+        "followers": get_followers(db, uid),
+    }
 
 
 @router.get("/profile/{username}")
@@ -173,35 +214,40 @@ def get_public_profile(
             status_code=400, detail="Use /user/me for your own profile."
         )
 
-    is_friend = are_friends(db, uid, target.id)
     visibility = target.profile_visibility or "friends_only"
 
-    # Check for a pending outgoing request from the current user
-    pending = (
+    # Single query for all relationship rows between viewer and target
+    friendship_rows = (
         db.query(Friendship)
-        .filter_by(requester_id=uid, addressee_id=target.id, status="pending")
-        .first()
+        .filter(
+            or_(
+                and_(Friendship.requester_id == uid, Friendship.addressee_id == target.id),
+                and_(Friendship.requester_id == target.id, Friendship.addressee_id == uid),
+            )
+        )
+        .all()
     )
 
-    # Check if the current user is following the target (one-way)
-    following_row = (
-        db.query(Friendship)
-        .filter_by(requester_id=uid, addressee_id=target.id, status="following")
-        .first()
+    is_friend = any(r.status == "accepted" for r in friendship_rows)
+    pending = next(
+        (r for r in friendship_rows
+         if r.requester_id == uid and r.addressee_id == target.id and r.status == "pending"),
+        None,
     )
-
-    # Check if the target is following the current user (they follow viewer)
-    followed_by_target = (
-        db.query(Friendship)
-        .filter_by(requester_id=target.id, addressee_id=uid, status="following")
-        .first()
+    following_row = next(
+        (r for r in friendship_rows
+         if r.requester_id == uid and r.addressee_id == target.id and r.status == "following"),
+        None,
     )
-
-    # Check for a pending incoming request from the target to the current user
-    incoming_request = (
-        db.query(Friendship)
-        .filter_by(requester_id=target.id, addressee_id=uid, status="pending")
-        .first()
+    followed_by_target = next(
+        (r for r in friendship_rows
+         if r.requester_id == target.id and r.addressee_id == uid and r.status == "following"),
+        None,
+    )
+    incoming_request = next(
+        (r for r in friendship_rows
+         if r.requester_id == target.id and r.addressee_id == uid and r.status == "pending"),
+        None,
     )
 
     profile = {

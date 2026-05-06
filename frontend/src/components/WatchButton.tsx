@@ -1,12 +1,8 @@
 import { useState, useEffect, useRef } from "react";
-import { getAuth, User } from "firebase/auth";
-import { firebaseApp } from "../firebase";
-import { API_URL } from "../constants";
+import { useAuthUser } from "../hooks/useAuthUser";
 import StarRating from "./StarRating";
-import { clearDashboardCache } from "../utils/dashboardCache";
-import { clearWatchlistCache } from "../utils/watchlistCache";
-import { clearForYouCache } from "../pages/ForYou";
-import { updateCachedStatus } from "../utils/statusCache";
+import { useWatchStatus } from "../hooks/api/useWatchStatus";
+import { useUpdateWatchStatus, useRateItem } from "../hooks/api/useWatchActions";
 
 export type WatchStatus =
   | "none"
@@ -21,8 +17,10 @@ interface WatchButtonProps {
   initialStatus?: WatchStatus;
   initialRating?: number | null;
   onStatusChange?: (status: WatchStatus) => void;
-  /** Increment to silently re-fetch status in the background (no loading spinner). */
+  /** Kept for backward compatibility — no longer used (query auto-refetches on invalidation). */
   refreshKey?: number;
+  /** Icon-only mode with tighter padding — use in space-constrained rows. */
+  compact?: boolean;
 }
 
 // ── Icons ──────────────────────────────────────────────────────────────────
@@ -122,20 +120,26 @@ export default function WatchButton({
   initialStatus,
   initialRating,
   onStatusChange,
-  refreshKey,
+  compact = false,
 }: WatchButtonProps) {
-  const auth = getAuth(firebaseApp);
-  const [watchStatus, setWatchStatus] = useState<WatchStatus>(
-    initialStatus ?? "none",
-  );
+  const user = useAuthUser();
   const [menuOpen, setMenuOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const [saving, setSaving] = useState(false);
-  const [statusLoading, setStatusLoading] = useState(
-    initialStatus === undefined,
-  );
-  const [rating, setRating] = useState<number | null>(initialRating ?? null);
-  const [ratingSaving, setRatingSaving] = useState(false);
+
+  const statusQuery = useWatchStatus(contentType, contentId, {
+    skip: initialStatus !== undefined,
+  });
+  const updateMutation = useUpdateWatchStatus();
+  const rateMutation = useRateItem();
+
+  // Derive state from either props or query
+  const watchStatus: WatchStatus =
+    initialStatus ?? statusQuery.data?.status ?? "none";
+  const rating: number | null =
+    initialRating ?? statusQuery.data?.rating ?? null;
+  const statusLoading = initialStatus === undefined && statusQuery.isPending;
+  const saving = updateMutation.isPending;
+  const ratingSaving = rateMutation.isPending;
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -151,158 +155,30 @@ export default function WatchButton({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  useEffect(() => {
-    // Skip individual fetch when the parent already provided the status
-    if (initialStatus !== undefined) return;
-
-    const unsubscribe = auth.onAuthStateChanged((user) => {
-      if (user) fetchStatus(user);
-      else {
-        setWatchStatus("none");
-        setStatusLoading(false);
-      }
-    });
-    return unsubscribe;
-  }, [contentId]);
-
-  async function fetchStatus(user: User, silent = false) {
+  async function handleStatusChange(targetStatus: WatchStatus) {
+    if (!user) { alert("You must be signed in."); return; }
+    if (watchStatus === targetStatus) return;
     try {
-      if (!silent) setStatusLoading(true);
-      const res = await fetch(
-        `${API_URL}/watchlist/${contentType}/${contentId}/status`,
-        {
-          headers: { Authorization: `Bearer ${await user.getIdToken()}` },
-        },
-      );
-      if (!res.ok) throw new Error("Failed to fetch watch status");
-      const data = await res.json();
-      setWatchStatus(data.status);
-      setRating(data.rating ?? null);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      if (!silent) setStatusLoading(false);
-    }
-  }
-
-  // Silent background refresh when the parent signals that status may have changed
-  // (e.g. after marking all episodes watched via SeasonInfo)
-  useEffect(() => {
-    if (!refreshKey) return;
-    const user = auth.currentUser;
-    if (user) fetchStatus(user, true);
-  }, [refreshKey]);
-
-  async function updateWatchStatus(targetStatus: WatchStatus) {
-    const user = auth.currentUser;
-    if (!user) {
-      alert("You must be signed in.");
-      return;
-    }
-
-    const token = await user.getIdToken();
-    const headers = {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    };
-    const body = JSON.stringify({
-      content_type: contentType,
-      content_id: contentId,
-    });
-
-    const removeEndpoints: Record<WatchStatus, string | null> = {
-      none: null,
-      "Want To Watch": "watchlist/remove",
-      "Currently Watching": "currently-watching/remove",
-      Watched: "watched/remove",
-    };
-    const addEndpoints: Record<WatchStatus, string | null> = {
-      none: null,
-      "Want To Watch": "watchlist/add",
-      "Currently Watching": "currently-watching/add",
-      Watched: "watched/add",
-    };
-
-    try {
-      setSaving(true);
-
-      if (watchStatus === targetStatus) return;
-
-      // Add to target state first so the new entry exists before the old one
-      // is removed. This prevents cleanup logic in the remove handlers from
-      // treating the show as untracked (e.g. deleting episode history).
-      const addUrl = addEndpoints[targetStatus];
-      if (addUrl) {
-        await fetch(`${API_URL}/${addUrl}`, { method: "POST", headers, body });
-      }
-
-      // Remove from current state
-      const removeUrl = removeEndpoints[watchStatus];
-      if (removeUrl) {
-        await fetch(`${API_URL}/${removeUrl}`, {
-          method: "DELETE",
-          headers,
-          body,
-        });
-      }
-
-      const newRating = targetStatus !== "Watched" ? null : rating;
-      setWatchStatus(targetStatus);
+      await updateMutation.mutateAsync({
+        contentType,
+        contentId,
+        currentStatus: watchStatus,
+        targetStatus,
+      });
       onStatusChange?.(targetStatus);
-      if (targetStatus !== "Watched") setRating(null);
       setMenuOpen(false);
-      clearDashboardCache();
-      clearWatchlistCache();
-      clearForYouCache();
-      if (user)
-        updateCachedStatus(
-          user.uid,
-          contentType,
-          contentId,
-          targetStatus,
-          newRating,
-        );
     } catch (err) {
       console.error(err);
       alert("Failed to update status");
-    } finally {
-      setSaving(false);
     }
   }
 
-  async function saveRating(newRating: number | null) {
-    const user = auth.currentUser;
+  async function handleRate(newRating: number | null) {
     if (!user) return;
     try {
-      setRatingSaving(true);
-      await fetch(`${API_URL}/watched/rate`, {
-        method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${await user.getIdToken()}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          content_type: contentType,
-          content_id: contentId,
-          rating: newRating,
-        }),
-      });
-      setRating(newRating);
-      clearDashboardCache();
-      clearWatchlistCache();
-      clearForYouCache();
-      if (user)
-        updateCachedStatus(
-          user.uid,
-          contentType,
-          contentId,
-          watchStatus,
-          newRating,
-        );
+      await rateMutation.mutateAsync({ contentType, contentId, rating: newRating });
     } catch (err) {
       console.error(err);
-    } finally {
-      setRatingSaving(false);
     }
   }
 
@@ -353,13 +229,17 @@ export default function WatchButton({
           disabled={saving || statusLoading}
           onClick={() =>
             watchStatus === "none"
-              ? updateWatchStatus("Want To Watch")
+              ? handleStatusChange("Want To Watch")
               : setMenuOpen((o) => !o)
           }
-          className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-l-xl transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed ${mainClass}`}
+          className={`flex items-center gap-2 ${compact ? "px-2.5 sm:px-4 py-2" : "px-4 py-2"} text-sm font-semibold rounded-l-xl transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed ${mainClass}`}
         >
           {saving || statusLoading ? <IconSpinner /> : icon}
-          {statusLoading ? "Loading…" : saving ? "Saving…" : label}
+          {compact ? (
+            <span className="hidden sm:inline">{statusLoading ? "Loading…" : saving ? "Saving…" : label}</span>
+          ) : (
+            statusLoading ? "Loading…" : saving ? "Saving…" : label
+          )}
         </button>
 
         {/* Chevron dropdown toggle */}
@@ -378,10 +258,10 @@ export default function WatchButton({
 
         {/* Dropdown menu */}
         {menuOpen && (
-          <div className="absolute left-0 top-full mt-2 w-52 bg-neutral-800 border border-neutral-700 rounded-xl shadow-2xl shadow-black/60 z-30 overflow-hidden">
+          <div className={`absolute top-full mt-2 w-52 bg-neutral-800 border border-neutral-700 rounded-xl shadow-2xl shadow-black/60 z-30 overflow-hidden ${compact ? "right-0 sm:right-auto sm:left-0" : "left-0"}`}>
             {watchStatus !== "Want To Watch" && (
               <button
-                onClick={() => updateWatchStatus("Want To Watch")}
+                onClick={() => handleStatusChange("Want To Watch")}
                 className="flex items-center gap-3 w-full text-left px-4 py-3 text-sm text-neutral-200 hover:bg-neutral-700 transition-colors"
               >
                 <span className="text-primary-400">
@@ -393,7 +273,7 @@ export default function WatchButton({
 
             {watchStatus !== "Currently Watching" && (
               <button
-                onClick={() => updateWatchStatus("Currently Watching")}
+                onClick={() => handleStatusChange("Currently Watching")}
                 className="flex items-center gap-3 w-full text-left px-4 py-3 text-sm text-neutral-200 hover:bg-neutral-700 transition-colors"
               >
                 <span className="text-highlight-400">
@@ -405,7 +285,7 @@ export default function WatchButton({
 
             {watchStatus !== "Watched" && (
               <button
-                onClick={() => updateWatchStatus("Watched")}
+                onClick={() => handleStatusChange("Watched")}
                 className="flex items-center gap-3 w-full text-left px-4 py-3 text-sm text-neutral-200 hover:bg-neutral-700 transition-colors"
               >
                 <span className="text-success-400">
@@ -419,7 +299,7 @@ export default function WatchButton({
               <>
                 <div className="border-t border-neutral-700 mx-3" />
                 <button
-                  onClick={() => updateWatchStatus("none")}
+                  onClick={() => handleStatusChange("none")}
                   className="flex items-center gap-3 w-full text-left px-4 py-3 text-sm text-error-400 hover:bg-error-600/10 transition-colors"
                 >
                   <svg
@@ -447,7 +327,9 @@ export default function WatchButton({
         )}
       </div>
       {watchStatus === "Watched" && (
-        <StarRating rating={rating} onRate={saveRating} saving={ratingSaving} />
+        <div className={compact ? "hidden sm:block" : undefined}>
+          <StarRating rating={rating} onRate={handleRate} saving={ratingSaving} />
+        </div>
       )}
     </div>
   );

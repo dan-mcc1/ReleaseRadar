@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Text, Boolean
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Text, Boolean, Index
 from sqlalchemy.sql import func
 from app.db.base import Base
 
@@ -16,3 +16,8 @@ class Recommendation(Base):
     message = Column(Text, nullable=True)
     is_read = Column(Boolean, nullable=False, default=False, server_default="false")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_recommendation_recipient_read_created", "recipient_id", "is_read", "created_at"),
+        Index("ix_recommendation_created_at", "created_at"),
+    )

@@ -1,9 +1,8 @@
-import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { API_URL } from "../constants";
 import MediaList from "../components/MediaList";
 import type { Movie, Show } from "../types/calendar";
 import { usePageTitle } from "../hooks/usePageTitle";
+import { useUpcoming } from "../hooks/api/useSearch";
 
 type MediaType = "tv" | "movie";
 
@@ -17,55 +16,27 @@ export default function Upcoming() {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeType = (searchParams.get("type") as MediaType) ?? "movie";
   const page = Number(searchParams.get("page") ?? "1");
-  const [results, setResults] = useState<{ movies: Movie[]; shows: Show[] }>({
-    shows: [],
-    movies: [],
-  });
-  const [totalPages, setTotalPages] = useState(1);
-  const [loading, setLoading] = useState(false);
 
   const today = new Date();
-  const min_date = today.toISOString().split("T")[0];
+  const minDate = today.toISOString().split("T")[0];
   const nextMonth = new Date(today);
   nextMonth.setMonth(nextMonth.getMonth() + 1);
-  const max_date = nextMonth.toISOString().split("T")[0];
+  const maxDate = nextMonth.toISOString().split("T")[0];
 
   const formatDateRange = () => {
     const opts: Intl.DateTimeFormatOptions = { month: "long", day: "numeric" };
     return `${today.toLocaleDateString("en-us", opts)} – ${nextMonth.toLocaleDateString("en-us", { ...opts, year: "numeric" })}`;
   };
 
-  useEffect(() => {
-    async function fetchUpcoming() {
-      setLoading(true);
-      try {
-        const endpoint = activeType === "tv" ? "tv" : "movie";
-        const params = new URLSearchParams({
-          min_date,
-          max_date,
-          page: String(page),
-        });
-        const res = await fetch(
-          `${API_URL}/search/${endpoint}/upcoming?${params.toString()}`,
-        );
-        if (!res.ok) throw new Error("Failed to fetch upcoming");
-        const data = await res.json();
-        if (activeType === "tv") {
-          setResults({ movies: [], shows: data.results ?? [] });
-        } else {
-          setResults({ movies: data.results ?? [], shows: [] });
-        }
-        setTotalPages(data.total_pages ?? 1);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchUpcoming();
-  }, [activeType, page]);
+  const { data, isPending: loading } = useUpcoming(activeType, page, minDate, maxDate);
+  const rawItems = data?.results ?? [];
+  const totalPages = data?.total_pages ?? 1;
 
-  const total = results.movies.length + results.shows.length;
+  const results = {
+    movies: activeType === "movie" ? (rawItems as Movie[]) : [],
+    shows: activeType === "tv" ? (rawItems as Show[]) : [],
+  };
+  const total = rawItems.length;
 
   return (
     <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 py-8 pb-16">

@@ -2,8 +2,10 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import "./App.css";
 import NavBar from "./components/NavBar";
 import InstallBanner from "./components/InstallBanner";
+import ProtectedRoute from "./components/ProtectedRoute";
+import LandingPage from "./pages/LandingPage";
+import CalendarPage from "./pages/CalendarPage";
 import Search from "./pages/Search";
-import Dashboard from "./pages/Dashboard";
 import SignIn from "./pages/SignIn";
 import Settings from "./pages/Settings";
 import Upcoming from "./pages/Upcoming";
@@ -22,16 +24,25 @@ import BoxOffice from "./pages/BoxOffice";
 import CollectionInfo from "./pages/CollectionInfo";
 import ForYou from "./pages/ForYou";
 import Unsubscribe from "./pages/Unsubscribe";
+import Footer from "./components/Footer";
 
 function App() {
   return (
     <BrowserRouter>
-      {/* <div className="min-h-screen bg-neutral-950 text-neutral-100"> */}
       <div className="flex flex-col min-h-screen bg-neutral-950 text-neutral-100">
         <NavBar />
+        <div className="h-16 shrink-0" />
         <InstallBanner />
         <Routes>
-          <Route path="/" element={<Dashboard />} />
+          <Route path="/" element={<LandingPage />} />
+          <Route
+            path="/calendar"
+            element={
+              <ProtectedRoute>
+                <CalendarPage />
+              </ProtectedRoute>
+            }
+          />
           <Route path="/search" element={<Search />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/signIn" element={<SignIn />} />
@@ -55,6 +66,7 @@ function App() {
           <Route path="/for-you" element={<ForYou />} />
           <Route path="/unsubscribe" element={<Unsubscribe />} />
         </Routes>
+        <Footer />
       </div>
     </BrowserRouter>
   );

@@ -3,11 +3,16 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 from app.models.episode_watched import EpisodeWatched
 from app.models.episode import Episode
+from app.models.watchlist import Watchlist
+from app.models.currently_watching import CurrentlyWatching
 from app.services.episode_service import (
     get_or_create_episode,
     sync_season_episodes,
     ensure_show_in_db,
 )
+from app.services.watched_service import add_to_watched
+from app.services.watchlist_service import remove_from_watchlist
+from app.services.currently_watching_service import remove_from_currently_watching
 
 
 def add_episode_watched(
@@ -308,9 +313,15 @@ def _maybe_auto_complete_show(db: Session, user_id: str, show_id: int) -> bool:
     After marking episode(s) as watched, auto-move the show to Watched status
     if all episodes have been seen. Returns True if auto-completed.
     Only triggers if the show is currently in Watchlist or Currently Watching.
+
+    For in-production shows, only auto-completes when a season is genuinely
+    finished — either the last available episode is tagged as a season/series/
+    mid-season finale, or the user has watched all of the season's planned
+    episode count. This prevents the show from bouncing between Watched and
+    Watchlist for every week's episode on a currently-airing season.
     """
-    from app.models.watchlist import Watchlist
-    from app.models.currently_watching import CurrentlyWatching
+    from app.models.show import Show
+    from app.models.season import Season
 
     in_watchlist = (
         db.query(Watchlist)
@@ -344,9 +355,41 @@ def _maybe_auto_complete_show(db: Session, user_id: str, show_id: int) -> bool:
     if not result.get("finished"):
         return False
 
-    from app.services.watched_service import add_to_watched
-    from app.services.watchlist_service import remove_from_watchlist
-    from app.services.currently_watching_service import remove_from_currently_watching
+    # For in-production shows, only auto-complete when a season is truly finished.
+    # This prevents the weekly-airing bounce where the user watches the latest
+    # available episode but more are still coming in the same season.
+    show = db.query(Show).filter_by(id=show_id).first()
+    if show and show.in_production:
+        last_episode = (
+            db.query(Episode)
+            .filter(Episode.show_id == show_id, Episode.season_number > 0)
+            .order_by(Episode.season_number.desc(), Episode.episode_number.desc())
+            .first()
+        )
+        if not last_episode:
+            return False
+
+        # Primary: TMDB explicitly tagged the last episode as a finale
+        finale_types = ("season_finale", "series_finale", "mid_season")
+        is_season_complete = last_episode.episode_type in finale_types
+
+        if not is_season_complete:
+            # Fallback: user has watched all of the season's planned episode count
+            season_row = (
+                db.query(Season)
+                .filter_by(show_id=show_id, season_number=last_episode.season_number)
+                .first()
+            )
+            if season_row and season_row.episode_count:
+                watched_in_season = (
+                    db.query(EpisodeWatched)
+                    .filter_by(user_id=user_id, show_id=show_id, season_number=last_episode.season_number)
+                    .count()
+                )
+                is_season_complete = watched_in_season >= season_row.episode_count
+
+        if not is_season_complete:
+            return False
 
     # Add to Watched first so the subsequent removes see it still tracked
     # and leave tracking_count unchanged

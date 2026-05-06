@@ -1,8 +1,13 @@
 import asyncio
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
+from slowapi.errors import RateLimitExceeded
+from slowapi import _rate_limit_exceeded_handler
+from app.core.limiter import limiter
+from app.core.logging import setup_logging, request_elapsed_ms
 from app.config import settings
 from app.routers import (
     tv,
@@ -23,8 +28,11 @@ from app.routers import (
     reviews,
     box_office,
     collections,
+    calendar,
+    dev,
 )
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from app.db.session import SessionLocal, engine
 from app.db.base import Base
 from app.services.activity_service import delete_old_activity
@@ -34,7 +42,10 @@ from app.routers.notifications import (
     send_season_premiere_alerts_to_all,
 )
 from app.services.vote_update_service import update_all_vote_averages
-from app.services.episode_service import refresh_episodes_for_active_shows
+from app.services.episode_service import (
+    refresh_episodes_for_active_shows,
+    check_and_reactivate_watched_shows,
+)
 
 
 async def _activity_cleanup_loop():
@@ -59,33 +70,64 @@ async def _activity_cleanup_loop():
         await asyncio.sleep(3600)  # 1 hour
 
 
+# async def _daily_digest_loop():
+#     """Send daily email digest at 9am Eastern every day."""
+#     eastern = ZoneInfo("America/New_York")
+#     while True:
+#         now = datetime.now(eastern)
+#         next_run = now.replace(hour=9, minute=0, second=0, microsecond=0)
+#         if now >= next_run:
+#             next_run += timedelta(days=1)
+#         wait_seconds = (next_run - now).total_seconds()
+#         await asyncio.sleep(wait_seconds)
+#         print("[daily digest] Firing now...")
+#         try:
+#             db = SessionLocal()
+#             send_daily_digest_to_all(db)
+#             send_season_premiere_alerts_to_all(db)
+#             print("[daily digest] Done — emails sent")
+#         except Exception as e:
+#             print(f"[daily digest] Error: {e}")
+#         finally:
+#             db.close()
+
+
 async def _daily_digest_loop():
-    """Send daily email digest at 9am Eastern every day."""
     eastern = ZoneInfo("America/New_York")
+
     while True:
-        now = datetime.now(eastern)
-        next_run = now.replace(hour=9, minute=0, second=0, microsecond=0)
-        if now >= next_run:
-            next_run += timedelta(days=1)
-        wait_seconds = (next_run - now).total_seconds()
-        await asyncio.sleep(wait_seconds)
-        print("[daily digest] Firing now...")
         try:
+            now = datetime.now(eastern)
+            next_run = now.replace(hour=9, minute=0, second=0, microsecond=0)
+
+            if now >= next_run:
+                next_run += timedelta(days=1)
+
+            wait_seconds = (next_run - now).total_seconds()
+
+            print(f"[daily digest] Sleeping for {wait_seconds:.2f}s")
+            await asyncio.sleep(wait_seconds)
+
+            print("[daily digest] Firing now...")
+
             db = SessionLocal()
-            send_daily_digest_to_all(db)
-            send_season_premiere_alerts_to_all(db)
-            print("[daily digest] Done — emails sent")
+            try:
+                send_daily_digest_to_all(db)
+                send_season_premiere_alerts_to_all(db)
+                print("[daily digest] Done — emails sent")
+            finally:
+                db.close()
+
         except Exception as e:
-            print(f"[daily digest] Error: {e}")
-        finally:
-            db.close()
-        await asyncio.sleep(86400)  # sleep 24h before recalculating
+            print(f"[daily digest] Loop error: {e}")
+            await asyncio.sleep(60)  # prevent tight crash loop
 
 
 async def _episode_update_loop():
     """Refresh show's episodes and TMDB vote_average for all shows and movies once a day at 3am."""
+    eastern = ZoneInfo("America/New_York")
     while True:
-        now = datetime.now()
+        now = datetime.now(eastern)
         next_run = now.replace(hour=3, minute=0, second=0, microsecond=0)
         if now >= next_run:
             next_run += timedelta(days=1)
@@ -94,12 +136,12 @@ async def _episode_update_loop():
         try:
             db = SessionLocal()
             refresh_episodes_for_active_shows(db)
+            check_and_reactivate_watched_shows(db)
             await asyncio.to_thread(update_all_vote_averages, db)
         except Exception as e:
             print(f"[vote update] Error: {e}")
         finally:
             db.close()
-        await asyncio.sleep(86400)  # sleep 24h before recalculating
 
 
 @asynccontextmanager
@@ -129,11 +171,28 @@ async def lifespan(app: FastAPI):
     vote_task.cancel()
 
 
-app = FastAPI(title="ReleaseRadar API", lifespan=lifespan)
+app = FastAPI(title="ReleaseRadar API", lifespan=lifespan, redirect_slashes=True)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+setup_logging()
+
+
+@app.middleware("http")
+async def log_request_time(request: Request, call_next):
+    start = time.perf_counter()
+    response = await call_next(request)
+    request_elapsed_ms.set((time.perf_counter() - start) * 1000)
+    return response
+
 
 app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=["releaseradar.co", "www.releaseradar.co", "localhost", "127.0.0.1"],
+)
+app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://releaseradar.co", "https://www.releaseradar.co"],
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -165,3 +224,6 @@ app.include_router(events.router, prefix="/events", tags=["events"])
 app.include_router(reviews.router, prefix="/reviews", tags=["reviews"])
 app.include_router(box_office.router, prefix="/box-office", tags=["box-office"])
 app.include_router(collections.router, prefix="/collections", tags=["collections"])
+app.include_router(calendar.router, prefix="/calendar", tags=["calendar"])
+if settings.ENVIRONMENT != "production":
+    app.include_router(dev.router, prefix="/dev", tags=["dev"])

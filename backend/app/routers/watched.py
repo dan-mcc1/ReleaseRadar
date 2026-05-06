@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Body, BackgroundTasks, HTTPException
+from fastapi import APIRouter, Depends, Body, BackgroundTasks, HTTPException, Request
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.services.watched_service import (
@@ -7,23 +7,29 @@ from app.services.watched_service import (
     sync_watched_episodes_bg,
     get_watched,
     remove_from_watched,
-    get_watched_movies_info,
-    get_watched_tv_info,
+    _get_watched_items,
     update_watched_rating,
 )
 from app.dependencies.auth import get_current_user
+from app.core.limiter import limiter
 
 router = APIRouter()
 
 
 @router.post("/add")
+@limiter.limit("30/minute")
 def add_item(
+    request: Request,
     background_tasks: BackgroundTasks,
     content_type: str = Body(...),
     content_id: int = Body(...),
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
+    if content_type not in ("movie", "tv"):
+        raise HTTPException(
+            status_code=400, detail="content_type must be 'movie' or 'tv'"
+        )
     result = add_to_watched(db, uid, content_type, content_id)
     if content_type == "tv":
         mark_existing_episodes_watched(db, uid, content_id)
@@ -52,10 +58,14 @@ def remove_item(
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
+    if content_type not in ("movie", "tv"):
+        raise HTTPException(
+            status_code=400, detail="content_type must be 'movie' or 'tv'"
+        )
     return remove_from_watched(db, uid, content_type, content_id)
 
 
-@router.get("/")
+@router.get("")
 def get_user_watched(
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
@@ -67,11 +77,11 @@ def get_user_watched(
 def watched_tv_info(
     db: Session = Depends(get_db), uid: str = Depends(get_current_user)
 ):
-    return get_watched_tv_info(db, uid)
+    return _get_watched_items(db, uid, "tv")
 
 
 @router.get("/movie")
 def watched_movie_info(
     db: Session = Depends(get_db), uid: str = Depends(get_current_user)
 ):
-    return get_watched_movies_info(db, uid)
+    return _get_watched_items(db, uid, "movie")

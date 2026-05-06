@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, Body, HTTPException, Query
+from fastapi import APIRouter, Depends, Body, HTTPException, Query, Request
+from app.core.limiter import limiter
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from app.db.session import get_db
@@ -11,8 +12,10 @@ from app.services.omdb_service import get_omdb_scores
 router = APIRouter()
 
 
-@router.get("/")
+@router.get("")
+@limiter.limit("60/minute")
 def get_reviews(
+    request: Request,
     content_type: str = Query(...),
     content_id: int = Query(...),
     db: Session = Depends(get_db),
@@ -47,7 +50,9 @@ def get_reviews(
 
 
 @router.get("/aggregate")
+@limiter.limit("60/minute")
 def get_aggregate_ratings(
+    request: Request,
     content_type: str = Query(...),
     content_id: int = Query(...),
     db: Session = Depends(get_db),
@@ -70,12 +75,17 @@ def get_aggregate_ratings(
 
 
 @router.get("/external-scores")
-def get_external_scores(imdb_id: str = Query(...)):
+@limiter.limit("30/minute")
+def get_external_scores(
+    request: Request,
+    imdb_id: str = Query(...),
+    uid: str = Depends(get_current_user),
+):
     """Fetch RT, Metacritic, and IMDb scores from OMDB."""
     return get_omdb_scores(imdb_id)
 
 
-@router.post("/")
+@router.post("")
 def add_or_update_review(
     content_type: str = Body(...),
     content_id: int = Body(...),
@@ -97,6 +107,7 @@ def add_or_update_review(
         .filter_by(user_id=uid, content_type=content_type, content_id=content_id)
         .first()
     )
+
     def _with_rating(r: Review, u: User | None) -> dict:
         watched = (
             db.query(Watched.rating)
@@ -133,7 +144,7 @@ def add_or_update_review(
     return _with_rating(review, user_obj)
 
 
-@router.delete("/")
+@router.delete("")
 def delete_review(
     content_type: str = Body(...),
     content_id: int = Body(...),

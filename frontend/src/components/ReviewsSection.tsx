@@ -1,6 +1,10 @@
 import { useState, useEffect } from "react";
 import type { User } from "firebase/auth";
-import { API_URL } from "../constants";
+import {
+  useReviews,
+  useSubmitReview,
+  useDeleteReview,
+} from "../hooks/api/useReviews";
 
 interface Review {
   id: number;
@@ -60,29 +64,15 @@ export default function ReviewsSection({
   contentId,
   user,
 }: Props) {
-  const [reviews, setReviews] = useState<Review[]>([]);
-  const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const [editing, setEditing] = useState(false);
 
-  const myReview = user
-    ? (reviews.find((r) => r.user_id === user.uid) ?? null)
-    : null;
+  const { data, isLoading: loading } = useReviews(contentType, contentId);
+  const reviews = (data as Review[] | undefined) ?? [];
+  const submitMutation = useSubmitReview();
+  const deleteMutation = useDeleteReview();
 
-  useEffect(() => {
-    setLoading(true);
-    fetch(
-      `${API_URL}/reviews?content_type=${contentType}&content_id=${contentId}`,
-    )
-      .then((r) => r.json())
-      .then((data) => {
-        setReviews(Array.isArray(data) ? data : []);
-      })
-      .catch(() => setReviews([]))
-      .finally(() => setLoading(false));
-  }, [contentType, contentId]);
+  const myReview = user ? (reviews.find((r) => r.user_id === user.uid) ?? null) : null;
 
   // Pre-fill draft when editing
   useEffect(() => {
@@ -92,63 +82,18 @@ export default function ReviewsSection({
 
   async function submitReview() {
     if (!user || !draft.trim()) return;
-    setSaving(true);
-    try {
-      const token = await user.getIdToken();
-      const res = await fetch(`${API_URL}/reviews`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          content_type: contentType,
-          content_id: contentId,
-          review_text: draft.trim(),
-        }),
-      });
-      if (res.ok) {
-        const saved: Review = await res.json();
-        setReviews((prev) => {
-          const without = prev.filter((r) => r.user_id !== user.uid);
-          return [saved, ...without];
-        });
-        setEditing(false);
-        setDraft("");
-      }
-    } catch {
-      // ignore
-    } finally {
-      setSaving(false);
-    }
+    await submitMutation
+      .mutateAsync({ contentType, contentId, reviewText: draft.trim() })
+      .catch(() => {});
+    setEditing(false);
+    setDraft("");
   }
 
   async function deleteReview() {
     if (!user || !myReview) return;
-    setDeleting(true);
-    try {
-      const token = await user.getIdToken();
-      const res = await fetch(`${API_URL}/reviews`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          content_type: contentType,
-          content_id: contentId,
-        }),
-      });
-      if (res.ok) {
-        setReviews((prev) => prev.filter((r) => r.user_id !== user.uid));
-        setEditing(false);
-        setDraft("");
-      }
-    } catch {
-      // ignore
-    } finally {
-      setDeleting(false);
-    }
+    await deleteMutation.mutateAsync({ contentType, contentId }).catch(() => {});
+    setEditing(false);
+    setDraft("");
   }
 
   const othersReviews = reviews.filter((r) => r.user_id !== user?.uid);
@@ -188,7 +133,6 @@ export default function ReviewsSection({
               Write a review
             </button>
           ) : myReview && !editing ? (
-            /* Existing review — show it with edit/delete controls */
             <div className="bg-neutral-800/80 border border-highlight-500/30 rounded-xl p-4">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -214,10 +158,10 @@ export default function ReviewsSection({
                   </button>
                   <button
                     onClick={deleteReview}
-                    disabled={deleting}
+                    disabled={deleteMutation.isPending}
                     className="text-xs text-error-400 hover:text-error-300 disabled:opacity-50 transition-colors px-2 py-1 rounded"
                   >
-                    {deleting ? "Deleting…" : "Delete"}
+                    {deleteMutation.isPending ? "Deleting…" : "Delete"}
                   </button>
                 </div>
               </div>
@@ -226,7 +170,6 @@ export default function ReviewsSection({
               </p>
             </div>
           ) : (
-            /* Text editor */
             <div>
               <textarea
                 value={draft}
@@ -252,10 +195,10 @@ export default function ReviewsSection({
                   </button>
                   <button
                     onClick={submitReview}
-                    disabled={saving || !draft.trim()}
+                    disabled={submitMutation.isPending || !draft.trim()}
                     className="text-sm bg-highlight-600 hover:bg-highlight-500 disabled:opacity-50 text-white px-4 py-1.5 rounded-lg transition-colors font-medium"
                   >
-                    {saving ? "Saving…" : myReview ? "Update" : "Post"}
+                    {submitMutation.isPending ? "Saving…" : myReview ? "Update" : "Post"}
                   </button>
                 </div>
               </div>

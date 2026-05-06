@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
-import { getAuth } from "firebase/auth";
-import { firebaseApp } from "../firebase";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { API_URL } from "../constants";
+import { queryFetch } from "../hooks/api/queryFetch";
+import { queryKeys } from "../hooks/api/queryKeys";
+import { useAuthUser } from "../hooks/useAuthUser";
 
 interface Props {
   isOpen: boolean;
@@ -109,34 +111,18 @@ const INSTRUCTIONS: Instruction[] = [
 ];
 
 export default function CalendarSyncModal({ isOpen, onClose }: Props) {
-  const [feedUrl, setFeedUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const user = useAuthUser();
   const [copied, setCopied] = useState(false);
   const [openInstructions, setOpenInstructions] = useState<string | null>(null);
-  const auth = getAuth(firebaseApp);
 
-  useEffect(() => {
-    if (!isOpen || feedUrl) return;
-    fetchToken();
-  }, [isOpen]);
+  const { data: tokenData, isLoading: loading } = useQuery({
+    queryKey: queryKeys.icalToken(user?.uid ?? ""),
+    queryFn: () => queryFetch<{ token: string }>("/ical/token"),
+    enabled: !!user && isOpen,
+    staleTime: Infinity,
+  });
 
-  async function fetchToken() {
-    setLoading(true);
-    try {
-      const token = await auth.currentUser?.getIdToken();
-      if (!token) return;
-      const res = await fetch(`${API_URL}/ical/token`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) return;
-      const data = await res.json();
-      setFeedUrl(`${API_URL}/ical/feed/${data.token}`);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  }
+  const feedUrl = tokenData?.token ? `${API_URL}/ical/feed/${tokenData.token}` : null;
 
   function copyUrl() {
     if (!feedUrl) return;

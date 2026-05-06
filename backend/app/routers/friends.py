@@ -1,31 +1,49 @@
 # app/routers/friends.py
-from fastapi import APIRouter, Depends, Body, Query
+from fastapi import APIRouter, Depends, Body, Query, Request
 from sqlalchemy.orm import Session
+from app.core.limiter import limiter
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.services import friends_service
 from app.services.friends_service import get_followers
 from app.services.user_service import search_users_by_username
-from app.services.activity_service import get_friends_activity, get_activity_feed, get_my_activity
+from app.services.activity_service import (
+    get_friends_activity,
+    get_activity_feed,
+    get_my_activity,
+)
 from app.core.event_bus import publish
 from app.models.user import User
+from app.models.friendship import Friendship
+from app.services.recommendation_service import get_unread_count
 
 router = APIRouter()
 
 
 @router.get("/search")
+@limiter.limit("30/minute")
 def search_users(
-    q: str = Query(..., min_length=1),
+    request: Request,
+    q: str = Query(..., min_length=1, max_length=50),
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
     """Search users by partial username to find someone to add."""
     users = search_users_by_username(db, q, current_user_id=uid)
-    return [{"id": u.id, "username": u.username, "profile_visibility": u.profile_visibility or "friends_only"} for u in users]
+    return [
+        {
+            "id": u.id,
+            "username": u.username,
+            "profile_visibility": u.profile_visibility or "friends_only",
+        }
+        for u in users
+    ]
 
 
 @router.post("/request")
+@limiter.limit("20/minute")
 def send_request(
+    request: Request,
     addressee_username: str = Body(..., embed=True),
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
@@ -34,7 +52,17 @@ def send_request(
     result = friends_service.send_friend_request(db, uid, addressee_username)
     addressee = db.query(User).filter(User.username == addressee_username).first()
     if addressee:
-        publish(addressee.id, "friend_request")
+        pending_count = (
+            db.query(Friendship)
+            .filter(Friendship.addressee_id == addressee.id, Friendship.status == "pending")
+            .count()
+        )
+        unread_count = get_unread_count(db, addressee.id)
+        publish(addressee.id, {
+            "type": "counts_update",
+            "pending_requests": pending_count,
+            "unread_recs": unread_count,
+        })
     return result
 
 
@@ -46,7 +74,19 @@ def respond_to_request(
     uid: str = Depends(get_current_user),
 ):
     """Accept or decline an incoming friend request."""
-    return friends_service.respond_to_request(db, uid, friendship_id, accept)
+    result = friends_service.respond_to_request(db, uid, friendship_id, accept)
+    pending_count = (
+        db.query(Friendship)
+        .filter(Friendship.addressee_id == uid, Friendship.status == "pending")
+        .count()
+    )
+    unread_count = get_unread_count(db, uid)
+    publish(uid, {
+        "type": "counts_update",
+        "pending_requests": pending_count,
+        "unread_recs": unread_count,
+    })
+    return result
 
 
 @router.delete("/cancel/{friendship_id}")
@@ -71,7 +111,7 @@ def remove_friend(
     return {"detail": "Friend removed."}
 
 
-@router.get("/")
+@router.get("")
 def get_friends(
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),

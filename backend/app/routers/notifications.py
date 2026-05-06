@@ -111,59 +111,43 @@ def _build_items_for_window(db: Session, user_id: str, days: int) -> list:
             }
         )
 
-    # 📺 Episodes
-    episodes = (
-        db.query(Episode, Show)
-        .join(Show, Show.id == Episode.show_id)
-        .join(Watchlist, Watchlist.content_id == Show.id)
-        .filter(
-            Watchlist.user_id == user_id,
-            Watchlist.content_type == "tv",
-            Episode.air_date >= today,
-            Episode.air_date < end,
-        )
+    # Collect tracked show IDs from both Watchlist and CurrentlyWatching in one pass
+    tracked_show_ids = {
+        r.content_id
+        for r in db.query(Watchlist.content_id)
+        .filter_by(user_id=user_id, content_type="tv")
         .all()
-    )
-    for ep, show in episodes:
-        upcoming.append(
-            {
-                "title": f"{show.name} S{ep.season_number:02d}E{ep.episode_number:02d}"
-                + (f" — {ep.name}" if ep.name else ""),
-                "date": str(ep.air_date),
-                "air_time": format_air_time(show.air_time, show.air_timezone),
-                "content_type": "tv",
-                "content_id": show.id,
-                "poster_path": show.poster_path,
-                "episode_type": ep.episode_type,
-            }
-        )
-
-    watching_episodes = (
-        db.query(Episode, Show)
-        .join(Show, Show.id == Episode.show_id)
-        .join(CurrentlyWatching, CurrentlyWatching.content_id == Show.id)
-        .filter(
-            CurrentlyWatching.user_id == user_id,
-            CurrentlyWatching.content_type == "tv",
-            Episode.air_date >= today,
-            Episode.air_date < end,
-        )
+    } | {
+        r.content_id
+        for r in db.query(CurrentlyWatching.content_id)
+        .filter_by(user_id=user_id, content_type="tv")
         .all()
-    )
+    }
 
-    for ep, show in watching_episodes:
-        upcoming.append(
-            {
-                "title": f"{show.name} S{ep.season_number:02d}E{ep.episode_number:02d}"
-                + (f" — {ep.name}" if ep.name else ""),
-                "date": str(ep.air_date),
-                "air_time": format_air_time(show.air_time, show.air_timezone),
-                "content_type": "tv",
-                "content_id": show.id,
-                "poster_path": show.poster_path,
-                "episode_type": ep.episode_type,
-            }
+    if tracked_show_ids:
+        episodes = (
+            db.query(Episode, Show)
+            .join(Show, Show.id == Episode.show_id)
+            .filter(
+                Episode.show_id.in_(tracked_show_ids),
+                Episode.air_date >= today,
+                Episode.air_date < end,
+            )
+            .all()
         )
+        for ep, show in episodes:
+            upcoming.append(
+                {
+                    "title": f"{show.name} S{ep.season_number:02d}E{ep.episode_number:02d}"
+                    + (f" — {ep.name}" if ep.name else ""),
+                    "date": str(ep.air_date),
+                    "air_time": format_air_time(show.air_time, show.air_timezone),
+                    "content_type": "tv",
+                    "content_id": show.id,
+                    "poster_path": show.poster_path,
+                    "episode_type": ep.episode_type,
+                }
+            )
 
     return upcoming
 
@@ -203,13 +187,18 @@ def send_season_premiere_alerts_to_all(db: Session):
     if not upcoming_seasons:
         return
 
+    # Bulk-load shows for all upcoming seasons in one query
+    upcoming_show_ids = list({s.show_id for s in upcoming_seasons})
+    shows_by_id = {s.id: s for s in db.query(Show).filter(Show.id.in_(upcoming_show_ids)).all()}
+
     # Map show_id -> list of alert dicts
     show_alerts: dict[int, list] = defaultdict(list)
+    date_to_days = {dt: d for d, dt in target_dates.items()}
     for season in upcoming_seasons:
-        show = db.query(Show).filter_by(id=season.show_id).first()
+        show = shows_by_id.get(season.show_id)
         if not show:
             continue
-        days_away = next(d for d, dt in target_dates.items() if dt == season.air_date)
+        days_away = date_to_days[season.air_date]
         show_alerts[season.show_id].append(
             {
                 "show_name": show.name,
@@ -225,32 +214,46 @@ def send_season_premiere_alerts_to_all(db: Session):
     if not show_alerts:
         return
 
-    # Find all opted-in users who are tracking at least one of those shows
     affected_show_ids = list(show_alerts.keys())
+
+    # Bulk-load all tracking rows for affected shows in two queries
+    watchlist_rows = (
+        db.query(Watchlist.user_id, Watchlist.content_id)
+        .filter(Watchlist.content_type == "tv", Watchlist.content_id.in_(affected_show_ids))
+        .all()
+    )
+    watched_rows = (
+        db.query(Watched.user_id, Watched.content_id)
+        .filter(Watched.content_type == "tv", Watched.content_id.in_(affected_show_ids))
+        .all()
+    )
+
+    # Map user_id -> set of tracked show_ids
+    user_tracked: dict[str, set] = defaultdict(set)
+    for user_id, content_id in watchlist_rows:
+        user_tracked[user_id].add(content_id)
+    for user_id, content_id in watched_rows:
+        user_tracked[user_id].add(content_id)
+
+    # Find all opted-in users who track at least one affected show
+    relevant_user_ids = list(user_tracked.keys())
     users = (
         db.query(User)
-        .filter(User.email_notifications == True, User.email != None)
+        .filter(
+            User.id.in_(relevant_user_ids),
+            User.email_notifications == True,
+            User.email != None,
+        )
         .all()
     )
 
     for user in users:
         try:
-            tracked_show_ids = {
-                r.content_id
-                for r in db.query(Watchlist.content_id)
-                .filter_by(user_id=user.id, content_type="tv")
-                .all()
-            } | {
-                r.content_id
-                for r in db.query(Watched.content_id)
-                .filter_by(user_id=user.id, content_type="tv")
-                .all()
-            }
-
+            tracked = user_tracked[user.id]
             alerts = [
                 alert
                 for show_id in affected_show_ids
-                if show_id in tracked_show_ids
+                if show_id in tracked
                 for alert in show_alerts[show_id]
             ]
             if alerts:

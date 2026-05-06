@@ -243,7 +243,6 @@ def get_show_season_calendar(tv_id: int):
     }
 
 
-@lru_cache(maxsize=1024)
 def fetch_show_from_tmdb(show_id: int, append: str | None):
     params = {}
     if append:

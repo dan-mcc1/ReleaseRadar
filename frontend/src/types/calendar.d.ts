@@ -31,6 +31,8 @@ export type Show = {
   popularity?: number;
   vote_average?: number;
   user_rating?: number | null;
+  sort_key?: number;
+  watchlist_id?: number;
 }
 
 export type Season = {
@@ -62,6 +64,7 @@ export type Episode = {
   still_path: string | null;
   vote_average: number;
   vote_count: number;
+  is_watched: boolean;
 
   showData: Show;
 }
@@ -88,8 +91,10 @@ export type Movie = {
   bg_color?: string;
   popularity?: number;
   vote_average?: number;
-  isWatched?: boolean;
+  is_watched: boolean;
   user_rating?: number | null;
+  sort_key?: number;
+  watchlist_id?: number;
 }
 
 export type Genre = {

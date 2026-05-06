@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { BASE_IMAGE_URL, API_URL } from "../constants";
-import type { Collection, Movie } from "../types/calendar";
+import { BASE_IMAGE_URL } from "../constants";
+import type { Movie } from "../types/calendar";
 import { usePageTitle } from "../hooks/usePageTitle";
 import MediaList from "../components/MediaList";
+import { useCollectionInfo } from "../hooks/api/useCollectionInfo";
 
 function formatRuntime(minutes: number) {
   const h = Math.floor(minutes / 60);
@@ -15,30 +15,8 @@ function formatRuntime(minutes: number) {
 
 export default function CollectionInfo() {
   const { id } = useParams<{ id: string }>();
-  const [collection, setCollection] = useState<Collection | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  usePageTitle(collection?.name);
-
-  useEffect(() => {
-    async function fetchCollection() {
-      try {
-        setLoading(true);
-        const res = await fetch(`${API_URL}/collections/${id}`);
-        if (!res.ok) throw new Error("Collection not found");
-        const data = await res.json();
-        data.parts = (data.parts ?? []).sort((a: Movie, b: Movie) =>
-          (a.release_date ?? "").localeCompare(b.release_date ?? ""),
-        );
-        setCollection(data);
-      } catch (err: any) {
-        setError(err.message ?? "Something went wrong");
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchCollection();
-  }, [id]);
+  const { data: rawCollection, isPending: loading, error } = useCollectionInfo(id);
+  usePageTitle(rawCollection?.name);
 
   if (loading)
     return (
@@ -49,13 +27,20 @@ export default function CollectionInfo() {
         </div>
       </div>
     );
-  if (error) return <p className="text-error-400 p-6">{error}</p>;
-  if (!collection)
+  if (error) return <p className="text-error-400 p-6">{error?.message}</p>;
+  if (!rawCollection)
     return <p className="text-neutral-400 p-6">Collection not found.</p>;
 
-  const releasedParts = collection.parts.filter((p) => p.release_date);
+  const collection = {
+    ...rawCollection,
+    parts: [...(rawCollection.parts ?? [])].sort((a: Movie, b: Movie) =>
+      (a.release_date ?? "").localeCompare(b.release_date ?? ""),
+    ),
+  };
+
+  const releasedParts = collection.parts.filter((p: Movie) => p.release_date);
   const totalRuntime = releasedParts.reduce(
-    (sum, p) => sum + (p.runtime ?? 0),
+    (sum: number, p: Movie) => sum + (p.runtime ?? 0),
     0,
   );
 

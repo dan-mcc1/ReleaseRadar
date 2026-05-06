@@ -4,7 +4,7 @@ import hmac
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 from icalendar import Calendar, Event
 from sqlalchemy.orm import Session
@@ -17,6 +17,7 @@ from app.models.episode import Episode
 from app.models.movie import Movie
 from app.models.show import Show
 from app.models.watchlist import Watchlist
+from app.core.limiter import limiter
 
 router = APIRouter()
 
@@ -59,7 +60,8 @@ def get_ical_token(uid: str = Depends(get_current_user)):
 
 
 @router.get("/feed/{token}")
-def get_ical_feed(token: str, db: Session = Depends(get_db)):
+@limiter.limit("6/minute")
+def get_ical_feed(request: Request, token: str, db: Session = Depends(get_db)):
     """
     Public endpoint — returns a .ics calendar file for the user's watchlist
     and currently-watching shows and movies.  Calendar apps subscribe to this

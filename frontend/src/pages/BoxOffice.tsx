@@ -1,17 +1,7 @@
-import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { API_URL, BASE_IMAGE_URL } from "../constants";
+import { BASE_IMAGE_URL } from "../constants";
 import { usePageTitle } from "../hooks/usePageTitle";
-
-interface BoxOfficeMovie {
-  rank: number;
-  id: number;
-  title: string;
-  poster_path: string | null;
-  release_date: string;
-  revenue: number;
-  budget: number;
-}
+import { useBoxOffice } from "../hooks/api/useBoxOffice";
 
 const MONTH_NAMES = [
   "January",
@@ -59,33 +49,9 @@ export default function BoxOffice() {
   const mode = (searchParams.get("mode") as "yearly" | "monthly") ?? "yearly";
   const year = Number(searchParams.get("year") ?? currentYear);
   const month = Number(searchParams.get("month") ?? new Date().getMonth() + 1);
-  const [movies, setMovies] = useState<BoxOfficeMovie[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const MOVIE_LIMIT = 10;
 
-  useEffect(() => {
-    async function fetchData() {
-      setLoading(true);
-      setError(null);
-      try {
-        const url =
-          mode === "yearly"
-            ? `${API_URL}/box-office/yearly?year=${year}&limit=${MOVIE_LIMIT}`
-            : `${API_URL}/box-office/monthly?year=${year}&month=${month}&limit=${MOVIE_LIMIT}`;
-        const res = await fetch(url);
-        if (!res.ok) throw new Error("Failed to fetch box office data");
-        const data: BoxOfficeMovie[] = await res.json();
-        setMovies(data);
-      } catch (err) {
-        setError("Could not load box office data. Please try again.");
-        setMovies([]);
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchData();
-  }, [mode, year, month]);
+  const { data: movies = [], isPending: loading, error } = useBoxOffice(mode, year, month, MOVIE_LIMIT);
 
   const subtitle =
     mode === "yearly"
@@ -191,7 +157,7 @@ export default function BoxOffice() {
       {/* Error */}
       {!loading && error && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <p className="text-error-400">{error}</p>
+          <p className="text-error-400">{error?.message}</p>
         </div>
       )}
 

@@ -4,6 +4,7 @@ from datetime import datetime
 import resend
 from collections import defaultdict
 from app.config import settings
+from html import escape
 
 TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w185"
 
@@ -131,7 +132,7 @@ def _digest_item_row(item: dict) -> str:
     poster_path = item.get("poster_path")
     poster = (
         f'<a href="{content_url}" style="display:inline-block;flex-shrink:0;margin-right:12px;">'
-        f'<img src="{TMDB_IMAGE_BASE}{poster_path}" alt="{item["title"]}" width="56" height="84"'
+        f'<img src="{TMDB_IMAGE_BASE}{poster_path}" alt="{escape(item["title"])}" width="56" height="84"'
         f' style="border-radius:6px;object-fit:cover;display:block;" /></a>'
         if poster_path
         else ""
@@ -167,7 +168,7 @@ def _digest_item_row(item: dict) -> str:
   {poster}
   <div style="flex:1;min-width:0;">
     <a href="{content_url}" style="color:#f5f5f5;font-size:15px;font-weight:600;
-       text-decoration:none;display:block;margin-bottom:3px;">{item["title"]}</a>
+       text-decoration:none;display:block;margin-bottom:3px;">{escape(item["title"])}</a>
     <span style="color:#737373;font-size:13px;">{_format_date(item["date"])}</span>
     {time_badge}{special_badge}
   </div>
@@ -222,7 +223,7 @@ def send_notification_email(
 
     body = f"""
 <h2 style="margin:0 0 4px;color:#f5f5f5;font-size:20px;font-weight:700;">
-  Hi {username or 'there'} 👋
+  Hi {escape(username) or 'there'} 👋
 </h2>
 <p style="margin:0 0 20px;color:#a3a3a3;font-size:14px;">
   {intro}
@@ -268,7 +269,8 @@ def send_season_premiere_email(
         poster_inner = _poster_img(a.get("poster_path"), a["show_name"], content_url)
         poster = (
             f'<div style="flex-shrink:0;margin-right:16px;">{poster_inner}</div>'
-            if has_poster else ""
+            if has_poster
+            else ""
         )
         layout_style = "display:flex;align-items:flex-start;" if has_poster else ""
         return f"""
@@ -277,7 +279,7 @@ def send_season_premiere_email(
   {poster}
   <div style="flex:1;">
     <a href="{content_url}" style="color:#f5f5f5;font-size:15px;font-weight:600;
-       text-decoration:none;display:block;margin-bottom:2px;">{a["show_name"]}</a>
+       text-decoration:none;display:block;margin-bottom:2px;">{escape(a["show_name"])}</a>
     <p style="margin:0 0 4px;color:#6ee7b7;font-size:13px;">{season_label}</p>
     <p style="margin:0;color:#737373;font-size:12px;">Premieres {_format_date(a["air_date"])}</p>
   </div>
@@ -300,7 +302,7 @@ def send_season_premiere_email(
 
     body = f"""
 <h2 style="margin:0 0 4px;color:#f5f5f5;font-size:20px;font-weight:700;">
-  Hi {username or 'there'} 👋
+  Hi {escape(username) or 'there'} 👋
 </h2>
 <p style="margin:0 0 20px;color:#a3a3a3;font-size:14px;">
   Heads up — the following show{'s' if count > 1 else ''} you're tracking
@@ -345,6 +347,7 @@ def send_new_season_available_email(
         if premiere_date:
             try:
                 from datetime import date as date_type
+
                 pd = date_type.fromisoformat(premiere_date)
                 if pd > today:
                     date_str = _format_date(premiere_date)
@@ -376,8 +379,9 @@ def send_new_season_available_email(
         poster = (
             f'<div style="flex-shrink:0;margin-right:16px;">'
             f'{_poster_img(s.get("poster_path"), s["show_name"], content_url)}'
-            f'</div>'
-            if has_poster else ""
+            f"</div>"
+            if has_poster
+            else ""
         )
         layout_style = "display:flex;align-items:flex-start;" if has_poster else ""
         return f"""
@@ -386,7 +390,7 @@ def send_new_season_available_email(
   {poster}
   <div style="flex:1;">
     <a href="{content_url}" style="color:#f5f5f5;font-size:15px;font-weight:600;
-       text-decoration:none;display:block;margin-bottom:2px;">{s["show_name"]}</a>
+       text-decoration:none;display:block;margin-bottom:2px;">{escape(s["show_name"])}</a>
     {_premiere_line(s)}
     <p style="margin:4px 0 0;color:#737373;font-size:12px;">Added back to your watchlist</p>
   </div>
@@ -395,15 +399,21 @@ def send_new_season_available_email(
     count = len(shows)
     first = shows[0]
     if count == 1:
-        season_label = f"Season {first['season_number']}" if first.get("season_number") else "A new season"
+        season_label = (
+            f"Season {first['season_number']}"
+            if first.get("season_number")
+            else "A new season"
+        )
         subject = f"{season_label} of {first['show_name']} is coming — Release Radar"
     else:
-        subject = f"New seasons coming for {count} shows you've finished — Release Radar"
+        subject = (
+            f"New seasons coming for {count} shows you've finished — Release Radar"
+        )
 
     cards = "".join(_show_card(s) for s in shows)
     body = f"""
 <h2 style="margin:0 0 4px;color:#f5f5f5;font-size:20px;font-weight:700;">
-  Hi {username or 'there'} 👋
+  Hi {escape(username) or 'there'} 👋
 </h2>
 <p style="margin:0 0 20px;color:#a3a3a3;font-size:14px;">
   {'A show' if count == 1 else 'Some shows'} you already finished
@@ -445,7 +455,7 @@ def send_recommendation_email(
         poster_block = (
             f'<div style="text-align:center;margin-bottom:20px;">'
             f'<a href="{content_url}">'
-            f'<img src="{TMDB_IMAGE_BASE}{poster_path}" alt="{content_title}"'
+            f'<img src="{TMDB_IMAGE_BASE}{poster_path}" alt="{escape(content_title)}"'
             f' width="100" height="150" style="border-radius:10px;object-fit:cover;display:inline-block;" />'
             f"</a></div>"
         )
@@ -455,22 +465,22 @@ def send_recommendation_email(
         message_block = (
             f'<div style="background:#171717;border-left:3px solid #10b981;'
             f'border-radius:0 8px 8px 0;padding:12px 16px;margin:16px 0;">'
-            f'<p style="margin:0;color:#a3a3a3;font-size:14px;font-style:italic;">"{message}"</p>'
+            f'<p style="margin:0;color:#a3a3a3;font-size:14px;font-style:italic;">"{escape(message)}"</p>'
             f"</div>"
         )
 
     body = f"""
 <h2 style="margin:0 0 4px;color:#f5f5f5;font-size:20px;font-weight:700;">
-  Hi {to_username or 'there'} 👋
+  Hi {escape(to_username) or 'there'} 👋
 </h2>
 <p style="margin:0 0 20px;color:#a3a3a3;font-size:14px;">
-  <strong style="color:#6ee7b7;">@{from_username}</strong> recommended a {kind} for you:
+  <strong style="color:#6ee7b7;">@{escape(from_username)}</strong> recommended a {kind} for you:
 </p>
 {poster_block}
 <div style="background:#171717;border:1px solid #404040;border-radius:10px;padding:16px;margin-bottom:16px;">
   <a href="{content_url}"
      style="color:#f5f5f5;font-size:18px;font-weight:700;text-decoration:none;">
-    {content_title}
+    {escape(content_title)}
   </a>
   <p style="margin:4px 0 0;color:#737373;font-size:13px;text-transform:capitalize;">{kind}</p>
 </div>
@@ -479,13 +489,13 @@ def send_recommendation_email(
   <a href="{content_url}"
      style="display:inline-block;background:#059669;color:#ffffff;font-weight:600;
             font-size:14px;padding:12px 28px;border-radius:8px;text-decoration:none;">
-    View {content_title}
+    View {escape(content_title)}
   </a>
 </div>"""
 
     send_email(
         to_email,
-        f'@{from_username} recommended "{content_title}" to you',
+        f'@{escape(from_username)} recommended "{escape(content_title)}" to you',
         _email_wrapper(body, uid),
     )
 

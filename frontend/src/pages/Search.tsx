@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
-import type { Show, Movie, Person, CollectionResult } from "../types/calendar";
-import { API_URL } from "../constants";
 import MediaList from "../components/MediaList";
 import { usePageTitle } from "../hooks/usePageTitle";
+import { useSearch } from "../hooks/api/useSearch";
 
 type Tab = "all" | "movies" | "tv" | "people" | "collections";
 
@@ -15,13 +14,6 @@ export default function Search() {
   const searchParams = new URLSearchParams(location.search);
   const query = searchParams.get("q") || "";
 
-  const [results, setResults] = useState<{
-    movies: Movie[];
-    shows: Show[];
-    people: Person[];
-    collections: CollectionResult[];
-  }>({ movies: [], shows: [], people: [], collections: [] });
-  const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("all");
 
   // Reset to "all" when query changes
@@ -29,36 +21,11 @@ export default function Search() {
     setActiveTab("all");
   }, [query]);
 
-  useEffect(() => {
-    if (!query) {
-      setResults({ movies: [], shows: [], people: [], collections: [] });
-      return;
-    }
-
-    async function fetchResults() {
-      setLoading(true);
-      try {
-        const res = await fetch(
-          `${API_URL}/search?query=${encodeURIComponent(query)}`,
-        );
-        if (!res.ok) throw new Error("Failed to fetch search results");
-        const data = await res.json();
-        setResults({
-          movies: data.movies ?? [],
-          shows: data.shows ?? [],
-          people: data.people ?? [],
-          collections: data.collections ?? [],
-        });
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchResults();
-  }, [query]);
+  const { data, isPending: loading } = useSearch(query);
+  const results = data ?? { movies: [], shows: [], people: [], collections: [] };
 
   const { movies, shows, people, collections } = results;
+
   const total =
     movies.length + shows.length + people.length + collections.length;
 

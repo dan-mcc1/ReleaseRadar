@@ -1,23 +1,9 @@
-import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import type { Show, Movie } from "../types/calendar";
-import { API_URL } from "../constants";
 import MediaList from "../components/MediaList";
 import { usePageTitle } from "../hooks/usePageTitle";
+import { useGenres, useGenreResults } from "../hooks/api/useSearch";
 
 type ActiveTab = "movie" | "tv";
-
-interface GenreItem {
-  id: number;
-  name: string;
-}
-
-interface GenreList {
-  movie: GenreItem[];
-  tv: GenreItem[];
-}
-
-let genreCache: GenreList | null = null;
 
 const TABS: { label: string; value: ActiveTab }[] = [
   { label: "Movies", value: "movie" },
@@ -33,71 +19,28 @@ export default function BrowseGenres() {
     : null;
   const page = Number(searchParams.get("page") ?? "1");
 
-  // Genre browsing state
-  const [genres, setGenres] = useState<GenreList>({ movie: [], tv: [] });
-  const [results, setResults] = useState<{ movies: Movie[]; shows: Show[] }>({
-    movies: [],
-    shows: [],
-  });
-  const [totalPages, setTotalPages] = useState(1);
-  const [loading, setLoading] = useState(false);
+  const { data: genreList } = useGenres();
+  const genres = genreList ?? { movie: [], tv: [] };
 
-  // Fetch genre list once per session
-  useEffect(() => {
-    if (genreCache) {
-      setGenres(genreCache);
-      return;
-    }
-    fetch(`${API_URL}/search/genres`)
-      .then((r) => r.json())
-      .then((data: GenreList) => {
-        genreCache = data;
-        setGenres(data);
-      })
-      .catch(console.error);
-  }, []);
+  const { data: genreData, isFetching: loading } = useGenreResults(
+    activeTab,
+    selectedGenreId ?? 0,
+    page,
+    !!selectedGenreId,
+  );
 
-  // Reset genre state when switching between movie/tv tabs
-  useEffect(() => {
-    setResults({ movies: [], shows: [] });
-    setTotalPages(1);
-  }, [activeTab]);
+  const totalPages = genreData?.total_pages ?? 1;
+  const results = {
+    movies: genreData?.movies ?? [],
+    shows: genreData?.shows ?? [],
+  };
+  const rawItems = [...results.movies, ...results.shows];
 
-  // Fetch genre results
-  useEffect(() => {
-    if (!selectedGenreId) {
-      setResults({ movies: [], shows: [] });
-      return;
-    }
-
-    async function fetchResults() {
-      setLoading(true);
-      try {
-        const params = new URLSearchParams({
-          genre_id: String(selectedGenreId),
-          type: activeTab,
-          page: String(page),
-        });
-        const res = await fetch(`${API_URL}/search?${params}`);
-        if (!res.ok) throw new Error("Failed to fetch genre results");
-        const data = await res.json();
-        setResults({ movies: data.movies ?? [], shows: data.shows ?? [] });
-        setTotalPages(data.total_pages ?? 1);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchResults();
-  }, [selectedGenreId, activeTab, page]);
-
-  const genrePills = genres[activeTab as "movie" | "tv"];
+  const genrePills = genres[activeTab];
   const selectedGenreName = genrePills.find(
     (g) => g.id === selectedGenreId,
   )?.name;
-  const total = results.movies.length + results.shows.length;
+  const total = rawItems.length;
 
   return (
     <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 py-8 pb-16">
