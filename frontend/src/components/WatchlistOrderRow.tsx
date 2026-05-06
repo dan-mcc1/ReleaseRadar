@@ -18,6 +18,7 @@ interface WatchlistOrderRowProps {
   onMoveUp: () => void;
   onMoveDown: () => void;
   onMoveToTop: () => void;
+  onDelete: () => void;
   onClick: () => void;
 }
 
@@ -37,6 +38,7 @@ export default function WatchlistOrderRow({
   onMoveUp,
   onMoveDown,
   onMoveToTop,
+  onDelete,
   onClick,
 }: WatchlistOrderRowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
@@ -171,18 +173,30 @@ export default function WatchlistOrderRow({
         )}
       </div>
 
-      {/* Move to top */}
-      <button
-        type="button"
-        onClick={onMoveToTop}
-        disabled={isFirst}
-        aria-label="Move to top"
-        className="text-neutral-500 hover:text-neutral-300 disabled:opacity-20 disabled:cursor-not-allowed p-1 rounded transition-colors flex-shrink-0"
-      >
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M5 11l7-7 7 7M5 19l7-7 7 7" />
-        </svg>
-      </button>
+      {/* Move to top + Delete */}
+      <div className="flex items-center gap-0.5 flex-shrink-0">
+        <button
+          type="button"
+          onClick={onMoveToTop}
+          disabled={isFirst}
+          aria-label="Move to top"
+          className="text-neutral-500 hover:text-neutral-300 disabled:opacity-20 disabled:cursor-not-allowed p-1 rounded transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 11l7-7 7 7M5 19l7-7 7 7" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          aria-label="Remove from watchlist"
+          className="text-red-500 hover:text-red-400 p-1 rounded transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
     </div>
   );
 }

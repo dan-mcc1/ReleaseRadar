@@ -395,6 +395,9 @@ export default function Watchlist() {
                     const after = combinedItems[0];
                     fireReorder(item._contentType, item.id, null, after.watchlist_id);
                   }}
+                  onDelete={() =>
+                    removeFromList.mutate({ list: "watchlist", contentType: item._contentType, contentId: item.id })
+                  }
                   onClick={() =>
                     navigate(`/${item._contentType === "movie" ? "movies" : "shows"}/${item.id}`)
                   }
@@ -440,6 +443,9 @@ export default function Watchlist() {
                 const after = combinedItems[0];
                 fireReorder(item._contentType, item.id, null, after?.watchlist_id ?? null);
               }}
+              onDelete={() =>
+                removeFromList.mutate({ list: "watchlist", contentType: item._contentType, contentId: item.id })
+              }
               onClick={() =>
                 navigate(`/${item._contentType === "movie" ? "movies" : "shows"}/${item.id}`)
               }

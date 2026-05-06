@@ -113,6 +113,27 @@ export function useRemoveFromList() {
         body: JSON.stringify({ content_type: contentType, content_id: contentId }),
       });
     },
+    onMutate: async ({ list, contentType, contentId }) => {
+      if (!user || list !== "watchlist") return;
+      const key = queryKeys.watchlist(user.uid);
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<ListData>(key);
+      if (previous) {
+        queryClient.setQueryData<ListData>(key, {
+          movies: contentType === "movie"
+            ? previous.movies.filter((m) => m.id !== contentId)
+            : previous.movies,
+          shows: contentType === "tv"
+            ? previous.shows.filter((s) => s.id !== contentId)
+            : previous.shows,
+        });
+      }
+      return { previous };
+    },
+    onError: (_err, { list }, context) => {
+      if (!user || list !== "watchlist" || !context?.previous) return;
+      queryClient.setQueryData(queryKeys.watchlist(user.uid), context.previous);
+    },
     onSuccess: (_, { list }) => {
       if (!user) return;
       const keyMap = {
