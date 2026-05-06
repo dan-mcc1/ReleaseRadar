@@ -4,13 +4,14 @@ import firebase_admin
 from firebase_admin import credentials, auth
 from cachetools import TTLCache
 from threading import Lock
+from app.config import settings
 
 _firebase_credentials = os.getenv("FIREBASE_CREDENTIALS")
 
 if _firebase_credentials:
     cred = credentials.Certificate(json.loads(_firebase_credentials))
 else:
-    cred = credentials.Certificate("firebase-service.json")
+    cred = credentials.Certificate(settings.FIREBASE_CREDS_PATH)
 
 firebase_admin.initialize_app(cred)
 
