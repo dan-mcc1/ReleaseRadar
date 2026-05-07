@@ -69,7 +69,7 @@ export default function MovieInfo() {
   } = useMediaInfo<FullMovieData>({
     contentType: "movie",
     id,
-    fetchUrl: `/${id}/info`,
+    fetchUrl: `/movies/${id}/info`,
   });
   const user = useAuthUser();
   usePageTitle(movie?.title);
