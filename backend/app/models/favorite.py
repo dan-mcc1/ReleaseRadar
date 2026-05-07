@@ -13,5 +13,7 @@ class Favorite(Base):
     added_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
-        UniqueConstraint("user_id", "content_type", "content_id", name="uq_favorite_user_content"),
+        UniqueConstraint(
+            "user_id", "content_type", "content_id", name="uq_favorite_user_content"
+        ),
     )

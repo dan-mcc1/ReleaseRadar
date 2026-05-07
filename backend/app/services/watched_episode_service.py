@@ -125,9 +125,9 @@ def add_season_watched(db: Session, user_id: str, show_id: int, season_number: i
     )
     already_watched = {
         ep_num
-        for (ep_num,) in db.query(EpisodeWatched.episode_number).filter_by(
-            user_id=user_id, show_id=show_id, season_number=season_number
-        ).all()
+        for (ep_num,) in db.query(EpisodeWatched.episode_number)
+        .filter_by(user_id=user_id, show_id=show_id, season_number=season_number)
+        .all()
     }
     for ep in episodes:
         if ep.episode_number not in already_watched:
@@ -172,7 +172,9 @@ def get_next_unwatched_episode(db: Session, user_id: str, show_id: int) -> dict:
 
     watched_set = {
         (w.season_number, w.episode_number)
-        for w in db.query(EpisodeWatched).filter_by(user_id=user_id, show_id=show_id).all()
+        for w in db.query(EpisodeWatched)
+        .filter_by(user_id=user_id, show_id=show_id)
+        .all()
     }
 
     def _query_episodes():
@@ -231,7 +233,9 @@ def get_next_unwatched_episode(db: Session, user_id: str, show_id: int) -> dict:
     return {"finished": True}
 
 
-def get_next_unwatched_episodes_bulk(db: Session, user_id: str, show_ids: list[int]) -> dict:
+def get_next_unwatched_episodes_bulk(
+    db: Session, user_id: str, show_ids: list[int]
+) -> dict:
     """
     Return next unwatched episode for each show_id in one pass.
     Avoids one round-trip per show.
@@ -241,7 +245,11 @@ def get_next_unwatched_episodes_bulk(db: Session, user_id: str, show_ids: list[i
 
     # Load all watched episodes for the user + these shows in one query
     watched_rows = (
-        db.query(EpisodeWatched.show_id, EpisodeWatched.season_number, EpisodeWatched.episode_number)
+        db.query(
+            EpisodeWatched.show_id,
+            EpisodeWatched.season_number,
+            EpisodeWatched.episode_number,
+        )
         .filter(EpisodeWatched.user_id == user_id, EpisodeWatched.show_id.in_(show_ids))
         .all()
     )
@@ -343,9 +351,7 @@ def _maybe_auto_complete_show(db: Session, user_id: str, show_id: int) -> bool:
         .count()
     )
     watched_count = (
-        db.query(EpisodeWatched)
-        .filter_by(user_id=user_id, show_id=show_id)
-        .count()
+        db.query(EpisodeWatched).filter_by(user_id=user_id, show_id=show_id).count()
     )
     if watched_count < stored_count:
         return False
@@ -383,7 +389,11 @@ def _maybe_auto_complete_show(db: Session, user_id: str, show_id: int) -> bool:
             if season_row and season_row.episode_count:
                 watched_in_season = (
                     db.query(EpisodeWatched)
-                    .filter_by(user_id=user_id, show_id=show_id, season_number=last_episode.season_number)
+                    .filter_by(
+                        user_id=user_id,
+                        show_id=show_id,
+                        season_number=last_episode.season_number,
+                    )
                     .count()
                 )
                 is_season_complete = watched_in_season >= season_row.episode_count

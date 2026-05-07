@@ -17,8 +17,12 @@ class Provider(Base):
 class ShowProvider(Base):
     __tablename__ = "show_provider"
 
-    show_id = Column(Integer, ForeignKey("show.id", ondelete="CASCADE"), primary_key=True)
-    provider_id = Column(Integer, ForeignKey("provider.id", ondelete="CASCADE"), primary_key=True)
+    show_id = Column(
+        Integer, ForeignKey("show.id", ondelete="CASCADE"), primary_key=True
+    )
+    provider_id = Column(
+        Integer, ForeignKey("provider.id", ondelete="CASCADE"), primary_key=True
+    )
     flatrate = Column(Boolean, default=False)
     rent = Column(Boolean, default=False)
     buy = Column(Boolean, default=False)
@@ -30,8 +34,12 @@ class ShowProvider(Base):
 class MovieProvider(Base):
     __tablename__ = "movie_provider"
 
-    movie_id = Column(Integer, ForeignKey("movie.id", ondelete="CASCADE"), primary_key=True)
-    provider_id = Column(Integer, ForeignKey("provider.id", ondelete="CASCADE"), primary_key=True)
+    movie_id = Column(
+        Integer, ForeignKey("movie.id", ondelete="CASCADE"), primary_key=True
+    )
+    provider_id = Column(
+        Integer, ForeignKey("provider.id", ondelete="CASCADE"), primary_key=True
+    )
     flatrate = Column(Boolean, default=False)
     rent = Column(Boolean, default=False)
     buy = Column(Boolean, default=False)

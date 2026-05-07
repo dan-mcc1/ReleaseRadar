@@ -1,4 +1,12 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, Body, HTTPException, Request, Query
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    Body,
+    HTTPException,
+    Request,
+    Query,
+)
 from sqlalchemy import tuple_, union_all, select, literal, null, Float
 from sqlalchemy.orm import Session
 from app.db.session import get_db
@@ -73,9 +81,13 @@ def reorder_item(
     uid: str = Depends(get_current_user),
 ):
     if content_type not in ("movie", "tv"):
-        raise HTTPException(status_code=400, detail="content_type must be 'movie' or 'tv'")
+        raise HTTPException(
+            status_code=400, detail="content_type must be 'movie' or 'tv'"
+        )
     try:
-        return reorder_watchlist_item(db, uid, content_type, content_id, before_id, after_id)
+        return reorder_watchlist_item(
+            db, uid, content_type, content_id, before_id, after_id
+        )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 

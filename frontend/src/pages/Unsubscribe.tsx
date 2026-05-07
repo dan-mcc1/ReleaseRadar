@@ -23,7 +23,14 @@ export default function Unsubscribe() {
     staleTime: Infinity,
   });
 
-  const status = !uid || !token ? "error" : isLoading ? "loading" : isSuccess ? "success" : "error";
+  const status =
+    !uid || !token
+      ? "error"
+      : isLoading
+        ? "loading"
+        : isSuccess
+          ? "success"
+          : "error";
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] px-4 text-center">

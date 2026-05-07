@@ -227,53 +227,61 @@ export default function NavBar() {
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  const connectSSE = useCallback(async (uid: string) => {
-    if (esRef.current?.readyState === EventSource.OPEN) return;
-    esRef.current?.close();
-    esRef.current = null;
-
-    if (!auth.currentUser) return;
-
-    const tokenRes = await apiFetch("/events/token", { method: "POST" });
-    if (!tokenRes.ok) return;
-    const { session_token } = await tokenRes.json();
-    const es = new EventSource(
-      `${API_URL}/events/stream?token=${encodeURIComponent(session_token)}`,
-    );
-    esRef.current = es;
-
-    es.onmessage = (e) => {
-      try {
-        const data: {
-          type: string;
-          pending_requests?: number;
-          unread_recs?: number;
-        } = JSON.parse(e.data);
-        if (data.type === "counts_update") {
-          queryClient.setQueryData(
-            queryKeys.navCounts(uid),
-            (old: { pendingRequests: number; unreadRecs: number } | undefined) => ({
-              pendingRequests: data.pending_requests ?? old?.pendingRequests ?? 0,
-              unreadRecs: data.unread_recs ?? old?.unreadRecs ?? 0,
-            }),
-          );
-        }
-      } catch {
-        // ignore malformed events
-      }
-    };
-
-    es.onerror = () => {
+  const connectSSE = useCallback(
+    async (uid: string) => {
+      if (esRef.current?.readyState === EventSource.OPEN) return;
       esRef.current?.close();
       esRef.current = null;
 
-      queryClient.invalidateQueries({ queryKey: queryKeys.navCounts(uid) });
+      if (!auth.currentUser) return;
 
-      setTimeout(() => {
-        connectSSE(uid);
-      }, 2000);
-    };
-  }, [queryClient]);
+      const tokenRes = await apiFetch("/events/token", { method: "POST" });
+      if (!tokenRes.ok) return;
+      const { session_token } = await tokenRes.json();
+      const es = new EventSource(
+        `${API_URL}/events/stream?token=${encodeURIComponent(session_token)}`,
+      );
+      esRef.current = es;
+
+      es.onmessage = (e) => {
+        try {
+          const data: {
+            type: string;
+            pending_requests?: number;
+            unread_recs?: number;
+          } = JSON.parse(e.data);
+          if (data.type === "counts_update") {
+            queryClient.setQueryData(
+              queryKeys.navCounts(uid),
+              (
+                old:
+                  | { pendingRequests: number; unreadRecs: number }
+                  | undefined,
+              ) => ({
+                pendingRequests:
+                  data.pending_requests ?? old?.pendingRequests ?? 0,
+                unreadRecs: data.unread_recs ?? old?.unreadRecs ?? 0,
+              }),
+            );
+          }
+        } catch {
+          // ignore malformed events
+        }
+      };
+
+      es.onerror = () => {
+        esRef.current?.close();
+        esRef.current = null;
+
+        queryClient.invalidateQueries({ queryKey: queryKeys.navCounts(uid) });
+
+        setTimeout(() => {
+          connectSSE(uid);
+        }, 2000);
+      };
+    },
+    [queryClient],
+  );
 
   useEffect(() => {
     const unsubscribe = onIdTokenChanged(auth, async (currentUser) => {
@@ -286,8 +294,12 @@ export default function NavBar() {
       }
 
       setUser(currentUser);
-      queryClient.invalidateQueries({ queryKey: queryKeys.navCounts(currentUser.uid) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.navAvatar(currentUser.uid) });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.navCounts(currentUser.uid),
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.navAvatar(currentUser.uid),
+      });
       connectSSE(currentUser.uid);
     });
 

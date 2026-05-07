@@ -17,7 +17,10 @@ export default function CalendarDayDetail({
   headingSize = "lg",
 }: Props) {
   return (
-    <div ref={containerRef} className="border-t border-neutral-700 bg-neutral-900/50 px-4 sm:px-6 py-4 sm:py-6">
+    <div
+      ref={containerRef}
+      className="border-t border-neutral-700 bg-neutral-900/50 px-4 sm:px-6 py-4 sm:py-6"
+    >
       <div className="flex items-center gap-3 mb-4">
         <h2
           className={`${headingSize === "xl" ? "text-xl" : "text-lg"} font-semibold text-neutral-100`}
@@ -39,7 +42,9 @@ export default function CalendarDayDetail({
         {items.length > 0 ? (
           <DayScheduleView items={items} />
         ) : (
-          <p className="text-neutral-500 italic">Nothing scheduled for this day.</p>
+          <p className="text-neutral-500 italic">
+            Nothing scheduled for this day.
+          </p>
         )}
       </div>
     </div>

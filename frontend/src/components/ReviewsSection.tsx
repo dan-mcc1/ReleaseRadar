@@ -72,7 +72,9 @@ export default function ReviewsSection({
   const submitMutation = useSubmitReview();
   const deleteMutation = useDeleteReview();
 
-  const myReview = user ? (reviews.find((r) => r.user_id === user.uid) ?? null) : null;
+  const myReview = user
+    ? (reviews.find((r) => r.user_id === user.uid) ?? null)
+    : null;
 
   // Pre-fill draft when editing
   useEffect(() => {
@@ -91,7 +93,9 @@ export default function ReviewsSection({
 
   async function deleteReview() {
     if (!user || !myReview) return;
-    await deleteMutation.mutateAsync({ contentType, contentId }).catch(() => {});
+    await deleteMutation
+      .mutateAsync({ contentType, contentId })
+      .catch(() => {});
     setEditing(false);
     setDraft("");
   }
@@ -198,7 +202,11 @@ export default function ReviewsSection({
                     disabled={submitMutation.isPending || !draft.trim()}
                     className="text-sm bg-highlight-600 hover:bg-highlight-500 disabled:opacity-50 text-white px-4 py-1.5 rounded-lg transition-colors font-medium"
                   >
-                    {submitMutation.isPending ? "Saving…" : myReview ? "Update" : "Post"}
+                    {submitMutation.isPending
+                      ? "Saving…"
+                      : myReview
+                        ? "Update"
+                        : "Post"}
                   </button>
                 </div>
               </div>

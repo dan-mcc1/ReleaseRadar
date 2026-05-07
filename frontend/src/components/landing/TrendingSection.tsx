@@ -23,12 +23,19 @@ export default function TrendingSection() {
           <h2 className="text-2xl font-bold text-white">Trending</h2>
           <span className="text-lg">🔥</span>
         </div>
-        <Link to="/trending" className="text-sm text-primary-400 hover:text-primary-300 transition-colors">
+        <Link
+          to="/trending"
+          className="text-sm text-primary-400 hover:text-primary-300 transition-colors"
+        >
           See all →
         </Link>
       </div>
       <MediaList
-        results={{ movies: movies.slice(0, 6), shows: shows.slice(0, 6), people: [] }}
+        results={{
+          movies: movies.slice(0, 6),
+          shows: shows.slice(0, 6),
+          people: [],
+        }}
         showWatchButton={false}
       />
     </div>

@@ -11,10 +11,28 @@ def get_user_stats(db: Session, user_id: str) -> dict:
     # --- Counts + averages in one query against watched ---
     watched_row = (
         db.query(
-            func.count(case((Watched.content_type == "movie", 1))).label("movies_watched"),
+            func.count(case((Watched.content_type == "movie", 1))).label(
+                "movies_watched"
+            ),
             func.count(case((Watched.content_type == "tv", 1))).label("shows_watched"),
-            func.avg(case((and_(Watched.content_type == "movie", Watched.rating.isnot(None)), Watched.rating))).label("movie_avg"),
-            func.avg(case((and_(Watched.content_type == "tv", Watched.rating.isnot(None)), Watched.rating))).label("show_avg"),
+            func.avg(
+                case(
+                    (
+                        and_(
+                            Watched.content_type == "movie", Watched.rating.isnot(None)
+                        ),
+                        Watched.rating,
+                    )
+                )
+            ).label("movie_avg"),
+            func.avg(
+                case(
+                    (
+                        and_(Watched.content_type == "tv", Watched.rating.isnot(None)),
+                        Watched.rating,
+                    )
+                )
+            ).label("show_avg"),
         )
         .filter(Watched.user_id == user_id)
         .one()
@@ -23,8 +41,12 @@ def get_user_stats(db: Session, user_id: str) -> dict:
     # --- Watchlist counts in one query ---
     watchlist_row = (
         db.query(
-            func.count(case((Watchlist.content_type == "movie", 1))).label("movies_watchlist"),
-            func.count(case((Watchlist.content_type == "tv", 1))).label("shows_watchlist"),
+            func.count(case((Watchlist.content_type == "movie", 1))).label(
+                "movies_watchlist"
+            ),
+            func.count(case((Watchlist.content_type == "tv", 1))).label(
+                "shows_watchlist"
+            ),
         )
         .filter(Watchlist.user_id == user_id)
         .one()

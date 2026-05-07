@@ -23,5 +23,12 @@ class Movie(Base):
     tracking_count = Column(Integer)
     vote_average = Column(Float, nullable=True)
 
-    genres = relationship("Genre", secondary="movie_genre", back_populates="movies", passive_deletes=True)
-    movie_providers = relationship("MovieProvider", back_populates="movie", cascade="all, delete-orphan", passive_deletes=True)
+    genres = relationship(
+        "Genre", secondary="movie_genre", back_populates="movies", passive_deletes=True
+    )
+    movie_providers = relationship(
+        "MovieProvider",
+        back_populates="movie",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )

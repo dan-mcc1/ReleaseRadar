@@ -135,7 +135,9 @@ export default function FriendRequests({
                   disabled={cancellingId === req.friendship_id}
                   className="text-sm text-neutral-400 hover:text-error-500 disabled:opacity-50"
                 >
-                  {cancellingId === req.friendship_id ? "Cancelling…" : "Cancel"}
+                  {cancellingId === req.friendship_id
+                    ? "Cancelling…"
+                    : "Cancel"}
                 </button>
               </li>
             ))}

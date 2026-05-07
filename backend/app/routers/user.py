@@ -17,7 +17,12 @@ from app.services.user_service import (
     get_profile_watchlist_preview,
     get_profile_watched_preview,
 )
-from app.services.friends_service import get_friends, get_incoming_requests, get_outgoing_requests, get_followers
+from app.services.friends_service import (
+    get_friends,
+    get_incoming_requests,
+    get_outgoing_requests,
+    get_followers,
+)
 from app.models.friendship import Friendship
 from app.services.user_service import get_profile_watchlist, get_profile_watched
 from app.services.favorite_service import get_favorites
@@ -221,8 +226,12 @@ def get_public_profile(
         db.query(Friendship)
         .filter(
             or_(
-                and_(Friendship.requester_id == uid, Friendship.addressee_id == target.id),
-                and_(Friendship.requester_id == target.id, Friendship.addressee_id == uid),
+                and_(
+                    Friendship.requester_id == uid, Friendship.addressee_id == target.id
+                ),
+                and_(
+                    Friendship.requester_id == target.id, Friendship.addressee_id == uid
+                ),
             )
         )
         .all()
@@ -230,23 +239,43 @@ def get_public_profile(
 
     is_friend = any(r.status == "accepted" for r in friendship_rows)
     pending = next(
-        (r for r in friendship_rows
-         if r.requester_id == uid and r.addressee_id == target.id and r.status == "pending"),
+        (
+            r
+            for r in friendship_rows
+            if r.requester_id == uid
+            and r.addressee_id == target.id
+            and r.status == "pending"
+        ),
         None,
     )
     following_row = next(
-        (r for r in friendship_rows
-         if r.requester_id == uid and r.addressee_id == target.id and r.status == "following"),
+        (
+            r
+            for r in friendship_rows
+            if r.requester_id == uid
+            and r.addressee_id == target.id
+            and r.status == "following"
+        ),
         None,
     )
     followed_by_target = next(
-        (r for r in friendship_rows
-         if r.requester_id == target.id and r.addressee_id == uid and r.status == "following"),
+        (
+            r
+            for r in friendship_rows
+            if r.requester_id == target.id
+            and r.addressee_id == uid
+            and r.status == "following"
+        ),
         None,
     )
     incoming_request = next(
-        (r for r in friendship_rows
-         if r.requester_id == target.id and r.addressee_id == uid and r.status == "pending"),
+        (
+            r
+            for r in friendship_rows
+            if r.requester_id == target.id
+            and r.addressee_id == uid
+            and r.status == "pending"
+        ),
         None,
     )
 

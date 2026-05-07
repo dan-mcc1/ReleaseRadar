@@ -86,19 +86,23 @@ def sync_season_episodes(db: Session, show_id: int, season_number: int):
             continue
 
         ep_num = ep.get("episode_number")
-        db.add(Episode(
-            id=ep_id,
-            show_id=show_id,
-            season_number=season_number,
-            episode_number=ep_num,
-            name=ep.get("name"),
-            overview=ep.get("overview"),
-            air_date=ep.get("air_date") or None,
-            runtime=ep.get("runtime"),
-            still_path=ep.get("still_path"),
-            vote_average=ep.get("vote_average"),
-            episode_type=_compute_episode_type(ep_num, season_number, ep.get("episode_type"), in_production),
-        ))
+        db.add(
+            Episode(
+                id=ep_id,
+                show_id=show_id,
+                season_number=season_number,
+                episode_number=ep_num,
+                name=ep.get("name"),
+                overview=ep.get("overview"),
+                air_date=ep.get("air_date") or None,
+                runtime=ep.get("runtime"),
+                still_path=ep.get("still_path"),
+                vote_average=ep.get("vote_average"),
+                episode_type=_compute_episode_type(
+                    ep_num, season_number, ep.get("episode_type"), in_production
+                ),
+            )
+        )
 
     db.commit()
 
@@ -135,7 +139,8 @@ def sync_show_episodes(db: Session, show_id: int):
 
     # Collect IDs already in DB to skip existing episodes efficiently
     existing_ids = {
-        ep_id for (ep_id,) in db.query(Episode.id).filter(Episode.show_id == show_id).all()
+        ep_id
+        for (ep_id,) in db.query(Episode.id).filter(Episode.show_id == show_id).all()
     }
 
     for season_number in season_numbers:
@@ -160,7 +165,9 @@ def sync_show_episodes(db: Session, show_id: int):
                 runtime=ep.get("runtime"),
                 still_path=ep.get("still_path"),
                 vote_average=ep.get("vote_average"),
-                episode_type=_compute_episode_type(ep_num, season_number, ep.get("episode_type"), show.in_production),
+                episode_type=_compute_episode_type(
+                    ep_num, season_number, ep.get("episode_type"), show.in_production
+                ),
             )
             db.add(episode)
             existing_ids.add(ep_id)
@@ -237,7 +244,9 @@ def get_or_create_episode(
         runtime=ep_data.get("runtime"),
         still_path=ep_data.get("still_path"),
         vote_average=ep_data.get("vote_average"),
-        episode_type=_compute_episode_type(episode_number, season_number, ep_data.get("episode_type"), in_production),
+        episode_type=_compute_episode_type(
+            episode_number, season_number, ep_data.get("episode_type"), in_production
+        ),
     )
     db.add(episode)
     db.commit()
@@ -290,17 +299,19 @@ def _refresh_show_metadata(db: Session, show: Show):
         sid = s.get("id")
         if sn <= 0 or not sid or sid in existing_season_ids:
             continue
-        db.add(Season(
-            id=sid,
-            show_id=show.id,
-            season_number=sn,
-            name=s.get("name"),
-            overview=s.get("overview"),
-            air_date=s.get("air_date") or None,
-            episode_count=s.get("episode_count"),
-            poster_path=s.get("poster_path"),
-            vote_average=s.get("vote_average"),
-        ))
+        db.add(
+            Season(
+                id=sid,
+                show_id=show.id,
+                season_number=sn,
+                name=s.get("name"),
+                overview=s.get("overview"),
+                air_date=s.get("air_date") or None,
+                episode_count=s.get("episode_count"),
+                poster_path=s.get("poster_path"),
+                vote_average=s.get("vote_average"),
+            )
+        )
         changed = True
 
     if changed:
@@ -366,10 +377,12 @@ def refresh_episodes_for_show(db: Session, show_id: int):
 
     existing = {
         ep.id: ep
-        for ep in db.query(Episode).filter(
+        for ep in db.query(Episode)
+        .filter(
             Episode.show_id == show_id,
             Episode.season_number.in_(seasons_to_refresh),
-        ).all()
+        )
+        .all()
     }
 
     changed = False
@@ -390,7 +403,9 @@ def refresh_episodes_for_show(db: Session, show_id: int):
             new_runtime = ep.get("runtime")
             new_still = ep.get("still_path")
             new_vote = ep.get("vote_average")
-            new_type = _compute_episode_type(ep_num, sn, ep.get("episode_type"), show.in_production)
+            new_type = _compute_episode_type(
+                ep_num, sn, ep.get("episode_type"), show.in_production
+            )
 
             if ep_id in existing:
                 row = existing[ep_id]
@@ -412,19 +427,21 @@ def refresh_episodes_for_show(db: Session, show_id: int):
                     row.episode_type = new_type
                     changed = True
             else:
-                db.add(Episode(
-                    id=ep_id,
-                    show_id=show_id,
-                    season_number=sn,
-                    episode_number=ep_num,
-                    name=new_name,
-                    overview=new_overview,
-                    air_date=new_air_date,
-                    runtime=new_runtime,
-                    still_path=new_still,
-                    vote_average=new_vote,
-                    episode_type=new_type,
-                ))
+                db.add(
+                    Episode(
+                        id=ep_id,
+                        show_id=show_id,
+                        season_number=sn,
+                        episode_number=ep_num,
+                        name=new_name,
+                        overview=new_overview,
+                        air_date=new_air_date,
+                        runtime=new_runtime,
+                        still_path=new_still,
+                        vote_average=new_vote,
+                        episode_type=new_type,
+                    )
+                )
                 changed = True
 
     if changed:
@@ -521,10 +538,14 @@ def check_and_reactivate_watched_shows(db: Session):
     watched_keys_by_user_show: dict[tuple, set] = defaultdict(set)
     for ew in (
         db.query(EpisodeWatched)
-        .filter(EpisodeWatched.user_id.in_(user_ids), EpisodeWatched.show_id.in_(show_ids))
+        .filter(
+            EpisodeWatched.user_id.in_(user_ids), EpisodeWatched.show_id.in_(show_ids)
+        )
         .all()
     ):
-        watched_keys_by_user_show[(ew.user_id, ew.show_id)].add((ew.season_number, ew.episode_number))
+        watched_keys_by_user_show[(ew.user_id, ew.show_id)].add(
+            (ew.season_number, ew.episode_number)
+        )
 
     # Bulk-load shows and users
     shows_by_id = {s.id: s for s in db.query(Show).filter(Show.id.in_(show_ids)).all()}
@@ -534,7 +555,11 @@ def check_and_reactivate_watched_shows(db: Session):
     existing_watchlist = {
         (w.user_id, w.content_id)
         for w in db.query(Watchlist.user_id, Watchlist.content_id)
-        .filter(Watchlist.user_id.in_(user_ids), Watchlist.content_id.in_(show_ids), Watchlist.content_type == "tv")
+        .filter(
+            Watchlist.user_id.in_(user_ids),
+            Watchlist.content_id.in_(show_ids),
+            Watchlist.content_type == "tv",
+        )
         .all()
     }
 
@@ -551,7 +576,8 @@ def check_and_reactivate_watched_shows(db: Session):
 
         today = date.today()
         new_episodes = [
-            ep for ep in all_episodes
+            ep
+            for ep in all_episodes
             if (ep.season_number, ep.episode_number) not in watched_keys
             and (
                 # New season: always reactivate (enables advance notifications)
@@ -570,18 +596,22 @@ def check_and_reactivate_watched_shows(db: Session):
             key=lambda e: e.episode_number,
         )
         premiere_date = (
-            str(season_eps[0].air_date) if season_eps and season_eps[0].air_date else None
+            str(season_eps[0].air_date)
+            if season_eps and season_eps[0].air_date
+            else None
         )
 
         show = shows_by_id.get(show_id)
 
         if (user_id, show_id) not in existing_watchlist:
-            db.add(Watchlist(
-                user_id=user_id,
-                content_type="tv",
-                content_id=show_id,
-                added_at=datetime.utcnow(),
-            ))
+            db.add(
+                Watchlist(
+                    user_id=user_id,
+                    content_type="tv",
+                    content_id=show_id,
+                    added_at=datetime.utcnow(),
+                )
+            )
             existing_watchlist.add((user_id, show_id))
             db.flush()
 

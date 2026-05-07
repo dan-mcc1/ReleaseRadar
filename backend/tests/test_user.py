@@ -9,7 +9,9 @@ from tests.conftest import make_client
 
 class TestUserCreate:
     def test_create_user(self, client):
-        r = client.post("/user/create", json={"email": "alice@test.com", "username": "alice"})
+        r = client.post(
+            "/user/create", json={"email": "alice@test.com", "username": "alice"}
+        )
         assert r.status_code == 200
 
     def test_create_user_no_username(self, client):
@@ -24,16 +26,24 @@ class TestUserCreate:
         assert r.status_code == 409
 
     def test_create_invalid_username_rejected(self, client):
-        r = client.post("/user/create", json={"username": "ab", "email": "x@test.com"})  # too short
+        r = client.post(
+            "/user/create", json={"username": "ab", "email": "x@test.com"}
+        )  # too short
         assert r.status_code == 422
 
     def test_create_username_with_spaces_rejected(self, client):
-        r = client.post("/user/create", json={"username": "bad name", "email": "x@test.com"})
+        r = client.post(
+            "/user/create", json={"username": "bad name", "email": "x@test.com"}
+        )
         assert r.status_code == 422
 
     def test_create_idempotent(self, client):
-        client.post("/user/create", json={"email": "alice@test.com", "username": "alice"})
-        r = client.post("/user/create", json={"email": "alice@test.com", "username": "alice"})
+        client.post(
+            "/user/create", json={"email": "alice@test.com", "username": "alice"}
+        )
+        r = client.post(
+            "/user/create", json={"email": "alice@test.com", "username": "alice"}
+        )
         assert r.status_code in (200, 409)
 
 
@@ -111,7 +121,10 @@ class TestPublicProfile:
 
     def test_private_profile_hides_lists(self, db):
         from app.models.user import User
-        db.add(User(id="test-uid-1", username="alice", profile_visibility="friends_only"))
+
+        db.add(
+            User(id="test-uid-1", username="alice", profile_visibility="friends_only")
+        )
         db.add(User(id="test-uid-2", username="bob", profile_visibility="friends_only"))
         db.commit()
         c1 = make_client("test-uid-1")
@@ -123,6 +136,7 @@ class TestPublicProfile:
 
     def test_public_profile_shows_lists(self, db):
         from app.models.user import User
+
         db.add(User(id="test-uid-1", username="alice"))
         db.add(User(id="test-uid-2", username="bob", profile_visibility="public"))
         db.commit()
@@ -134,10 +148,15 @@ class TestPublicProfile:
     def test_friends_can_see_private_profile(self, db):
         from app.models.user import User
         from app.models.friendship import Friendship
+
         db.add(User(id="test-uid-1", username="alice"))
         db.add(User(id="test-uid-2", username="bob", profile_visibility="friends_only"))
         db.flush()
-        db.add(Friendship(requester_id="test-uid-1", addressee_id="test-uid-2", status="accepted"))
+        db.add(
+            Friendship(
+                requester_id="test-uid-1", addressee_id="test-uid-2", status="accepted"
+            )
+        )
         db.commit()
         c1 = make_client("test-uid-1")
         r = c1.get("/user/profile/bob")
@@ -167,10 +186,20 @@ class TestProfileSummary:
         assert "total_movies" in data["watched"]
         assert "total_shows" in data["watched"]
 
-    def test_profile_summary_counts_reflect_data(self, client, db, seed_users, seed_movie):
+    def test_profile_summary_counts_reflect_data(
+        self, client, db, seed_users, seed_movie
+    ):
         from app.models.watchlist import Watchlist
         from datetime import datetime
-        db.add(Watchlist(user_id="test-uid-1", content_type="movie", content_id=550, added_at=datetime.utcnow()))
+
+        db.add(
+            Watchlist(
+                user_id="test-uid-1",
+                content_type="movie",
+                content_id=550,
+                added_at=datetime.utcnow(),
+            )
+        )
         db.commit()
         r = client.get("/user/profile-summary")
         data = r.json()
@@ -181,11 +210,19 @@ class TestProfileSummary:
         from app.models.movie import Movie
         from app.models.watchlist import Watchlist
         from datetime import datetime
+
         for i in range(1, 8):
             db.add(Movie(id=i, title=f"Movie {i}", tracking_count=1))
         db.flush()
         for i in range(1, 8):
-            db.add(Watchlist(user_id="test-uid-1", content_type="movie", content_id=i, added_at=datetime.utcnow()))
+            db.add(
+                Watchlist(
+                    user_id="test-uid-1",
+                    content_type="movie",
+                    content_id=i,
+                    added_at=datetime.utcnow(),
+                )
+            )
         db.commit()
         r = client.get("/user/profile-summary")
         data = r.json()
@@ -195,6 +232,7 @@ class TestProfileSummary:
     def test_profile_summary_requires_auth(self):
         from fastapi.testclient import TestClient
         from app.main import app
+
         c = TestClient(app, raise_server_exceptions=False)
         r = c.get("/user/profile-summary")
         assert r.status_code in (400, 401, 403, 422)
@@ -207,6 +245,7 @@ class TestAccountDelete:
 
     def test_delete_removes_user_row(self, client, db, seed_users):
         from app.models.user import User
+
         client.delete("/user/account")
         db.expire_all()
         u = db.query(User).filter_by(id="test-uid-1").first()
@@ -215,7 +254,15 @@ class TestAccountDelete:
     def test_delete_clears_watchlist(self, client, db, seed_movie, seed_users):
         from app.models.watchlist import Watchlist
         from datetime import datetime
-        db.add(Watchlist(user_id="test-uid-1", content_type="movie", content_id=550, added_at=datetime.utcnow()))
+
+        db.add(
+            Watchlist(
+                user_id="test-uid-1",
+                content_type="movie",
+                content_id=550,
+                added_at=datetime.utcnow(),
+            )
+        )
         db.commit()
         client.delete("/user/account")
         db.expire_all()
@@ -224,7 +271,12 @@ class TestAccountDelete:
 
     def test_delete_clears_episode_watched(self, client, db, seed_show, seed_users):
         from app.models.episode_watched import EpisodeWatched
-        db.add(EpisodeWatched(user_id="test-uid-1", show_id=1396, season_number=1, episode_number=1))
+
+        db.add(
+            EpisodeWatched(
+                user_id="test-uid-1", show_id=1396, season_number=1, episode_number=1
+            )
+        )
         db.commit()
         client.delete("/user/account")
         db.expire_all()
@@ -235,9 +287,17 @@ class TestAccountDelete:
         from app.models.movie import Movie
         from app.models.watchlist import Watchlist
         from datetime import datetime
+
         # Seed movie already has tracking_count 0; add watchlist row
         db.query(Movie).filter_by(id=550).update({"tracking_count": 1})
-        db.add(Watchlist(user_id="test-uid-1", content_type="movie", content_id=550, added_at=datetime.utcnow()))
+        db.add(
+            Watchlist(
+                user_id="test-uid-1",
+                content_type="movie",
+                content_id=550,
+                added_at=datetime.utcnow(),
+            )
+        )
         db.commit()
         client.delete("/user/account")
         db.expire_all()
@@ -249,9 +309,24 @@ class TestAccountDelete:
         from app.models.movie import Movie
         from app.models.watchlist import Watchlist
         from datetime import datetime
+
         db.query(Movie).filter_by(id=550).update({"tracking_count": 2})
-        db.add(Watchlist(user_id="test-uid-1", content_type="movie", content_id=550, added_at=datetime.utcnow()))
-        db.add(Watchlist(user_id="test-uid-2", content_type="movie", content_id=550, added_at=datetime.utcnow()))
+        db.add(
+            Watchlist(
+                user_id="test-uid-1",
+                content_type="movie",
+                content_id=550,
+                added_at=datetime.utcnow(),
+            )
+        )
+        db.add(
+            Watchlist(
+                user_id="test-uid-2",
+                content_type="movie",
+                content_id=550,
+                added_at=datetime.utcnow(),
+            )
+        )
         db.commit()
         c1 = make_client("test-uid-1")
         c1.delete("/user/account")

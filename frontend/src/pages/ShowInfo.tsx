@@ -22,20 +22,43 @@ import TrailerButton from "../components/media/TrailerButton";
 type FullShowData = Show & {
   vote_average?: number;
   vote_count?: number;
-  created_by: { id: number; credit_id: string; name: string; profile_path: string | null; }[];
-  credits: { cast: { id: number; name: string; profile_path: string; character: string; }[]; };
+  created_by: {
+    id: number;
+    credit_id: string;
+    name: string;
+    profile_path: string | null;
+  }[];
+  credits: {
+    cast: {
+      id: number;
+      name: string;
+      profile_path: string;
+      character: string;
+    }[];
+  };
   external_ids: MediaExternalIds;
   recommendations: { results: Show[] };
-  videos: { results: MediaVideo[]; };
+  videos: { results: MediaVideo[] };
 };
 
 export default function ShowInfo() {
   const { id } = useParams<{ id: string }>();
-  const { data: show, loading, error, initialStatus, initialRating, statusReady, externalScores, aggRating } =
-    useMediaInfo<FullShowData>({ contentType: "tv", id, fetchUrl: `/tv/${id}/full` });
+  const {
+    data: show,
+    loading,
+    error,
+    initialStatus,
+    initialRating,
+    statusReady,
+    externalScores,
+    aggRating,
+  } = useMediaInfo<FullShowData>({
+    contentType: "tv",
+    id,
+    fetchUrl: `/tv/${id}/full`,
+  });
   const user = useAuthUser();
   usePageTitle(show?.name);
-
 
   if (loading)
     return (
@@ -49,10 +72,13 @@ export default function ShowInfo() {
   if (error) return <p className="text-error-400 p-6">{error}</p>;
   if (!show) return <p className="text-neutral-400 p-6">Show not found.</p>;
 
-  const year = show.first_air_date ? parseLocalDate(show.first_air_date).getFullYear() : null;
+  const year = show.first_air_date
+    ? parseLocalDate(show.first_air_date).getFullYear()
+    : null;
   const trailer =
-    show.videos?.results?.find((v) => v.type === "Trailer" && v.site === "YouTube") ??
-    show.videos?.results?.find((v) => v.site === "YouTube");
+    show.videos?.results?.find(
+      (v) => v.type === "Trailer" && v.site === "YouTube",
+    ) ?? show.videos?.results?.find((v) => v.site === "YouTube");
 
   return (
     <div className="max-w-5xl mx-auto pb-16 w-full overflow-x-hidden">
@@ -74,7 +100,7 @@ export default function ShowInfo() {
               contentId={show.id}
               initialStatus={initialStatus}
               initialRating={initialRating}
-              />
+            />
           )}
           {user && <FavoriteButton contentType="tv" contentId={show.id} />}
           {user && (
@@ -111,7 +137,11 @@ export default function ShowInfo() {
           {show.in_production && <StatBox label="In Production" value="Yes" />}
         </div>
 
-        <RatingsRow voteAverage={show.vote_average} externalScores={externalScores} aggRating={aggRating} />
+        <RatingsRow
+          voteAverage={show.vote_average}
+          externalScores={externalScores}
+          aggRating={aggRating}
+        />
 
         {/* Created by */}
         {show.created_by && show.created_by.length > 0 && (
@@ -126,7 +156,9 @@ export default function ShowInfo() {
         {/* Overview */}
         {show.overview && (
           <div>
-            <h2 className="text-neutral-400 text-xs uppercase tracking-wider font-semibold mb-2">Overview</h2>
+            <h2 className="text-neutral-400 text-xs uppercase tracking-wider font-semibold mb-2">
+              Overview
+            </h2>
             <p className="text-neutral-300 leading-relaxed">{show.overview}</p>
           </div>
         )}
@@ -135,23 +167,37 @@ export default function ShowInfo() {
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
           {show.first_air_date && (
             <div>
-              <div className="text-neutral-500 text-xs uppercase tracking-wide mb-0.5">First Aired</div>
+              <div className="text-neutral-500 text-xs uppercase tracking-wide mb-0.5">
+                First Aired
+              </div>
               <div className="text-neutral-200">
-                {formatLocalDate(show.first_air_date, { year: "numeric", month: "long", day: "numeric" })}
+                {formatLocalDate(show.first_air_date, {
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })}
               </div>
             </div>
           )}
           {show.last_air_date && (
             <div>
-              <div className="text-neutral-500 text-xs uppercase tracking-wide mb-0.5">Last Aired</div>
+              <div className="text-neutral-500 text-xs uppercase tracking-wide mb-0.5">
+                Last Aired
+              </div>
               <div className="text-neutral-200">
-                {formatLocalDate(show.last_air_date, { year: "numeric", month: "long", day: "numeric" })}
+                {formatLocalDate(show.last_air_date, {
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })}
               </div>
             </div>
           )}
           {show.homepage && (
             <div>
-              <div className="text-neutral-500 text-xs uppercase tracking-wide mb-0.5">Homepage</div>
+              <div className="text-neutral-500 text-xs uppercase tracking-wide mb-0.5">
+                Homepage
+              </div>
               <a
                 href={show.homepage}
                 target="_blank"
@@ -167,20 +213,22 @@ export default function ShowInfo() {
         {show.providers && <WhereToWatch providers={show.providers} />}
 
         {show.seasons?.length > 0 && (
-          <SeasonInfo
-            showId={show.id}
-            seasons={show.seasons}
-          />
+          <SeasonInfo showId={show.id} seasons={show.seasons} />
         )}
 
         {show.credits?.cast.length > 0 && <CastBar cast={show.credits.cast} />}
 
-        {show.external_ids && <ExternalLinksSection externalIds={show.external_ids} />}
+        {show.external_ids && (
+          <ExternalLinksSection externalIds={show.external_ids} />
+        )}
 
         <ReviewsSection contentType="tv" contentId={show.id} user={user} />
 
         {show.recommendations?.results.length > 0 && (
-          <RecommendationsGrid items={show.recommendations.results} linkPrefix="/tv" />
+          <RecommendationsGrid
+            items={show.recommendations.results}
+            linkPrefix="/tv"
+          />
         )}
       </div>
     </div>

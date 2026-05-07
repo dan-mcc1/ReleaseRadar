@@ -24,9 +24,13 @@ from app.models.currently_watching import CurrentlyWatching
 from app.db.session import SessionLocal
 
 
-def _is_on_other_list(db: Session, user_id: str, content_type: str, content_id: int) -> bool:
+def _is_on_other_list(
+    db: Session, user_id: str, content_type: str, content_id: int
+) -> bool:
     """Return True if the item exists on Watchlist or CurrentlyWatching."""
-    return _is_tracked_on_any(db, user_id, content_type, content_id, Watchlist, CurrentlyWatching)
+    return _is_tracked_on_any(
+        db, user_id, content_type, content_id, Watchlist, CurrentlyWatching
+    )
 
 
 def add_to_watched(
@@ -56,10 +60,26 @@ def add_to_watched(
 
     if content_type == "movie":
         media = ensure_movie_in_db(db, content_id, already_tracked)
-        log_activity(db, user_id, "watched", content_type, content_id, media.title, media.poster_path)
+        log_activity(
+            db,
+            user_id,
+            "watched",
+            content_type,
+            content_id,
+            media.title,
+            media.poster_path,
+        )
     elif content_type == "tv":
         media = ensure_show_in_db(db, content_id, already_tracked)
-        log_activity(db, user_id, "watched", content_type, content_id, media.name, media.poster_path)
+        log_activity(
+            db,
+            user_id,
+            "watched",
+            content_type,
+            content_id,
+            media.name,
+            media.poster_path,
+        )
     else:
         log_activity(db, user_id, "watched", content_type, content_id, None, None)
 
@@ -140,7 +160,9 @@ def update_watched_rating(
 
     if rating is not None:
         title, poster = _get_item_title_and_poster(db, content_type, content_id)
-        log_activity(db, user_id, "rated", content_type, content_id, title, poster, rating=rating)
+        log_activity(
+            db, user_id, "rated", content_type, content_id, title, poster, rating=rating
+        )
 
     db.commit()
     db.refresh(entry)
@@ -164,7 +186,9 @@ def remove_from_watched(db: Session, user_id: str, content_type: str, content_id
 
         # If the user is no longer on any list for this TV show, clear their episode progress
         if not still_tracked and content_type == "tv":
-            db.query(EpisodeWatched).filter_by(user_id=user_id, show_id=content_id).delete()
+            db.query(EpisodeWatched).filter_by(
+                user_id=user_id, show_id=content_id
+            ).delete()
 
         if not still_tracked:
             if content_type == "movie":
@@ -189,23 +213,40 @@ def remove_from_watched(db: Session, user_id: str, content_type: str, content_id
 
 def _get_watched_items(db: Session, user_id: str, content_type: str):
     if content_type == "tv":
-        model, options, content_id_col, serialize = Show, _show_query_options_list(), Show.id, serialize_show_list
+        model, options, content_id_col, serialize = (
+            Show,
+            _show_query_options_list(),
+            Show.id,
+            serialize_show_list,
+        )
     else:
-        model, options, content_id_col, serialize = Movie, _movie_query_options_list(), Movie.id, serialize_movie_list
+        model, options, content_id_col, serialize = (
+            Movie,
+            _movie_query_options_list(),
+            Movie.id,
+            serialize_movie_list,
+        )
 
     rows = (
         db.query(model, Watched.rating, Watched.watched_at)
         .options(*options)
         .select_from(Watched)
-        .join(model, and_(
-            Watched.content_id == content_id_col,
-            Watched.content_type == content_type,
-            Watched.user_id == user_id,
-        ))
+        .join(
+            model,
+            and_(
+                Watched.content_id == content_id_col,
+                Watched.content_type == content_type,
+                Watched.user_id == user_id,
+            ),
+        )
         .all()
     )
     return [
-        {**serialize(item), "user_rating": rating, "watched_at": watched_at.isoformat() if watched_at else None}
+        {
+            **serialize(item),
+            "user_rating": rating,
+            "watched_at": watched_at.isoformat() if watched_at else None,
+        }
         for item, rating, watched_at in rows
     ]
 

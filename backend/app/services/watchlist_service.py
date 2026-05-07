@@ -19,7 +19,6 @@ from app.services.tvmaze_service import fetch_show_air_time
 from sqlalchemy import text
 from collections import defaultdict
 
-
 # -------------------------
 # Serialization helpers
 # -------------------------
@@ -278,11 +277,15 @@ def ensure_movie_in_db(db: Session, content_id: int, already_tracked: bool) -> M
             movie.tracking_count += 1
         return movie
 
-    movie_data = fetch_movie_from_tmdb(content_id, "watch/providers,release_dates,images")
+    movie_data = fetch_movie_from_tmdb(
+        content_id, "watch/providers,release_dates,images"
+    )
     if not movie_data or not movie_data.get("title"):
         raise ValueError("Cannot add movie without a title")
 
-    us_providers = movie_data.get("watch/providers", {}).get("results", {}).get("US", {})
+    us_providers = (
+        movie_data.get("watch/providers", {}).get("results", {}).get("US", {})
+    )
     theatrical_release_date = get_theatrical_release_date(movie_data)
     all_logos = movie_data.get("images", {}).get("logos", [])
     english_logos = [l for l in all_logos if l.get("iso_639_1") == "en"]
@@ -384,7 +387,9 @@ def _is_on_other_list(
     db: Session, user_id: str, content_type: str, content_id: int
 ) -> bool:
     """Return True if the item exists on CurrentlyWatching or Watched."""
-    return _is_tracked_on_any(db, user_id, content_type, content_id, CurrentlyWatching, Watched)
+    return _is_tracked_on_any(
+        db, user_id, content_type, content_id, CurrentlyWatching, Watched
+    )
 
 
 def add_to_watchlist(db: Session, user_id: str, content_type: str, content_id: int):
@@ -402,9 +407,7 @@ def add_to_watchlist(db: Session, user_id: str, content_type: str, content_id: i
     already_tracked = _is_on_other_list(db, user_id, content_type, content_id)
 
     max_sort_key = (
-        db.query(func.max(Watchlist.sort_key))
-        .filter_by(user_id=user_id)
-        .scalar()
+        db.query(func.max(Watchlist.sort_key)).filter_by(user_id=user_id).scalar()
     ) or 0
 
     entry = Watchlist(
@@ -418,10 +421,26 @@ def add_to_watchlist(db: Session, user_id: str, content_type: str, content_id: i
 
     if content_type == "movie":
         media = ensure_movie_in_db(db, content_id, already_tracked)
-        log_activity(db, user_id, "want_to_watch", content_type, content_id, media.title, media.poster_path)
+        log_activity(
+            db,
+            user_id,
+            "want_to_watch",
+            content_type,
+            content_id,
+            media.title,
+            media.poster_path,
+        )
     elif content_type == "tv":
         media = ensure_show_in_db(db, content_id, already_tracked)
-        log_activity(db, user_id, "want_to_watch", content_type, content_id, media.name, media.poster_path)
+        log_activity(
+            db,
+            user_id,
+            "want_to_watch",
+            content_type,
+            content_id,
+            media.name,
+            media.poster_path,
+        )
 
     db.commit()
     db.refresh(entry)
@@ -464,18 +483,29 @@ def reorder_watchlist_item(
 
     before_key = 0
     if before_id is not None:
-        bk = db.query(Watchlist.sort_key).filter_by(id=before_id, user_id=user_id).scalar()
+        bk = (
+            db.query(Watchlist.sort_key)
+            .filter_by(id=before_id, user_id=user_id)
+            .scalar()
+        )
         if bk is None:
             raise ValueError(f"before_id {before_id} not found in user's watchlist")
         before_key = bk
 
     if after_id is not None:
-        ak = db.query(Watchlist.sort_key).filter_by(id=after_id, user_id=user_id).scalar()
+        ak = (
+            db.query(Watchlist.sort_key)
+            .filter_by(id=after_id, user_id=user_id)
+            .scalar()
+        )
         if ak is None:
             raise ValueError(f"after_id {after_id} not found in user's watchlist")
         after_key = ak
     else:
-        max_key = db.query(func.max(Watchlist.sort_key)).filter_by(user_id=user_id).scalar() or 0
+        max_key = (
+            db.query(func.max(Watchlist.sort_key)).filter_by(user_id=user_id).scalar()
+            or 0
+        )
         after_key = max_key + 2000
 
     new_sort_key = (before_key + after_key) // 2
@@ -651,8 +681,7 @@ def get_watchlist(db: Session, user_id: str):
 
 def get_watchlist_status(id: int, db: Session, user_id: str, content_type: str):
     row = db.execute(
-        text(
-            """
+        text("""
         SELECT 'Currently Watching' AS status, NULL::float AS rating
         FROM currently_watching
         WHERE user_id = :uid AND content_id = :cid AND content_type = :ctype
@@ -665,8 +694,7 @@ def get_watchlist_status(id: int, db: Session, user_id: str, content_type: str):
         FROM watched
         WHERE user_id = :uid AND content_id = :cid AND content_type = :ctype
         LIMIT 1
-    """
-        ),
+    """),
         {"uid": user_id, "cid": id, "ctype": content_type},
     ).first()
 

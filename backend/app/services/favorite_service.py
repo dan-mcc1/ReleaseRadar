@@ -27,7 +27,9 @@ def add_to_favorites(db: Session, user_id: str, content_type: str, content_id: i
     return entry
 
 
-def remove_from_favorites(db: Session, user_id: str, content_type: str, content_id: int):
+def remove_from_favorites(
+    db: Session, user_id: str, content_type: str, content_id: int
+):
     entry = (
         db.query(Favorite)
         .filter_by(user_id=user_id, content_type=content_type, content_id=content_id)

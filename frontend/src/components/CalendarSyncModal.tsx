@@ -122,7 +122,9 @@ export default function CalendarSyncModal({ isOpen, onClose }: Props) {
     staleTime: Infinity,
   });
 
-  const feedUrl = tokenData?.token ? `${API_URL}/ical/feed/${tokenData.token}` : null;
+  const feedUrl = tokenData?.token
+    ? `${API_URL}/ical/feed/${tokenData.token}`
+    : null;
 
   function copyUrl() {
     if (!feedUrl) return;

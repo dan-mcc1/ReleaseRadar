@@ -18,7 +18,9 @@ export default function RecommendationsGrid({ items, linkPrefix }: Props) {
   if (!items.length) return null;
   return (
     <div>
-      <h2 className="text-xl font-semibold text-neutral-100 mb-4">You Might Also Like</h2>
+      <h2 className="text-xl font-semibold text-neutral-100 mb-4">
+        You Might Also Like
+      </h2>
       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
         {items.slice(0, 12).map((rec) => {
           const label = rec.title ?? rec.name ?? "";
@@ -32,7 +34,9 @@ export default function RecommendationsGrid({ items, linkPrefix }: Props) {
                 />
               ) : (
                 <div className="w-full aspect-[2/3] bg-neutral-800 border border-neutral-700 rounded-lg flex items-center justify-center">
-                  <span className="text-neutral-500 text-xs text-center px-1">{label}</span>
+                  <span className="text-neutral-500 text-xs text-center px-1">
+                    {label}
+                  </span>
                 </div>
               )}
               <p className="text-xs mt-1.5 text-neutral-400 group-hover:text-neutral-200 transition-colors text-center line-clamp-1">

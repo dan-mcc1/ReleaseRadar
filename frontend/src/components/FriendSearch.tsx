@@ -40,9 +40,7 @@ export default function FriendSearch({ onRequestSent, friendIds }: Props) {
       onRequestSent();
     } catch (e) {
       setError(
-        e instanceof Error && e.message
-          ? e.message
-          : "Could not send request.",
+        e instanceof Error && e.message ? e.message : "Could not send request.",
       );
     }
   }

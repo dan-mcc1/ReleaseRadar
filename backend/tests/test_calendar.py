@@ -1,8 +1,8 @@
 """Tests for the combined GET /calendar endpoint."""
+
 import pytest
 from datetime import date
 from tests.conftest import make_client
-
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -51,7 +51,9 @@ class TestCalendarEndpoint:
         assert 1 in episode_numbers
         assert 2 in episode_numbers
 
-    def test_shows_excluded_when_no_episodes_in_range(self, client, seed_users, seed_show):
+    def test_shows_excluded_when_no_episodes_in_range(
+        self, client, seed_users, seed_show
+    ):
         add_to_watchlist(client, "tv", 1396)
         r = client.get("/calendar?from_date=2030-01-01&to_date=2030-01-31")
         assert r.status_code == 200
@@ -100,6 +102,7 @@ class TestCalendarEndpoint:
     def test_unauthenticated_returns_401(self):
         from fastapi.testclient import TestClient
         from app.main import app
+
         saved = app.dependency_overrides.copy()
         try:
             app.dependency_overrides.clear()

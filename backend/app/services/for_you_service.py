@@ -9,9 +9,9 @@ from app.models.watched import Watched
 from app.models.watchlist import Watchlist
 from app.services.tmdb_client import get
 
-_SOURCE_LIMIT = 25   # most recent watched + watchlist items to seed from
+_SOURCE_LIMIT = 25  # most recent watched + watchlist items to seed from
 _MAX_WORKERS = 10
-_RETURN_LIMIT = 40   # max results returned
+_RETURN_LIMIT = 40  # max results returned
 _CACHE_TTL = 6 * 3600  # TMDB rec results are user-agnostic and stable
 
 # In-memory cache: (content_type, content_id) → (results, monotonic_timestamp)
@@ -79,8 +79,12 @@ def _get_seeds_top_rated(db: Session, uid: str) -> list[tuple[str, int]]:
 
 def _get_excluded(db: Session, uid: str) -> set[tuple[str, int]]:
     """All (content_type, content_id) the user already has — column-only, single union query."""
-    watched_q = select(Watched.content_type, Watched.content_id).where(Watched.user_id == uid)
-    watchlist_q = select(Watchlist.content_type, Watchlist.content_id).where(Watchlist.user_id == uid)
+    watched_q = select(Watched.content_type, Watched.content_id).where(
+        Watched.user_id == uid
+    )
+    watchlist_q = select(Watchlist.content_type, Watchlist.content_id).where(
+        Watchlist.user_id == uid
+    )
     rows = db.execute(union_all(watched_q, watchlist_q)).all()
     return {(r[0], r[1]) for r in rows}
 
@@ -128,8 +132,8 @@ def get_for_you_recommendations(db: Session, uid: str, mode: str = "recent") -> 
                 frequency[key] += 1
                 if key not in score_map:
                     score_map[key] = {"score": 0, "item": item, "content_type": ct}
-                score_map[key]["score"] = (
-                    frequency[key] * 10 + item.get("popularity", 0)
+                score_map[key]["score"] = frequency[key] * 10 + item.get(
+                    "popularity", 0
                 )
 
     # ── Step 4: sort and split ─────────────────────────────────────────────

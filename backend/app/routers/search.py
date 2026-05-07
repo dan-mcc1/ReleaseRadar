@@ -18,15 +18,30 @@ router = APIRouter()
 
 
 @router.get("")
-def search(query: str = "", genre_id: int = None, type: str = Query(None), page: int = Query(1, ge=1)):
+def search(
+    query: str = "",
+    genre_id: int = None,
+    type: str = Query(None),
+    page: int = Query(1, ge=1),
+):
     # Genre mode: use TMDB /discover sorted by popularity
     if genre_id:
         if type == "tv":
             data = get_tv_by_genre(genre_id, page)
-            return {"movies": [], "shows": data["results"], "total_pages": data["total_pages"], "people": []}
+            return {
+                "movies": [],
+                "shows": data["results"],
+                "total_pages": data["total_pages"],
+                "people": [],
+            }
         else:
             data = get_movie_by_genre(genre_id, page)
-            return {"movies": data["results"], "shows": [], "total_pages": data["total_pages"], "people": []}
+            return {
+                "movies": data["results"],
+                "shows": [],
+                "total_pages": data["total_pages"],
+                "people": [],
+            }
 
     # Text search mode
     if not query:

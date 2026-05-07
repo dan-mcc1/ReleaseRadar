@@ -99,9 +99,8 @@ export default function Settings() {
     return () => clearTimeout(t);
   }, [newUsername]);
 
-  const { data: usernameCheck, isFetching: usernameChecking } = useCheckUsername(
-    debouncedUsername,
-  );
+  const { data: usernameCheck, isFetching: usernameChecking } =
+    useCheckUsername(debouncedUsername);
   const usernameAvailable =
     debouncedUsername.length >= 3 ? (usernameCheck?.available ?? null) : null;
 
@@ -113,10 +112,13 @@ export default function Settings() {
   }, [userMe?.bio]);
 
   // Avatar — local state for picker, synced from query data on load
-  const [selectedAvatar, setSelectedAvatar] = useState<string | null | undefined>(undefined);
+  const [selectedAvatar, setSelectedAvatar] = useState<
+    string | null | undefined
+  >(undefined);
   const [avatarSaved, setAvatarSaved] = useState(false);
   useEffect(() => {
-    if (userMe && selectedAvatar === undefined) setSelectedAvatar(userMe.avatar_key);
+    if (userMe && selectedAvatar === undefined)
+      setSelectedAvatar(userMe.avatar_key);
   }, [userMe]);
 
   // Derived from query data
@@ -378,7 +380,9 @@ export default function Settings() {
             <span className="text-xs text-neutral-500">{bio.length}/300</span>
             <button
               onClick={saveBio}
-              disabled={updateBioMutation.isPending || bio === (userMe?.bio ?? "")}
+              disabled={
+                updateBioMutation.isPending || bio === (userMe?.bio ?? "")
+              }
               className="bg-primary-600 enabled:hover:bg-primary-500 disabled:opacity-40 text-white text-sm px-4 py-1.5 rounded"
             >
               {updateBioMutation.isPending

@@ -43,8 +43,7 @@ export default function FriendProfilePage() {
   const queryClient = useQueryClient();
 
   const { data, isLoading, isError } = useFriendProfile(username);
-  const profile =
-    data && !("isSelf" in data) ? (data as PublicProfile) : null;
+  const profile = data && !("isSelf" in data) ? (data as PublicProfile) : null;
   const isSelf = !!(data && "isSelf" in data && data.isSelf);
 
   usePageTitle(profile ? `@${profile.username}` : undefined);
@@ -231,11 +230,12 @@ export default function FriendProfilePage() {
                     Add this person as a friend to see their lists.
                   </p>
                 )}
-              {!profile.is_friend && profile.profile_visibility === "private" && (
-                <p className="text-neutral-300 text-sm mt-1">
-                  This account is private.
-                </p>
-              )}
+              {!profile.is_friend &&
+                profile.profile_visibility === "private" && (
+                  <p className="text-neutral-300 text-sm mt-1">
+                    This account is private.
+                  </p>
+                )}
             </div>
           </div>
 

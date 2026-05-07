@@ -3,6 +3,7 @@
 Developer testing endpoints — NOT for production use.
 These exist to manually trigger background jobs for local QA.
 """
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -42,9 +43,11 @@ def test_new_season(
     from app.services.episode_service import check_and_reactivate_watched_shows
 
     # 1. Confirm the show is in the user's Watched list
-    if not db.query(Watched).filter_by(
-        user_id=uid, content_type="tv", content_id=show_id
-    ).first():
+    if (
+        not db.query(Watched)
+        .filter_by(user_id=uid, content_type="tv", content_id=show_id)
+        .first()
+    ):
         raise HTTPException(
             status_code=400,
             detail="Show is not in your Watched list. Mark it as Watched first.",
@@ -54,12 +57,18 @@ def test_new_season(
     user = db.query(User).filter_by(id=uid).first()
 
     # Snapshot pre-run state
-    pre_watched = db.query(Watched).filter_by(
-        user_id=uid, content_type="tv", content_id=show_id
-    ).first() is not None
-    pre_watchlist = db.query(Watchlist).filter_by(
-        user_id=uid, content_type="tv", content_id=show_id
-    ).first() is not None
+    pre_watched = (
+        db.query(Watched)
+        .filter_by(user_id=uid, content_type="tv", content_id=show_id)
+        .first()
+        is not None
+    )
+    pre_watchlist = (
+        db.query(Watchlist)
+        .filter_by(user_id=uid, content_type="tv", content_id=show_id)
+        .first()
+        is not None
+    )
 
     # 2. Insert a clearly fake episode that this user hasn't watched
     FAKE_EP_ID = 999_000_000 + show_id  # unlikely to clash with real TMDB IDs
@@ -92,20 +101,28 @@ def test_new_season(
     if fake_ep:
         db.delete(fake_ep)
     # Also clean up any episode_watched entry that might have been created
-    fake_ew = db.query(EpisodeWatched).filter_by(
-        show_id=show_id, season_number=99, episode_number=1
-    ).first()
+    fake_ew = (
+        db.query(EpisodeWatched)
+        .filter_by(show_id=show_id, season_number=99, episode_number=1)
+        .first()
+    )
     if fake_ew:
         db.delete(fake_ew)
     db.commit()
 
     # 5. Report results
-    post_watchlist = db.query(Watchlist).filter_by(
-        user_id=uid, content_type="tv", content_id=show_id
-    ).first() is not None
-    post_watched = db.query(Watched).filter_by(
-        user_id=uid, content_type="tv", content_id=show_id
-    ).first() is not None
+    post_watchlist = (
+        db.query(Watchlist)
+        .filter_by(user_id=uid, content_type="tv", content_id=show_id)
+        .first()
+        is not None
+    )
+    post_watched = (
+        db.query(Watched)
+        .filter_by(user_id=uid, content_type="tv", content_id=show_id)
+        .first()
+        is not None
+    )
 
     reactivated = post_watchlist and not post_watched
     email_attempted = (

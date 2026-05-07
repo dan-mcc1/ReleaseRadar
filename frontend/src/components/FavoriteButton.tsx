@@ -6,7 +6,10 @@ interface FavoriteButtonProps {
   contentId: number;
 }
 
-export default function FavoriteButton({ contentType, contentId }: FavoriteButtonProps) {
+export default function FavoriteButton({
+  contentType,
+  contentId,
+}: FavoriteButtonProps) {
   const user = useAuthUser();
   const { data, isLoading } = useFavoriteStatus(contentType, contentId);
   const toggleMutation = useToggleFavorite();

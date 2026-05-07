@@ -2,7 +2,10 @@ import { useState, useEffect, useRef } from "react";
 import { useAuthUser } from "../hooks/useAuthUser";
 import StarRating from "./StarRating";
 import { useWatchStatus } from "../hooks/api/useWatchStatus";
-import { useUpdateWatchStatus, useRateItem } from "../hooks/api/useWatchActions";
+import {
+  useUpdateWatchStatus,
+  useRateItem,
+} from "../hooks/api/useWatchActions";
 
 export type WatchStatus =
   | "none"
@@ -156,7 +159,10 @@ export default function WatchButton({
   }, []);
 
   async function handleStatusChange(targetStatus: WatchStatus) {
-    if (!user) { alert("You must be signed in."); return; }
+    if (!user) {
+      alert("You must be signed in.");
+      return;
+    }
     if (watchStatus === targetStatus) return;
     try {
       await updateMutation.mutateAsync({
@@ -176,7 +182,11 @@ export default function WatchButton({
   async function handleRate(newRating: number | null) {
     if (!user) return;
     try {
-      await rateMutation.mutateAsync({ contentType, contentId, rating: newRating });
+      await rateMutation.mutateAsync({
+        contentType,
+        contentId,
+        rating: newRating,
+      });
     } catch (err) {
       console.error(err);
     }
@@ -236,9 +246,15 @@ export default function WatchButton({
         >
           {saving || statusLoading ? <IconSpinner /> : icon}
           {compact ? (
-            <span className="hidden sm:inline">{statusLoading ? "Loading…" : saving ? "Saving…" : label}</span>
+            <span className="hidden sm:inline">
+              {statusLoading ? "Loading…" : saving ? "Saving…" : label}
+            </span>
+          ) : statusLoading ? (
+            "Loading…"
+          ) : saving ? (
+            "Saving…"
           ) : (
-            statusLoading ? "Loading…" : saving ? "Saving…" : label
+            label
           )}
         </button>
 
@@ -258,7 +274,9 @@ export default function WatchButton({
 
         {/* Dropdown menu */}
         {menuOpen && (
-          <div className={`absolute top-full mt-2 w-52 bg-neutral-800 border border-neutral-700 rounded-xl shadow-2xl shadow-black/60 z-30 overflow-hidden ${compact ? "right-0 sm:right-auto sm:left-0" : "left-0"}`}>
+          <div
+            className={`absolute top-full mt-2 w-52 bg-neutral-800 border border-neutral-700 rounded-xl shadow-2xl shadow-black/60 z-30 overflow-hidden ${compact ? "right-0 sm:right-auto sm:left-0" : "left-0"}`}
+          >
             {watchStatus !== "Want To Watch" && (
               <button
                 onClick={() => handleStatusChange("Want To Watch")}
@@ -328,7 +346,11 @@ export default function WatchButton({
       </div>
       {watchStatus === "Watched" && (
         <div className={compact ? "hidden sm:block" : undefined}>
-          <StarRating rating={rating} onRate={handleRate} saving={ratingSaving} />
+          <StarRating
+            rating={rating}
+            onRate={handleRate}
+            saving={ratingSaving}
+          />
         </div>
       )}
     </div>

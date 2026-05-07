@@ -189,7 +189,9 @@ def send_season_premiere_alerts_to_all(db: Session):
 
     # Bulk-load shows for all upcoming seasons in one query
     upcoming_show_ids = list({s.show_id for s in upcoming_seasons})
-    shows_by_id = {s.id: s for s in db.query(Show).filter(Show.id.in_(upcoming_show_ids)).all()}
+    shows_by_id = {
+        s.id: s for s in db.query(Show).filter(Show.id.in_(upcoming_show_ids)).all()
+    }
 
     # Map show_id -> list of alert dicts
     show_alerts: dict[int, list] = defaultdict(list)
@@ -219,7 +221,9 @@ def send_season_premiere_alerts_to_all(db: Session):
     # Bulk-load all tracking rows for affected shows in two queries
     watchlist_rows = (
         db.query(Watchlist.user_id, Watchlist.content_id)
-        .filter(Watchlist.content_type == "tv", Watchlist.content_id.in_(affected_show_ids))
+        .filter(
+            Watchlist.content_type == "tv", Watchlist.content_id.in_(affected_show_ids)
+        )
         .all()
     )
     watched_rows = (

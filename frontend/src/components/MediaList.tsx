@@ -179,7 +179,6 @@ function MediaRow({
             {item.overview}
           </p>
         )}
-
       </div>
     </div>
   );
@@ -368,10 +367,16 @@ export default function MediaList({
   const shows = useMemo(() => results.shows ?? [], [results.shows]);
   const people = results.people ?? [];
 
-  const items = useMemo(() => [
-    ...movies.map((m) => ({ content_type: "movie" as const, content_id: m.id })),
-    ...shows.map((s) => ({ content_type: "tv" as const, content_id: s.id })),
-  ], [movies, shows]);
+  const items = useMemo(
+    () => [
+      ...movies.map((m) => ({
+        content_type: "movie" as const,
+        content_id: m.id,
+      })),
+      ...shows.map((s) => ({ content_type: "tv" as const, content_id: s.id })),
+    ],
+    [movies, shows],
+  );
 
   const { data: statusMap } = useBulkWatchStatus(showWatchButton ? items : []);
 

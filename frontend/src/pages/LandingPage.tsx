@@ -17,9 +17,12 @@ export default function LandingPage() {
   return (
     <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 py-8 pb-16">
       <div className="mb-10 text-center py-8">
-        <h1 className="text-4xl font-bold text-white mb-3">Track What You Watch</h1>
+        <h1 className="text-4xl font-bold text-white mb-3">
+          Track What You Watch
+        </h1>
         <p className="text-neutral-400 mb-6 max-w-md mx-auto">
-          Keep up with your favourite shows and movies. Log what you've watched, build your watchlist, and never miss a release.
+          Keep up with your favourite shows and movies. Log what you've watched,
+          build your watchlist, and never miss a release.
         </p>
         <p className="text-xs text-neutral-600 mb-6 max-w-sm mx-auto">
           Calendar shows initial air dates only — reruns are not included.

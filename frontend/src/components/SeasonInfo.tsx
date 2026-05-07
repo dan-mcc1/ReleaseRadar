@@ -75,14 +75,23 @@ export default function SeasonInfo({
   );
 
   const { data: watchedEpisodesData } = useWatchedEpisodes(showId);
-  const rawEpisodes = (watchedEpisodesData as { season_number: number; episode_number: number }[] | undefined) ?? [];
-  const watchedEpisodes = new Set(rawEpisodes.map((e) => epKey(e.season_number, e.episode_number)));
+  const rawEpisodes =
+    (watchedEpisodesData as
+      | { season_number: number; episode_number: number }[]
+      | undefined) ?? [];
+  const watchedEpisodes = new Set(
+    rawEpisodes.map((e) => epKey(e.season_number, e.episode_number)),
+  );
 
   const toggleEpisodeMutation = useToggleEpisode();
   const toggleSeasonMutation = useToggleSeason();
 
-  const [togglingEpisodes, setTogglingEpisodes] = useState<Set<string>>(new Set());
-  const [togglingSeasons, setTogglingSeasons] = useState<Set<number>>(new Set());
+  const [togglingEpisodes, setTogglingEpisodes] = useState<Set<string>>(
+    new Set(),
+  );
+  const [togglingSeasons, setTogglingSeasons] = useState<Set<number>>(
+    new Set(),
+  );
 
   const isLoggedIn = !!user;
 

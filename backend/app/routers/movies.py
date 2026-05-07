@@ -45,4 +45,3 @@ def full_movie_info(id: int):
         raise HTTPException(status_code=404, detail="Show not found")
 
     return movie_data
-

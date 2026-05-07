@@ -319,22 +319,45 @@ class TestReorderWatchlist:
         """Insert Watchlist rows directly with explicit sort_keys. items = [(content_type, content_id, sort_key)]"""
         from app.models.watchlist import Watchlist
         from datetime import datetime
+
         for ct, cid, sk in items:
-            db.add(Watchlist(user_id=uid, content_type=ct, content_id=cid, sort_key=sk, added_at=datetime.utcnow()))
+            db.add(
+                Watchlist(
+                    user_id=uid,
+                    content_type=ct,
+                    content_id=cid,
+                    sort_key=sk,
+                    added_at=datetime.utcnow(),
+                )
+            )
         db.commit()
 
     def test_reorder_between_two_items(self, client, db, seed_movie, seed_show):
         # Seed: movie@1000, show@2000, and a second movie we'll move between them
         from app.models.movie import Movie
         from datetime import date
-        m2 = Movie(id=551, title="Movie 2", status="Released", release_date=date(2020,1,1), runtime=90, overview="x", tracking_count=1, vote_average=7.0)
+
+        m2 = Movie(
+            id=551,
+            title="Movie 2",
+            status="Released",
+            release_date=date(2020, 1, 1),
+            runtime=90,
+            overview="x",
+            tracking_count=1,
+            vote_average=7.0,
+        )
         db.add(m2)
         db.commit()
-        self._seed_watchlist(db, "test-uid-1", [
-            ("movie", 550, 1000),
-            ("tv", 1396, 2000),
-            ("movie", 551, 3000),
-        ])
+        self._seed_watchlist(
+            db,
+            "test-uid-1",
+            [
+                ("movie", 550, 1000),
+                ("tv", 1396, 2000),
+                ("movie", 551, 3000),
+            ],
+        )
         # Get watchlist_ids
         r = client.get("/watchlist")
         movies = {m["id"]: m for m in r.json()["movies"]}
@@ -344,61 +367,86 @@ class TestReorderWatchlist:
         wid_m551 = movies[551]["watchlist_id"]
 
         # Move movie 551 (sort_key=3000) between movie 550 (1000) and show 1396 (2000)
-        r2 = client.post("/watchlist/reorder", json={
-            "content_type": "movie",
-            "content_id": 551,
-            "before_id": wid_m550,
-            "after_id": wid_tv,
-        })
+        r2 = client.post(
+            "/watchlist/reorder",
+            json={
+                "content_type": "movie",
+                "content_id": 551,
+                "before_id": wid_m550,
+                "after_id": wid_tv,
+            },
+        )
         assert r2.status_code == 200
         all_movies = {m["id"]: m for m in r2.json()["movies"]}
         assert all_movies[551]["sort_key"] == 1500  # (1000 + 2000) // 2
 
     def test_reorder_to_top(self, client, db, seed_movie, seed_show):
-        self._seed_watchlist(db, "test-uid-1", [
-            ("movie", 550, 1000),
-            ("tv", 1396, 2000),
-        ])
+        self._seed_watchlist(
+            db,
+            "test-uid-1",
+            [
+                ("movie", 550, 1000),
+                ("tv", 1396, 2000),
+            ],
+        )
         r = client.get("/watchlist")
         wid_movie = r.json()["movies"][0]["watchlist_id"]
         wid_show = r.json()["shows"][0]["watchlist_id"]
 
         # Move show to top (before_id=None, after_id=movie's watchlist_id)
-        r2 = client.post("/watchlist/reorder", json={
-            "content_type": "tv",
-            "content_id": 1396,
-            "before_id": None,
-            "after_id": wid_movie,
-        })
+        r2 = client.post(
+            "/watchlist/reorder",
+            json={
+                "content_type": "tv",
+                "content_id": 1396,
+                "before_id": None,
+                "after_id": wid_movie,
+            },
+        )
         assert r2.status_code == 200
         shows = r2.json()["shows"]
         assert shows[0]["sort_key"] == 500  # 1000 // 2
 
     def test_reorder_to_bottom(self, client, db, seed_movie, seed_show):
-        self._seed_watchlist(db, "test-uid-1", [
-            ("movie", 550, 1000),
-            ("tv", 1396, 2000),
-        ])
+        self._seed_watchlist(
+            db,
+            "test-uid-1",
+            [
+                ("movie", 550, 1000),
+                ("tv", 1396, 2000),
+            ],
+        )
         r = client.get("/watchlist")
         wid_show = r.json()["shows"][0]["watchlist_id"]
 
         # Move movie to bottom (before_id=show's watchlist_id, after_id=None)
-        r2 = client.post("/watchlist/reorder", json={
-            "content_type": "movie",
-            "content_id": 550,
-            "before_id": wid_show,
-            "after_id": None,
-        })
+        r2 = client.post(
+            "/watchlist/reorder",
+            json={
+                "content_type": "movie",
+                "content_id": 550,
+                "before_id": wid_show,
+                "after_id": None,
+            },
+        )
         assert r2.status_code == 200
         movies = r2.json()["movies"]
-        assert movies[0]["sort_key"] == 3000  # (2000 + 4000) // 2, where after_key = max(2000) + 2000 = 4000
+        assert (
+            movies[0]["sort_key"] == 3000
+        )  # (2000 + 4000) // 2, where after_key = max(2000) + 2000 = 4000
 
-    def test_renormalization_triggered_when_gap_le_10(self, client, db, seed_movie, seed_show):
+    def test_renormalization_triggered_when_gap_le_10(
+        self, client, db, seed_movie, seed_show
+    ):
         # Set up items with sort_keys that are very close together
-        self._seed_watchlist(db, "test-uid-1", [
-            ("movie", 550, 1000),
-            ("tv", 1396, 1001),
-        ])
+        self._seed_watchlist(
+            db,
+            "test-uid-1",
+            [
+                ("movie", 550, 1000),
+                ("tv", 1396, 1001),
+            ],
+        )
         r = client.get("/watchlist")
         wid_movie = r.json()["movies"][0]["watchlist_id"]
         wid_show = r.json()["shows"][0]["watchlist_id"]
@@ -406,17 +454,41 @@ class TestReorderWatchlist:
         # Set items with sort_keys 1000 and 1010, move something between them:
         # midpoint = (1000 + 1010) // 2 = 1005. gap_above=5, gap_below=5. Renorm triggers.
         from app.models.watchlist import Watchlist
-        db.query(Watchlist).filter_by(user_id="test-uid-1", content_type="movie").update({"sort_key": 1000})
-        db.query(Watchlist).filter_by(user_id="test-uid-1", content_type="tv").update({"sort_key": 1010})
+
+        db.query(Watchlist).filter_by(
+            user_id="test-uid-1", content_type="movie"
+        ).update({"sort_key": 1000})
+        db.query(Watchlist).filter_by(user_id="test-uid-1", content_type="tv").update(
+            {"sort_key": 1010}
+        )
         db.commit()
 
         from app.models.movie import Movie
         from datetime import date
-        m2 = Movie(id=551, title="M2", status="Released", release_date=date(2020,1,1), runtime=90, overview="x", tracking_count=1, vote_average=7.0)
+
+        m2 = Movie(
+            id=551,
+            title="M2",
+            status="Released",
+            release_date=date(2020, 1, 1),
+            runtime=90,
+            overview="x",
+            tracking_count=1,
+            vote_average=7.0,
+        )
         db.add(m2)
         from app.models.watchlist import Watchlist as WL
         import datetime as dt
-        db.add(WL(user_id="test-uid-1", content_type="movie", content_id=551, sort_key=2000, added_at=dt.datetime.utcnow()))
+
+        db.add(
+            WL(
+                user_id="test-uid-1",
+                content_type="movie",
+                content_id=551,
+                sort_key=2000,
+                added_at=dt.datetime.utcnow(),
+            )
+        )
         db.commit()
 
         r = client.get("/watchlist")
@@ -425,16 +497,19 @@ class TestReorderWatchlist:
 
         # Move m2 between movie@1000 and show@1010 — midpoint=1005, gaps=5 ≤ 10 → renorm
         wid_m551 = next(m["watchlist_id"] for m in r.json()["movies"] if m["id"] == 551)
-        r2 = client.post("/watchlist/reorder", json={
-            "content_type": "movie",
-            "content_id": 551,
-            "before_id": wid_m550,
-            "after_id": wid_tv,
-        })
+        r2 = client.post(
+            "/watchlist/reorder",
+            json={
+                "content_type": "movie",
+                "content_id": 551,
+                "before_id": wid_m550,
+                "after_id": wid_tv,
+            },
+        )
         assert r2.status_code == 200
         all_keys = sorted(
-            [m["sort_key"] for m in r2.json()["movies"]] +
-            [s["sort_key"] for s in r2.json()["shows"]]
+            [m["sort_key"] for m in r2.json()["movies"]]
+            + [s["sort_key"] for s in r2.json()["shows"]]
         )
         # After renorm: 1000, 2000, 3000
         assert all_keys == [1000, 2000, 3000]

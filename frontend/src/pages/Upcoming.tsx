@@ -28,7 +28,12 @@ export default function Upcoming() {
     return `${today.toLocaleDateString("en-us", opts)} – ${nextMonth.toLocaleDateString("en-us", { ...opts, year: "numeric" })}`;
   };
 
-  const { data, isPending: loading } = useUpcoming(activeType, page, minDate, maxDate);
+  const { data, isPending: loading } = useUpcoming(
+    activeType,
+    page,
+    minDate,
+    maxDate,
+  );
   const rawItems = data?.results ?? [];
   const totalPages = data?.total_pages ?? 1;
 

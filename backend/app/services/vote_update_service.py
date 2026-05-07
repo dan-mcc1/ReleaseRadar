@@ -37,7 +37,9 @@ def update_all_vote_averages(db: Session):
     if show_ids:
         with ThreadPoolExecutor(max_workers=8) as executor:
             results = list(executor.map(_fetch_show_vote, show_ids))
-        show_updates = [{"id": sid, "vote_average": v} for sid, v in results if v is not None]
+        show_updates = [
+            {"id": sid, "vote_average": v} for sid, v in results if v is not None
+        ]
         updated_shows = len(show_updates)
         if show_updates:
             db.bulk_update_mappings(Show, show_updates)
@@ -46,7 +48,9 @@ def update_all_vote_averages(db: Session):
     if movie_ids:
         with ThreadPoolExecutor(max_workers=8) as executor:
             results = list(executor.map(_fetch_movie_vote, movie_ids))
-        movie_updates = [{"id": mid, "vote_average": v} for mid, v in results if v is not None]
+        movie_updates = [
+            {"id": mid, "vote_average": v} for mid, v in results if v is not None
+        ]
         updated_movies = len(movie_updates)
         if movie_updates:
             db.bulk_update_mappings(Movie, movie_updates)

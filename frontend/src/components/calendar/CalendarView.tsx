@@ -18,8 +18,18 @@ import {
 } from "../../utils/calendarUtils";
 
 const monthNames = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
 ];
 
 export default function CalendarView() {
@@ -37,7 +47,9 @@ export default function CalendarView() {
     typeof window !== "undefined" && window.innerWidth < 640 ? "day" : "month",
   );
   const [filterType, setFilterType] = useState<"all" | "tv" | "movie">("all");
-  const [watchFilter, setWatchFilter] = useState<"all" | "watched" | "unwatched">("all");
+  const [watchFilter, setWatchFilter] = useState<
+    "all" | "watched" | "unwatched"
+  >("all");
   const [showWatchlist, setShowWatchlist] = useState(false);
   const [showSyncModal, setShowSyncModal] = useState(false);
 
@@ -48,7 +60,14 @@ export default function CalendarView() {
   );
 
   const daysOfMonth = useMemo(
-    () => getDaysInMonth(currentMonth, currentYear, allItems, filterType, watchFilter),
+    () =>
+      getDaysInMonth(
+        currentMonth,
+        currentYear,
+        allItems,
+        filterType,
+        watchFilter,
+      ),
     [currentMonth, currentYear, allItems, filterType, watchFilter],
   );
 
@@ -58,7 +77,12 @@ export default function CalendarView() {
   );
 
   const selectedDateItems = useMemo(
-    () => applyFilters(getItemsForDate(allItems, selectedDate), filterType, watchFilter),
+    () =>
+      applyFilters(
+        getItemsForDate(allItems, selectedDate),
+        filterType,
+        watchFilter,
+      ),
     [selectedDate, allItems, filterType, watchFilter],
   );
 
@@ -68,7 +92,9 @@ export default function CalendarView() {
   );
 
   const todayItemCount = useMemo(
-    () => applyFilters(getItemsForDate(allItems, today), filterType, watchFilter).length,
+    () =>
+      applyFilters(getItemsForDate(allItems, today), filterType, watchFilter)
+        .length,
     [allItems, filterType, watchFilter],
   );
 
@@ -141,7 +167,9 @@ export default function CalendarView() {
     });
   };
 
-  const emptyCells = Array(new Date(currentYear, currentMonth, 1).getDay()).fill(null);
+  const emptyCells = Array(
+    new Date(currentYear, currentMonth, 1).getDay(),
+  ).fill(null);
 
   // CalendarMonthGrid and WeekGrid still expect DayItem for selectedDate comparison
   const selectedDayItem = { date: selectedDate, items: selectedDateItems };

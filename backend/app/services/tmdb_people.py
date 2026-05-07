@@ -2,7 +2,6 @@ from functools import lru_cache
 
 from app.services.tmdb_client import get
 
-
 # -------------------------
 # Search
 # -------------------------

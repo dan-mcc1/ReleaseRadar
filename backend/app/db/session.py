@@ -20,7 +20,7 @@ else:
         pool_pre_ping=True,
         pool_size=10,
         max_overflow=20,
-        pool_recycle=300,   # Neon closes idle connections after ~5 min; recycle before that
+        pool_recycle=300,  # Neon closes idle connections after ~5 min; recycle before that
         pool_timeout=30,
     )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

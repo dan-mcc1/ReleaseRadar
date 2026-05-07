@@ -8,6 +8,7 @@ from tests.conftest import make_client
 
 def _seed_both_users(db):
     from app.models.user import User
+
     db.add(User(id="test-uid-1", username="alice", email="alice@test.com"))
     db.add(User(id="test-uid-2", username="bob", email="bob@test.com"))
     db.commit()
@@ -17,10 +18,15 @@ def _make_friends(db):
     """Seed two users and create an accepted friendship between them."""
     from app.models.user import User
     from app.models.friendship import Friendship
+
     db.add(User(id="test-uid-1", username="alice", email="alice@test.com"))
     db.add(User(id="test-uid-2", username="bob", email="bob@test.com"))
     db.flush()
-    db.add(Friendship(requester_id="test-uid-1", addressee_id="test-uid-2", status="accepted"))
+    db.add(
+        Friendship(
+            requester_id="test-uid-1", addressee_id="test-uid-2", status="accepted"
+        )
+    )
     db.commit()
 
 
@@ -51,6 +57,7 @@ class TestRecommendationSend:
 
     def test_send_to_nonexistent_user_returns_error(self, client, db, seed_movie):
         from app.models.user import User
+
         db.add(User(id="test-uid-1", username="alice"))
         db.commit()
         r = _send(client, recipient="nobody")
@@ -58,6 +65,7 @@ class TestRecommendationSend:
 
     def test_send_to_self_returns_error(self, client, db, seed_movie):
         from app.models.user import User
+
         db.add(User(id="test-uid-1", username="alice"))
         db.commit()
         r = _send(client, recipient="alice")
@@ -65,12 +73,15 @@ class TestRecommendationSend:
 
     def test_send_invalid_content_type(self, client, db):
         _make_friends(db)
-        r = client.post("/recommendations/send", json={
-            "recipient_username": "bob",
-            "content_type": "podcast",
-            "content_id": 1,
-            "content_title": "Test",
-        })
+        r = client.post(
+            "/recommendations/send",
+            json={
+                "recipient_username": "bob",
+                "content_type": "podcast",
+                "content_id": 1,
+                "content_title": "Test",
+            },
+        )
         assert r.status_code == 400
 
     def test_send_with_message(self, client, db, seed_movie):
@@ -80,6 +91,7 @@ class TestRecommendationSend:
 
     def test_send_creates_db_row(self, client, db, seed_movie):
         from app.models.recommendation import Recommendation
+
         _make_friends(db)
         _send(client)
         db.expire_all()
@@ -95,6 +107,7 @@ class TestRecommendationSend:
 class TestRecommendationInbox:
     def test_inbox_empty(self, client, db):
         from app.models.user import User
+
         db.add(User(id="test-uid-1", username="alice"))
         db.commit()
         r = client.get("/recommendations/inbox")
@@ -120,6 +133,7 @@ class TestRecommendationInbox:
 class TestRecommendationUnreadCount:
     def test_unread_count_zero(self, client, db):
         from app.models.user import User
+
         db.add(User(id="test-uid-1", username="alice"))
         db.commit()
         r = client.get("/recommendations/unread-count")
@@ -190,6 +204,7 @@ class TestRecommendationDelete:
 
     def test_delete_nonexistent(self, client, db):
         from app.models.user import User
+
         db.add(User(id="test-uid-1", username="alice"))
         db.commit()
         r = client.delete("/recommendations/99999")

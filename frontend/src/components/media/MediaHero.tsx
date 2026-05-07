@@ -10,7 +10,14 @@ interface Props {
   minHeight?: string;
 }
 
-export default function MediaHero({ backdropPath, posterPath, logoPath, title, tagline, minHeight = "280px" }: Props) {
+export default function MediaHero({
+  backdropPath,
+  posterPath,
+  logoPath,
+  title,
+  tagline,
+  minHeight = "280px",
+}: Props) {
   return (
     <div className="relative overflow-hidden" style={{ minHeight }}>
       {backdropPath ? (
@@ -41,9 +48,13 @@ export default function MediaHero({ backdropPath, posterPath, logoPath, title, t
               className="max-h-16 max-w-[280px] object-contain drop-shadow-2xl mb-1"
             />
           ) : (
-            <h1 className="text-3xl md:text-4xl font-bold text-white drop-shadow-lg">{title}</h1>
+            <h1 className="text-3xl md:text-4xl font-bold text-white drop-shadow-lg">
+              {title}
+            </h1>
           )}
-          {tagline && <p className="text-neutral-300 italic text-sm mt-1">{tagline}</p>}
+          {tagline && (
+            <p className="text-neutral-300 italic text-sm mt-1">{tagline}</p>
+          )}
         </div>
       </div>
     </div>

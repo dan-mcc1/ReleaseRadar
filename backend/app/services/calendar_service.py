@@ -39,8 +39,12 @@ def get_calendar(
         )
         .all()
     )
-    watchlist_show_ids = {r.content_id for r in watchlist_rows if r.content_type == "tv"}
-    watchlist_movie_ids = {r.content_id for r in watchlist_rows if r.content_type == "movie"}
+    watchlist_show_ids = {
+        r.content_id for r in watchlist_rows if r.content_type == "tv"
+    }
+    watchlist_movie_ids = {
+        r.content_id for r in watchlist_rows if r.content_type == "movie"
+    }
 
     cw_rows = (
         db.query(CurrentlyWatching.content_id, CurrentlyWatching.content_type)

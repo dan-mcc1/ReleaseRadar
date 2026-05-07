@@ -8,6 +8,7 @@ route handlers without needing await.
 Note: this only works within a single process. If you ever run multiple
 Uvicorn workers you'd need Redis pub/sub instead.
 """
+
 import asyncio
 from collections import defaultdict
 

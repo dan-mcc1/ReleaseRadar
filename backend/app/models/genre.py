@@ -16,12 +16,20 @@ class Genre(Base):
 class ShowGenre(Base):
     __tablename__ = "show_genre"
 
-    show_id = Column(Integer, ForeignKey("show.id", ondelete="CASCADE"), primary_key=True)
-    genre_id = Column(Integer, ForeignKey("genre.id", ondelete="CASCADE"), primary_key=True)
+    show_id = Column(
+        Integer, ForeignKey("show.id", ondelete="CASCADE"), primary_key=True
+    )
+    genre_id = Column(
+        Integer, ForeignKey("genre.id", ondelete="CASCADE"), primary_key=True
+    )
 
 
 class MovieGenre(Base):
     __tablename__ = "movie_genre"
 
-    movie_id = Column(Integer, ForeignKey("movie.id", ondelete="CASCADE"), primary_key=True)
-    genre_id = Column(Integer, ForeignKey("genre.id", ondelete="CASCADE"), primary_key=True)
+    movie_id = Column(
+        Integer, ForeignKey("movie.id", ondelete="CASCADE"), primary_key=True
+    )
+    genre_id = Column(
+        Integer, ForeignKey("genre.id", ondelete="CASCADE"), primary_key=True
+    )

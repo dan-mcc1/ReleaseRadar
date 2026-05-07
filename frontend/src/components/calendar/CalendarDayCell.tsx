@@ -40,23 +40,35 @@ export default function CalendarDayCell({
       <time
         dateTime={isoDate}
         className={`text-xs sm:text-sm font-semibold ${
-          isToday ? "text-white" : isSelected ? "text-primary-300" : "text-neutral-300"
+          isToday
+            ? "text-white"
+            : isSelected
+              ? "text-primary-300"
+              : "text-neutral-300"
         }`}
       >
         {day.date.getDate()}
       </time>
 
       {isLoading
-        ? Array.from({ length: day.date.getDate() % 3 === 0 ? 2 : 1 }).map((_, idx) => (
-            <div key={idx} className="mt-1 h-8 sm:h-14 rounded-md bg-neutral-700 animate-pulse" />
-          ))
+        ? Array.from({ length: day.date.getDate() % 3 === 0 ? 2 : 1 }).map(
+            (_, idx) => (
+              <div
+                key={idx}
+                className="mt-1 h-8 sm:h-14 rounded-md bg-neutral-700 animate-pulse"
+              />
+            ),
+          )
         : cellItems.map((item, idx) => {
             const title =
               "episode_number" in item
                 ? `${item.showData.name} - ${item.name}`
                 : item.title;
             return (
-              <div key={idx} className="relative mt-1 h-8 sm:h-14 rounded-md overflow-hidden group">
+              <div
+                key={idx}
+                className="relative mt-1 h-8 sm:h-14 rounded-md overflow-hidden group"
+              >
                 {item.showData.backdrop_path && (
                   <img
                     src={`${BASE_IMAGE_URL}/w780${item.showData.backdrop_path}`}
@@ -79,9 +91,15 @@ export default function CalendarDayCell({
                   )}
                 </div>
                 {item.type === "tv" &&
-                  formatAirTimeToLocal(item.showData.air_time, item.showData.air_timezone) && (
+                  formatAirTimeToLocal(
+                    item.showData.air_time,
+                    item.showData.air_timezone,
+                  ) && (
                     <div className="absolute bottom-0.5 right-1 z-10 hidden sm:block text-white/75 text-[7px] font-medium drop-shadow">
-                      {formatAirTimeToLocal(item.showData.air_time, item.showData.air_timezone)}
+                      {formatAirTimeToLocal(
+                        item.showData.air_time,
+                        item.showData.air_timezone,
+                      )}
                     </div>
                   )}
               </div>

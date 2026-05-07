@@ -129,16 +129,21 @@ export default function EpisodeInfo() {
   }>();
 
   const episodeQuery = useQuery<EpisodeData>({
-    queryKey: queryKeys.episodeDetail(showId ?? "", season ?? "", episode ?? ""),
+    queryKey: queryKeys.episodeDetail(
+      showId ?? "",
+      season ?? "",
+      episode ?? "",
+    ),
     queryFn: () =>
-      queryFetch<EpisodeData>(`/tv/${showId}/season/${season}/episode/${episode}`),
+      queryFetch<EpisodeData>(
+        `/tv/${showId}/season/${season}/episode/${episode}`,
+      ),
     enabled: !!showId && !!season && !!episode,
   });
 
   const showQuery = useQuery<{ name: string; in_production: boolean | null }>({
     queryKey: queryKeys.mediaDetail("tv", showId ?? ""),
-    queryFn: () =>
-      queryFetch(`/tv/${showId}`),
+    queryFn: () => queryFetch(`/tv/${showId}`),
     enabled: !!showId,
   });
 
@@ -148,9 +153,12 @@ export default function EpisodeInfo() {
   const data = episodeQuery.data;
   const showName = showQuery.data?.name ?? null;
   const showInProduction = showQuery.data?.in_production ?? null;
-  const isWatched = watchedEpisodesQuery.data?.some(
-    (e) => e.season_number === Number(season) && e.episode_number === Number(episode),
-  ) ?? false;
+  const isWatched =
+    watchedEpisodesQuery.data?.some(
+      (e) =>
+        e.season_number === Number(season) &&
+        e.episode_number === Number(episode),
+    ) ?? false;
 
   usePageTitle(data ? data.name : "Episode");
 

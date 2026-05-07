@@ -83,20 +83,38 @@ export default function ProfilePage() {
   const [friendsTab, setFriendsTab] = useState<FriendsTab>("friends");
 
   const { data: summary, isLoading: summaryLoading } = useProfileSummary();
-  const { data: watchlistFull, isLoading: watchlistLoading } = useWatchlist(watchlistOpen);
-  const { data: watchedFull, isLoading: watchedLoading } = useWatched(watchedOpen);
+  const { data: watchlistFull, isLoading: watchlistLoading } =
+    useWatchlist(watchlistOpen);
+  const { data: watchedFull, isLoading: watchedLoading } =
+    useWatched(watchedOpen);
 
   const typedDbUser = summary?.user;
   const favorites = summary?.favorites ?? { movies: [], shows: [] };
-  const watchlistPreview = summary?.watchlist ?? { movies: [], shows: [], total_movies: 0, total_shows: 0 };
-  const watchedPreview = summary?.watched ?? { movies: [], shows: [], total_movies: 0, total_shows: 0 };
+  const watchlistPreview = summary?.watchlist ?? {
+    movies: [],
+    shows: [],
+    total_movies: 0,
+    total_shows: 0,
+  };
+  const watchedPreview = summary?.watched ?? {
+    movies: [],
+    shows: [],
+    total_movies: 0,
+    total_shows: 0,
+  };
   const friends = summary?.friends ?? [];
   const incoming = summary?.incoming_requests ?? [];
   const outgoing = summary?.outgoing_requests ?? [];
   const followers = summary?.followers ?? [];
 
-  const watchlist = watchlistFull ?? { movies: watchlistPreview.movies, shows: watchlistPreview.shows };
-  const watched = watchedFull ?? { movies: watchedPreview.movies, shows: watchedPreview.shows };
+  const watchlist = watchlistFull ?? {
+    movies: watchlistPreview.movies,
+    shows: watchlistPreview.shows,
+  };
+  const watched = watchedFull ?? {
+    movies: watchedPreview.movies,
+    shows: watchedPreview.shows,
+  };
 
   const loading = summaryLoading || watchlistLoading || watchedLoading;
 
@@ -121,7 +139,8 @@ export default function ProfilePage() {
 
   const incomingCount = incoming.length;
   const totalWatched = watchedPreview.total_movies + watchedPreview.total_shows;
-  const totalWatchlist = watchlistPreview.total_movies + watchlistPreview.total_shows;
+  const totalWatchlist =
+    watchlistPreview.total_movies + watchlistPreview.total_shows;
   const totalFavorites = favorites.movies.length + favorites.shows.length;
 
   return (
@@ -129,7 +148,10 @@ export default function ProfilePage() {
       {/* ── Hero banner ── */}
       <div className="rounded-2xl overflow-hidden bg-gradient-to-br from-primary-800 via-primary-700 to-primary-900">
         <div className="px-6 pt-8 pb-6 flex flex-col sm:flex-row items-center sm:items-end gap-5">
-          <HeroAvatar avatarKey={typedDbUser?.avatar_key} photoURL={user.photoURL} />
+          <HeroAvatar
+            avatarKey={typedDbUser?.avatar_key}
+            photoURL={user.photoURL}
+          />
           <div className="flex-1 text-center sm:text-left">
             <h1 className="text-2xl sm:text-3xl font-bold text-white">
               {user.displayName ?? "User"}
@@ -443,9 +465,7 @@ export default function ProfilePage() {
               onClick={() => setStatsOpen((o) => !o)}
               className="w-full flex items-center justify-between px-4 py-3.5 text-left hover:bg-neutral-700/50 transition-colors"
             >
-              <span className="text-base font-semibold text-white">
-                Stats
-              </span>
+              <span className="text-base font-semibold text-white">Stats</span>
               <svg
                 className={`w-4 h-4 text-neutral-400 transition-transform duration-200 ${statsOpen ? "rotate-180" : ""}`}
                 fill="none"
@@ -540,7 +560,9 @@ export default function ProfilePage() {
                         disabled={addingBackUsername === follower.username}
                         className="text-xs bg-primary-600 hover:bg-primary-500 disabled:opacity-50 text-white px-3 py-1 rounded transition-colors"
                       >
-                        {addingBackUsername === follower.username ? "Adding…" : "Add back"}
+                        {addingBackUsername === follower.username
+                          ? "Adding…"
+                          : "Add back"}
                       </button>
                     </div>
                   ))

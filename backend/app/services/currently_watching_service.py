@@ -14,7 +14,9 @@ from app.services.watchlist_service import (
 )
 
 
-def _is_on_other_list(db: Session, user_id: str, content_type: str, content_id: int) -> bool:
+def _is_on_other_list(
+    db: Session, user_id: str, content_type: str, content_id: int
+) -> bool:
     """Return True if the item exists on Watchlist or Watched."""
     return _is_tracked_on_any(db, user_id, content_type, content_id, Watchlist, Watched)
 
@@ -26,11 +28,14 @@ def _get_currently_watching_items(db: Session, user_id: str, content_type: str):
         items = (
             db.query(Show)
             .select_from(CurrentlyWatching)
-            .join(Show, and_(
-                CurrentlyWatching.content_id == Show.id,
-                CurrentlyWatching.content_type == "tv",
-                CurrentlyWatching.user_id == user_id,
-            ))
+            .join(
+                Show,
+                and_(
+                    CurrentlyWatching.content_id == Show.id,
+                    CurrentlyWatching.content_type == "tv",
+                    CurrentlyWatching.user_id == user_id,
+                ),
+            )
             .all()
         )
         return [
@@ -51,11 +56,14 @@ def _get_currently_watching_items(db: Session, user_id: str, content_type: str):
         items = (
             db.query(Movie)
             .select_from(CurrentlyWatching)
-            .join(Movie, and_(
-                CurrentlyWatching.content_id == Movie.id,
-                CurrentlyWatching.content_type == "movie",
-                CurrentlyWatching.user_id == user_id,
-            ))
+            .join(
+                Movie,
+                and_(
+                    CurrentlyWatching.content_id == Movie.id,
+                    CurrentlyWatching.content_type == "movie",
+                    CurrentlyWatching.user_id == user_id,
+                ),
+            )
             .all()
         )
         return [
@@ -157,7 +165,13 @@ def get_currently_watching(db: Session, user_id: str):
             Show.air_timezone,
         )
         .select_from(CurrentlyWatching)
-        .join(Show, and_(CurrentlyWatching.content_id == Show.id, CurrentlyWatching.content_type == "tv"))
+        .join(
+            Show,
+            and_(
+                CurrentlyWatching.content_id == Show.id,
+                CurrentlyWatching.content_type == "tv",
+            ),
+        )
         .where(CurrentlyWatching.user_id == user_id)
     )
     movie_q = (
@@ -177,26 +191,59 @@ def get_currently_watching(db: Session, user_id: str):
             null().label("air_timezone"),
         )
         .select_from(CurrentlyWatching)
-        .join(Movie, and_(CurrentlyWatching.content_id == Movie.id, CurrentlyWatching.content_type == "movie"))
+        .join(
+            Movie,
+            and_(
+                CurrentlyWatching.content_id == Movie.id,
+                CurrentlyWatching.content_type == "movie",
+            ),
+        )
         .where(CurrentlyWatching.user_id == user_id)
     )
 
     rows = db.execute(union_all(show_q, movie_q)).all()
     movies, shows = [], []
     for row in rows:
-        ct, id_, name, title, poster_path, backdrop_path, runtime, release_date, vote_average, status, in_production, air_time, air_timezone = row
+        (
+            ct,
+            id_,
+            name,
+            title,
+            poster_path,
+            backdrop_path,
+            runtime,
+            release_date,
+            vote_average,
+            status,
+            in_production,
+            air_time,
+            air_timezone,
+        ) = row
         if ct == "tv":
-            shows.append({
-                "id": id_, "name": name, "poster_path": poster_path,
-                "backdrop_path": backdrop_path, "air_time": air_time,
-                "air_timezone": air_timezone, "vote_average": vote_average,
-                "status": status, "in_production": in_production,
-            })
+            shows.append(
+                {
+                    "id": id_,
+                    "name": name,
+                    "poster_path": poster_path,
+                    "backdrop_path": backdrop_path,
+                    "air_time": air_time,
+                    "air_timezone": air_timezone,
+                    "vote_average": vote_average,
+                    "status": status,
+                    "in_production": in_production,
+                }
+            )
         else:
-            movies.append({
-                "id": id_, "title": title, "poster_path": poster_path,
-                "backdrop_path": backdrop_path, "runtime": runtime,
-                "release_date": str(release_date) if release_date else None,
-                "vote_average": vote_average, "status": status,
-            })
+            movies.append(
+                {
+                    "id": id_,
+                    "title": title,
+                    "poster_path": poster_path,
+                    "backdrop_path": backdrop_path,
+                    "runtime": runtime,
+                    "release_date": str(release_date) if release_date else None,
+                    "vote_average": vote_average,
+                    "status": status,
+                }
+            )
     return {"movies": movies, "shows": shows}

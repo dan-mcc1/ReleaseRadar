@@ -54,15 +54,20 @@ def send_request(
     if addressee:
         pending_count = (
             db.query(Friendship)
-            .filter(Friendship.addressee_id == addressee.id, Friendship.status == "pending")
+            .filter(
+                Friendship.addressee_id == addressee.id, Friendship.status == "pending"
+            )
             .count()
         )
         unread_count = get_unread_count(db, addressee.id)
-        publish(addressee.id, {
-            "type": "counts_update",
-            "pending_requests": pending_count,
-            "unread_recs": unread_count,
-        })
+        publish(
+            addressee.id,
+            {
+                "type": "counts_update",
+                "pending_requests": pending_count,
+                "unread_recs": unread_count,
+            },
+        )
     return result
 
 
@@ -81,11 +86,14 @@ def respond_to_request(
         .count()
     )
     unread_count = get_unread_count(db, uid)
-    publish(uid, {
-        "type": "counts_update",
-        "pending_requests": pending_count,
-        "unread_recs": unread_count,
-    })
+    publish(
+        uid,
+        {
+            "type": "counts_update",
+            "pending_requests": pending_count,
+            "unread_recs": unread_count,
+        },
+    )
     return result
 
 

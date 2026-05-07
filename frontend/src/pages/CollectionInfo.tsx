@@ -15,7 +15,11 @@ function formatRuntime(minutes: number) {
 
 export default function CollectionInfo() {
   const { id } = useParams<{ id: string }>();
-  const { data: rawCollection, isPending: loading, error } = useCollectionInfo(id);
+  const {
+    data: rawCollection,
+    isPending: loading,
+    error,
+  } = useCollectionInfo(id);
   usePageTitle(rawCollection?.name);
 
   if (loading)

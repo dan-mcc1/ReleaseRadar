@@ -4,7 +4,6 @@ from typing import Tuple, Optional
 
 from app.services.tmdb_client import get
 
-
 # -------------------------
 # Core movie info
 # -------------------------

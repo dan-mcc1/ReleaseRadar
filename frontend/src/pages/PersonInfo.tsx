@@ -109,7 +109,11 @@ function CreditList({
 
 export default function PersonInfo() {
   const { id } = useParams<{ id: string }>();
-  const { data: person, isPending: loading, error } = usePersonInfo<FullPersonData>(id);
+  const {
+    data: person,
+    isPending: loading,
+    error,
+  } = usePersonInfo<FullPersonData>(id);
   usePageTitle(person?.name);
   const [bioExpanded, setBioExpanded] = useState(false);
 

@@ -59,15 +59,21 @@ def send(
     )
     pending_count = (
         db.query(Friendship)
-        .filter(Friendship.addressee_id == result.recipient_id, Friendship.status == "pending")
+        .filter(
+            Friendship.addressee_id == result.recipient_id,
+            Friendship.status == "pending",
+        )
         .count()
     )
     unread_count = get_unread_count(db, result.recipient_id)
-    publish(result.recipient_id, {
-        "type": "counts_update",
-        "pending_requests": pending_count,
-        "unread_recs": unread_count,
-    })
+    publish(
+        result.recipient_id,
+        {
+            "type": "counts_update",
+            "pending_requests": pending_count,
+            "unread_recs": unread_count,
+        },
+    )
     if result._email_params:
         background_tasks.add_task(send_recommendation_email, **result._email_params)
     return result
@@ -102,11 +108,14 @@ def read(
         .count()
     )
     unread_count = get_unread_count(db, uid)
-    publish(uid, {
-        "type": "counts_update",
-        "pending_requests": pending_count,
-        "unread_recs": unread_count,
-    })
+    publish(
+        uid,
+        {
+            "type": "counts_update",
+            "pending_requests": pending_count,
+            "unread_recs": unread_count,
+        },
+    )
     return result
 
 

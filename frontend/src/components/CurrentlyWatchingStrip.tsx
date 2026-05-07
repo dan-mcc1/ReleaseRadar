@@ -3,7 +3,10 @@ import { Link, useNavigate } from "react-router-dom";
 import { BASE_IMAGE_URL } from "../constants";
 import type { Show, Movie } from "../types/calendar";
 import { useCurrentlyWatching } from "../hooks/api/useLists";
-import { useNextEpisodesBulk, useToggleEpisode } from "../hooks/api/useEpisodes";
+import {
+  useNextEpisodesBulk,
+  useToggleEpisode,
+} from "../hooks/api/useEpisodes";
 
 interface NextEpisode {
   finished: boolean;
@@ -260,7 +263,9 @@ export default function CurrentlyWatchingStrip() {
   const { data: bulkNextData } = useNextEpisodesBulk(open ? showIds : []);
   const nextEpisodes: Record<number, NextEpisode> = {};
   if (bulkNextData) {
-    for (const [k, v] of Object.entries(bulkNextData as Record<string, NextEpisode>)) {
+    for (const [k, v] of Object.entries(
+      bulkNextData as Record<string, NextEpisode>,
+    )) {
       nextEpisodes[Number(k)] = v;
     }
   }

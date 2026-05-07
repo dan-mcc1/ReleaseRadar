@@ -7,7 +7,9 @@ class Season(Base):
     __tablename__ = "season"
 
     id = Column(Integer, primary_key=True)  # TMDB season id
-    show_id = Column(Integer, ForeignKey("show.id", ondelete="CASCADE"), nullable=False, index=True)
+    show_id = Column(
+        Integer, ForeignKey("show.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     season_number = Column(Integer, nullable=False)
     name = Column(String)
     overview = Column(Text)

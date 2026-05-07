@@ -23,10 +23,14 @@ def send_recommendation(
         raise HTTPException(status_code=404, detail="User not found.")
 
     if recipient.id == sender_id:
-        raise HTTPException(status_code=400, detail="You cannot recommend something to yourself.")
+        raise HTTPException(
+            status_code=400, detail="You cannot recommend something to yourself."
+        )
 
     if not are_friends(db, sender_id, recipient.id):
-        raise HTTPException(status_code=403, detail="You can only recommend to friends.")
+        raise HTTPException(
+            status_code=403, detail="You can only recommend to friends."
+        )
 
     entry = Recommendation(
         sender_id=sender_id,
@@ -120,9 +124,7 @@ def delete_recommendation(db: Session, user_id: str, recommendation_id: int):
 def delete_old_recommendations(db: Session) -> int:
     cutoff = datetime.now(timezone.utc) - timedelta(days=_REC_TTL_DAYS)
     deleted = (
-        db.query(Recommendation)
-        .filter(Recommendation.created_at < cutoff)
-        .delete()
+        db.query(Recommendation).filter(Recommendation.created_at < cutoff).delete()
     )
     db.commit()
     return deleted

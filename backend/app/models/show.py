@@ -26,6 +26,19 @@ class Show(Base):
     air_timezone = Column(String, nullable=True)
     vote_average = Column(Float, nullable=True)
 
-    genres = relationship("Genre", secondary="show_genre", back_populates="shows", passive_deletes=True)
-    show_providers = relationship("ShowProvider", back_populates="show", cascade="all, delete-orphan", passive_deletes=True)
-    seasons = relationship("Season", back_populates="show", cascade="all, delete-orphan", passive_deletes=True, order_by="Season.season_number")
+    genres = relationship(
+        "Genre", secondary="show_genre", back_populates="shows", passive_deletes=True
+    )
+    show_providers = relationship(
+        "ShowProvider",
+        back_populates="show",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    seasons = relationship(
+        "Season",
+        back_populates="show",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="Season.season_number",
+    )

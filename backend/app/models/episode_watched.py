@@ -1,5 +1,14 @@
 # src/models/episode_watched.py
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Float, Index, UniqueConstraint
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    ForeignKey,
+    DateTime,
+    Float,
+    Index,
+    UniqueConstraint,
+)
 from sqlalchemy.sql import func
 from app.db.base import Base
 
@@ -17,7 +26,13 @@ class EpisodeWatched(Base):
     rating = Column(Float, nullable=True)
 
     __table_args__ = (
-        UniqueConstraint("user_id", "show_id", "season_number", "episode_number", name="uq_episode_watched_user_episode"),
+        UniqueConstraint(
+            "user_id",
+            "show_id",
+            "season_number",
+            "episode_number",
+            name="uq_episode_watched_user_episode",
+        ),
         Index("ix_episode_watched_user_show", "user_id", "show_id"),
         Index("ix_episode_watched_show", "show_id"),
     )

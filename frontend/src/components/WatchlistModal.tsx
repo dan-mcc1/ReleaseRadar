@@ -14,7 +14,10 @@ interface WatchlistModalProps {
   onClose: () => void;
 }
 
-export default function WatchlistModal({ isOpen, onClose }: WatchlistModalProps) {
+export default function WatchlistModal({
+  isOpen,
+  onClose,
+}: WatchlistModalProps) {
   if (!isOpen) return null;
 
   const user = useAuthUser();

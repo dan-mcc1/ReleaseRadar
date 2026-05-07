@@ -22,7 +22,12 @@ export default function Search() {
   }, [query]);
 
   const { data, isPending: loading } = useSearch(query);
-  const results = data ?? { movies: [], shows: [], people: [], collections: [] };
+  const results = data ?? {
+    movies: [],
+    shows: [],
+    people: [],
+    collections: [],
+  };
 
   const { movies, shows, people, collections } = results;
 

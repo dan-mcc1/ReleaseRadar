@@ -9,7 +9,10 @@ export default function ComingSoonSection() {
   nextMonth.setMonth(nextMonth.getMonth() + 1);
   const maxDate = nextMonth.toISOString().split("T")[0];
 
-  const { data: movies = [], isPending: loading } = useComingSoon(minDate, maxDate);
+  const { data: movies = [], isPending: loading } = useComingSoon(
+    minDate,
+    maxDate,
+  );
 
   if (loading)
     return (
@@ -24,11 +27,17 @@ export default function ComingSoonSection() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold text-white">Coming Soon</h2>
-        <Link to="/upcoming" className="text-sm text-primary-400 hover:text-primary-300 transition-colors">
+        <Link
+          to="/upcoming"
+          className="text-sm text-primary-400 hover:text-primary-300 transition-colors"
+        >
           See all →
         </Link>
       </div>
-      <MediaList results={{ movies: movies.slice(0, 6) }} showWatchButton={false} />
+      <MediaList
+        results={{ movies: movies.slice(0, 6) }}
+        showWatchButton={false}
+      />
     </div>
   );
 }

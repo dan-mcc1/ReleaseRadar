@@ -153,14 +153,10 @@ def get_profile_watchlist_preview(db: Session, user_id: str, limit: int = 5) -> 
     Returns lightweight objects (id, title/name, poster_path, added_at) only.
     """
     total_movies = (
-        db.query(Watchlist)
-        .filter_by(user_id=user_id, content_type="movie")
-        .count()
+        db.query(Watchlist).filter_by(user_id=user_id, content_type="movie").count()
     )
     total_shows = (
-        db.query(Watchlist)
-        .filter_by(user_id=user_id, content_type="tv")
-        .count()
+        db.query(Watchlist).filter_by(user_id=user_id, content_type="tv").count()
     )
     movies = (
         db.query(Movie.id, Movie.title, Movie.poster_path, Watchlist.added_at)
@@ -273,14 +269,10 @@ def get_profile_watched_preview(db: Session, user_id: str, limit: int = 5) -> di
     Returns lightweight objects (id, title/name, poster_path, watched_at) only.
     """
     total_movies = (
-        db.query(Watched)
-        .filter_by(user_id=user_id, content_type="movie")
-        .count()
+        db.query(Watched).filter_by(user_id=user_id, content_type="movie").count()
     )
     total_shows = (
-        db.query(Watched)
-        .filter_by(user_id=user_id, content_type="tv")
-        .count()
+        db.query(Watched).filter_by(user_id=user_id, content_type="tv").count()
     )
     movies = (
         db.query(Movie.id, Movie.title, Movie.poster_path, Watched.watched_at)

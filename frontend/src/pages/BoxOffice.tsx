@@ -51,7 +51,11 @@ export default function BoxOffice() {
   const month = Number(searchParams.get("month") ?? new Date().getMonth() + 1);
   const MOVIE_LIMIT = 10;
 
-  const { data: movies = [], isPending: loading, error } = useBoxOffice(mode, year, month, MOVIE_LIMIT);
+  const {
+    data: movies = [],
+    isPending: loading,
+    error,
+  } = useBoxOffice(mode, year, month, MOVIE_LIMIT);
 
   const subtitle =
     mode === "yearly"

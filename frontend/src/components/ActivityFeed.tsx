@@ -44,7 +44,12 @@ export default function ActivityFeed() {
         onClick={() => setOpen((o) => !o)}
         className="w-full flex items-center gap-2 px-4 sm:px-6 py-3 hover:bg-neutral-700/40 transition-colors"
       >
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5 text-primary-400 flex-shrink-0">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="currentColor"
+          className="w-3.5 h-3.5 text-primary-400 flex-shrink-0"
+        >
           <path d="M12 2a5 5 0 110 10A5 5 0 0112 2zm0 12c5.33 0 8 2.67 8 4v2H4v-2c0-1.33 2.67-4 8-4z" />
         </svg>
         <h2 className="text-sm font-semibold text-neutral-200 uppercase tracking-wider">
@@ -61,14 +66,21 @@ export default function ActivityFeed() {
           strokeWidth={2.5}
           className={`w-4 h-4 ml-auto text-neutral-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
         >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M19 9l-7 7-7-7"
+          />
         </svg>
       </button>
 
       {open && (
         <div className="px-4 sm:px-6 pb-4 pt-1 flex flex-col gap-2 max-h-72 overflow-y-auto">
           {items.map((item) => (
-            <div key={item.id} className="flex items-center gap-3 bg-neutral-900/60 border border-neutral-700 rounded-xl p-2.5">
+            <div
+              key={item.id}
+              className="flex items-center gap-3 bg-neutral-900/60 border border-neutral-700 rounded-xl p-2.5"
+            >
               {item.content_poster_path ? (
                 <img
                   src={`${BASE_IMAGE_URL}/w185${item.content_poster_path}`}
@@ -80,8 +92,10 @@ export default function ActivityFeed() {
               )}
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-neutral-300 leading-snug">
-                  <span className="font-semibold text-neutral-100">{item.username ?? "Someone"}</span>
-                  {" "}{activityLabel(item.activity_type)}{" "}
+                  <span className="font-semibold text-neutral-100">
+                    {item.username ?? "Someone"}
+                  </span>{" "}
+                  {activityLabel(item.activity_type)}{" "}
                   <Link
                     to={`/${item.content_type === "movie" ? "movie" : "tv"}/${item.content_id}`}
                     className="font-semibold text-primary-400 hover:underline"
@@ -89,7 +103,9 @@ export default function ActivityFeed() {
                     {item.content_title ?? "Unknown"}
                   </Link>
                 </p>
-                <p className="text-xs text-neutral-500 mt-0.5">{timeAgo(item.created_at)}</p>
+                <p className="text-xs text-neutral-500 mt-0.5">
+                  {timeAgo(item.created_at)}
+                </p>
               </div>
             </div>
           ))}

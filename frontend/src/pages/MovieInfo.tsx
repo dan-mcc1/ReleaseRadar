@@ -28,8 +28,20 @@ type FullMovieData = Movie & {
     poster_path: string | null;
     backdrop_path: string | null;
   } | null;
-  created_by: { id: number; credit_id: string; name: string; profile_path: string | null }[];
-  credits: { cast: { id: number; name: string; profile_path: string; character: string }[] };
+  created_by: {
+    id: number;
+    credit_id: string;
+    name: string;
+    profile_path: string | null;
+  }[];
+  credits: {
+    cast: {
+      id: number;
+      name: string;
+      profile_path: string;
+      character: string;
+    }[];
+  };
   external_ids: MediaExternalIds;
   recommendations: { results: Movie[] };
   videos: { results: MediaVideo[] };
@@ -38,13 +50,27 @@ type FullMovieData = Movie & {
 function formatRuntime(minutes: number) {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
-  return [h > 0 ? `${h}h` : null, m > 0 ? `${m}m` : null].filter(Boolean).join(" ");
+  return [h > 0 ? `${h}h` : null, m > 0 ? `${m}m` : null]
+    .filter(Boolean)
+    .join(" ");
 }
 
 export default function MovieInfo() {
   const { id } = useParams<{ id: string }>();
-  const { data: movie, loading, error, initialStatus, initialRating, statusReady, externalScores, aggRating } =
-    useMediaInfo<FullMovieData>({ contentType: "movie", id, fetchUrl: `/movies/${id}/info` });
+  const {
+    data: movie,
+    loading,
+    error,
+    initialStatus,
+    initialRating,
+    statusReady,
+    externalScores,
+    aggRating,
+  } = useMediaInfo<FullMovieData>({
+    contentType: "movie",
+    id,
+    fetchUrl: `/${id}/info`,
+  });
   const user = useAuthUser();
   usePageTitle(movie?.title);
 
@@ -61,11 +87,16 @@ export default function MovieInfo() {
   if (!movie) return <p className="text-neutral-400 p-6">Movie not found.</p>;
 
   const year = movie.release_date
-    ? formatLocalDate(movie.release_date, { year: "numeric", month: "long", day: "numeric" })
+    ? formatLocalDate(movie.release_date, {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
     : null;
   const trailer =
-    movie.videos?.results?.find((v) => v.type === "Trailer" && v.site === "YouTube") ??
-    movie.videos?.results?.find((v) => v.site === "YouTube");
+    movie.videos?.results?.find(
+      (v) => v.type === "Trailer" && v.site === "YouTube",
+    ) ?? movie.videos?.results?.find((v) => v.site === "YouTube");
 
   return (
     <div className="max-w-5xl mx-auto pb-16 w-full overflow-x-hidden">
@@ -120,7 +151,9 @@ export default function MovieInfo() {
         {/* Stat boxes */}
         <div className="flex flex-wrap gap-3">
           {year && <StatBox label="Release Date" value={year} />}
-          {movie.runtime > 0 && <StatBox label="Runtime" value={formatRuntime(movie.runtime)} />}
+          {movie.runtime > 0 && (
+            <StatBox label="Runtime" value={formatRuntime(movie.runtime)} />
+          )}
           <StatBox label="Status" value={movie.status} />
           {movie.budget > 0 && (
             <StatBox
@@ -145,7 +178,11 @@ export default function MovieInfo() {
         </div>
 
         {/* Ratings row */}
-        <RatingsRow voteAverage={movie.vote_average} externalScores={externalScores} aggRating={aggRating} />
+        <RatingsRow
+          voteAverage={movie.vote_average}
+          externalScores={externalScores}
+          aggRating={aggRating}
+        />
 
         {/* Directed by */}
         {movie.created_by && movie.created_by.length > 0 && (
@@ -160,7 +197,9 @@ export default function MovieInfo() {
         {/* Overview */}
         {movie.overview && (
           <div>
-            <h2 className="text-neutral-400 text-xs uppercase tracking-wider font-semibold mb-2">Overview</h2>
+            <h2 className="text-neutral-400 text-xs uppercase tracking-wider font-semibold mb-2">
+              Overview
+            </h2>
             <p className="text-neutral-300 leading-relaxed">{movie.overview}</p>
           </div>
         )}
@@ -175,7 +214,12 @@ export default function MovieInfo() {
               to={`/collection/${movie.belongs_to_collection.id}`}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-neutral-800 border border-neutral-700 hover:border-primary-600/50 hover:bg-neutral-700 transition-all duration-150 text-neutral-200 text-sm font-medium"
             >
-              <svg className="w-4 h-4 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg
+                className="w-4 h-4 text-primary-400"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -192,15 +236,23 @@ export default function MovieInfo() {
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
           {movie.release_date && (
             <div>
-              <div className="text-neutral-500 text-xs uppercase tracking-wide mb-0.5">Release Date</div>
+              <div className="text-neutral-500 text-xs uppercase tracking-wide mb-0.5">
+                Release Date
+              </div>
               <div className="text-neutral-200">
-                {formatLocalDate(movie.release_date, { year: "numeric", month: "long", day: "numeric" })}
+                {formatLocalDate(movie.release_date, {
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })}
               </div>
             </div>
           )}
           {movie.homepage && (
             <div>
-              <div className="text-neutral-500 text-xs uppercase tracking-wide mb-0.5">Homepage</div>
+              <div className="text-neutral-500 text-xs uppercase tracking-wide mb-0.5">
+                Homepage
+              </div>
               <a
                 href={movie.homepage}
                 target="_blank"
@@ -217,16 +269,23 @@ export default function MovieInfo() {
         {movie.providers && <WhereToWatch providers={movie.providers} />}
 
         {/* Cast */}
-        {movie.credits?.cast.length > 0 && <CastBar cast={movie.credits.cast} />}
+        {movie.credits?.cast.length > 0 && (
+          <CastBar cast={movie.credits.cast} />
+        )}
 
         {/* External links */}
-        {movie.external_ids && <ExternalLinksSection externalIds={movie.external_ids} />}
+        {movie.external_ids && (
+          <ExternalLinksSection externalIds={movie.external_ids} />
+        )}
 
         {/* Reviews */}
         <ReviewsSection contentType="movie" contentId={movie.id} user={user} />
 
         {/* Recommendations */}
-        <RecommendationsGrid items={movie.recommendations?.results ?? []} linkPrefix="/movie" />
+        <RecommendationsGrid
+          items={movie.recommendations?.results ?? []}
+          linkPrefix="/movie"
+        />
       </div>
     </div>
   );
