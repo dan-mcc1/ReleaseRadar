@@ -484,7 +484,7 @@ export default function Watchlist() {
                     }
                     onClick={() =>
                       navigate(
-                        `/${item._contentType === "movie" ? "movies" : "shows"}/${item.id}`,
+                        `/${item._contentType === "movie" ? "movie" : "tv"}/${item.id}`,
                       )
                     }
                   />
@@ -560,7 +560,7 @@ export default function Watchlist() {
                   }
                   onClick={() =>
                     navigate(
-                      `/${item._contentType === "movie" ? "movies" : "shows"}/${item.id}`,
+                      `/${item._contentType === "movie" ? "movie" : "tv"}/${item.id}`,
                     )
                   }
                 />
