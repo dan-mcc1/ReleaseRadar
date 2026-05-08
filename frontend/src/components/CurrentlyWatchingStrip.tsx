@@ -270,21 +270,21 @@ export default function CurrentlyWatchingStrip() {
     }
   }
 
-  if (total === 0) return null;
-
   return (
     <div className="flex flex-col border-b border-neutral-700 bg-neutral-800/60 max-w-7xl mx-auto">
       <button
         onClick={() => setOpen((o) => !o)}
         className="w-full flex items-center gap-2 px-4 sm:px-6 py-3 hover:bg-neutral-700/40 transition-colors"
       >
-        <span className="flex items-center justify-center w-2 h-2 rounded-full bg-highlight-400 animate-pulse flex-shrink-0" />
+        <span className={`flex items-center justify-center w-2 h-2 rounded-full flex-shrink-0 ${total > 0 ? "bg-highlight-400 animate-pulse" : "bg-neutral-600"}`} />
         <h2 className="text-sm font-semibold text-neutral-200 uppercase tracking-wider">
           Currently Watching
         </h2>
-        <span className="text-xs text-neutral-500 font-normal normal-case tracking-normal">
-          — {total} title{total !== 1 ? "s" : ""}
-        </span>
+        {total > 0 && (
+          <span className="text-xs text-neutral-500 font-normal normal-case tracking-normal">
+            — {total} title{total !== 1 ? "s" : ""}
+          </span>
+        )}
         <svg
           xmlns="http://www.w3.org/2000/svg"
           viewBox="0 0 24 24"
@@ -301,7 +301,21 @@ export default function CurrentlyWatchingStrip() {
         </svg>
       </button>
 
-      {open && (
+      {open && total === 0 && (
+        <div className="px-4 sm:px-6 pb-4 pt-1">
+          <div className="flex items-center gap-3 py-3 px-4 rounded-xl bg-neutral-700/30 border border-neutral-700/50">
+            <span className="text-2xl">🎬</span>
+            <div>
+              <p className="text-sm font-medium text-neutral-300">Nothing here yet</p>
+              <p className="text-xs text-neutral-500 mt-0.5">
+                Search for a show or movie and mark it as Currently Watching to see it here.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {open && total > 0 && (
         <div className="px-4 sm:px-6 pb-4 pt-1">
           <div className="flex gap-4 overflow-x-auto pb-2">
             {shows.map((show) => (

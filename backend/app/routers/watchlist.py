@@ -7,6 +7,7 @@ from fastapi import (
     Request,
     Query,
 )
+from pydantic import BaseModel
 from sqlalchemy import tuple_, union_all, select, literal, null, Float
 from sqlalchemy.orm import Session
 from app.db.session import get_db
@@ -22,9 +23,14 @@ from app.services.watchlist_service import (
 from app.models.watchlist import Watchlist
 from app.models.watched import Watched
 from app.models.currently_watching import CurrentlyWatching
+from app.models.user import User
+from app.models.show import Show
+from app.models.movie import Movie
 from app.dependencies.auth import get_current_user
+from app.dependencies.subscription import feature_gate
 from app.core.limiter import limiter
 from app.services.episode_service import sync_show_episodes_background
+from app.services.binge_planner_service import get_binge_plan, get_binge_plans_bulk
 
 router = APIRouter()
 
@@ -34,6 +40,7 @@ def add_item(
     background_tasks: BackgroundTasks,
     content_type: str = Body(...),
     content_id: int = Body(...),
+    notify: bool = Body(True),
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
@@ -41,7 +48,27 @@ def add_item(
         raise HTTPException(
             status_code=400, detail="content_type must be 'movie' or 'tv'"
         )
-    result = add_to_watchlist(db, uid, content_type, content_id)
+
+    # with_for_update() acquires a row-level lock on the user row so concurrent
+    # add requests for the same user serialize here instead of racing past the limit.
+    user = db.query(User).filter(User.id == uid).with_for_update().first()
+    if not user or user.subscription_tier == "free":
+        tracked = (
+            db.query(Watchlist).filter(Watchlist.user_id == uid).count()
+            + db.query(CurrentlyWatching).filter(CurrentlyWatching.user_id == uid).count()
+        )
+        if tracked >= 30:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "error": "tracking_limit_reached",
+                    "message": "Free accounts can track up to 30 titles.",
+                    "limit": 30,
+                    "current": tracked,
+                },
+            )
+
+    result = add_to_watchlist(db, uid, content_type, content_id, notify=notify)
     if content_type == "tv":
         background_tasks.add_task(sync_show_episodes_background, content_id)
     return result
@@ -189,3 +216,103 @@ def watchlist_tv_status(
     id: int, db: Session = Depends(get_db), uid: str = Depends(get_current_user)
 ):
     return get_watchlist_status(id, db, uid, "tv")
+
+
+@router.get("/notify-prefs")
+def get_notify_prefs(
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    """Return all watchlist items with their notify flag and display name (3 queries total)."""
+    rows = db.query(Watchlist).filter_by(user_id=uid).all()
+    if not rows:
+        return []
+
+    tv_ids = [r.content_id for r in rows if r.content_type == "tv"]
+    movie_ids = [r.content_id for r in rows if r.content_type == "movie"]
+
+    show_names = {}
+    if tv_ids:
+        for sid, name in db.query(Show.id, Show.name).filter(Show.id.in_(tv_ids)).all():
+            show_names[sid] = name
+
+    movie_names = {}
+    if movie_ids:
+        for mid, title in db.query(Movie.id, Movie.title).filter(Movie.id.in_(movie_ids)).all():
+            movie_names[mid] = title
+
+    return [
+        {
+            "content_type": r.content_type,
+            "content_id": r.content_id,
+            "name": (show_names if r.content_type == "tv" else movie_names).get(
+                r.content_id, f"{'Show' if r.content_type == 'tv' else 'Movie'} #{r.content_id}"
+            ),
+            "notify": r.notify,
+        }
+        for r in rows
+    ]
+
+
+class NotifyPrefUpdate(BaseModel):
+    content_type: str
+    content_id: int
+    notify: bool
+
+
+class NotifyAllUpdate(BaseModel):
+    notify: bool
+    content_type: str | None = None  # optional filter: "movie" or "tv"
+
+
+@router.patch("/notify-all")
+def update_notify_all(
+    body: NotifyAllUpdate,
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    q = db.query(Watchlist).filter_by(user_id=uid)
+    if body.content_type:
+        q = q.filter_by(content_type=body.content_type)
+    q.update({"notify": body.notify}, synchronize_session=False)
+    db.commit()
+    return {"updated": True, "notify": body.notify}
+
+
+@router.patch("/notify")
+def update_notify_pref(
+    body: NotifyPrefUpdate,
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    item = (
+        db.query(Watchlist)
+        .filter_by(user_id=uid, content_type=body.content_type, content_id=body.content_id)
+        .first()
+    )
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not in watchlist")
+    item.notify = body.notify
+    db.commit()
+    return {"content_type": item.content_type, "content_id": item.content_id, "notify": item.notify}
+
+
+@router.get("/binge/{show_id}")
+def binge_plan(
+    show_id: int,
+    db: Session = Depends(get_db),
+    uid: str = Depends(feature_gate("binge_planner")),
+):
+    """Return remaining runtime + pace estimate for a single show."""
+    return get_binge_plan(db, uid, show_id)
+
+
+@router.get("/binge-bulk")
+def binge_plan_bulk(
+    show_ids: str,
+    db: Session = Depends(get_db),
+    uid: str = Depends(feature_gate("binge_planner")),
+):
+    """Comma-separated show_ids — returns binge plan for each."""
+    ids = [int(x) for x in show_ids.split(",") if x.strip().isdigit()][:50]
+    return get_binge_plans_bulk(db, uid, ids)

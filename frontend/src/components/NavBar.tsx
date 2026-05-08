@@ -18,6 +18,7 @@ import { API_URL, BASE_IMAGE_URL, getAvatarColor } from "../constants";
 import { apiFetch } from "../utils/apiFetch";
 import { useNavCounts, useNavAvatar } from "../hooks/api/useNavCounts";
 import { queryKeys } from "../hooks/api/queryKeys";
+import { useUserMe } from "../hooks/api/useUser";
 
 interface SearchResult {
   id: number;
@@ -33,6 +34,7 @@ const discoverLinks = [
   { name: "Upcoming", href: "/upcoming" },
   { name: "Browse", href: "/browse-genres" },
   { name: "Box Office", href: "/box-office" },
+  { name: "News", href: "/news" },
 ];
 
 function classNames(...classes: string[]) {
@@ -137,8 +139,10 @@ export default function NavBar() {
 
   const { data: navCounts } = useNavCounts();
   const { data: avatarKey } = useNavAvatar();
+  const { data: userMe } = useUserMe();
   const pendingRequests = navCounts?.pendingRequests ?? 0;
   const unreadRecs = navCounts?.unreadRecs ?? 0;
+  const showUpgradeCta = user && userMe?.subscription_tier === "free";
 
   function cancelPendingDropdown() {
     if (dropdownTimerRef.current) clearTimeout(dropdownTimerRef.current);
@@ -316,6 +320,8 @@ export default function NavBar() {
   const libraryLinks = [
     { name: "Watchlist", href: "/watchlist" },
     { name: "Watched", href: "/watched" },
+    { name: "Shelves", href: "/shelves" },
+    { name: "Stats", href: "/stats" },
     { name: "For You", href: "/for-you" },
     { name: "Activity", href: "/activity" },
   ];
@@ -409,6 +415,17 @@ export default function NavBar() {
 
           {/* Right side: search + avatar/sign in */}
           <div className="absolute inset-y-0 right-0 flex items-center pr-2 lg:static lg:inset-auto lg:ml-6 lg:pr-0 space-x-2">
+            {showUpgradeCta && (
+              <Link
+                to="/pricing"
+                className="hidden lg:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30 hover:bg-amber-500/25 transition-colors"
+              >
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M2.5 7.5L5 14h14l2.5-6.5L17 10l-5-6-5 6-4.5-2.5zm2.5 8h14v2H5v-2z" />
+                </svg>
+                Upgrade
+              </Link>
+            )}
             <div ref={searchContainerRef} className="relative hidden lg:block">
               <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-400 pointer-events-none z-10">
                 <svg
@@ -569,6 +586,32 @@ export default function NavBar() {
                       Settings
                     </a>
                   </MenuItem>
+                  <MenuItem>
+                    <a
+                      href="/billing"
+                      className="flex items-center justify-between px-4 py-2 text-sm text-neutral-300 data-focus:bg-white/5 data-focus:outline-hidden"
+                    >
+                      Subscription
+                      {userMe?.subscription_tier === "premium" && (
+                        <span className="text-[9px] font-bold uppercase tracking-wider bg-amber-400/15 text-amber-400 border border-amber-400/30 rounded-full px-1.5 py-0.5">
+                          Premium
+                        </span>
+                      )}
+                    </a>
+                  </MenuItem>
+                  {userMe?.subscription_tier === "admin" && (
+                    <MenuItem>
+                      <a
+                        href="/admin"
+                        className="flex items-center gap-2 px-4 py-2 text-sm text-red-400 data-focus:bg-white/5 data-focus:outline-hidden"
+                      >
+                        Admin
+                        <span className="text-[9px] font-bold uppercase tracking-wider bg-red-500/15 text-red-400 border border-red-500/30 rounded-full px-1.5 py-0.5">
+                          Admin
+                        </span>
+                      </a>
+                    </MenuItem>
+                  )}
                   <MenuItem>
                     <button
                       onClick={async () => {

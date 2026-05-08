@@ -27,7 +27,9 @@ from app.models.friendship import Friendship
 from app.services.user_service import get_profile_watchlist, get_profile_watched
 from app.services.favorite_service import get_favorites
 from app.services.stats_service import get_user_stats
+from app.services.watch_time_service import get_watch_time_stats
 from app.dependencies.auth import get_current_user
+from app.dependencies.subscription import feature_gate
 from app.models.user import User
 from app.models.watchlist import Watchlist
 from app.models.watched import Watched
@@ -171,6 +173,16 @@ def get_stats_route(
     return get_user_stats(db, uid)
 
 
+@router.get("/watch-time-stats")
+def get_watch_time_stats_route(
+    year: int | None = Query(None),
+    db: Session = Depends(get_db),
+    uid: str = Depends(feature_gate("watch_time_stats")),
+):
+    """Return watch-time breakdown for Annual Wrapped / stats page."""
+    return get_watch_time_stats(db, uid, year=year)
+
+
 @router.get("/profile-summary")
 def get_profile_summary(
     db: Session = Depends(get_db),
@@ -189,6 +201,7 @@ def get_profile_summary(
             "bio": user.bio,
             "profile_visibility": user.profile_visibility,
             "created_at": user.created_at,
+            "subscription_tier": user.subscription_tier,
         },
         "favorites": get_favorites(db, uid),
         "watchlist": get_profile_watchlist_preview(db, uid),
@@ -304,6 +317,34 @@ def get_public_profile(
         profile["friends"] = get_friends(db, target.id)
 
     return profile
+
+
+@router.post("/complete-onboarding")
+def complete_onboarding_route(
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    user = db.query(User).filter_by(id=uid).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.onboarding_completed = True
+    db.commit()
+    return {"onboarding_completed": True}
+
+
+@router.post("/subscription/cancel")
+def cancel_subscription(
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    user = db.query(User).filter(User.id == uid).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.subscription_tier == "admin":
+        raise HTTPException(status_code=403, detail="Admin accounts cannot be modified this way")
+    user.subscription_tier = "free"
+    db.commit()
+    return {"subscription_tier": "free"}
 
 
 @router.delete("/account")

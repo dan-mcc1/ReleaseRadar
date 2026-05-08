@@ -10,3 +10,5 @@ resend
 slowapi
 pydantic[email]
 cachetools
+stripe
+python-multipart

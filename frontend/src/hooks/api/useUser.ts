@@ -12,6 +12,8 @@ interface DBUser {
   bio: string | null;
   profile_visibility: string;
   created_at: string;
+  subscription_tier: string;
+  onboarding_completed: boolean;
 }
 
 export function useUserMe() {
@@ -28,6 +30,32 @@ export function useUserStats() {
   return useQuery({
     queryKey: queryKeys.userStats(user?.uid ?? ""),
     queryFn: () => queryFetch("/user/stats"),
+    enabled: !!user,
+  });
+}
+
+export interface WatchTimeStats {
+  year: number | null;
+  available_years: number[];
+  total_minutes: number;
+  movie_minutes: number;
+  episode_minutes: number;
+  movies_count: number;
+  episodes_count: number;
+  top_genres: { name: string; minutes: number }[];
+  top_platforms: { name: string; logo_path: string | null; minutes: number }[];
+  longest_binge: { date: string | null; minutes: number };
+  humor_fact: string | null;
+}
+
+export function useWatchTimeStats(year: number | null) {
+  const user = useAuthUser();
+  return useQuery({
+    queryKey: queryKeys.watchTimeStats(user?.uid ?? "", year),
+    queryFn: () =>
+      queryFetch<WatchTimeStats>(
+        `/user/watch-time-stats${year ? `?year=${year}` : ""}`,
+      ),
     enabled: !!user,
   });
 }
@@ -171,5 +199,16 @@ export function useUpdateAvatar() {
 export function useDeleteAccount() {
   return useMutation({
     mutationFn: () => apiFetch("/user/account", { method: "DELETE" }),
+  });
+}
+
+export function useCancelSubscription() {
+  const user = useAuthUser();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiFetch("/user/subscription/cancel", { method: "POST" }),
+    onSuccess: () => {
+      if (user) queryClient.invalidateQueries({ queryKey: queryKeys.userMe(user.uid) });
+    },
   });
 }

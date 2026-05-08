@@ -43,6 +43,7 @@ def get_full_show_info(id: int):
             "recommendations",
             "images",
             "videos",
+            "content_ratings",
         ]
     )
     show_data = fetch_show_from_tmdb(id, append)

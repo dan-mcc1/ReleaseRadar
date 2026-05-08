@@ -392,7 +392,7 @@ def _is_on_other_list(
     )
 
 
-def add_to_watchlist(db: Session, user_id: str, content_type: str, content_id: int):
+def add_to_watchlist(db: Session, user_id: str, content_type: str, content_id: int, notify: bool = True):
     """
     Add a movie or show to the user's watchlist.
     """
@@ -416,6 +416,7 @@ def add_to_watchlist(db: Session, user_id: str, content_type: str, content_id: i
         content_id=content_id,
         added_at=datetime.utcnow(),
         sort_key=max_sort_key + 1000,
+        notify=notify,
     )
     db.add(entry)
 

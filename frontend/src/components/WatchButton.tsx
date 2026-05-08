@@ -6,6 +6,9 @@ import {
   useUpdateWatchStatus,
   useRateItem,
 } from "../hooks/api/useWatchActions";
+import { TrackingLimitError, useSubscription } from "../hooks/api/useSubscription";
+import { isPremiumFeature } from "../config/features";
+import ProUpgradeModal from "./ProUpgradeModal";
 
 export type WatchStatus =
   | "none"
@@ -126,7 +129,10 @@ export default function WatchButton({
   compact = false,
 }: WatchButtonProps) {
   const user = useAuthUser();
+  const { isPremium } = useSubscription();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [showNotifyPrompt, setShowNotifyPrompt] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const statusQuery = useWatchStatus(contentType, contentId, {
@@ -158,24 +164,39 @@ export default function WatchButton({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  async function handleStatusChange(targetStatus: WatchStatus) {
+  async function handleStatusChange(targetStatus: WatchStatus, notify?: boolean) {
     if (!user) {
       alert("You must be signed in.");
       return;
     }
     if (watchStatus === targetStatus) return;
+
+    // Show notification prompt — gated by features config
+    if ((!isPremiumFeature("watchlistNotifyPrompt") || isPremium) && targetStatus === "Want To Watch" && watchStatus === "none" && notify === undefined) {
+      setShowNotifyPrompt(true);
+      return;
+    }
+
     try {
       await updateMutation.mutateAsync({
         contentType,
         contentId,
         currentStatus: watchStatus,
         targetStatus,
+        notify,
       });
       onStatusChange?.(targetStatus);
       setMenuOpen(false);
+      setShowNotifyPrompt(false);
     } catch (err) {
-      console.error(err);
-      alert("Failed to update status");
+      if (err instanceof TrackingLimitError) {
+        setMenuOpen(false);
+        setShowNotifyPrompt(false);
+        setShowUpgradeModal(true);
+      } else {
+        console.error(err);
+        alert("Failed to update status");
+      }
     }
   }
 
@@ -343,6 +364,36 @@ export default function WatchButton({
             )}
           </div>
         )}
+
+        {/* Notification prompt — floats below the button, no layout shift */}
+        {showNotifyPrompt && (
+          <div className="absolute top-full mt-2 right-0 sm:right-auto sm:left-0 z-30 bg-neutral-800 border border-neutral-700 rounded-xl p-3 shadow-2xl shadow-black/60 w-64">
+            <p className="text-xs font-semibold text-white mb-0.5">
+              Get notified?
+            </p>
+            <p className="text-xs text-neutral-400 mb-3">
+              {contentType === "tv"
+                ? "Receive updates when new episodes air."
+                : "Receive a reminder when this releases."}
+            </p>
+            <div className="flex gap-2">
+              <button
+                disabled={saving}
+                onClick={() => handleStatusChange("Want To Watch", true)}
+                className="flex-1 py-1.5 rounded-lg bg-primary-600 hover:bg-primary-500 text-white text-xs font-semibold transition-colors disabled:opacity-50"
+              >
+                Yes, notify me
+              </button>
+              <button
+                disabled={saving}
+                onClick={() => handleStatusChange("Want To Watch", false)}
+                className="flex-1 py-1.5 rounded-lg bg-neutral-700 hover:bg-neutral-600 text-neutral-300 text-xs font-semibold transition-colors disabled:opacity-50"
+              >
+                No thanks
+              </button>
+            </div>
+          </div>
+        )}
       </div>
       {watchStatus === "Watched" && (
         <div className={compact ? "hidden sm:block" : undefined}>
@@ -352,6 +403,12 @@ export default function WatchButton({
             saving={ratingSaving}
           />
         </div>
+      )}
+      {showUpgradeModal && (
+        <ProUpgradeModal
+          onClose={() => setShowUpgradeModal(false)}
+          feature="tracking_limit"
+        />
       )}
     </div>
   );

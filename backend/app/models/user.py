@@ -22,3 +22,7 @@ class User(Base):
     )
     avatar_key = Column(String, nullable=True)
     bio = Column(String, nullable=True)
+    subscription_tier = Column(String, default="free", server_default="free", nullable=False)
+    notify_new_seasons = Column(Boolean, default=True, server_default="true", nullable=False)
+    notify_streaming_changes = Column(Boolean, default=True, server_default="true", nullable=False)
+    onboarding_completed = Column(Boolean, default=False, server_default="false", nullable=False)

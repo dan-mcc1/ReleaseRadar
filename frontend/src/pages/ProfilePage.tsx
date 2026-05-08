@@ -9,6 +9,7 @@ import StatsSection from "../components/StatsSection";
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useProfileSummary } from "../hooks/api/useUser";
 import { useWatchlist, useWatched } from "../hooks/api/useLists";
+import { useShelves } from "../hooks/api/useShelves";
 import { useSendFriendRequest } from "../hooks/api/useFriends";
 
 type FriendsTab = "friends" | "requests" | "followers" | "add";
@@ -77,6 +78,7 @@ export default function ProfilePage() {
   // Collapsible sections
   const [watchlistOpen, setWatchlistOpen] = useState(false);
   const [watchedOpen, setWatchedOpen] = useState(false);
+  const [shelvesOpen, setShelvesOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
 
   // Friends tab
@@ -87,6 +89,7 @@ export default function ProfilePage() {
     useWatchlist(watchlistOpen);
   const { data: watchedFull, isLoading: watchedLoading } =
     useWatched(watchedOpen);
+  const { data: shelves = [] } = useShelves();
 
   const typedDbUser = summary?.user;
   const favorites = summary?.favorites ?? { movies: [], shows: [] };
@@ -156,13 +159,26 @@ export default function ProfilePage() {
             <h1 className="text-2xl sm:text-3xl font-bold text-white">
               {user.displayName ?? "User"}
             </h1>
-            <div className="mt-1 flex items-center gap-2 justify-center sm:justify-start">
+            <div className="mt-1 flex items-center gap-2 justify-center sm:justify-start flex-wrap">
               {typedDbUser?.username ? (
                 <span className="text-neutral-300 text-sm">
                   @{typedDbUser.username}
                 </span>
               ) : (
                 <span className="text-amber-400 text-sm">No username set</span>
+              )}
+              {typedDbUser?.subscription_tier === "premium" && (
+                <Link
+                  to="/billing"
+                  className="text-[10px] font-bold uppercase tracking-wider bg-amber-400/20 text-amber-400 border border-amber-400/30 rounded-full px-2 py-0.5 hover:bg-amber-400/30 transition-colors"
+                >
+                  Premium
+                </Link>
+              )}
+              {typedDbUser?.subscription_tier === "admin" && (
+                <span className="text-[10px] font-bold uppercase tracking-wider bg-purple-400/20 text-purple-400 border border-purple-400/30 rounded-full px-2 py-0.5">
+                  Admin
+                </span>
               )}
             </div>
             <p className="text-neutral-400 text-sm mt-1">{user.email}</p>
@@ -181,6 +197,7 @@ export default function ProfilePage() {
             { label: "Watched", value: totalWatched },
             { label: "Watchlist", value: totalWatchlist },
             { label: "Favorites", value: totalFavorites },
+            { label: "Shelves", value: shelves.length },
             { label: "Friends", value: friends.length },
           ].map(({ label, value }) => (
             <div key={label} className="flex-1 py-3 text-center">
@@ -458,6 +475,53 @@ export default function ProfilePage() {
               )}
             </div>
           </div>
+
+          {/* Shelves */}
+          {shelves.length > 0 && (
+            <div className="bg-neutral-800 rounded-xl overflow-hidden">
+              <button
+                onClick={() => setShelvesOpen((o) => !o)}
+                className="w-full flex items-center justify-between px-4 py-3.5 text-left hover:bg-neutral-700/50 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-base font-semibold text-white">Shelves</span>
+                  <span className="text-xs text-neutral-400 bg-neutral-700 px-1.5 py-0.5 rounded-full">
+                    {shelves.length}
+                  </span>
+                </div>
+                <svg
+                  className={`w-4 h-4 text-neutral-400 transition-transform duration-200 ${shelvesOpen ? "rotate-180" : ""}`}
+                  fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {shelvesOpen && (
+                <div className="px-4 pb-4 border-t border-neutral-700 space-y-1 pt-3">
+                  {shelves.map((shelf) => (
+                    <Link
+                      key={shelf.id}
+                      to={`/shelves/${shelf.id}`}
+                      className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-neutral-700 transition-colors group"
+                    >
+                      <span className="text-sm font-medium text-neutral-200 group-hover:text-white transition-colors truncate">
+                        {shelf.name}
+                      </span>
+                      <span className="text-xs text-neutral-500 ml-2 shrink-0">
+                        {shelf.item_count} {shelf.item_count === 1 ? "item" : "items"}
+                      </span>
+                    </Link>
+                  ))}
+                  <Link
+                    to="/shelves"
+                    className="text-sky-400 hover:text-sky-300 text-sm mt-2 inline-block"
+                  >
+                    Manage shelves →
+                  </Link>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Stats */}
           <div className="bg-neutral-800 rounded-xl overflow-hidden">

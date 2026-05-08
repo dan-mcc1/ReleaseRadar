@@ -1,7 +1,10 @@
 import { useState, useMemo, useRef } from "react";
+import { isPremiumFeature } from "../../config/features";
 import "react-datepicker/dist/react-datepicker.css";
 import CalendarSyncModal from "../CalendarSyncModal";
+import ProUpgradeModal from "../ProUpgradeModal";
 import { useAuthUser } from "../../hooks/useAuthUser";
+import { useUserMe } from "../../hooks/api/useUser";
 import { useCalendarData } from "../../hooks/useCalendarData";
 import CalendarHeader from "./CalendarHeader";
 import CalendarControls, { ViewMode } from "./CalendarControls";
@@ -34,7 +37,9 @@ const monthNames = [
 
 export default function CalendarView() {
   const user = useAuthUser();
+  const { data: userMe } = useUserMe();
   const { shows, movies, isLoading, maybePrefetch } = useCalendarData();
+  const isPremium = userMe?.subscription_tier === "premium" || userMe?.subscription_tier === "admin";
 
   const today = new Date();
   const episodeListRef = useRef<HTMLDivElement>(null);
@@ -52,6 +57,7 @@ export default function CalendarView() {
   >("all");
   const [showWatchlist, setShowWatchlist] = useState(false);
   const [showSyncModal, setShowSyncModal] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   // Derivation chain — all useMemo
   const allItems = useMemo(
@@ -199,7 +205,7 @@ export default function CalendarView() {
         onPrev={handlePrev}
         onNext={handleNext}
         user={user}
-        onSyncCalendar={() => setShowSyncModal(true)}
+        onSyncCalendar={() => (!isPremiumFeature("icalSync") || isPremium) ? setShowSyncModal(true) : setShowUpgradeModal(true)}
         showWatchlist={showWatchlist}
         onOpenWatchlist={() => setShowWatchlist(true)}
         onCloseWatchlist={() => setShowWatchlist(false)}
@@ -275,6 +281,12 @@ export default function CalendarView() {
         isOpen={showSyncModal}
         onClose={() => setShowSyncModal(false)}
       />
+      {showUpgradeModal && (
+        <ProUpgradeModal
+          feature="general"
+          onClose={() => setShowUpgradeModal(false)}
+        />
+      )}
     </div>
   );
 }

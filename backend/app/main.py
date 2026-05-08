@@ -29,7 +29,13 @@ from app.routers import (
     box_office,
     collections,
     calendar,
+    shelf,
+    admin,
+    billing,
     dev,
+    news,
+    rewatch,
+    import_router,
 )
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -46,6 +52,7 @@ from app.services.episode_service import (
     refresh_episodes_for_active_shows,
     check_and_reactivate_watched_shows,
 )
+from app.services.streaming_notification_service import refresh_streaming_providers
 
 
 async def _activity_cleanup_loop():
@@ -144,6 +151,28 @@ async def _episode_update_loop():
             db.close()
 
 
+async def _streaming_refresh_loop():
+    """Refresh streaming providers and notify users of changes once a day at 5am."""
+    eastern = ZoneInfo("America/New_York")
+    while True:
+        try:
+            now = datetime.now(eastern)
+            next_run = now.replace(hour=11, minute=0, second=0, microsecond=0)
+            if now >= next_run:
+                next_run += timedelta(days=1)
+            await asyncio.sleep((next_run - now).total_seconds())
+            print("[streaming] Starting provider refresh...")
+            db = SessionLocal()
+            try:
+                await asyncio.to_thread(refresh_streaming_providers, db)
+                print("[streaming] Done")
+            finally:
+                db.close()
+        except Exception as e:
+            print(f"[streaming] Loop error: {e}")
+            await asyncio.sleep(60)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Import all models so SQLAlchemy Base.metadata is populated before create_all
@@ -160,15 +189,21 @@ async def lifespan(app: FastAPI):
     import app.models.episode  # noqa: F401
     import app.models.activity  # noqa: F401
     import app.models.review  # noqa: F401
+    import app.models.shelf  # noqa: F401
+    import app.models.shelf_item  # noqa: F401
+    import app.models.subscription  # noqa: F401
+    import app.models.rewatch  # noqa: F401
 
     Base.metadata.create_all(engine)
     task = asyncio.create_task(_activity_cleanup_loop())
     digest_task = asyncio.create_task(_daily_digest_loop())
     vote_task = asyncio.create_task(_episode_update_loop())
+    streaming_task = asyncio.create_task(_streaming_refresh_loop())
     yield
     task.cancel()
     digest_task.cancel()
     vote_task.cancel()
+    streaming_task.cancel()
 
 
 app = FastAPI(title="ReleaseRadar API", lifespan=lifespan, redirect_slashes=True)
@@ -231,5 +266,11 @@ app.include_router(reviews.router, prefix="/reviews", tags=["reviews"])
 app.include_router(box_office.router, prefix="/box-office", tags=["box-office"])
 app.include_router(collections.router, prefix="/collections", tags=["collections"])
 app.include_router(calendar.router, prefix="/calendar", tags=["calendar"])
+app.include_router(shelf.router, prefix="/shelf", tags=["shelf"])
+app.include_router(admin.router, prefix="/admin", tags=["admin"])
+app.include_router(billing.router, prefix="/billing", tags=["billing"])
+app.include_router(news.router, prefix="/news", tags=["news"])
+app.include_router(rewatch.router, prefix="/rewatch", tags=["rewatch"])
+app.include_router(import_router.router, prefix="/import", tags=["import"])
 if settings.ENVIRONMENT != "production":
     app.include_router(dev.router, prefix="/dev", tags=["dev"])

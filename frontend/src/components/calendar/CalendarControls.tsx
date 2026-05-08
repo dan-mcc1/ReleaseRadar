@@ -20,6 +20,7 @@ interface Props {
   showWatchlist: boolean;
   onOpenWatchlist: () => void;
   onCloseWatchlist: () => void;
+  showActions?: boolean;
 }
 
 export default function CalendarControls({
@@ -37,6 +38,7 @@ export default function CalendarControls({
   showWatchlist,
   onOpenWatchlist,
   onCloseWatchlist,
+  showActions = true,
 }: Props) {
   const [showFilters, setShowFilters] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
@@ -219,7 +221,7 @@ export default function CalendarControls({
 
         {/* RIGHT: Sync + Watchlist */}
         <div className="ml-auto flex items-center gap-2">
-          {user && (
+          {showActions && user && (
             <button
               onClick={onSyncCalendar}
               title="Sync with Google Calendar, Outlook, or Apple Calendar"
@@ -241,7 +243,7 @@ export default function CalendarControls({
               Sync
             </button>
           )}
-          {user && (
+          {showActions && user && (
             <>
               <button
                 onClick={onOpenWatchlist}

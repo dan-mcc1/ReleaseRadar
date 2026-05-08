@@ -1,6 +1,15 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { BASE_IMAGE_URL } from "../constants";
+import type { BingePlan } from "../hooks/api/useBingePlan";
+
+function fmtMins(mins: number): string {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h === 0) return `${m}m`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
+}
 
 interface WatchlistOrderRowProps {
   dndId: string;
@@ -12,6 +21,7 @@ interface WatchlistOrderRowProps {
   voteAverage?: number;
   userRating?: number | null;
   genres?: { id: number; name: string }[];
+  bingePlan?: BingePlan | null;
   isFirst: boolean;
   isLast: boolean;
   isDragDisabled?: boolean;
@@ -32,6 +42,7 @@ export default function WatchlistOrderRow({
   voteAverage,
   userRating,
   genres,
+  bingePlan,
   isFirst,
   isLast,
   isDragDisabled = false,
@@ -197,6 +208,20 @@ export default function WatchlistOrderRow({
               </span>
             ))}
         </div>
+        {bingePlan && bingePlan.remaining_episodes > 0 && (
+          <div className="flex items-center gap-2 mt-1">
+            <svg className="w-3 h-3 text-primary-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+              <circle cx="12" cy="12" r="10" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2" />
+            </svg>
+            <span className="text-xs text-neutral-400">
+              {fmtMins(bingePlan.remaining_minutes)} left
+              {bingePlan.completion_estimate && (
+                <span className="text-primary-400"> · {bingePlan.completion_estimate}</span>
+              )}
+            </span>
+          </div>
+        )}
+
         {userRating != null && (
           <div className="flex items-center gap-0.5">
             {[1, 2, 3, 4, 5].map((s) => (

@@ -8,8 +8,12 @@ export default function CalendarPage() {
   usePageTitle();
   return (
     <div>
-      <CurrentlyWatchingStrip />
-      <CalendarView />
+      <div data-tour="currently-watching">
+        <CurrentlyWatchingStrip />
+      </div>
+      <div data-tour="calendar-view">
+        <CalendarView />
+      </div>
       <ForYouPreview />
     </div>
   );

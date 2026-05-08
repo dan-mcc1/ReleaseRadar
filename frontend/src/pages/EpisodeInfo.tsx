@@ -1,10 +1,11 @@
 import { useParams, Link } from "react-router-dom";
+import { useState } from "react";
 import { BASE_IMAGE_URL } from "../constants";
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "../hooks/api/queryKeys";
 import { queryFetch } from "../hooks/api/queryFetch";
-import { useWatchedEpisodes, useToggleEpisode } from "../hooks/api/useEpisodes";
+import { useWatchedEpisodes, useToggleEpisode, useAnnotateEpisode } from "../hooks/api/useEpisodes";
 
 interface CastMember {
   id: number;
@@ -149,16 +150,21 @@ export default function EpisodeInfo() {
 
   const watchedEpisodesQuery = useWatchedEpisodes(Number(showId ?? 0));
   const toggleEpisode = useToggleEpisode();
+  const annotateEpisode = useAnnotateEpisode();
 
   const data = episodeQuery.data;
   const showName = showQuery.data?.name ?? null;
   const showInProduction = showQuery.data?.in_production ?? null;
-  const isWatched =
-    watchedEpisodesQuery.data?.some(
-      (e) =>
-        e.season_number === Number(season) &&
-        e.episode_number === Number(episode),
-    ) ?? false;
+
+  const watchedEntry = watchedEpisodesQuery.data?.find(
+    (e) =>
+      e.season_number === Number(season) &&
+      e.episode_number === Number(episode),
+  ) ?? null;
+  const isWatched = watchedEntry !== null;
+
+  const [notesDraft, setNotesDraft] = useState<string>(() => watchedEntry?.notes ?? "");
+  const [notesOpen, setNotesOpen] = useState(false);
 
   usePageTitle(data ? data.name : "Episode");
 
@@ -169,6 +175,29 @@ export default function EpisodeInfo() {
       seasonNumber: Number(season),
       episodeNumber: Number(episode),
       watched: isWatched,
+    });
+  }
+
+  function submitNotes() {
+    if (!showId) return;
+    annotateEpisode.mutate(
+      {
+        showId: Number(showId),
+        seasonNumber: Number(season),
+        episodeNumber: Number(episode),
+        notes: notesDraft || null,
+      },
+      { onSuccess: () => setNotesOpen(false) },
+    );
+  }
+
+  function setEpisodeRating(rating: number | null) {
+    if (!showId || !isWatched) return;
+    annotateEpisode.mutate({
+      showId: Number(showId),
+      seasonNumber: Number(season),
+      episodeNumber: Number(episode),
+      rating,
     });
   }
 
@@ -350,6 +379,86 @@ export default function EpisodeInfo() {
           </button>
         </div>
       </div>
+
+      {/* Rating + Notes (only when watched) */}
+      {isWatched && (
+        <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 space-y-4">
+          {/* Star rating */}
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500 mb-2">Your Rating</p>
+            <div className="flex items-center gap-1">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button
+                  key={star}
+                  onClick={() => setEpisodeRating(watchedEntry?.rating === star ? null : star)}
+                  disabled={annotateEpisode.isPending}
+                  className="disabled:opacity-50"
+                >
+                  <svg
+                    className={`w-6 h-6 transition-colors ${
+                      (watchedEntry?.rating ?? 0) >= star
+                        ? "fill-amber-400 text-amber-400"
+                        : "fill-neutral-700 text-neutral-700 hover:fill-amber-400/50"
+                    }`}
+                    viewBox="0 0 24 24"
+                  >
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                  </svg>
+                </button>
+              ))}
+              {watchedEntry?.rating != null && (
+                <span className="ml-2 text-sm text-amber-400">{watchedEntry.rating}/5</span>
+              )}
+            </div>
+          </div>
+
+          {/* Notes */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500">Notes</p>
+              {!notesOpen && (
+                <button
+                  onClick={() => { setNotesDraft(watchedEntry?.notes ?? ""); setNotesOpen(true); }}
+                  className="text-xs text-primary-400 hover:text-primary-300 transition-colors"
+                >
+                  {watchedEntry?.notes ? "Edit" : "+ Add note"}
+                </button>
+              )}
+            </div>
+            {notesOpen ? (
+              <div className="space-y-2">
+                <textarea
+                  value={notesDraft}
+                  onChange={(e) => setNotesDraft(e.target.value)}
+                  maxLength={2000}
+                  rows={3}
+                  placeholder="What did you think?"
+                  className="w-full bg-neutral-800 border border-neutral-700 rounded-xl px-3 py-2 text-sm text-neutral-200 placeholder-neutral-500 resize-none focus:outline-none focus:border-primary-500"
+                />
+                <div className="flex items-center gap-2 justify-end">
+                  <button
+                    onClick={() => setNotesOpen(false)}
+                    className="text-sm text-neutral-500 hover:text-neutral-300 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={submitNotes}
+                    disabled={annotateEpisode.isPending}
+                    className="text-sm px-3 py-1.5 bg-primary-600 hover:bg-primary-500 disabled:opacity-50 text-white rounded-lg transition-colors"
+                  >
+                    {annotateEpisode.isPending ? "Saving…" : "Save"}
+                  </button>
+                </div>
+              </div>
+            ) : watchedEntry?.notes ? (
+              <p className="text-sm text-neutral-300 leading-relaxed">{watchedEntry.notes}</p>
+            ) : (
+              <p className="text-sm text-neutral-600 italic">No notes yet.</p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Overview */}
       {data.overview && (

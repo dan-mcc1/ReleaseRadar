@@ -3,6 +3,20 @@ import { apiFetch } from "../../utils/apiFetch";
 import { queryKeys } from "./queryKeys";
 import { useAuthUser } from "../useAuthUser";
 import type { WatchStatus } from "../../components/WatchButton";
+import { TrackingLimitError } from "./useSubscription";
+
+async function checkedFetch(path: string, options: RequestInit): Promise<void> {
+  const res = await apiFetch(path, options);
+  if (!res.ok) {
+    if (res.status === 403) {
+      const body = await res.json().catch(() => ({}));
+      if (body?.detail?.error === "tracking_limit_reached") {
+        throw new TrackingLimitError(body.detail.limit, body.detail.current);
+      }
+    }
+    throw new Error(`Request failed: ${res.status}`);
+  }
+}
 
 const ENDPOINTS: Record<string, { add: string; remove: string } | null> = {
   none: null,
@@ -24,26 +38,40 @@ export function useUpdateWatchStatus() {
       contentId,
       currentStatus,
       targetStatus,
+      notify,
     }: {
       contentType: "movie" | "tv";
       contentId: number;
       currentStatus: WatchStatus;
       targetStatus: WatchStatus;
+      notify?: boolean;
     }) => {
       const headers = { "Content-Type": "application/json" };
+
+      const addEndpoint = ENDPOINTS[targetStatus];
+      if (addEndpoint) {
+        const payload: Record<string, unknown> = {
+          content_type: contentType,
+          content_id: contentId,
+        };
+        if (targetStatus === "Want To Watch" && notify !== undefined) {
+          payload.notify = notify;
+        }
+        await checkedFetch(addEndpoint.add, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(payload),
+        });
+      }
+
       const body = JSON.stringify({
         content_type: contentType,
         content_id: contentId,
       });
 
-      const addEndpoint = ENDPOINTS[targetStatus];
-      if (addEndpoint) {
-        await apiFetch(addEndpoint.add, { method: "POST", headers, body });
-      }
-
       const removeEndpoint = ENDPOINTS[currentStatus];
       if (removeEndpoint) {
-        await apiFetch(removeEndpoint.remove, { method: "DELETE", headers, body });
+        await checkedFetch(removeEndpoint.remove, { method: "DELETE", headers, body });
       }
 
       return targetStatus;

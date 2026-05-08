@@ -8,6 +8,7 @@ import CastBar from "../components/CastBar";
 import WatchButton from "../components/WatchButton";
 import FavoriteButton from "../components/FavoriteButton";
 import RecommendButton from "../components/RecommendButton";
+import ShelfButton from "../components/ShelfButton";
 import ReviewsSection from "../components/ReviewsSection";
 import { useAuthUser } from "../hooks/useAuthUser";
 import { usePageTitle } from "../hooks/usePageTitle";
@@ -18,6 +19,9 @@ import RatingsRow from "../components/media/RatingsRow";
 import ExternalLinksSection from "../components/media/ExternalLinksSection";
 import RecommendationsGrid from "../components/media/RecommendationsGrid";
 import TrailerButton from "../components/media/TrailerButton";
+import ContentRatingBadge from "../components/media/ContentRatingBadge";
+import BingePlanWidget from "../components/BingePlanWidget";
+import RewatchSection from "../components/RewatchSection";
 
 type FullShowData = Show & {
   vote_average?: number;
@@ -39,6 +43,9 @@ type FullShowData = Show & {
   external_ids: MediaExternalIds;
   recommendations: { results: Show[] };
   videos: { results: MediaVideo[] };
+  content_ratings?: {
+    results: { iso_3166_1: string; rating: string }[];
+  };
 };
 
 export default function ShowInfo() {
@@ -80,6 +87,10 @@ export default function ShowInfo() {
       (v) => v.type === "Trailer" && v.site === "YouTube",
     ) ?? show.videos?.results?.find((v) => v.site === "YouTube");
 
+  const certification =
+    show.content_ratings?.results?.find((r) => r.iso_3166_1 === "US")
+      ?.rating ?? null;
+
   return (
     <div className="max-w-5xl mx-auto pb-16 w-full overflow-x-hidden">
       <MediaHero
@@ -103,6 +114,7 @@ export default function ShowInfo() {
             />
           )}
           {user && <FavoriteButton contentType="tv" contentId={show.id} />}
+          {user && <ShelfButton contentType="tv" contentId={show.id} />}
           {user && (
             <RecommendButton
               contentType="tv"
@@ -114,10 +126,11 @@ export default function ShowInfo() {
           {trailer && <TrailerButton trailerKey={trailer.key} />}
         </div>
 
-        {/* Genre pills */}
-        {show.genres && show.genres.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {show.genres.map((genre) => (
+        {/* Genre pills + content rating */}
+        {(show.genres?.length > 0 || certification) && (
+          <div className="flex flex-wrap items-center gap-2">
+            {certification && <ContentRatingBadge rating={certification} />}
+            {show.genres?.map((genre) => (
               <span
                 key={genre.id}
                 className="px-3 py-1 text-sm rounded-full bg-neutral-700/60 border border-neutral-600 text-neutral-300"
@@ -136,6 +149,10 @@ export default function ShowInfo() {
           <StatBox label="Status" value={show.status} />
           {show.in_production && <StatBox label="In Production" value="Yes" />}
         </div>
+
+        {user && initialStatus !== "none" && initialStatus !== "Watched" && (
+          <BingePlanWidget showId={show.id} />
+        )}
 
         <RatingsRow
           voteAverage={show.vote_average}
@@ -223,6 +240,10 @@ export default function ShowInfo() {
         )}
 
         <ReviewsSection contentType="tv" contentId={show.id} user={user} />
+
+        {user && initialStatus === "Watched" && (
+          <RewatchSection contentType="tv" contentId={show.id} />
+        )}
 
         {show.recommendations?.results.length > 0 && (
           <RecommendationsGrid

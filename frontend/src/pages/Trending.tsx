@@ -29,7 +29,7 @@ export default function Trending() {
   return (
     <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 py-8 pb-16">
       {/* Page header */}
-      <div className="mb-6">
+      <div className="mb-6" data-tour="trending-header">
         <div className="flex items-center gap-3 mb-1">
           <h1 className="text-3xl font-bold text-white">Trending</h1>
           <span className="text-lg">🔥</span>

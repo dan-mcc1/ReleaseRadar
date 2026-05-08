@@ -65,7 +65,7 @@ export default function BoxOffice() {
   return (
     <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 py-8 pb-16">
       {/* Header */}
-      <div className="mb-8">
+      <div className="mb-8" data-tour="box-office-header">
         <div className="flex items-center gap-3 mb-1">
           <h1 className="text-3xl font-bold text-white">Box Office</h1>
           <span className="text-lg">🎬</span>

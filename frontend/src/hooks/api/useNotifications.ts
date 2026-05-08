@@ -4,10 +4,12 @@ import { queryFetch } from "./queryFetch";
 import { apiFetch } from "../../utils/apiFetch";
 import { useAuthUser } from "../useAuthUser";
 
-interface NotificationPrefs {
+export interface NotificationPrefs {
   email_notifications: boolean;
   notification_frequency: string;
   profile_visibility: string;
+  notify_new_seasons: boolean;
+  notify_streaming_changes: boolean;
 }
 
 export function useNotificationPrefs() {

@@ -41,6 +41,7 @@ export const queryKeys = {
   // User
   userMe: (uid: string) => ["user", "me", uid] as const,
   userStats: (uid: string) => ["user", "stats", uid] as const,
+  watchTimeStats: (uid: string, year: number | null) => ["user", "watchTime", uid, year] as const,
   profileSummary: (uid: string) => ["user", "profileSummary", uid] as const,
   usernameAvailable: (username: string) => ["user", "checkUsername", username] as const,
 
@@ -82,4 +83,21 @@ export const queryKeys = {
   // Box office
   boxOffice: (mode: string, year: number, month: number) =>
     ["boxOffice", mode, year, month] as const,
+
+  // Shelves
+  shelves: (uid: string) => ["shelves", uid] as const,
+  shelfItems: (uid: string, shelfId: number) => ["shelves", uid, shelfId, "items"] as const,
+  shelfCalendar: (uid: string, shelfId: number) => ["shelves", uid, shelfId, "calendar"] as const,
+  itemShelves: (uid: string, contentType: string, contentId: number) =>
+    ["shelves", "item", uid, contentType, contentId] as const,
+
+  // News
+  news: (category: string, page: number, q: string) =>
+    ["news", category, page, q] as const,
+
+  // Admin
+  adminStats: () => ["admin", "stats"] as const,
+
+  // Billing
+  billingStatus: (uid: string) => ["billing", "status", uid] as const,
 } as const;

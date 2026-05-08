@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
+from app.dependencies.subscription import is_premium
 from app.models.user import User
 from app.models.watchlist import Watchlist
 from app.models.currently_watching import CurrentlyWatching
@@ -32,6 +33,8 @@ class PreferencesUpdate(BaseModel):
     email_notifications: bool | None = None
     notification_frequency: str | None = None
     profile_visibility: str | None = None
+    notify_new_seasons: bool | None = None
+    notify_streaming_changes: bool | None = None
 
 
 @router.get("/preferences")
@@ -46,6 +49,8 @@ def get_notification_preferences(
         "email_notifications": user.email_notifications,
         "notification_frequency": user.notification_frequency or "daily",
         "profile_visibility": user.profile_visibility or "friends_only",
+        "notify_new_seasons": user.notify_new_seasons,
+        "notify_streaming_changes": user.notify_streaming_changes,
     }
 
 
@@ -74,11 +79,35 @@ def update_notification_preferences(
             raise HTTPException(status_code=422, detail="Invalid profile visibility.")
         user.profile_visibility = body.profile_visibility
 
+    if body.notify_new_seasons is not None:
+        if body.notify_new_seasons and not is_premium(uid, db):
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "error": "premium_required",
+                    "message": "This feature requires a Premium subscription.",
+                },
+            )
+        user.notify_new_seasons = body.notify_new_seasons
+
+    if body.notify_streaming_changes is not None:
+        if body.notify_streaming_changes and not is_premium(uid, db):
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "error": "premium_required",
+                    "message": "This feature requires a Premium subscription.",
+                },
+            )
+        user.notify_streaming_changes = body.notify_streaming_changes
+
     db.commit()
     return {
         "email_notifications": user.email_notifications,
         "notification_frequency": user.notification_frequency,
         "profile_visibility": user.profile_visibility,
+        "notify_new_seasons": user.notify_new_seasons,
+        "notify_streaming_changes": user.notify_streaming_changes,
     }
 
 
@@ -94,6 +123,7 @@ def _build_items_for_window(db: Session, user_id: str, days: int) -> list:
         .filter(
             Watchlist.user_id == user_id,
             Watchlist.content_type == "movie",
+            Watchlist.notify == True,  # noqa: E712
             Movie.release_date >= today,
             Movie.release_date < end,
         )
@@ -111,11 +141,15 @@ def _build_items_for_window(db: Session, user_id: str, days: int) -> list:
             }
         )
 
-    # Collect tracked show IDs from both Watchlist and CurrentlyWatching in one pass
+    # Collect tracked show IDs, respecting per-item notify flag on Watchlist
     tracked_show_ids = {
         r.content_id
         for r in db.query(Watchlist.content_id)
-        .filter_by(user_id=user_id, content_type="tv")
+        .filter(
+            Watchlist.user_id == user_id,
+            Watchlist.content_type == "tv",
+            Watchlist.notify == True,  # noqa: E712
+        )
         .all()
     } | {
         r.content_id
@@ -218,11 +252,13 @@ def send_season_premiere_alerts_to_all(db: Session):
 
     affected_show_ids = list(show_alerts.keys())
 
-    # Bulk-load all tracking rows for affected shows in two queries
+    # Bulk-load tracking rows; only include watchlist items where notify=True
     watchlist_rows = (
         db.query(Watchlist.user_id, Watchlist.content_id)
         .filter(
-            Watchlist.content_type == "tv", Watchlist.content_id.in_(affected_show_ids)
+            Watchlist.content_type == "tv",
+            Watchlist.content_id.in_(affected_show_ids),
+            Watchlist.notify == True,  # noqa: E712
         )
         .all()
     )
@@ -246,7 +282,9 @@ def send_season_premiere_alerts_to_all(db: Session):
         .filter(
             User.id.in_(relevant_user_ids),
             User.email_notifications == True,
+            User.notify_new_seasons == True,
             User.email != None,
+            User.subscription_tier.in_(["premium", "admin"]),
         )
         .all()
     )

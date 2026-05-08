@@ -500,6 +500,108 @@ def send_recommendation_email(
     )
 
 
+def send_streaming_alert_email(
+    to_email: str,
+    username: str,
+    alerts: list,
+    uid: str = "",
+):
+    """
+    Notify a user about streaming availability changes for their tracked content.
+    Each alert dict has: title, content_type, content_id, poster_path,
+    added (list of provider names), removed (list of provider names).
+    """
+    if not alerts:
+        return
+
+    def _provider_badges(names: list[str], bg: str, fg: str) -> str:
+        return "".join(
+            f'<span style="display:inline-block;background:{bg};color:{fg};'
+            f'font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;'
+            f'margin:2px 4px 2px 0;">{escape(n)}</span>'
+            for n in names
+        )
+
+    def _alert_card(a: dict) -> str:
+        content_type = a.get("content_type", "movie")
+        content_id = a.get("content_id")
+        content_url = (
+            f"{settings.FRONTEND_URL}/{content_type}/{content_id}"
+            if content_id
+            else settings.FRONTEND_URL
+        )
+        has_poster = bool(a.get("poster_path"))
+        poster = (
+            f'<a href="{content_url}" style="display:inline-block;flex-shrink:0;margin-right:12px;">'
+            f'<img src="{TMDB_IMAGE_BASE}{a["poster_path"]}" alt="{escape(a["title"])}" width="56" height="84"'
+            f' style="border-radius:6px;object-fit:cover;display:block;" /></a>'
+            if has_poster
+            else ""
+        )
+        layout_style = "display:flex;align-items:flex-start;" if has_poster else ""
+
+        added_html = ""
+        if a.get("added"):
+            added_html = (
+                f'<div style="margin-top:6px;">'
+                f'<span style="color:#6ee7b7;font-size:12px;font-weight:600;">Now streaming on </span>'
+                f'{_provider_badges(a["added"], "#064e3b", "#6ee7b7")}'
+                f"</div>"
+            )
+        removed_html = ""
+        if a.get("removed"):
+            removed_html = (
+                f'<div style="margin-top:4px;">'
+                f'<span style="color:#f87171;font-size:12px;font-weight:600;">No longer on </span>'
+                f'{_provider_badges(a["removed"], "#450a0a", "#fca5a5")}'
+                f"</div>"
+            )
+
+        return f"""
+<div style="{layout_style}background:#171717;border:1px solid #404040;
+            border-radius:10px;padding:14px;margin-bottom:10px;">
+  {poster}
+  <div style="flex:1;min-width:0;">
+    <a href="{content_url}" style="color:#f5f5f5;font-size:15px;font-weight:600;
+       text-decoration:none;display:block;margin-bottom:4px;">{escape(a["title"])}</a>
+    {added_html}
+    {removed_html}
+  </div>
+</div>"""
+
+    count = len(alerts)
+    if count == 1:
+        a = alerts[0]
+        if a.get("added") and not a.get("removed"):
+            subject = f"{a['title']} is now streaming — Release Radar"
+        elif a.get("removed") and not a.get("added"):
+            subject = f"{a['title']} has left streaming — Release Radar"
+        else:
+            subject = f"Streaming update for {a['title']} — Release Radar"
+    else:
+        subject = f"Streaming updates for {count} titles you're tracking — Release Radar"
+
+    cards = "".join(_alert_card(a) for a in alerts)
+    body = f"""
+<h2 style="margin:0 0 4px;color:#f5f5f5;font-size:20px;font-weight:700;">
+  Hi {escape(username) or 'there'} 👋
+</h2>
+<p style="margin:0 0 20px;color:#a3a3a3;font-size:14px;">
+  There {'have been' if count > 1 else 'has been a'} streaming {'changes' if count > 1 else 'change'}
+  for {'titles' if count > 1 else 'a title'} you're tracking:
+</p>
+{cards}
+<div style="text-align:center;margin-top:24px;">
+  <a href="{settings.FRONTEND_URL}"
+     style="display:inline-block;background:#059669;color:#ffffff;font-weight:600;
+            font-size:14px;padding:12px 28px;border-radius:8px;text-decoration:none;">
+    Open Release Radar
+  </a>
+</div>"""
+
+    send_email(to_email, subject, _email_wrapper(body, uid))
+
+
 def send_email(to_email: str, subject: str, html_body: str):
     if not settings.RESEND_API_KEY:
         print(

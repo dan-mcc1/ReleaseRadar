@@ -8,7 +8,9 @@ import CastBar from "../components/CastBar";
 import WatchButton from "../components/WatchButton";
 import FavoriteButton from "../components/FavoriteButton";
 import RecommendButton from "../components/RecommendButton";
+import ShelfButton from "../components/ShelfButton";
 import ReviewsSection from "../components/ReviewsSection";
+import RewatchSection from "../components/RewatchSection";
 import { useAuthUser } from "../hooks/useAuthUser";
 import { useMediaInfo } from "../hooks/useMediaInfo";
 import { StatBox } from "../components/InfoPageWidgets";
@@ -18,6 +20,7 @@ import RatingsRow from "../components/media/RatingsRow";
 import ExternalLinksSection from "../components/media/ExternalLinksSection";
 import RecommendationsGrid from "../components/media/RecommendationsGrid";
 import TrailerButton from "../components/media/TrailerButton";
+import ContentRatingBadge from "../components/media/ContentRatingBadge";
 
 type FullMovieData = Movie & {
   vote_average?: number;
@@ -45,6 +48,12 @@ type FullMovieData = Movie & {
   external_ids: MediaExternalIds;
   recommendations: { results: Movie[] };
   videos: { results: MediaVideo[] };
+  release_dates?: {
+    results: {
+      iso_3166_1: string;
+      release_dates: { certification: string; type: number }[];
+    }[];
+  };
 };
 
 function formatRuntime(minutes: number) {
@@ -98,6 +107,22 @@ export default function MovieInfo() {
       (v) => v.type === "Trailer" && v.site === "YouTube",
     ) ?? movie.videos?.results?.find((v) => v.site === "YouTube");
 
+  const certification = (() => {
+    const us = movie.release_dates?.results?.find(
+      (r) => r.iso_3166_1 === "US",
+    );
+    if (!us) return null;
+    // prefer theatrical (type 3), then limited (type 2), then any with a cert
+    const sorted = [...us.release_dates].sort((a, b) => {
+      if (a.type === 3) return -1;
+      if (b.type === 3) return 1;
+      if (a.type === 2) return -1;
+      if (b.type === 2) return 1;
+      return 0;
+    });
+    return sorted.find((d) => d.certification)?.certification ?? null;
+  })();
+
   return (
     <div className="max-w-5xl mx-auto pb-16 w-full overflow-x-hidden">
       {/* Hero */}
@@ -123,6 +148,7 @@ export default function MovieInfo() {
             />
           )}
           {user && <FavoriteButton contentType="movie" contentId={movie.id} />}
+          {user && <ShelfButton contentType="movie" contentId={movie.id} />}
           {user && (
             <RecommendButton
               contentType="movie"
@@ -134,10 +160,11 @@ export default function MovieInfo() {
           {trailer && <TrailerButton trailerKey={trailer.key} />}
         </div>
 
-        {/* Genre pills */}
-        {movie.genres && movie.genres.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {movie.genres.map((genre) => (
+        {/* Genre pills + content rating */}
+        {(movie.genres?.length > 0 || certification) && (
+          <div className="flex flex-wrap items-center gap-2">
+            {certification && <ContentRatingBadge rating={certification} />}
+            {movie.genres?.map((genre) => (
               <span
                 key={genre.id}
                 className="px-3 py-1 text-sm rounded-full bg-neutral-700/60 border border-neutral-600 text-neutral-300"
@@ -280,6 +307,10 @@ export default function MovieInfo() {
 
         {/* Reviews */}
         <ReviewsSection contentType="movie" contentId={movie.id} user={user} />
+
+        {user && initialStatus === "Watched" && (
+          <RewatchSection contentType="movie" contentId={movie.id} />
+        )}
 
         {/* Recommendations */}
         <RecommendationsGrid

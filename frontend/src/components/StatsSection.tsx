@@ -23,6 +23,11 @@ interface Stats {
     distribution: { rating: number; count: number }[];
   };
   top_genres: { name: string; count: number }[];
+  streak?: {
+    current: number;
+    longest: number;
+    today_logged: boolean;
+  };
 }
 
 const GENRE_COLORS = [
@@ -79,7 +84,7 @@ export default function StatsSection() {
 
   if (!stats) return null;
 
-  const { counts, ratings, top_genres } = stats;
+  const { counts, ratings, top_genres, streak } = stats;
   const totalWatched = counts.movies_watched + counts.shows_watched;
   const hasRatings = ratings.distribution.some((d) => d.count > 0);
   const hasGenres = top_genres.length > 0;
@@ -87,6 +92,54 @@ export default function StatsSection() {
   return (
     <div className="bg-neutral-800 rounded-lg p-4 space-y-6">
       <h2 className="text-lg font-semibold text-white">Stats</h2>
+
+      {/* Watch streak */}
+      {streak && (streak.current > 0 || streak.longest > 0) && (
+        <div className="flex flex-wrap gap-3">
+          <div
+            className={`flex items-center gap-3 rounded-lg px-4 py-3 border ${
+              streak.current > 0
+                ? "bg-orange-500/10 border-orange-500/30"
+                : "bg-neutral-700/50 border-neutral-600/50"
+            }`}
+          >
+            <span className="text-2xl" aria-hidden="true">
+              {streak.today_logged ? "🔥" : streak.current > 0 ? "🔥" : "💤"}
+            </span>
+            <div>
+              <div className="text-xl font-bold text-white leading-none">
+                {streak.current}{" "}
+                <span className="text-sm font-normal text-neutral-300">
+                  day{streak.current !== 1 ? "s" : ""}
+                </span>
+              </div>
+              <div className="text-xs text-neutral-400 mt-0.5">
+                Current streak
+                {streak.today_logged && (
+                  <span className="ml-1 text-orange-400">· logged today</span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {streak.longest > 0 && (
+            <div className="flex items-center gap-3 bg-neutral-700/50 border border-neutral-600/50 rounded-lg px-4 py-3">
+              <span className="text-2xl" aria-hidden="true">🏆</span>
+              <div>
+                <div className="text-xl font-bold text-white leading-none">
+                  {streak.longest}{" "}
+                  <span className="text-sm font-normal text-neutral-300">
+                    day{streak.longest !== 1 ? "s" : ""}
+                  </span>
+                </div>
+                <div className="text-xs text-neutral-400 mt-0.5">
+                  Longest streak
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Summary counts */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">

@@ -3,6 +3,7 @@ from sqlalchemy import (
     Column,
     Integer,
     String,
+    Text,
     ForeignKey,
     DateTime,
     Float,
@@ -24,6 +25,7 @@ class EpisodeWatched(Base):
     episode_number = Column(Integer)
     watched_at = Column(DateTime(timezone=True), server_default=func.now())
     rating = Column(Float, nullable=True)
+    notes = Column(Text, nullable=True)
 
     __table_args__ = (
         UniqueConstraint(

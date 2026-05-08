@@ -4,9 +4,11 @@ import { queryFetch } from "./queryFetch";
 import { apiFetch } from "../../utils/apiFetch";
 import { useAuthUser } from "../useAuthUser";
 
-interface WatchedEpisode {
+export interface WatchedEpisode {
   season_number: number;
   episode_number: number;
+  rating: number | null;
+  notes: string | null;
 }
 
 interface NextEpisode {
@@ -99,6 +101,43 @@ export function useToggleEpisode() {
       });
       queryClient.invalidateQueries({
         queryKey: ["watchStatus", user.uid],
+      });
+    },
+  });
+}
+
+export function useAnnotateEpisode() {
+  const user = useAuthUser();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      showId,
+      seasonNumber,
+      episodeNumber,
+      rating,
+      notes,
+    }: {
+      showId: number;
+      seasonNumber: number;
+      episodeNumber: number;
+      rating?: number | null;
+      notes?: string | null;
+    }) => {
+      const res = await apiFetch(
+        `/watched-episode/annotate?show_id=${showId}&season_number=${seasonNumber}&episode_number=${episodeNumber}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rating, notes }),
+        },
+      );
+      if (!res.ok) throw new Error("Failed to save annotation.");
+      return res.json();
+    },
+    onSuccess: (_, { showId }) => {
+      if (!user) return;
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.watchedEpisodes(user.uid, showId),
       });
     },
   });

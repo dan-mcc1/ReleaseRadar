@@ -38,6 +38,7 @@ def full_movie_info(id: int):
             "recommendations",
             "images",
             "videos",
+            "release_dates",
         ]
     )
     movie_data = fetch_movie_from_tmdb(id, append)

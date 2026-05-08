@@ -1,4 +1,5 @@
 from sqlalchemy import (
+    Boolean,
     Column,
     Integer,
     BigInteger,
@@ -21,6 +22,7 @@ class Watchlist(Base):
     content_id = Column(Integer)  # movie or show id
     added_at = Column(DateTime(timezone=True), server_default=func.now())
     sort_key = Column(BigInteger, nullable=False, default=0)
+    notify = Column(Boolean, default=True, server_default="true", nullable=False)
 
     __table_args__ = (
         UniqueConstraint(

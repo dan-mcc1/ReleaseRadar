@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db.session import get_db
-from app.dependencies.auth import get_current_user
+from app.dependencies.subscription import feature_gate
 from app.models.currently_watching import CurrentlyWatching
 from app.models.episode import Episode
 from app.models.movie import Movie
@@ -54,8 +54,8 @@ def _verify_token(token: str) -> str | None:
 
 
 @router.get("/token")
-def get_ical_token(uid: str = Depends(get_current_user)):
-    """Return the user's personal iCal feed token (authenticated)."""
+def get_ical_token(uid: str = Depends(feature_gate("ical_sync"))):
+    """Return the user's personal iCal feed token — requires a premium subscription."""
     return {"token": _make_token(uid)}
 
 

@@ -22,6 +22,7 @@ import {
   useRemoveFromList,
   useReorderWatchlist,
 } from "../hooks/api/useLists";
+import { useBingePlanBulk } from "../hooks/api/useBingePlan";
 
 type TabType = "all" | "movies" | "tv";
 type SortType =
@@ -128,6 +129,9 @@ export default function Watchlist() {
   const results = data ?? { movies: [], shows: [] };
   const removeFromList = useRemoveFromList();
   const reorderWatchlist = useReorderWatchlist();
+
+  const tvShowIds = results.shows.map((s) => s.id);
+  const { data: bingePlans } = useBingePlanBulk(tvShowIds);
   const [activeTab, setActiveTab] = useState<TabType>("all");
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortType>("my_order");
@@ -234,7 +238,7 @@ export default function Watchlist() {
 
   return (
     <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-8 pb-16">
-      <div className="mb-8">
+      <div className="mb-8" data-tour="watchlist-header">
         <div className="flex items-center gap-3 mb-1">
           <h1 className="text-3xl font-bold text-white">My Watchlist</h1>
           <span className="bg-primary-600/20 text-primary-400 border border-primary-600/30 text-sm font-medium px-2.5 py-0.5 rounded-full">
@@ -443,6 +447,7 @@ export default function Watchlist() {
                     voteAverage={item.vote_average}
                     userRating={item.user_rating}
                     genres={item.genres}
+                    bingePlan={item._contentType === "tv" ? (bingePlans?.[String(item.id)] ?? null) : null}
                     isFirst={idx === 0}
                     isLast={idx === combinedItems.length - 1}
                     onMoveUp={() => {
@@ -516,6 +521,7 @@ export default function Watchlist() {
                   voteAverage={item.vote_average}
                   userRating={item.user_rating}
                   genres={item.genres}
+                  bingePlan={item._contentType === "tv" ? (bingePlans?.[String(item.id)] ?? null) : null}
                   isFirst={allIdx === 0}
                   isLast={allIdx === combinedItems.length - 1}
                   isDragDisabled

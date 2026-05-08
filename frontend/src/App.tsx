@@ -24,7 +24,16 @@ import BoxOffice from "./pages/BoxOffice";
 import CollectionInfo from "./pages/CollectionInfo";
 import ForYou from "./pages/ForYou";
 import Unsubscribe from "./pages/Unsubscribe";
+import ShelvesPage from "./pages/ShelvesPage";
+import ShelfDetailPage from "./pages/ShelfDetailPage";
+import Pricing from "./pages/Pricing";
+import BillingSettings from "./pages/BillingSettings";
+import AdminPage from "./pages/AdminPage";
+import News from "./pages/News";
+import StatsPage from "./pages/StatsPage";
+import ImportPage from "./pages/ImportPage";
 import Footer from "./components/Footer";
+import SpotlightTour from "./components/SpotlightTour";
 
 function App() {
   return (
@@ -33,6 +42,7 @@ function App() {
         <NavBar />
         <div className="h-16 shrink-0" />
         <InstallBanner />
+        <SpotlightTour />
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route
@@ -62,9 +72,52 @@ function App() {
             element={<EpisodeInfo />}
           />
           <Route path="/box-office" element={<BoxOffice />} />
+          <Route path="/news" element={<News />} />
+          <Route
+            path="/stats"
+            element={
+              <ProtectedRoute>
+                <StatsPage />
+              </ProtectedRoute>
+            }
+          />
           <Route path="/collection/:id" element={<CollectionInfo />} />
           <Route path="/for-you" element={<ForYou />} />
           <Route path="/unsubscribe" element={<Unsubscribe />} />
+          <Route path="/pricing" element={<Pricing />} />
+          <Route path="/billing" element={<BillingSettings />} />
+          <Route
+            path="/import"
+            element={
+              <ProtectedRoute>
+                <ImportPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute>
+                <AdminPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/shelves"
+            element={
+              <ProtectedRoute>
+                <ShelvesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/shelves/:id"
+            element={
+              <ProtectedRoute>
+                <ShelfDetailPage />
+              </ProtectedRoute>
+            }
+          />
         </Routes>
         <Footer />
       </div>
