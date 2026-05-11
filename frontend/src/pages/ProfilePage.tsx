@@ -11,6 +11,8 @@ import { useProfileSummary } from "../hooks/api/useUser";
 import { useWatchlist, useWatched } from "../hooks/api/useLists";
 import { useShelves } from "../hooks/api/useShelves";
 import { useSendFriendRequest } from "../hooks/api/useFriends";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "../hooks/api/queryKeys";
 
 type FriendsTab = "friends" | "requests" | "followers" | "add";
 
@@ -71,9 +73,18 @@ function HeroAvatar({
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function patchSummary(queryClient: ReturnType<typeof useQueryClient>, uid: string, updater: (old: any) => any) {
+  queryClient.setQueryData(queryKeys.profileSummary(uid), (old: unknown) => {
+    if (!old) return old;
+    return updater(old);
+  });
+}
+
 export default function ProfilePage() {
   usePageTitle("My Profile");
   const user = useAuthUser();
+  const queryClient = useQueryClient();
 
   // Collapsible sections
   const [watchlistOpen, setWatchlistOpen] = useState(false);
@@ -123,13 +134,12 @@ export default function ProfilePage() {
 
   const sendRequestMutation = useSendFriendRequest();
   const addingBackUsername =
-    sendRequestMutation.isPending &&
-    typeof sendRequestMutation.variables === "string"
-      ? (sendRequestMutation.variables as string)
+    sendRequestMutation.isPending
+      ? sendRequestMutation.variables?.addresseeUsername ?? null
       : null;
 
   async function addBack(follower: { id: string; username: string }) {
-    await sendRequestMutation.mutateAsync(follower.username).catch(() => {});
+    await sendRequestMutation.mutateAsync({ addresseeUsername: follower.username }).catch(() => {});
   }
 
   if (!user) {
@@ -598,7 +608,13 @@ export default function ProfilePage() {
           {friendsTab === "friends" && (
             <FriendsList
               friends={friends}
-              onFriendRemoved={() => {}}
+              onFriendRemoved={(friendId) => {
+                if (!user) return;
+                patchSummary(queryClient, user.uid, (old) => ({
+                  ...old,
+                  friends: old.friends.filter((f: { friend: { id: string } }) => f.friend.id !== friendId),
+                }));
+              }}
               onFindFriends={() => setFriendsTab("add")}
             />
           )}
@@ -637,8 +653,27 @@ export default function ProfilePage() {
             <FriendRequests
               incoming={incoming}
               outgoing={outgoing}
-              onResponded={() => {}}
-              onCancelled={() => {}}
+              onResponded={(friendshipId, accepted, req) => {
+                if (!user) return;
+                patchSummary(queryClient, user.uid, (old) => ({
+                  ...old,
+                  incoming_requests: old.incoming_requests.filter(
+                    (r: { friendship_id: number }) => r.friendship_id !== friendshipId,
+                  ),
+                  friends: accepted
+                    ? [...old.friends, { friendship_id: friendshipId, friend: req.from_user }]
+                    : old.friends,
+                }));
+              }}
+              onCancelled={(friendshipId) => {
+                if (!user) return;
+                patchSummary(queryClient, user.uid, (old) => ({
+                  ...old,
+                  outgoing_requests: old.outgoing_requests.filter(
+                    (r: { friendship_id: number }) => r.friendship_id !== friendshipId,
+                  ),
+                }));
+              }}
             />
           )}
           {friendsTab === "add" && (

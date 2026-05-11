@@ -44,11 +44,17 @@ export function useSendFriendRequest() {
   const user = useAuthUser();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (addresseeUsername: string) =>
+    mutationFn: ({
+      addresseeUsername,
+      message,
+    }: {
+      addresseeUsername: string;
+      message?: string;
+    }) =>
       queryFetch<{ status: string; id: number }>("/friends/request", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ addressee_username: addresseeUsername }),
+        body: JSON.stringify({ addressee_username: addresseeUsername, message: message || null }),
       }),
     onSuccess: () => {
       if (!user) return;

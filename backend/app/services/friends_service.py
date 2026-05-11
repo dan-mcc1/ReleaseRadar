@@ -39,7 +39,7 @@ def _get_friendship(db: Session, user_a: str, user_b: str) -> Friendship | None:
     )
 
 
-def send_friend_request(db: Session, requester_id: str, addressee_username: str):
+def send_friend_request(db: Session, requester_id: str, addressee_username: str, message: str | None = None):
     """
     Send a friend request to a user identified by username.
     If the target's profile is public, the friendship is auto-accepted immediately.
@@ -115,6 +115,7 @@ def send_friend_request(db: Session, requester_id: str, addressee_username: str)
             existing.requester_id = requester_id
             existing.addressee_id = addressee.id
             existing.status = "following" if is_public else "pending"
+            existing.message = message if not is_public else None
             existing.updated_at = _utcnow()
             db.commit()
             db.refresh(existing)
@@ -139,6 +140,7 @@ def send_friend_request(db: Session, requester_id: str, addressee_username: str)
         requester_id=requester_id,
         addressee_id=addressee.id,
         status="following" if is_public else "pending",
+        message=message if not is_public else None,
     )
     db.add(friendship)
     db.commit()
@@ -233,6 +235,7 @@ def get_incoming_requests(db: Session, user_id: str) -> list[dict]:
             "friendship_id": f.id,
             "from_user": _serialize_user(users[f.requester_id]),
             "created_at": f.created_at,
+            "message": f.message,
         }
         for f in friendships
         if f.requester_id in users

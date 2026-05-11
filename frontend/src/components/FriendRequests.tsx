@@ -15,6 +15,7 @@ interface IncomingRequest {
   friendship_id: number;
   from_user: RequestUser;
   created_at: string;
+  message?: string | null;
 }
 
 interface OutgoingRequest {
@@ -83,30 +84,37 @@ export default function FriendRequests({
             {incoming.map((req) => (
               <li
                 key={req.friendship_id}
-                className="flex items-center justify-between bg-neutral-700 px-3 py-2 rounded-lg"
+                className="bg-neutral-700 px-3 py-2 rounded-lg space-y-2"
               >
-                <Link
-                  to={`/user/${req.from_user.username}`}
-                  className="text-neutral-100 font-medium hover:text-primary-400 transition-colors"
-                >
-                  <span>@{req.from_user.username}</span>
-                </Link>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => respond(req.friendship_id, true)}
-                    disabled={respondingId === req.friendship_id}
-                    className="text-sm bg-success-600 hover:bg-success-500 disabled:opacity-50 text-white px-3 py-1 rounded"
+                <div className="flex items-center justify-between">
+                  <Link
+                    to={`/user/${req.from_user.username}`}
+                    className="text-neutral-100 font-medium hover:text-primary-400 transition-colors"
                   >
-                    Accept
-                  </button>
-                  <button
-                    onClick={() => respond(req.friendship_id, false)}
-                    disabled={respondingId === req.friendship_id}
-                    className="text-sm bg-neutral-600 hover:bg-neutral-500 disabled:opacity-50 text-neutral-200 px-3 py-1 rounded"
-                  >
-                    Decline
-                  </button>
+                    <span>@{req.from_user.username}</span>
+                  </Link>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => respond(req.friendship_id, true)}
+                      disabled={respondingId === req.friendship_id}
+                      className="text-sm bg-success-600 hover:bg-success-500 disabled:opacity-50 text-white px-3 py-1 rounded"
+                    >
+                      Accept
+                    </button>
+                    <button
+                      onClick={() => respond(req.friendship_id, false)}
+                      disabled={respondingId === req.friendship_id}
+                      className="text-sm bg-neutral-600 hover:bg-neutral-500 disabled:opacity-50 text-neutral-200 px-3 py-1 rounded"
+                    >
+                      Decline
+                    </button>
+                  </div>
                 </div>
+                {req.message && (
+                  <p className="text-sm text-neutral-300 italic border-l-2 border-neutral-500 pl-2">
+                    "{req.message}"
+                  </p>
+                )}
               </li>
             ))}
           </ul>

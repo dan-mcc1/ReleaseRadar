@@ -44,12 +44,13 @@ def search_users(
 @limiter.limit("20/minute")
 def send_request(
     request: Request,
-    addressee_username: str = Body(..., embed=True),
+    addressee_username: str = Body(...),
+    message: str | None = Body(None, max_length=200),
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
     """Send a friend request to a user by their username."""
-    result = friends_service.send_friend_request(db, uid, addressee_username)
+    result = friends_service.send_friend_request(db, uid, addressee_username, message)
     addressee = db.query(User).filter(User.username == addressee_username).first()
     if addressee:
         pending_count = (

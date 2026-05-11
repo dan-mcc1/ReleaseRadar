@@ -24,6 +24,7 @@ class Friendship(Base):
     )
     # status: 'pending' | 'accepted' | 'declined' | 'following'
     status = Column(String, nullable=False, default="pending")
+    message = Column(String(200), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
