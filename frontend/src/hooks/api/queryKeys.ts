@@ -97,6 +97,11 @@ export const queryKeys = {
 
   // Admin
   adminStats: () => ["admin", "stats"] as const,
+  adminReports: (status: string) => ["admin", "reports", status] as const,
+  adminUsers: (search: string, skip: number) => ["admin", "users", search, skip] as const,
+
+  // Moderation
+  myBlocks: (uid: string) => ["moderation", "blocks", uid] as const,
 
   // Billing
   billingStatus: (uid: string) => ["billing", "status", uid] as const,

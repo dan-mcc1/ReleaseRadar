@@ -1,6 +1,7 @@
 import { BASE_IMAGE_URL } from "../constants";
 import { Link } from "react-router-dom";
 import { Movie, Show, Person, CollectionResult } from "../types/calendar";
+import ContentRatingBadge from "./media/ContentRatingBadge";
 import { parseLocalDate } from "../utils/date";
 import { useState, useMemo } from "react";
 import { useAuthUser } from "../hooks/useAuthUser";
@@ -129,6 +130,9 @@ function MediaRow({
               </h3>
             </Link>
             <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+              {item.certification && (
+                <ContentRatingBadge rating={item.certification} />
+              )}
               {releaseDate ? (
                 <span className="text-xs text-neutral-500">{releaseDate}</span>
               ) : (

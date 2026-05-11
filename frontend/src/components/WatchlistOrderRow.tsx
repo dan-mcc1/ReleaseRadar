@@ -2,6 +2,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { BASE_IMAGE_URL } from "../constants";
 import type { BingePlan } from "../hooks/api/useBingePlan";
+import ContentRatingBadge from "./media/ContentRatingBadge";
 
 function fmtMins(mins: number): string {
   const h = Math.floor(mins / 60);
@@ -21,6 +22,7 @@ interface WatchlistOrderRowProps {
   voteAverage?: number;
   userRating?: number | null;
   genres?: { id: number; name: string }[];
+  certification?: string | null;
   bingePlan?: BingePlan | null;
   isFirst: boolean;
   isLast: boolean;
@@ -42,6 +44,7 @@ export default function WatchlistOrderRow({
   voteAverage,
   userRating,
   genres,
+  certification,
   bingePlan,
   isFirst,
   isLast,
@@ -189,6 +192,7 @@ export default function WatchlistOrderRow({
           >
             {contentType === "tv" ? "TV" : "Movie"}
           </span>
+          {certification && <ContentRatingBadge rating={certification} />}
           {year && <span className="text-xs text-neutral-400">{year}</span>}
           {voteAverage != null && voteAverage > 0 && (
             <span className="flex items-center gap-0.5 text-xs text-warning-400 font-medium">
@@ -199,7 +203,7 @@ export default function WatchlistOrderRow({
             </span>
           )}
           {genres &&
-            genres.slice(0, 2).map((g) => (
+            genres.map((g) => (
               <span
                 key={g.id}
                 className="text-xs text-neutral-500 bg-neutral-700/60 px-1.5 py-0.5 rounded"

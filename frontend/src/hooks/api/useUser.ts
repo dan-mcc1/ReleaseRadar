@@ -14,6 +14,47 @@ interface DBUser {
   created_at: string;
   subscription_tier: string;
   onboarding_completed: boolean;
+  warning_count: number;
+  has_unread_warning: boolean;
+  is_silenced: boolean;
+  silenced_until: string | null;
+}
+
+export interface AccountStatus {
+  is_banned: boolean;
+  ban_reason: string | null;
+  is_suspended: boolean;
+  suspended_until: string | null;
+  suspension_reason: string | null;
+  is_silenced: boolean;
+  silenced_until: string | null;
+  has_pending_appeal: boolean;
+  pending_appeal_requests_unsilence: boolean;
+}
+
+export function useAccountStatus() {
+  const user = useAuthUser();
+  return useQuery({
+    queryKey: ["accountStatus", user?.uid ?? ""],
+    queryFn: () => queryFetch<AccountStatus>("/user/account-status"),
+    enabled: !!user,
+    refetchInterval: 60_000,
+  });
+}
+
+export function useSubmitAppeal() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ message, requestUnsilence }: { message: string; requestUnsilence: boolean }) =>
+      apiFetch("/user/appeal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message, request_unsilence: requestUnsilence }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["accountStatus"] });
+    },
+  });
 }
 
 export function useUserMe() {
@@ -22,6 +63,17 @@ export function useUserMe() {
     queryKey: queryKeys.userMe(user?.uid ?? ""),
     queryFn: () => queryFetch<DBUser>("/user/me"),
     enabled: !!user,
+  });
+}
+
+export function useAcknowledgeWarning() {
+  const user = useAuthUser();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiFetch("/user/acknowledge-warning", { method: "POST" }),
+    onSuccess: () => {
+      if (user) queryClient.invalidateQueries({ queryKey: queryKeys.userMe(user.uid) });
+    },
   });
 }
 

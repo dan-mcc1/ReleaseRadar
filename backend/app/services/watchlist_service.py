@@ -80,6 +80,7 @@ def serialize_show(show):
         "air_time": show.air_time,
         "air_timezone": show.air_timezone,
         "vote_average": show.vote_average,
+        "certification": show.certification,
         "seasons": [serialize_season(s) for s in show.seasons],
         "genres": [{"id": g.id, "name": g.name} for g in show.genres],
         "providers": serialize_providers(show.show_providers),
@@ -104,6 +105,7 @@ def serialize_movie(movie):
         "title": movie.title,
         "tracking_count": movie.tracking_count,
         "vote_average": movie.vote_average,
+        "certification": movie.certification,
         "genres": [{"id": g.id, "name": g.name} for g in movie.genres],
         "providers": serialize_providers(movie.movie_providers),
     }
@@ -237,8 +239,26 @@ def _upsert_seasons_for_show(db: Session, show: Show, seasons_data: list):
 
 
 # -------------------------
-# Release date helper
+# Release date / certification helpers
 # -------------------------
+
+
+def get_us_movie_certification(movie_data: dict) -> str | None:
+    results = movie_data.get("release_dates", {}).get("results", [])
+    us = next((r for r in results if r.get("iso_3166_1") == "US"), None)
+    if not us:
+        return None
+    for release_type in (3, 2, 1, 4):
+        for rd in us.get("release_dates", []):
+            if rd.get("type") == release_type and rd.get("certification"):
+                return rd["certification"]
+    return None
+
+
+def get_us_show_certification(show_data: dict) -> str | None:
+    results = show_data.get("content_ratings", {}).get("results", [])
+    us = next((r for r in results if r.get("iso_3166_1") == "US"), None)
+    return us.get("rating") or None if us else None
 
 
 def get_theatrical_release_date(movie_data: dict) -> str | None:
@@ -287,6 +307,7 @@ def ensure_movie_in_db(db: Session, content_id: int, already_tracked: bool) -> M
         movie_data.get("watch/providers", {}).get("results", {}).get("US", {})
     )
     theatrical_release_date = get_theatrical_release_date(movie_data)
+    certification = get_us_movie_certification(movie_data)
     all_logos = movie_data.get("images", {}).get("logos", [])
     english_logos = [l for l in all_logos if l.get("iso_639_1") == "en"]
     logo = english_logos[0]["file_path"] if english_logos else None
@@ -308,6 +329,7 @@ def ensure_movie_in_db(db: Session, content_id: int, already_tracked: bool) -> M
         title=movie_data.get("title"),
         tracking_count=1,
         vote_average=movie_data.get("vote_average"),
+        certification=certification,
     )
     db.add(movie)
     db.flush()
@@ -327,7 +349,7 @@ def ensure_show_in_db(db: Session, content_id: int, already_tracked: bool) -> Sh
             show.tracking_count += 1
         return show
 
-    show_data = fetch_show_from_tmdb(content_id, "watch/providers,images")
+    show_data = fetch_show_from_tmdb(content_id, "watch/providers,images,content_ratings")
     if not show_data or not show_data.get("name"):
         raise ValueError("Cannot add show without a name")
 
@@ -336,6 +358,7 @@ def ensure_show_in_db(db: Session, content_id: int, already_tracked: bool) -> Sh
     english_logos = [l for l in all_logos if l.get("iso_639_1") == "en"]
     logo = english_logos[0]["file_path"] if english_logos else None
     air_time, air_timezone = fetch_show_air_time(show_data["name"])
+    certification = get_us_show_certification(show_data)
 
     show = Show(
         id=show_data["id"],
@@ -357,6 +380,7 @@ def ensure_show_in_db(db: Session, content_id: int, already_tracked: bool) -> Sh
         air_time=air_time,
         air_timezone=air_timezone,
         vote_average=show_data.get("vote_average"),
+        certification=certification,
     )
     db.add(show)
     db.flush()
@@ -610,6 +634,7 @@ def serialize_show_list(show):
         "status": show.status,
         "tracking_count": show.tracking_count,
         "vote_average": show.vote_average,
+        "certification": show.certification,
         "genres": [{"id": g.id, "name": g.name} for g in show.genres],
     }
 
@@ -628,6 +653,7 @@ def serialize_movie_list(movie):
         "title": movie.title,
         "tracking_count": movie.tracking_count,
         "vote_average": movie.vote_average,
+        "certification": movie.certification,
         "genres": [{"id": g.id, "name": g.name} for g in movie.genres],
     }
 

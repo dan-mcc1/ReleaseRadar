@@ -29,11 +29,16 @@ import ShelfDetailPage from "./pages/ShelfDetailPage";
 import Pricing from "./pages/Pricing";
 import BillingSettings from "./pages/BillingSettings";
 import AdminPage from "./pages/AdminPage";
+import AdminModerationPage from "./pages/AdminModerationPage";
+import AdminUsersPage from "./pages/AdminUsersPage";
 import News from "./pages/News";
+import CommunityGuidelines from "./pages/CommunityGuidelines";
 import StatsPage from "./pages/StatsPage";
 import ImportPage from "./pages/ImportPage";
 import Footer from "./components/Footer";
 import SpotlightTour from "./components/SpotlightTour";
+import WarningModal from "./components/WarningModal";
+import SuspensionBanModal from "./components/SuspensionBanModal";
 
 function App() {
   return (
@@ -43,6 +48,8 @@ function App() {
         <div className="h-16 shrink-0" />
         <InstallBanner />
         <SpotlightTour />
+        <WarningModal />
+        <SuspensionBanModal />
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route
@@ -84,6 +91,7 @@ function App() {
           <Route path="/collection/:id" element={<CollectionInfo />} />
           <Route path="/for-you" element={<ForYou />} />
           <Route path="/unsubscribe" element={<Unsubscribe />} />
+          <Route path="/community-guidelines" element={<CommunityGuidelines />} />
           <Route path="/pricing" element={<Pricing />} />
           <Route path="/billing" element={<BillingSettings />} />
           <Route
@@ -99,6 +107,22 @@ function App() {
             element={
               <ProtectedRoute>
                 <AdminPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/moderation"
+            element={
+              <ProtectedRoute>
+                <AdminModerationPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/users"
+            element={
+              <ProtectedRoute>
+                <AdminUsersPage />
               </ProtectedRoute>
             }
           />

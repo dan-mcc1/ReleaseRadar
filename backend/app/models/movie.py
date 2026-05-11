@@ -22,6 +22,7 @@ class Movie(Base):
     title = Column(String)
     tracking_count = Column(Integer)
     vote_average = Column(Float, nullable=True)
+    certification = Column(String, nullable=True)
 
     genres = relationship(
         "Genre", secondary="movie_genre", back_populates="movies", passive_deletes=True

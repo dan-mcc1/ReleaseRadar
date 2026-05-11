@@ -28,7 +28,13 @@ from app.services.user_service import get_profile_watchlist, get_profile_watched
 from app.services.favorite_service import get_favorites
 from app.services.stats_service import get_user_stats
 from app.services.watch_time_service import get_watch_time_stats
-from app.dependencies.auth import get_current_user
+from datetime import datetime, timezone
+from app.dependencies.auth import get_current_user, get_uid_only
+from app.models.appeal import Appeal
+from app.models.shelf_item import ShelfItem
+from app.models.shelf import Shelf
+from app.models.review import Review
+from app.models.report import Report
 from app.dependencies.subscription import feature_gate
 from app.models.user import User
 from app.models.watchlist import Watchlist
@@ -41,6 +47,8 @@ from app.models.recommendation import Recommendation
 from app.models.show import Show
 from app.models.movie import Movie
 from app.models.episode import Episode
+from app.models.block import Block
+from firebase_admin import auth as firebase_auth
 
 router = APIRouter()
 
@@ -80,6 +88,101 @@ def get_current_user_route(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return user
+
+
+@router.post("/acknowledge-warning")
+def acknowledge_warning(
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    user = db.query(User).filter(User.id == uid).first()
+    if user:
+        user.has_unread_warning = False
+        db.commit()
+    return {"detail": "Warning acknowledged."}
+
+
+@router.get("/account-status")
+def get_account_status(
+    uid: str = Depends(get_uid_only),
+    db: Session = Depends(get_db),
+):
+    """Returns suspension/ban state. Uses token-only auth so suspended/banned users can reach it."""
+    user = db.query(User).filter(User.id == uid).first()
+    if not user:
+        return {"is_banned": False, "is_suspended": False, "has_pending_appeal": False}
+
+    now = datetime.now(timezone.utc)
+    active_suspension = user.is_suspended and (
+        user.suspended_until is None or now < user.suspended_until
+    )
+    has_pending_appeal = (
+        db.query(Appeal).filter_by(user_id=uid, status="pending").first() is not None
+    )
+    pending_appeal = db.query(Appeal).filter_by(user_id=uid, status="pending").first()
+    return {
+        "is_banned": user.is_banned,
+        "ban_reason": user.ban_reason,
+        "is_suspended": active_suspension,
+        "suspended_until": user.suspended_until,
+        "suspension_reason": user.suspension_reason,
+        "is_silenced": user.is_silenced,
+        "silenced_until": user.silenced_until,
+        "has_pending_appeal": pending_appeal is not None,
+        "pending_appeal_requests_unsilence": (
+            pending_appeal.request_unsilence if pending_appeal else False
+        ),
+    }
+
+
+@router.post("/appeal")
+def submit_appeal(
+    message: str = Body(...),
+    request_unsilence: bool = Body(False),
+    uid: str = Depends(get_uid_only),
+    db: Session = Depends(get_db),
+):
+    """Submit an appeal for a suspension or ban. Accessible without suspension/ban checks."""
+    if not message or not message.strip():
+        raise HTTPException(status_code=422, detail="Appeal message cannot be empty.")
+    if len(message.strip()) > 2000:
+        raise HTTPException(
+            status_code=422, detail="Appeal must be 2000 characters or less."
+        )
+
+    user = db.query(User).filter(User.id == uid).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    now = datetime.now(timezone.utc)
+    active_suspension = user.is_suspended and (
+        user.suspended_until is None or now < user.suspended_until
+    )
+    if not user.is_banned and not active_suspension:
+        raise HTTPException(
+            status_code=400, detail="No active suspension or ban to appeal."
+        )
+
+    existing = db.query(Appeal).filter_by(user_id=uid, status="pending").first()
+    if existing:
+        raise HTTPException(
+            status_code=409, detail="You already have a pending appeal."
+        )
+
+    is_silenced = user.is_silenced or (
+        user.silenced_until is not None
+        and datetime.now(timezone.utc) < user.silenced_until
+    )
+    appeal_type = "ban" if user.is_banned else "suspension"
+    appeal = Appeal(
+        user_id=uid,
+        appeal_type=appeal_type,
+        message=message.strip(),
+        request_unsilence=request_unsilence and is_silenced,
+    )
+    db.add(appeal)
+    db.commit()
+    return {"detail": "Appeal submitted."}
 
 
 @router.put("/update-email")
@@ -232,6 +335,26 @@ def get_public_profile(
             status_code=400, detail="Use /user/me for your own profile."
         )
 
+    i_blocked = (
+        db.query(Block)
+        .filter(Block.blocker_id == uid, Block.blocked_id == target.id)
+        .first()
+    )
+    they_blocked = (
+        db.query(Block)
+        .filter(Block.blocker_id == target.id, Block.blocked_id == uid)
+        .first()
+    )
+
+    if they_blocked:
+        raise HTTPException(status_code=404, detail="User not found.")
+    if i_blocked:
+        return {
+            "id": target.id,
+            "username": target.username,
+            "blocked_by_viewer": True,
+        }
+
     visibility = target.profile_visibility or "friends_only"
 
     # Single query for all relationship rows between viewer and target
@@ -341,7 +464,9 @@ def cancel_subscription(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     if user.subscription_tier == "admin":
-        raise HTTPException(status_code=403, detail="Admin accounts cannot be modified this way")
+        raise HTTPException(
+            status_code=403, detail="Admin accounts cannot be modified this way"
+        )
     user.subscription_tier = "free"
     db.commit()
     return {"subscription_tier": "free"}
@@ -385,18 +510,21 @@ def delete_account(
     db.flush()
 
     # Delete all user data
-    db.query(Activity).filter_by(user_id=uid).delete()
-    db.query(EpisodeWatched).filter_by(user_id=uid).delete()
-    db.query(CurrentlyWatching).filter_by(user_id=uid).delete()
-    db.query(Watchlist).filter_by(user_id=uid).delete()
-    db.query(Watched).filter_by(user_id=uid).delete()
-    db.query(Favorite).filter_by(user_id=uid).delete()
-    db.query(Recommendation).filter(
-        (Recommendation.sender_id == uid) | (Recommendation.recipient_id == uid)
-    ).delete()
-    db.query(Friendship).filter(
-        (Friendship.requester_id == uid) | (Friendship.addressee_id == uid)
-    ).delete()
+    db.query(ShelfItem).filter(ShelfItem.user_id == uid).delete()
+    db.query(Shelf).filter(Shelf.user_id == uid).delete()
+    db.query(Review).filter(Review.user_id == uid).delete()
+    db.query(Favorite).filter(Favorite.user_id == uid).delete()
+    db.query(Activity).filter(Activity.user_id == uid).delete()
+    db.query(EpisodeWatched).filter(EpisodeWatched.user_id == uid).delete()
+    db.query(CurrentlyWatching).filter(CurrentlyWatching.user_id == uid).delete()
+    db.query(Watched).filter(Watched.user_id == uid).delete()
+    db.query(Watchlist).filter(Watchlist.user_id == uid).delete()
+    db.query(Block).filter(
+        (Block.blocker_id == uid) | (Block.blocked_id == uid)
+    ).delete(synchronize_session=False)
+    db.query(Report).filter(Report.reporter_id == uid).update(
+        {Report.reporter_id: None}, synchronize_session=False
+    )
 
     # Remove shows/movies no longer tracked by anyone
     for content_type, content_id in tracked:
@@ -416,4 +544,10 @@ def delete_account(
         db.delete(user)
 
     db.commit()
+
+    try:
+        firebase_auth.delete_user(uid)
+    except firebase_auth.UserNotFoundError:
+        pass
+
     return {"message": "Account deleted"}

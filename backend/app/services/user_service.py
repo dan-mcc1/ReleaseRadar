@@ -1,12 +1,13 @@
 # app/services/user_service.py
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
+from sqlalchemy import and_, or_
 from datetime import datetime
 from app.models.user import User
 from app.models.watchlist import Watchlist
 from app.models.watched import Watched
 from app.models.movie import Movie
 from app.models.show import Show
+from app.models.block import Block
 
 
 def create_user(
@@ -330,14 +331,18 @@ def search_users_by_username(
     db: Session, query: str, current_user_id: str, limit: int = 10
 ):
     """
-    Search users by partial username match, excluding the current user.
+    Search users by partial username match, excluding the current user and any blocked relationships.
     """
+    blocked_subquery = db.query(Block.blocked_id).filter(Block.blocker_id == current_user_id)
+    blocker_subquery = db.query(Block.blocker_id).filter(Block.blocked_id == current_user_id)
     return (
         db.query(User)
         .filter(
             User.username.ilike(f"%{query}%"),
             User.id != current_user_id,
             User.username.isnot(None),
+            User.id.notin_(blocked_subquery),
+            User.id.notin_(blocker_subquery),
         )
         .limit(limit)
         .all()

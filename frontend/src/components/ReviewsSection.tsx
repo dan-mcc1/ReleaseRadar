@@ -1,10 +1,22 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import type { User } from "firebase/auth";
 import {
   useReviews,
   useSubmitReview,
   useDeleteReview,
 } from "../hooks/api/useReviews";
+import { useSubmitReport, type ReportReason } from "../hooks/api/useModeration";
+import { useUserMe } from "../hooks/api/useUser";
+
+const REPORT_REASONS: { value: ReportReason; label: string }[] = [
+  { value: "spam", label: "Spam" },
+  { value: "harassment", label: "Harassment" },
+  { value: "hate_speech", label: "Hate speech" },
+  { value: "inappropriate_content", label: "Inappropriate content" },
+  { value: "misinformation", label: "Misinformation" },
+  { value: "other", label: "Other" },
+];
 
 interface Review {
   id: number;
@@ -39,6 +51,104 @@ function MiniStars({ rating }: { rating: number }) {
   );
 }
 
+function ReportReviewModal({
+  reviewId,
+  username,
+  onClose,
+}: {
+  reviewId: number;
+  username: string;
+  onClose: () => void;
+}) {
+  const [reason, setReason] = useState<ReportReason>("spam");
+  const [message, setMessage] = useState("");
+  const [done, setDone] = useState(false);
+  const reportMutation = useSubmitReport();
+
+  async function submit() {
+    await reportMutation.mutateAsync({
+      reported_type: "review",
+      reported_id: String(reviewId),
+      reason,
+      message: message.trim() || undefined,
+    });
+    setDone(true);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+      <div
+        className="bg-neutral-800 border border-neutral-700 rounded-xl p-5 w-full max-w-sm space-y-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {done ? (
+          <>
+            <p className="text-neutral-200 text-sm">
+              Report submitted. Thanks for letting us know.
+            </p>
+            <button
+              onClick={onClose}
+              className="w-full bg-neutral-700 hover:bg-neutral-600 text-neutral-200 text-sm py-2 rounded-lg transition-colors"
+            >
+              Close
+            </button>
+          </>
+        ) : (
+          <>
+            <h3 className="text-white font-semibold">
+              Report @{username}'s review
+            </h3>
+            <div className="space-y-1">
+              {REPORT_REASONS.map(({ value, label }) => (
+                <label
+                  key={value}
+                  className="flex items-center gap-2 cursor-pointer py-1"
+                >
+                  <input
+                    type="radio"
+                    name="reason"
+                    value={value}
+                    checked={reason === value}
+                    onChange={() => setReason(value)}
+                    className="accent-highlight-500"
+                  />
+                  <span className="text-neutral-300 text-sm">{label}</span>
+                </label>
+              ))}
+            </div>
+            <div>
+              <label className="text-xs text-neutral-400 block mb-1">Additional details (optional)</label>
+              <textarea
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                rows={3}
+                maxLength={500}
+                placeholder="Describe the issue…"
+                className="w-full bg-neutral-900 border border-neutral-600 rounded-lg px-3 py-2 text-sm text-neutral-200 placeholder-neutral-600 focus:outline-none focus:border-neutral-500 resize-none"
+              />
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={onClose}
+                className="flex-1 bg-neutral-700 hover:bg-neutral-600 text-neutral-300 text-sm py-2 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submit}
+                disabled={reportMutation.isPending}
+                className="flex-1 bg-error-600 hover:bg-error-500 disabled:opacity-50 text-white text-sm py-2 rounded-lg transition-colors font-medium"
+              >
+                {reportMutation.isPending ? "Submitting…" : "Report"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 interface Props {
   contentType: "movie" | "tv";
   contentId: number;
@@ -66,11 +176,17 @@ export default function ReviewsSection({
 }: Props) {
   const [draft, setDraft] = useState("");
   const [editing, setEditing] = useState(false);
+  const [reportingReviewId, setReportingReviewId] = useState<number | null>(null);
 
   const { data, isLoading: loading } = useReviews(contentType, contentId);
   const reviews = (data as Review[] | undefined) ?? [];
   const submitMutation = useSubmitReview();
   const deleteMutation = useDeleteReview();
+  const { data: me } = useUserMe();
+  const isSilenced = !!me && (
+    me.is_silenced ||
+    (!!me.silenced_until && new Date(me.silenced_until) > new Date())
+  );
 
   const myReview = user
     ? (reviews.find((r) => r.user_id === user.uid) ?? null)
@@ -114,7 +230,7 @@ export default function ReviewsSection({
       </h2>
 
       {/* Write / edit review */}
-      {user && (
+      {user && !isSilenced && (
         <div className="mb-6">
           {!myReview && !editing ? (
             <button
@@ -140,12 +256,14 @@ export default function ReviewsSection({
             <div className="bg-neutral-800/80 border border-highlight-500/30 rounded-xl p-4">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <div className="w-6 h-6 rounded-full bg-highlight-700 flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">
-                    {myReview.username[0]?.toUpperCase()}
-                  </div>
-                  <span className="text-sm font-medium text-highlight-300">
-                    @{myReview.username}
-                  </span>
+                  <Link to={`/user/${myReview.username}`} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+                    <div className="w-6 h-6 rounded-full bg-highlight-700 flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">
+                      {myReview.username[0]?.toUpperCase()}
+                    </div>
+                    <span className="text-sm font-medium text-highlight-300">
+                      @{myReview.username}
+                    </span>
+                  </Link>
                   {myReview.rating != null && (
                     <MiniStars rating={myReview.rating} />
                   )}
@@ -237,16 +355,30 @@ export default function ReviewsSection({
               className="bg-neutral-800/60 border border-neutral-700 rounded-xl p-4"
             >
               <div className="flex items-center gap-2 mb-2 flex-wrap">
-                <div className="w-6 h-6 rounded-full bg-neutral-600 flex items-center justify-center text-[10px] font-bold text-neutral-300 flex-shrink-0">
-                  {review.username[0]?.toUpperCase()}
-                </div>
-                <span className="text-sm font-medium text-neutral-300">
-                  @{review.username}
-                </span>
+                <Link to={`/user/${review.username}`} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+                  <div className="w-6 h-6 rounded-full bg-neutral-600 flex items-center justify-center text-[10px] font-bold text-neutral-300 flex-shrink-0">
+                    {review.username[0]?.toUpperCase()}
+                  </div>
+                  <span className="text-sm font-medium text-neutral-300">
+                    @{review.username}
+                  </span>
+                </Link>
                 {review.rating != null && <MiniStars rating={review.rating} />}
                 <span className="text-xs text-neutral-600">
                   {timeAgo(review.updated_at ?? review.created_at)}
                 </span>
+                {user && (
+                  <button
+                    onClick={() => setReportingReviewId(review.id)}
+                    className="ml-auto text-neutral-600 hover:text-error-400 transition-colors"
+                    title="Report review"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 3l1.5 1.5M21 3l-1.5 1.5M12 2v2m0 16v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2m16 0h2M6.34 17.66l-1.42 1.42M19.08 4.92l-1.42 1.42" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01" />
+                    </svg>
+                  </button>
+                )}
               </div>
               <p className="text-neutral-400 text-sm leading-relaxed whitespace-pre-wrap">
                 {review.review_text}
@@ -254,6 +386,13 @@ export default function ReviewsSection({
             </div>
           ))}
         </div>
+      )}
+      {reportingReviewId !== null && (
+        <ReportReviewModal
+          reviewId={reportingReviewId}
+          username={othersReviews.find((r) => r.id === reportingReviewId)?.username ?? ""}
+          onClose={() => setReportingReviewId(null)}
+        />
       )}
     </div>
   );

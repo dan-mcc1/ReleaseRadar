@@ -6,6 +6,7 @@ from fastapi import HTTPException
 
 from app.models.friendship import Friendship
 from app.models.user import User
+from app.models.block import Block
 
 # Configurable limits
 MAX_PENDING_OUTGOING = 25
@@ -54,6 +55,20 @@ def send_friend_request(db: Session, requester_id: str, addressee_username: str)
         raise HTTPException(
             status_code=400, detail="You cannot send a friend request to yourself."
         )
+
+    # Block check: either party has blocked the other
+    block = (
+        db.query(Block)
+        .filter(
+            or_(
+                and_(Block.blocker_id == requester_id, Block.blocked_id == addressee.id),
+                and_(Block.blocker_id == addressee.id, Block.blocked_id == requester_id),
+            )
+        )
+        .first()
+    )
+    if block:
+        raise HTTPException(status_code=403, detail="User not found.")
 
     is_public = (addressee.profile_visibility or "friends_only") == "public"
 

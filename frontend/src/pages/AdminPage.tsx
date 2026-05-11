@@ -58,13 +58,13 @@ function GrowthChart({ data }: { data: { date: string; signups: number }[] }) {
       {data.length === 0 ? (
         <p className="text-sm text-neutral-500">No data yet.</p>
       ) : (
-        <div className="flex items-end gap-1 h-20">
+        <div className="flex gap-1 h-20">
           {data.map((d) => {
             const heightPct = Math.max((d.signups / max) * 100, 4);
             return (
               <div
                 key={d.date}
-                className="flex-1 flex flex-col items-center justify-end gap-1 group"
+                className="flex-1 flex flex-col items-center justify-end gap-1 group h-full"
                 title={`${d.date}: ${d.signups}`}
               >
                 <div
@@ -139,6 +139,26 @@ export default function AdminPage() {
         <div>
           <h1 className="text-xl font-bold text-white">Admin Dashboard</h1>
           <p className="text-xs text-neutral-500">Release Radar site stats</p>
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          <Link
+            to="/admin/users"
+            className="flex items-center gap-2 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-neutral-300 text-sm px-4 py-2 rounded-lg transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a4 4 0 00-5-3.87M9 20H4v-2a4 4 0 015-3.87m6-4a4 4 0 11-8 0 4 4 0 018 0z" />
+            </svg>
+            Users
+          </Link>
+          <Link
+            to="/admin/moderation"
+            className="flex items-center gap-2 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-neutral-300 text-sm px-4 py-2 rounded-lg transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+            </svg>
+            Moderation
+          </Link>
         </div>
       </div>
 

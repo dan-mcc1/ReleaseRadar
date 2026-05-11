@@ -1,8 +1,10 @@
 from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
+from sqlalchemy import or_, and_
 from app.models.recommendation import Recommendation
 from app.models.user import User
+from app.models.block import Block
 from app.services.friends_service import are_friends
 
 _REC_TTL_DAYS = 7
@@ -26,6 +28,19 @@ def send_recommendation(
         raise HTTPException(
             status_code=400, detail="You cannot recommend something to yourself."
         )
+
+    block = (
+        db.query(Block)
+        .filter(
+            or_(
+                and_(Block.blocker_id == sender_id, Block.blocked_id == recipient.id),
+                and_(Block.blocker_id == recipient.id, Block.blocked_id == sender_id),
+            )
+        )
+        .first()
+    )
+    if block:
+        raise HTTPException(status_code=404, detail="User not found.")
 
     if not are_friends(db, sender_id, recipient.id):
         raise HTTPException(

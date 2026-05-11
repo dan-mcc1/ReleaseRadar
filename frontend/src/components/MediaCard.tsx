@@ -2,6 +2,7 @@ import { Movie, Show } from "../types/calendar";
 import { BASE_IMAGE_URL } from "../constants";
 import { Link } from "react-router-dom";
 import { parseLocalDate } from "../utils/date";
+import ContentRatingBadge from "./media/ContentRatingBadge";
 
 type MediaCardProps =
   | {
@@ -96,6 +97,9 @@ export default function MediaCard({ item, type, onRemove }: MediaCardProps) {
             </div>
           )}
           <div className="flex items-center gap-2 flex-wrap">
+            {item.certification && (
+              <ContentRatingBadge rating={item.certification} />
+            )}
             {year && <span className="text-xs text-neutral-400">{year}</span>}
             {item.vote_average != null && item.vote_average > 0 && (
               <span className="flex items-center gap-0.5 text-xs text-warning-400 font-medium">
@@ -109,7 +113,7 @@ export default function MediaCard({ item, type, onRemove }: MediaCardProps) {
                 {item.vote_average.toFixed(1)}
               </span>
             )}
-            {genres.slice(0, 2).map((g) => (
+            {genres.map((g) => (
               <span
                 key={g.id}
                 className="text-xs text-neutral-500 bg-neutral-700/60 px-1.5 py-0.5 rounded"

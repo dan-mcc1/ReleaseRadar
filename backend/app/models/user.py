@@ -1,5 +1,5 @@
 # src/models/user.py
-from sqlalchemy import Column, String, DateTime, Boolean
+from sqlalchemy import Column, String, DateTime, Boolean, Text, Integer
 from sqlalchemy.sql import func
 from app.db.base import Base
 
@@ -26,3 +26,12 @@ class User(Base):
     notify_new_seasons = Column(Boolean, default=True, server_default="true", nullable=False)
     notify_streaming_changes = Column(Boolean, default=True, server_default="true", nullable=False)
     onboarding_completed = Column(Boolean, default=False, server_default="false", nullable=False)
+    is_suspended = Column(Boolean, default=False, server_default="false", nullable=False)
+    suspended_until = Column(DateTime(timezone=True), nullable=True)
+    suspension_reason = Column(Text, nullable=True)
+    warning_count = Column(Integer, default=0, server_default="0", nullable=False)
+    has_unread_warning = Column(Boolean, default=False, server_default="false", nullable=False)
+    is_banned = Column(Boolean, default=False, server_default="false", nullable=False)
+    ban_reason = Column(Text, nullable=True)
+    is_silenced = Column(Boolean, default=False, server_default="false", nullable=False)
+    silenced_until = Column(DateTime(timezone=True), nullable=True)

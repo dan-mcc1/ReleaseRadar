@@ -1,13 +1,28 @@
+from typing import Optional
 from fastapi import APIRouter, Depends, Body, HTTPException, Query, Request
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.core.limiter import limiter
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from app.db.session import get_db
-from app.dependencies.auth import get_current_user
+from app.dependencies.auth import get_current_user, require_not_silenced
+from app.core.firebase import verify_token
 from app.models.review import Review
 from app.models.user import User
 from app.models.watched import Watched
+from app.models.block import Block
 from app.services.omdb_service import get_omdb_scores
+
+_bearer = HTTPBearer(auto_error=False)
+
+
+def _optional_user(credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer)) -> Optional[str]:
+    if not credentials:
+        return None
+    try:
+        return verify_token(credentials.credentials)["uid"]
+    except Exception:
+        return None
 
 router = APIRouter()
 
@@ -19,9 +34,10 @@ def get_reviews(
     content_type: str = Query(...),
     content_id: int = Query(...),
     db: Session = Depends(get_db),
+    uid: Optional[str] = Depends(_optional_user),
 ):
-    """Get all reviews for a piece of content."""
-    rows = (
+    """Get all reviews for a piece of content, excluding reviews from users the viewer has blocked."""
+    query = (
         db.query(Review, User.username, Watched.rating)
         .join(User, Review.user_id == User.id)
         .outerjoin(
@@ -31,10 +47,17 @@ def get_reviews(
             & (Watched.content_id == Review.content_id),
         )
         .filter(Review.content_type == content_type, Review.content_id == content_id)
-        .order_by(Review.created_at.desc())
-        .limit(5)
-        .all()
     )
+
+    if uid:
+        blocked_ids = [
+            b.blocked_id
+            for b in db.query(Block.blocked_id).filter(Block.blocker_id == uid).all()
+        ]
+        if blocked_ids:
+            query = query.filter(Review.user_id.notin_(blocked_ids))
+
+    rows = query.order_by(Review.created_at.desc()).limit(5).all()
     return [
         {
             "id": row.Review.id,
@@ -91,7 +114,7 @@ def add_or_update_review(
     content_id: int = Body(...),
     review_text: str = Body(...),
     db: Session = Depends(get_db),
-    uid: str = Depends(get_current_user),
+    uid: str = Depends(require_not_silenced),
 ):
     """Add or update the current user's review."""
     review_text = review_text.strip()

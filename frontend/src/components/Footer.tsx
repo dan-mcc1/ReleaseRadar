@@ -49,6 +49,12 @@ export default function Footer() {
             >
               Settings
             </Link>
+            <Link
+              to="/community-guidelines"
+              className="hover:text-neutral-300 transition-colors"
+            >
+              Community Guidelines
+            </Link>
           </div>
 
           {/* TMDB attribution */}

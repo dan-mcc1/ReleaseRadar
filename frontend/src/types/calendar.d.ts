@@ -30,6 +30,7 @@ export type Show = {
   bg_color?: string;
   popularity?: number;
   vote_average?: number;
+  certification?: string | null;
   user_rating?: number | null;
   sort_key?: number;
   watchlist_id?: number;
@@ -91,6 +92,7 @@ export type Movie = {
   bg_color?: string;
   popularity?: number;
   vote_average?: number;
+  certification?: string | null;
   is_watched: boolean;
   user_rating?: number | null;
   sort_key?: number;

@@ -16,6 +16,12 @@ import {
 } from "@dnd-kit/sortable";
 import MediaCard from "../components/MediaCard";
 import WatchlistOrderRow from "../components/WatchlistOrderRow";
+import ListFilterPanel, {
+  DEFAULT_FILTERS,
+  type ListFilters,
+  countActiveFilters,
+  applyFilters,
+} from "../components/ListFilterPanel";
 import { usePageTitle } from "../hooks/usePageTitle";
 import {
   useWatchlist,
@@ -135,6 +141,26 @@ export default function Watchlist() {
   const [activeTab, setActiveTab] = useState<TabType>("all");
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortType>("my_order");
+  const [filters, setFilters] = useState<ListFilters>(DEFAULT_FILTERS);
+  const [showFilters, setShowFilters] = useState(false);
+
+  const availableGenres = useMemo(() => {
+    const set = new Set<string>();
+    [...results.movies, ...results.shows].forEach((item) =>
+      (item.genres ?? []).forEach((g) => set.add(g.name)),
+    );
+    return [...set].sort();
+  }, [results.movies, results.shows]);
+
+  const availableCertifications = useMemo(() => {
+    const set = new Set<string>();
+    [...results.movies, ...results.shows].forEach((item) => {
+      if (item.certification) set.add(item.certification);
+    });
+    return [...set];
+  }, [results.movies, results.shows]);
+
+  const activeFilterCount = countActiveFilters(filters);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -201,18 +227,30 @@ export default function Watchlist() {
   const q = query.toLowerCase();
 
   const filteredMovies = applySort(
-    results.movies.filter((m) => m.title.toLowerCase().includes(q)),
+    applyFilters(
+      results.movies.filter((m) => m.title.toLowerCase().includes(q)),
+      filters,
+    ),
     sort,
   );
   const filteredShows = applySort(
-    results.shows.filter((s) => s.name.toLowerCase().includes(q)),
+    applyFilters(
+      results.shows.filter((s) => s.name.toLowerCase().includes(q)),
+      filters,
+    ),
     sort,
   );
 
   const combinedItems = useMemo(
     () =>
-      isMyOrder ? buildCombined(results.movies, results.shows, query) : [],
-    [isMyOrder, results.movies, results.shows, query],
+      isMyOrder
+        ? buildCombined(
+            applyFilters(results.movies, filters),
+            applyFilters(results.shows, filters),
+            query,
+          )
+        : [],
+    [isMyOrder, results.movies, results.shows, query, filters],
   );
   const combinedByType = useMemo(
     () => ({
@@ -295,65 +333,83 @@ export default function Watchlist() {
       )}
 
       {!loading && totalCount > 0 && (
-        <div className="flex gap-3 mb-6">
-          <div className="relative flex-1">
-            <svg
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-              />
-            </svg>
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search your watchlist…"
-              className="w-full bg-neutral-800 border border-neutral-700 text-neutral-200 placeholder-neutral-500 rounded-lg pl-9 pr-4 py-2 text-sm focus:outline-none focus:border-neutral-500"
-            />
-            {query && (
-              <button
-                onClick={() => setQuery("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-300"
+        <div className="mb-6 space-y-3">
+          <div className="flex gap-3">
+            <div className="relative flex-1">
+              <svg
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
               >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
+              </svg>
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search your watchlist…"
+                className="w-full bg-neutral-800 border border-neutral-700 text-neutral-200 placeholder-neutral-500 rounded-lg pl-9 pr-4 py-2 text-sm focus:outline-none focus:border-neutral-500"
+              />
+              {query && (
+                <button
+                  onClick={() => setQuery("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-300"
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
-            )}
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+            <button
+              onClick={() => setShowFilters((v) => !v)}
+              className={`flex items-center gap-1.5 shrink-0 text-sm px-3 py-2 rounded-lg border transition-colors ${
+                showFilters || activeFilterCount > 0
+                  ? "bg-primary-600/20 border-primary-600/40 text-primary-300"
+                  : "bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-neutral-200 hover:border-neutral-600"
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" />
+              </svg>
+              <span className="hidden sm:inline">Filters</span>
+              {activeFilterCount > 0 && (
+                <span className="bg-primary-600 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center leading-none">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as SortType)}
+              className="w-28 sm:w-auto shrink-0 text-sm bg-neutral-800 border border-neutral-700 text-neutral-300 rounded-lg px-3 py-2 focus:outline-none focus:border-neutral-500"
+            >
+              <option value="my_order">My Order</option>
+              <option value="added_desc">Recently Added</option>
+              <option value="added_asc">Oldest Added</option>
+              <option value="title_asc">Title: A → Z</option>
+              <option value="title_desc">Title: Z → A</option>
+              <option value="date_desc">Release Date: Newest</option>
+              <option value="date_asc">Release Date: Oldest</option>
+              <option value="popularity_desc">Most Popular</option>
+              <option value="tmdb_rating_desc">TMDB Rating: High → Low</option>
+              <option value="tmdb_rating_asc">TMDB Rating: Low → High</option>
+            </select>
           </div>
-          <select
-            value={sort}
-            onChange={(e) => setSort(e.target.value as SortType)}
-            className="w-28 sm:w-auto shrink-0 text-sm bg-neutral-800 border border-neutral-700 text-neutral-300 rounded-lg px-3 py-2 focus:outline-none focus:border-neutral-500"
-          >
-            <option value="my_order">My Order</option>
-            <option value="added_desc">Recently Added</option>
-            <option value="added_asc">Oldest Added</option>
-            <option value="title_asc">Title: A → Z</option>
-            <option value="title_desc">Title: Z → A</option>
-            <option value="date_desc">Release Date: Newest</option>
-            <option value="date_asc">Release Date: Oldest</option>
-            <option value="popularity_desc">Most Popular</option>
-            <option value="tmdb_rating_desc">TMDB Rating: High → Low</option>
-            <option value="tmdb_rating_asc">TMDB Rating: Low → High</option>
-          </select>
+          {showFilters && (
+            <ListFilterPanel
+              filters={filters}
+              onChange={setFilters}
+              availableGenres={availableGenres}
+              availableCertifications={availableCertifications}
+            />
+          )}
         </div>
       )}
 
@@ -391,32 +447,44 @@ export default function Watchlist() {
 
       {!loading &&
         totalCount > 0 &&
-        query &&
         filteredMovies.length === 0 &&
         filteredShows.length === 0 &&
         !isMyOrder && (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <p className="text-neutral-400 font-medium mb-1">
-              No results for "{query}"
+              {activeFilterCount > 0 ? "No results match your filters" : `No results for "${query}"`}
             </p>
-            <p className="text-neutral-500 text-sm">
-              Try a different search term
-            </p>
+            {activeFilterCount > 0 ? (
+              <button
+                onClick={() => setFilters(DEFAULT_FILTERS)}
+                className="text-primary-400 hover:text-primary-300 text-sm mt-1 transition-colors"
+              >
+                Clear filters
+              </button>
+            ) : (
+              <p className="text-neutral-500 text-sm">Try a different search term</p>
+            )}
           </div>
         )}
 
       {!loading &&
         totalCount > 0 &&
-        query &&
         isMyOrder &&
         combinedItems.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <p className="text-neutral-400 font-medium mb-1">
-              No results for "{query}"
+              {activeFilterCount > 0 ? "No results match your filters" : `No results for "${query}"`}
             </p>
-            <p className="text-neutral-500 text-sm">
-              Try a different search term
-            </p>
+            {activeFilterCount > 0 ? (
+              <button
+                onClick={() => setFilters(DEFAULT_FILTERS)}
+                className="text-primary-400 hover:text-primary-300 text-sm mt-1 transition-colors"
+              >
+                Clear filters
+              </button>
+            ) : (
+              <p className="text-neutral-500 text-sm">Try a different search term</p>
+            )}
           </div>
         )}
 
@@ -447,6 +515,7 @@ export default function Watchlist() {
                     voteAverage={item.vote_average}
                     userRating={item.user_rating}
                     genres={item.genres}
+                    certification={item.certification}
                     bingePlan={item._contentType === "tv" ? (bingePlans?.[String(item.id)] ?? null) : null}
                     isFirst={idx === 0}
                     isLast={idx === combinedItems.length - 1}
@@ -521,6 +590,7 @@ export default function Watchlist() {
                   voteAverage={item.vote_average}
                   userRating={item.user_rating}
                   genres={item.genres}
+                  certification={item.certification}
                   bingePlan={item._contentType === "tv" ? (bingePlans?.[String(item.id)] ?? null) : null}
                   isFirst={allIdx === 0}
                   isLast={allIdx === combinedItems.length - 1}

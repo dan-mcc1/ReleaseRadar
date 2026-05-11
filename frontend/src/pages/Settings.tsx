@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { useMyBlocks, useUnblockUser } from "../hooks/api/useModeration";
 import { isPremiumFeature } from "../config/features";
 import { deleteUser, signOut } from "firebase/auth";
 import { auth } from "../firebase";
@@ -140,17 +141,31 @@ export default function Settings() {
   const notifyNewSeasons = prefs?.notify_new_seasons ?? true;
   const notifyStreamingChanges = prefs?.notify_streaming_changes ?? true;
   const prefSaving = updatePrefsMutation.isPending;
-  const isPremium = userMe?.subscription_tier === "premium" || userMe?.subscription_tier === "admin";
+  const isPremium =
+    userMe?.subscription_tier === "premium" ||
+    userMe?.subscription_tier === "admin";
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [notifySearch, setNotifySearch] = useState("");
-  const [notifyTypeFilter, setNotifyTypeFilter] = useState<"all" | "tv" | "movie">("all");
+  const [notifyTypeFilter, setNotifyTypeFilter] = useState<
+    "all" | "tv" | "movie"
+  >("all");
   const bulkToggleWatchlistNotify = useBulkToggleWatchlistNotify();
+  const { data: blocksData } = useMyBlocks();
+  const unblockMutation = useUnblockUser();
+  const blocks: {
+    user_id: string;
+    username: string | null;
+    blocked_at: string;
+  }[] = (blocksData as any) ?? [];
 
   const filteredWatchlistItems = useMemo(() => {
     if (!watchlistNotifyItems) return [];
     return watchlistNotifyItems.filter((item) => {
-      const matchesType = notifyTypeFilter === "all" || item.content_type === notifyTypeFilter;
-      const matchesSearch = item.name.toLowerCase().includes(notifySearch.toLowerCase());
+      const matchesType =
+        notifyTypeFilter === "all" || item.content_type === notifyTypeFilter;
+      const matchesSearch = item.name
+        .toLowerCase()
+        .includes(notifySearch.toLowerCase());
       return matchesType && matchesSearch;
     });
   }, [watchlistNotifyItems, notifySearch, notifyTypeFilter]);
@@ -211,7 +226,7 @@ export default function Settings() {
     setError(null);
     try {
       await deleteAccountMutation.mutateAsync();
-      await deleteUser(user);
+      await signOut(auth);
       navigate("/signIn");
     } catch (err: any) {
       if (err.code === "auth/requires-recent-login") {
@@ -469,7 +484,10 @@ export default function Settings() {
             </p>
             <div className="flex gap-2">
               {(["daily", "weekly", "monthly"] as const).map((freq) => {
-                const locked = freq === "daily" && isPremiumFeature("notificationSettings") && !isPremium;
+                const locked =
+                  freq === "daily" &&
+                  isPremiumFeature("notificationSettings") &&
+                  !isPremium;
                 return (
                   <button
                     key={freq}
@@ -487,8 +505,18 @@ export default function Settings() {
                   >
                     {freq.charAt(0).toUpperCase() + freq.slice(1)}
                     {locked && (
-                      <svg className="w-3.5 h-3.5 text-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                      <svg
+                        className="w-3.5 h-3.5 text-neutral-400"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                        />
                       </svg>
                     )}
                   </button>
@@ -499,70 +527,82 @@ export default function Settings() {
         )}
 
         <div className="flex items-center justify-between gap-6">
-            <div>
-              <p className="text-white font-medium flex items-center gap-2">
-                Season Premiere Alerts
-                {!isPremium && (
-                  <span className="text-[10px] font-bold uppercase tracking-wider bg-amber-400/15 text-amber-400 border border-amber-400/30 rounded-full px-2 py-0.5">
-                    Premium
-                  </span>
-                )}
-              </p>
-              <p className="text-neutral-400 text-sm">
-                Email me 30 and 7 days before a new season of a tracked show premieres.
-              </p>
-            </div>
-            <button
-              onClick={() =>
-                isPremium
-                  ? patchPreferences({ notify_new_seasons: !notifyNewSeasons })
-                  : setShowUpgradeModal(true)
-              }
-              disabled={prefSaving && isPremium}
-              className={`relative inline-flex h-6 w-12 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
-                isPremium && notifyNewSeasons ? "bg-primary-600" : "bg-neutral-600"
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  isPremium && notifyNewSeasons ? "translate-x-7" : "translate-x-1"
-                }`}
-              />
-            </button>
+          <div>
+            <p className="text-white font-medium flex items-center gap-2">
+              Season Premiere Alerts
+              {!isPremium && (
+                <span className="text-[10px] font-bold uppercase tracking-wider bg-amber-400/15 text-amber-400 border border-amber-400/30 rounded-full px-2 py-0.5">
+                  Premium
+                </span>
+              )}
+            </p>
+            <p className="text-neutral-400 text-sm">
+              Email me 30 and 7 days before a new season of a tracked show
+              premieres.
+            </p>
           </div>
+          <button
+            onClick={() =>
+              isPremium
+                ? patchPreferences({ notify_new_seasons: !notifyNewSeasons })
+                : setShowUpgradeModal(true)
+            }
+            disabled={prefSaving && isPremium}
+            className={`relative inline-flex h-6 w-12 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
+              isPremium && notifyNewSeasons
+                ? "bg-primary-600"
+                : "bg-neutral-600"
+            }`}
+          >
+            <span
+              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                isPremium && notifyNewSeasons
+                  ? "translate-x-7"
+                  : "translate-x-1"
+              }`}
+            />
+          </button>
+        </div>
 
-          <div className="flex items-center justify-between gap-6">
-            <div>
-              <p className="text-white font-medium flex items-center gap-2">
-                Streaming Availability Alerts
-                {!isPremium && (
-                  <span className="text-[10px] font-bold uppercase tracking-wider bg-amber-400/15 text-amber-400 border border-amber-400/30 rounded-full px-2 py-0.5">
-                    Premium
-                  </span>
-                )}
-              </p>
-              <p className="text-neutral-400 text-sm">
-                Email me when a tracked title arrives on or leaves a streaming service.
-              </p>
-            </div>
-            <button
-              onClick={() =>
-                isPremium
-                  ? patchPreferences({ notify_streaming_changes: !notifyStreamingChanges })
-                  : setShowUpgradeModal(true)
-              }
-              disabled={prefSaving && isPremium}
-              className={`relative inline-flex h-6 w-12 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
-                isPremium && notifyStreamingChanges ? "bg-primary-600" : "bg-neutral-600"
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  isPremium && notifyStreamingChanges ? "translate-x-7" : "translate-x-1"
-                }`}
-              />
-            </button>
+        <div className="flex items-center justify-between gap-6">
+          <div>
+            <p className="text-white font-medium flex items-center gap-2">
+              Streaming Availability Alerts
+              {!isPremium && (
+                <span className="text-[10px] font-bold uppercase tracking-wider bg-amber-400/15 text-amber-400 border border-amber-400/30 rounded-full px-2 py-0.5">
+                  Premium
+                </span>
+              )}
+            </p>
+            <p className="text-neutral-400 text-sm">
+              Email me when a tracked title arrives on or leaves a streaming
+              service.
+            </p>
           </div>
+          <button
+            onClick={() =>
+              isPremium
+                ? patchPreferences({
+                    notify_streaming_changes: !notifyStreamingChanges,
+                  })
+                : setShowUpgradeModal(true)
+            }
+            disabled={prefSaving && isPremium}
+            className={`relative inline-flex h-6 w-12 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
+              isPremium && notifyStreamingChanges
+                ? "bg-primary-600"
+                : "bg-neutral-600"
+            }`}
+          >
+            <span
+              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                isPremium && notifyStreamingChanges
+                  ? "translate-x-7"
+                  : "translate-x-1"
+              }`}
+            />
+          </button>
+        </div>
       </div>
 
       {/* ── Notification Subscriptions ── */}
@@ -573,7 +613,8 @@ export default function Settings() {
               Notification Subscriptions
             </h2>
             <p className="text-neutral-500 text-xs mt-1">
-              Control which watchlisted titles appear in your digest and premiere alerts.
+              Control which watchlisted titles appear in your digest and
+              premiere alerts.
             </p>
           </div>
           {!isPremium && (
@@ -591,8 +632,18 @@ export default function Settings() {
                 {/* Search + filter + bulk controls */}
                 <div className="flex items-center gap-2">
                   <div className="relative flex-1 min-w-0">
-                    <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-500 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    <svg
+                      className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-500 pointer-events-none"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                      />
                     </svg>
                     <input
                       type="text"
@@ -608,7 +659,9 @@ export default function Settings() {
                         key={t}
                         onClick={() => setNotifyTypeFilter(t)}
                         className={`px-2.5 py-1.5 text-xs font-medium transition-colors ${
-                          notifyTypeFilter === t ? "bg-primary-600 text-white" : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700"
+                          notifyTypeFilter === t
+                            ? "bg-primary-600 text-white"
+                            : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700"
                         } ${i < arr.length - 1 ? "border-r border-neutral-600" : ""}`}
                       >
                         {t === "all" ? "All" : t === "tv" ? "TV" : "Film"}
@@ -616,75 +669,104 @@ export default function Settings() {
                     ))}
                   </div>
                   <button
-                    onClick={() => bulkToggleWatchlistNotify.mutate({ notify: !allNotifyOn })}
+                    onClick={() =>
+                      bulkToggleWatchlistNotify.mutate({ notify: !allNotifyOn })
+                    }
                     disabled={bulkToggleWatchlistNotify.isPending}
                     className="shrink-0 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-neutral-600 bg-neutral-800 text-neutral-300 hover:bg-neutral-700 hover:text-white transition-colors disabled:opacity-50"
                   >
-                    {bulkToggleWatchlistNotify.isPending ? "Saving…" : allNotifyOn ? "Mute all" : "Unmute all"}
+                    {bulkToggleWatchlistNotify.isPending
+                      ? "Saving…"
+                      : allNotifyOn
+                        ? "Mute all"
+                        : "Unmute all"}
                   </button>
                 </div>
 
                 {/* Results count when filtering */}
                 {(notifySearch || notifyTypeFilter !== "all") && (
                   <p className="text-xs text-neutral-500">
-                    {filteredWatchlistItems.length} of {watchlistNotifyItems.length} titles
-                    {notifySearch && <> matching "<span className="text-neutral-300">{notifySearch}</span>"</>}
+                    {filteredWatchlistItems.length} of{" "}
+                    {watchlistNotifyItems.length} titles
+                    {notifySearch && (
+                      <>
+                        {" "}
+                        matching "
+                        <span className="text-neutral-300">{notifySearch}</span>
+                        "
+                      </>
+                    )}
                   </p>
                 )}
 
                 {/* List */}
                 <div className="max-h-72 overflow-y-auto rounded-lg border border-neutral-700 divide-y divide-neutral-700/50">
-                  {filteredWatchlistItems.length > 0 ? filteredWatchlistItems.map((item) => (
-                    <div
-                      key={`${item.content_type}:${item.content_id}`}
-                      className="flex items-center justify-between gap-3 px-3 py-2.5"
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-[10px] font-medium uppercase tracking-wider text-neutral-500 shrink-0 w-6">
-                          {item.content_type === "tv" ? "TV" : "Film"}
-                        </span>
-                        <span className="text-sm text-white truncate">{item.name}</span>
-                      </div>
-                      <button
-                        onClick={() =>
-                          toggleWatchlistNotify.mutate({
-                            contentType: item.content_type,
-                            contentId: item.content_id,
-                            notify: !item.notify,
-                          })
-                        }
-                        disabled={toggleWatchlistNotify.isPending || bulkToggleWatchlistNotify.isPending}
-                        className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
-                          item.notify ? "bg-primary-600" : "bg-neutral-600"
-                        }`}
+                  {filteredWatchlistItems.length > 0 ? (
+                    filteredWatchlistItems.map((item) => (
+                      <div
+                        key={`${item.content_type}:${item.content_id}`}
+                        className="flex items-center justify-between gap-3 px-3 py-2.5"
                       >
-                        <span
-                          className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
-                            item.notify ? "translate-x-4" : "translate-x-0.5"
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-[10px] font-medium uppercase tracking-wider text-neutral-500 shrink-0 w-6">
+                            {item.content_type === "tv" ? "TV" : "Film"}
+                          </span>
+                          <span className="text-sm text-white truncate">
+                            {item.name}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() =>
+                            toggleWatchlistNotify.mutate({
+                              contentType: item.content_type,
+                              contentId: item.content_id,
+                              notify: !item.notify,
+                            })
+                          }
+                          disabled={
+                            toggleWatchlistNotify.isPending ||
+                            bulkToggleWatchlistNotify.isPending
+                          }
+                          className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
+                            item.notify ? "bg-primary-600" : "bg-neutral-600"
                           }`}
-                        />
-                      </button>
-                    </div>
-                  )) : (
-                    <p className="text-sm text-neutral-500 px-3 py-4 text-center">No titles match your search.</p>
+                        >
+                          <span
+                            className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                              item.notify ? "translate-x-4" : "translate-x-0.5"
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-sm text-neutral-500 px-3 py-4 text-center">
+                      No titles match your search.
+                    </p>
                   )}
                 </div>
               </div>
             ) : (
-              <p className="text-sm text-neutral-500">Nothing in your watchlist yet.</p>
+              <p className="text-sm text-neutral-500">
+                Nothing in your watchlist yet.
+              </p>
             )}
 
             {/* Per-shelf toggles */}
             {shelves && shelves.length > 0 && (
               <div className="space-y-1">
-                <p className="text-xs font-medium text-neutral-400 mb-2">Shelves</p>
+                <p className="text-xs font-medium text-neutral-400 mb-2">
+                  Shelves
+                </p>
                 {shelves.map((shelf) => (
                   <div
                     key={shelf.id}
                     className="flex items-center justify-between gap-3 py-2 border-b border-neutral-700/50 last:border-0"
                   >
                     <div className="min-w-0">
-                      <span className="text-sm text-white truncate block">{shelf.name}</span>
+                      <span className="text-sm text-white truncate block">
+                        {shelf.name}
+                      </span>
                       {shelf.description && (
                         <span className="text-xs text-neutral-500 truncate block">
                           {shelf.description}
@@ -693,7 +775,10 @@ export default function Settings() {
                     </div>
                     <button
                       onClick={() =>
-                        toggleShelfNotify.mutate({ shelfId: shelf.id, notify: !shelf.notify })
+                        toggleShelfNotify.mutate({
+                          shelfId: shelf.id,
+                          notify: !shelf.notify,
+                        })
                       }
                       disabled={toggleShelfNotify.isPending}
                       className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
@@ -716,8 +801,18 @@ export default function Settings() {
             onClick={() => setShowUpgradeModal(true)}
             className="w-full flex items-center justify-center gap-2 py-3 rounded-lg border border-dashed border-neutral-600 text-sm text-neutral-400 hover:text-white hover:border-neutral-500 transition-colors"
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+              />
             </svg>
             Upgrade to Premium to customize notifications
           </button>
@@ -787,6 +882,38 @@ export default function Settings() {
             ))}
           </div>
         </div>
+      </div>
+
+      {/* ── Blocked Users ── */}
+      <div className="bg-neutral-800 shadow-md rounded-lg p-4 space-y-3">
+        <h2 className="text-sm font-semibold text-neutral-400 uppercase tracking-wider">
+          Blocked Users
+        </h2>
+        {blocks.length === 0 ? (
+          <p className="text-neutral-500 text-sm">
+            You haven't blocked anyone.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {blocks.map((b) => (
+              <div
+                key={b.user_id}
+                className="flex items-center justify-between gap-3"
+              >
+                <span className="text-neutral-300 text-sm">
+                  @{b.username ?? b.user_id}
+                </span>
+                <button
+                  onClick={() => unblockMutation.mutate(b.user_id)}
+                  disabled={unblockMutation.isPending}
+                  className="text-xs text-neutral-400 hover:text-neutral-200 disabled:opacity-50 border border-neutral-600 hover:border-neutral-500 px-3 py-1 rounded-lg transition-colors"
+                >
+                  Unblock
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ── Account ── */}

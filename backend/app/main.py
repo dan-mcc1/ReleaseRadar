@@ -36,6 +36,7 @@ from app.routers import (
     news,
     rewatch,
     import_router,
+    moderation,
 )
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -193,6 +194,9 @@ async def lifespan(app: FastAPI):
     import app.models.shelf_item  # noqa: F401
     import app.models.subscription  # noqa: F401
     import app.models.rewatch  # noqa: F401
+    import app.models.block  # noqa: F401
+    import app.models.report  # noqa: F401
+    import app.models.appeal  # noqa: F401
 
     Base.metadata.create_all(engine)
     task = asyncio.create_task(_activity_cleanup_loop())
@@ -272,5 +276,6 @@ app.include_router(billing.router, prefix="/billing", tags=["billing"])
 app.include_router(news.router, prefix="/news", tags=["news"])
 app.include_router(rewatch.router, prefix="/rewatch", tags=["rewatch"])
 app.include_router(import_router.router, prefix="/import", tags=["import"])
+app.include_router(moderation.router, prefix="/moderation", tags=["moderation"])
 if settings.ENVIRONMENT != "production":
     app.include_router(dev.router, prefix="/dev", tags=["dev"])
