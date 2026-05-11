@@ -341,11 +341,11 @@ def accept_report(
             target.has_unread_warning = True
 
             # Auto-escalate based on warning count
-            if target.warning_count == 3:
+            if target.warning_count == 2:
                 target.silenced_until = now + timedelta(days=7)
-            elif target.warning_count == 4:
+            elif target.warning_count == 3:
                 target.silenced_until = now + timedelta(days=30)
-            elif target.warning_count >= 5:
+            elif target.warning_count >= 4:
                 target.is_silenced = True
                 target.silenced_until = None
 

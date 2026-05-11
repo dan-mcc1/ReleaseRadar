@@ -13,14 +13,16 @@ interface Review {
   rating: number | null;
   created_at: string;
   updated_at: string;
+  like_count: number;
+  user_has_liked: boolean;
 }
 
-export function useReviews(contentType: string, contentId: number) {
+export function useReviews(contentType: string, contentId: number, sort: "newest" | "top" = "newest") {
   return useQuery({
-    queryKey: queryKeys.reviews(contentType, contentId),
+    queryKey: [...queryKeys.reviews(contentType, contentId), sort],
     queryFn: () =>
       queryFetch<Review[]>(
-        `/reviews?content_type=${contentType}&content_id=${contentId}`,
+        `/reviews?content_type=${contentType}&content_id=${contentId}&sort=${sort}`,
       ),
   });
 }
@@ -106,6 +108,53 @@ export function useDeleteReview() {
       queryClient.invalidateQueries({
         queryKey: queryKeys.reviews(contentType, contentId),
       });
+    },
+  });
+}
+
+export function useLikeReview() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: {
+      reviewId: number;
+      contentType: string;
+      contentId: number;
+    }) => {
+      const res = await apiFetch(`/reviews/${vars.reviewId}/like`, { method: "POST" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || "Failed to toggle like");
+      }
+      return res.json() as Promise<{ liked: boolean; like_count: number }>;
+    },
+    onMutate: async ({ reviewId, contentType, contentId }) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.reviews(contentType, contentId) });
+      const previousData = queryClient.getQueriesData<Review[]>({
+        queryKey: queryKeys.reviews(contentType, contentId),
+      });
+      queryClient.setQueriesData<Review[]>(
+        { queryKey: queryKeys.reviews(contentType, contentId) },
+        (old) =>
+          old?.map((r) =>
+            r.id === reviewId
+              ? {
+                  ...r,
+                  user_has_liked: !r.user_has_liked,
+                  like_count: r.user_has_liked ? r.like_count - 1 : r.like_count + 1,
+                }
+              : r
+          ),
+      );
+      return { previousData };
+    },
+    onError: (_err, { contentType, contentId }, context) => {
+      context?.previousData.forEach(([key, data]) => {
+        queryClient.setQueryData(key, data);
+      });
+      queryClient.invalidateQueries({ queryKey: queryKeys.reviews(contentType, contentId) });
+    },
+    onSettled: (_data, _err, { contentType, contentId }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.reviews(contentType, contentId) });
     },
   });
 }

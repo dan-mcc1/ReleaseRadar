@@ -190,6 +190,7 @@ async def lifespan(app: FastAPI):
     import app.models.episode  # noqa: F401
     import app.models.activity  # noqa: F401
     import app.models.review  # noqa: F401
+    import app.models.review_like  # noqa: F401
     import app.models.shelf  # noqa: F401
     import app.models.shelf_item  # noqa: F401
     import app.models.subscription  # noqa: F401

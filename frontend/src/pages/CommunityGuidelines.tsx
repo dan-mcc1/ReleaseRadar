@@ -35,7 +35,7 @@ const RULES = [
 
 const ENFORCEMENT = [
   {
-    level: "Warning 1–2",
+    level: "Warning 1",
     label: "Notice",
     color: "text-neutral-400",
     dot: "bg-neutral-500",
@@ -43,7 +43,7 @@ const ENFORCEMENT = [
       "A formal notice that your content violated the guidelines. No restrictions are applied, but the record is kept.",
   },
   {
-    level: "Warning 3",
+    level: "Warning 2",
     label: "7-day silence",
     color: "text-amber-400",
     dot: "bg-amber-400",
@@ -51,7 +51,7 @@ const ENFORCEMENT = [
       "You can still track titles, use your watchlist, and browse the site, but reviews and comments are disabled for 7 days.",
   },
   {
-    level: "Warning 4",
+    level: "Warning 3",
     label: "30-day silence",
     color: "text-orange-400",
     dot: "bg-orange-400",
@@ -59,7 +59,7 @@ const ENFORCEMENT = [
       "Same restrictions as above, extended to 30 days. This is the final step before permanent action.",
   },
   {
-    level: "Warning 5",
+    level: "Warning 4",
     label: "Permanent silence",
     color: "text-red-400",
     dot: "bg-red-400",

@@ -33,7 +33,13 @@ interface UserPayload {
   is_silenced: boolean;
   silenced_until: string | null;
   is_banned: boolean;
-  reviews: { id: number; content_type: string; content_id: number; text: string; created_at: string }[];
+  reviews: {
+    id: number;
+    content_type: string;
+    content_id: number;
+    text: string;
+    created_at: string;
+  }[];
   ratings: { content_type: string; content_id: number; rating: number }[];
 }
 
@@ -73,11 +79,18 @@ function ReviewReportCard({
   const rejectMutation = useRejectReport();
 
   async function accept() {
-    await acceptMutation.mutateAsync({ reportId: report.id, action: "delete_review", adminNotes: notes || undefined });
+    await acceptMutation.mutateAsync({
+      reportId: report.id,
+      action: "delete_review",
+      adminNotes: notes || undefined,
+    });
     onAction();
   }
   async function reject() {
-    await rejectMutation.mutateAsync({ reportId: report.id, adminNotes: notes || undefined });
+    await rejectMutation.mutateAsync({
+      reportId: report.id,
+      adminNotes: notes || undefined,
+    });
     onAction();
   }
 
@@ -87,13 +100,19 @@ function ReviewReportCard({
         <div className="space-y-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs text-neutral-500">Reported by</span>
-            <span className="text-sm font-medium text-neutral-200">@{report.reporter}</span>
+            <span className="text-sm font-medium text-neutral-200">
+              @{report.reporter}
+            </span>
             <ReasonBadge reason={report.reason} />
           </div>
           {report.message && (
-            <p className="text-xs text-neutral-400 italic">"{report.message}"</p>
+            <p className="text-xs text-neutral-400 italic">
+              "{report.message}"
+            </p>
           )}
-          <p className="text-xs text-neutral-500">{new Date(report.created_at).toLocaleDateString()}</p>
+          <p className="text-xs text-neutral-500">
+            {new Date(report.created_at).toLocaleDateString()}
+          </p>
         </div>
         <button
           onClick={() => setExpanded((v) => !v)}
@@ -107,20 +126,30 @@ function ReviewReportCard({
         <div className="bg-neutral-900 rounded-lg p-3 space-y-1">
           <div className="flex items-center gap-2">
             <span className="text-xs text-neutral-500">Review by</span>
-            <span className="text-sm font-medium text-neutral-300">@{report.review.author}</span>
-            <span className="text-xs text-neutral-600 capitalize">{report.review.content_type} #{report.review.content_id}</span>
+            <span className="text-sm font-medium text-neutral-300">
+              @{report.review.author}
+            </span>
+            <span className="text-xs text-neutral-600 capitalize">
+              {report.review.content_type} #{report.review.content_id}
+            </span>
           </div>
-          <p className="text-sm text-neutral-300 leading-relaxed line-clamp-3">{report.review.text}</p>
+          <p className="text-sm text-neutral-300 leading-relaxed line-clamp-3">
+            {report.review.text}
+          </p>
         </div>
       ) : (
-        <p className="text-xs text-neutral-500 italic">Review no longer exists.</p>
+        <p className="text-xs text-neutral-500 italic">
+          Review no longer exists.
+        </p>
       )}
 
       {report.status === "pending" ? (
         <>
           {expanded && (
             <div>
-              <label className="text-xs text-neutral-400 block mb-1">Admin notes (optional)</label>
+              <label className="text-xs text-neutral-400 block mb-1">
+                Admin notes (optional)
+              </label>
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
@@ -140,17 +169,27 @@ function ReviewReportCard({
             </button>
             <button
               onClick={accept}
-              disabled={acceptMutation.isPending || rejectMutation.isPending || !report.review}
+              disabled={
+                acceptMutation.isPending ||
+                rejectMutation.isPending ||
+                !report.review
+              }
               className="flex-1 bg-error-600 hover:bg-error-500 disabled:opacity-50 text-white text-sm py-2 rounded-lg transition-colors font-medium"
             >
-              {acceptMutation.isPending ? "Deleting…" : "Accept & Delete Review"}
+              {acceptMutation.isPending
+                ? "Deleting…"
+                : "Accept & Delete Review"}
             </button>
           </div>
         </>
       ) : (
-        <div className={`rounded-lg px-3 py-2 text-sm space-y-1 ${report.status === "accepted" ? "bg-green-900/30 border border-green-800/50" : "bg-neutral-700/40 border border-neutral-600/50"}`}>
+        <div
+          className={`rounded-lg px-3 py-2 text-sm space-y-1 ${report.status === "accepted" ? "bg-green-900/30 border border-green-800/50" : "bg-neutral-700/40 border border-neutral-600/50"}`}
+        >
           <div className="flex items-center gap-2">
-            <span className={`font-medium capitalize ${report.status === "accepted" ? "text-green-400" : "text-neutral-400"}`}>
+            <span
+              className={`font-medium capitalize ${report.status === "accepted" ? "text-green-400" : "text-neutral-400"}`}
+            >
               {report.status}
             </span>
             {report.resolved_at && (
@@ -172,9 +211,9 @@ type UserAction = "warn" | "suspend" | "ban" | "delete_user";
 
 function warnEscalationHint(warningCount: number): string {
   const next = warningCount + 1;
-  if (next === 3) return "→ will trigger 7-day silence";
-  if (next === 4) return "→ will trigger 30-day silence";
-  if (next >= 5) return "→ will permanently silence this account";
+  if (next === 2) return "→ will trigger 7-day silence";
+  if (next === 3) return "→ will trigger 30-day silence";
+  if (next >= 4) return "→ will permanently silence this account";
   return "";
 }
 
@@ -202,7 +241,10 @@ function UserReportCard({
     onAction();
   }
   async function reject() {
-    await rejectMutation.mutateAsync({ reportId: report.id, adminNotes: notes || undefined });
+    await rejectMutation.mutateAsync({
+      reportId: report.id,
+      adminNotes: notes || undefined,
+    });
     onAction();
   }
 
@@ -214,13 +256,19 @@ function UserReportCard({
         <div className="space-y-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs text-neutral-500">Reported by</span>
-            <span className="text-sm font-medium text-neutral-200">@{report.reporter}</span>
+            <span className="text-sm font-medium text-neutral-200">
+              @{report.reporter}
+            </span>
             <ReasonBadge reason={report.reason} />
           </div>
           {report.message && (
-            <p className="text-xs text-neutral-400 italic">"{report.message}"</p>
+            <p className="text-xs text-neutral-400 italic">
+              "{report.message}"
+            </p>
           )}
-          <p className="text-xs text-neutral-500">{new Date(report.created_at).toLocaleDateString()}</p>
+          <p className="text-xs text-neutral-500">
+            {new Date(report.created_at).toLocaleDateString()}
+          </p>
         </div>
         <button
           onClick={() => setExpanded((v) => !v)}
@@ -237,28 +285,43 @@ function UserReportCard({
               {target.username[0]?.toUpperCase()}
             </div>
             <div>
-              <p className="text-sm font-medium text-neutral-200">@{target.username}</p>
-              <p className="text-xs text-neutral-500">{target.email} · joined {new Date(target.created_at).toLocaleDateString()}</p>
+              <p className="text-sm font-medium text-neutral-200">
+                @{target.username}
+              </p>
+              <p className="text-xs text-neutral-500">
+                {target.email} · joined{" "}
+                {new Date(target.created_at).toLocaleDateString()}
+              </p>
             </div>
             <div className="ml-auto flex items-center gap-2 flex-wrap">
               {target.warning_count > 0 && (
                 <span className="text-xs bg-neutral-700 text-neutral-300 px-2 py-0.5 rounded-full">
-                  {target.warning_count} warning{target.warning_count !== 1 ? "s" : ""}
+                  {target.warning_count} warning
+                  {target.warning_count !== 1 ? "s" : ""}
                 </span>
               )}
               {target.is_banned && (
-                <span className="text-xs bg-red-900/60 text-red-300 px-2 py-0.5 rounded-full">Banned</span>
-              )}
-              {target.is_silenced && (
-                <span className="text-xs bg-orange-900/60 text-orange-300 px-2 py-0.5 rounded-full">Silenced</span>
-              )}
-              {!target.is_silenced && target.silenced_until && new Date(target.silenced_until) > new Date() && (
-                <span className="text-xs bg-orange-900/60 text-orange-300 px-2 py-0.5 rounded-full">
-                  Silenced until {new Date(target.silenced_until).toLocaleDateString()}
+                <span className="text-xs bg-red-900/60 text-red-300 px-2 py-0.5 rounded-full">
+                  Banned
                 </span>
               )}
+              {target.is_silenced && (
+                <span className="text-xs bg-orange-900/60 text-orange-300 px-2 py-0.5 rounded-full">
+                  Silenced
+                </span>
+              )}
+              {!target.is_silenced &&
+                target.silenced_until &&
+                new Date(target.silenced_until) > new Date() && (
+                  <span className="text-xs bg-orange-900/60 text-orange-300 px-2 py-0.5 rounded-full">
+                    Silenced until{" "}
+                    {new Date(target.silenced_until).toLocaleDateString()}
+                  </span>
+                )}
               {target.is_suspended && !target.is_banned && (
-                <span className="text-xs bg-warning-700 text-warning-200 px-2 py-0.5 rounded-full">Suspended</span>
+                <span className="text-xs bg-warning-700 text-warning-200 px-2 py-0.5 rounded-full">
+                  Suspended
+                </span>
               )}
             </div>
           </div>
@@ -267,12 +330,21 @@ function UserReportCard({
             <>
               {target.reviews.length > 0 && (
                 <div>
-                  <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-2">Recent Reviews</p>
+                  <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-2">
+                    Recent Reviews
+                  </p>
                   <div className="space-y-2">
                     {target.reviews.slice(0, 5).map((r) => (
-                      <div key={r.id} className="border-l-2 border-neutral-700 pl-3">
-                        <p className="text-xs text-neutral-500 capitalize">{r.content_type} #{r.content_id}</p>
-                        <p className="text-sm text-neutral-300 line-clamp-2">{r.text}</p>
+                      <div
+                        key={r.id}
+                        className="border-l-2 border-neutral-700 pl-3"
+                      >
+                        <p className="text-xs text-neutral-500 capitalize">
+                          {r.content_type} #{r.content_id}
+                        </p>
+                        <p className="text-sm text-neutral-300 line-clamp-2">
+                          {r.text}
+                        </p>
                       </div>
                     ))}
                   </div>
@@ -285,7 +357,10 @@ function UserReportCard({
                   </p>
                   <div className="flex flex-wrap gap-1">
                     {target.ratings.slice(0, 10).map((r, i) => (
-                      <span key={i} className="text-xs bg-neutral-800 text-neutral-400 px-2 py-0.5 rounded">
+                      <span
+                        key={i}
+                        className="text-xs bg-neutral-800 text-neutral-400 px-2 py-0.5 rounded"
+                      >
                         {r.content_type} #{r.content_id}: {r.rating}★
                       </span>
                     ))}
@@ -296,35 +371,49 @@ function UserReportCard({
           )}
         </div>
       ) : (
-        <p className="text-xs text-neutral-500 italic">User no longer exists.</p>
+        <p className="text-xs text-neutral-500 italic">
+          User no longer exists.
+        </p>
       )}
 
       {report.status === "pending" ? (
         <>
           {/* Action selector */}
           <div className="space-y-2">
-            <p className="text-xs text-neutral-400 font-medium">Action if accepted:</p>
+            <p className="text-xs text-neutral-400 font-medium">
+              Action if accepted:
+            </p>
             <div className="flex gap-2 flex-wrap">
-              {(["warn", "suspend", "ban", "delete_user"] as UserAction[]).map((a) => (
-                <button
-                  key={a}
-                  onClick={() => setAction(a)}
-                  className={`text-xs px-3 py-1.5 rounded-lg transition-colors border ${
-                    action === a
-                      ? "bg-primary-600 border-primary-500 text-white"
-                      : "bg-neutral-700 border-neutral-600 text-neutral-300 hover:bg-neutral-600"
-                  }`}
-                >
-                  {a === "warn" ? "Warn" : a === "suspend" ? "Suspend" : a === "ban" ? "Ban" : "Delete account"}
-                </button>
-              ))}
+              {(["warn", "suspend", "ban", "delete_user"] as UserAction[]).map(
+                (a) => (
+                  <button
+                    key={a}
+                    onClick={() => setAction(a)}
+                    className={`text-xs px-3 py-1.5 rounded-lg transition-colors border ${
+                      action === a
+                        ? "bg-primary-600 border-primary-500 text-white"
+                        : "bg-neutral-700 border-neutral-600 text-neutral-300 hover:bg-neutral-600"
+                    }`}
+                  >
+                    {a === "warn"
+                      ? "Warn"
+                      : a === "suspend"
+                        ? "Suspend"
+                        : a === "ban"
+                          ? "Ban"
+                          : "Delete account"}
+                  </button>
+                ),
+              )}
             </div>
-            {action === "warn" && target && (() => {
-              const hint = warnEscalationHint(target.warning_count);
-              return hint ? (
-                <p className="text-xs text-orange-400">{hint}</p>
-              ) : null;
-            })()}
+            {action === "warn" &&
+              target &&
+              (() => {
+                const hint = warnEscalationHint(target.warning_count);
+                return hint ? (
+                  <p className="text-xs text-orange-400">{hint}</p>
+                ) : null;
+              })()}
             {action === "suspend" && (
               <div className="flex items-center gap-2">
                 <label className="text-xs text-neutral-400">Days:</label>
@@ -339,7 +428,9 @@ function UserReportCard({
               </div>
             )}
             <div>
-              <label className="text-xs text-neutral-400 block mb-1">Admin notes (optional)</label>
+              <label className="text-xs text-neutral-400 block mb-1">
+                Admin notes (optional)
+              </label>
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
@@ -383,9 +474,13 @@ function UserReportCard({
           </div>
         </>
       ) : (
-        <div className={`rounded-lg px-3 py-2 text-sm space-y-1 ${report.status === "accepted" ? "bg-green-900/30 border border-green-800/50" : "bg-neutral-700/40 border border-neutral-600/50"}`}>
+        <div
+          className={`rounded-lg px-3 py-2 text-sm space-y-1 ${report.status === "accepted" ? "bg-green-900/30 border border-green-800/50" : "bg-neutral-700/40 border border-neutral-600/50"}`}
+        >
           <div className="flex items-center gap-2">
-            <span className={`font-medium capitalize ${report.status === "accepted" ? "text-green-400" : "text-neutral-400"}`}>
+            <span
+              className={`font-medium capitalize ${report.status === "accepted" ? "text-green-400" : "text-neutral-400"}`}
+            >
               {report.status}
             </span>
             {report.resolved_at && (
@@ -448,15 +543,29 @@ function AppealsQueue() {
             </button>
           ))}
         </div>
-        {total > 0 && <span className="text-sm text-neutral-500">{total} appeal{total !== 1 ? "s" : ""}</span>}
+        {total > 0 && (
+          <span className="text-sm text-neutral-500">
+            {total} appeal{total !== 1 ? "s" : ""}
+          </span>
+        )}
         <button
           onClick={() => refetch()}
           disabled={isLoading}
           className="ml-auto p-1.5 text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800 disabled:opacity-40 rounded-lg transition-colors"
           title="Refresh"
         >
-          <svg className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          <svg
+            className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+            />
           </svg>
         </button>
       </div>
@@ -464,11 +573,16 @@ function AppealsQueue() {
       {isLoading ? (
         <div className="space-y-4">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-36 bg-neutral-800 rounded-xl animate-pulse" />
+            <div
+              key={i}
+              className="h-36 bg-neutral-800 rounded-xl animate-pulse"
+            />
           ))}
         </div>
       ) : appeals.length === 0 ? (
-        <p className="text-neutral-500 text-sm py-8 text-center">No {appealStatus} appeals.</p>
+        <p className="text-neutral-500 text-sm py-8 text-center">
+          No {appealStatus} appeals.
+        </p>
       ) : (
         <div className="space-y-4">
           {appeals.map((appeal) => (
@@ -476,11 +590,18 @@ function AppealsQueue() {
               key={appeal.id}
               appeal={appeal}
               onApprove={async (notes, liftSilence) => {
-                await approveMutation.mutateAsync({ appealId: appeal.id, adminNotes: notes, liftSilence });
+                await approveMutation.mutateAsync({
+                  appealId: appeal.id,
+                  adminNotes: notes,
+                  liftSilence,
+                });
                 refetch();
               }}
               onReject={async (notes) => {
-                await rejectMutation.mutateAsync({ appealId: appeal.id, adminNotes: notes });
+                await rejectMutation.mutateAsync({
+                  appealId: appeal.id,
+                  adminNotes: notes,
+                });
                 refetch();
               }}
               busy={approveMutation.isPending || rejectMutation.isPending}
@@ -511,32 +632,46 @@ function AppealCard({
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div className="space-y-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-medium text-neutral-200">@{appeal.username}</span>
+            <span className="text-sm font-medium text-neutral-200">
+              @{appeal.username}
+            </span>
             <span className="text-xs text-neutral-500">{appeal.email}</span>
-            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-              appeal.appeal_type === "ban"
-                ? "bg-red-900/50 text-red-300"
-                : "bg-warning-900/40 text-warning-300"
-            }`}>
+            <span
+              className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                appeal.appeal_type === "ban"
+                  ? "bg-red-900/50 text-red-300"
+                  : "bg-warning-900/40 text-warning-300"
+              }`}
+            >
               Appealing {appeal.appeal_type}
             </span>
             {appeal.is_still_restricted && appeal.status === "pending" && (
-              <span className="text-xs bg-neutral-700 text-neutral-400 px-2 py-0.5 rounded-full">still restricted</span>
+              <span className="text-xs bg-neutral-700 text-neutral-400 px-2 py-0.5 rounded-full">
+                still restricted
+              </span>
             )}
           </div>
-          <p className="text-xs text-neutral-500">{new Date(appeal.created_at).toLocaleDateString()}</p>
+          <p className="text-xs text-neutral-500">
+            {new Date(appeal.created_at).toLocaleDateString()}
+          </p>
         </div>
       </div>
 
       <div className="bg-neutral-900 rounded-lg px-4 py-3">
-        <p className="text-xs text-neutral-500 font-medium uppercase tracking-wide mb-1">Appeal message</p>
-        <p className="text-sm text-neutral-300 leading-relaxed whitespace-pre-wrap">{appeal.message}</p>
+        <p className="text-xs text-neutral-500 font-medium uppercase tracking-wide mb-1">
+          Appeal message
+        </p>
+        <p className="text-sm text-neutral-300 leading-relaxed whitespace-pre-wrap">
+          {appeal.message}
+        </p>
       </div>
 
       {appeal.status === "pending" ? (
         <div className="space-y-3">
           <div>
-            <label className="text-xs text-neutral-400 block mb-1">Admin notes (optional)</label>
+            <label className="text-xs text-neutral-400 block mb-1">
+              Admin notes (optional)
+            </label>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
@@ -556,7 +691,9 @@ function AppealCard({
               <span className="text-sm text-neutral-400 group-hover:text-neutral-300 transition-colors leading-snug">
                 Also lift silence
                 {appeal.request_unsilence && (
-                  <span className="ml-1.5 text-xs text-amber-400">(user requested)</span>
+                  <span className="ml-1.5 text-xs text-amber-400">
+                    (user requested)
+                  </span>
                 )}
               </span>
             </label>
@@ -579,17 +716,23 @@ function AppealCard({
           </div>
         </div>
       ) : (
-        <div className={`rounded-lg px-3 py-2 text-sm space-y-1 ${
-          appeal.status === "approved"
-            ? "bg-green-900/30 border border-green-800/50"
-            : "bg-neutral-700/40 border border-neutral-600/50"
-        }`}>
+        <div
+          className={`rounded-lg px-3 py-2 text-sm space-y-1 ${
+            appeal.status === "approved"
+              ? "bg-green-900/30 border border-green-800/50"
+              : "bg-neutral-700/40 border border-neutral-600/50"
+          }`}
+        >
           <div className="flex items-center gap-2">
-            <span className={`font-medium capitalize ${appeal.status === "approved" ? "text-green-400" : "text-neutral-400"}`}>
+            <span
+              className={`font-medium capitalize ${appeal.status === "approved" ? "text-green-400" : "text-neutral-400"}`}
+            >
               {appeal.status}
             </span>
             {appeal.resolved_at && (
-              <span className="text-xs text-neutral-500">{new Date(appeal.resolved_at).toLocaleString()}</span>
+              <span className="text-xs text-neutral-500">
+                {new Date(appeal.resolved_at).toLocaleString()}
+              </span>
             )}
           </div>
           {appeal.admin_notes && (
@@ -605,18 +748,26 @@ export default function AdminModerationPage() {
   usePageTitle("Moderation");
   const [view, setView] = useState<"reports" | "appeals">("reports");
   const [status, setStatus] = useState<ReportStatus>("pending");
-  const [typeFilter, setTypeFilter] = useState<"all" | "review" | "user">("all");
+  const [typeFilter, setTypeFilter] = useState<"all" | "review" | "user">(
+    "all",
+  );
   const { data, isLoading, refetch } = useAdminReports(status);
 
   const reports: Report[] = (data as any)?.reports ?? [];
   const total: number = (data as any)?.total ?? 0;
 
-  const filtered = typeFilter === "all" ? reports : reports.filter((r) => r.reported_type === typeFilter);
+  const filtered =
+    typeFilter === "all"
+      ? reports
+      : reports.filter((r) => r.reported_type === typeFilter);
 
   return (
     <div className="w-full max-w-6xl mx-auto px-4 py-8 space-y-6">
       <div className="flex items-center gap-4">
-        <Link to="/admin" className="text-neutral-400 hover:text-neutral-200 transition-colors">
+        <Link
+          to="/admin"
+          className="text-neutral-400 hover:text-neutral-200 transition-colors"
+        >
           ← Admin
         </Link>
         <h1 className="text-2xl font-bold text-white">Moderation</h1>
@@ -646,23 +797,27 @@ export default function AdminModerationPage() {
           {/* Status tabs */}
           <div className="flex items-center gap-4 flex-wrap">
             <div className="flex gap-1 bg-neutral-800 p-1 rounded-xl w-fit">
-              {(["pending", "accepted", "rejected"] as ReportStatus[]).map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setStatus(s)}
-                  className={`px-4 py-1.5 text-sm rounded-lg transition-colors capitalize ${
-                    status === s
-                      ? "bg-neutral-600 text-white font-medium"
-                      : "text-neutral-400 hover:text-neutral-200"
-                  }`}
-                >
-                  {s}
-                </button>
-              ))}
+              {(["pending", "accepted", "rejected"] as ReportStatus[]).map(
+                (s) => (
+                  <button
+                    key={s}
+                    onClick={() => setStatus(s)}
+                    className={`px-4 py-1.5 text-sm rounded-lg transition-colors capitalize ${
+                      status === s
+                        ? "bg-neutral-600 text-white font-medium"
+                        : "text-neutral-400 hover:text-neutral-200"
+                    }`}
+                  >
+                    {s}
+                  </button>
+                ),
+              )}
             </div>
             <div className="ml-auto flex items-center gap-3">
               {total > 0 && (
-                <span className="text-sm text-neutral-400">{total} report{total !== 1 ? "s" : ""}</span>
+                <span className="text-sm text-neutral-400">
+                  {total} report{total !== 1 ? "s" : ""}
+                </span>
               )}
               <button
                 onClick={() => refetch()}
@@ -670,8 +825,18 @@ export default function AdminModerationPage() {
                 className="p-1.5 text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800 disabled:opacity-40 rounded-lg transition-colors"
                 title="Refresh"
               >
-                <svg className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                <svg
+                  className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  />
                 </svg>
               </button>
             </div>
@@ -697,7 +862,10 @@ export default function AdminModerationPage() {
           {isLoading ? (
             <div className="space-y-4">
               {[1, 2, 3].map((i) => (
-                <div key={i} className="h-36 bg-neutral-800 rounded-xl animate-pulse" />
+                <div
+                  key={i}
+                  className="h-36 bg-neutral-800 rounded-xl animate-pulse"
+                />
               ))}
             </div>
           ) : filtered.length === 0 ? (
@@ -708,9 +876,17 @@ export default function AdminModerationPage() {
             <div className="space-y-4">
               {filtered.map((report) =>
                 report.reported_type === "review" ? (
-                  <ReviewReportCard key={report.id} report={report} onAction={refetch} />
+                  <ReviewReportCard
+                    key={report.id}
+                    report={report}
+                    onAction={refetch}
+                  />
                 ) : (
-                  <UserReportCard key={report.id} report={report} onAction={refetch} />
+                  <UserReportCard
+                    key={report.id}
+                    report={report}
+                    onAction={refetch}
+                  />
                 ),
               )}
             </div>
