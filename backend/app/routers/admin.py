@@ -175,7 +175,7 @@ def get_reports(
     reports = (
         db.query(Report)
         .filter(Report.status == status)
-        .order_by(Report.created_at.asc())
+        .order_by(Report.created_at.desc())
         .offset(skip)
         .limit(limit)
         .all()
@@ -528,7 +528,7 @@ def list_appeals(
     appeals = (
         db.query(Appeal)
         .filter(Appeal.status == status)
-        .order_by(Appeal.created_at.asc())
+        .order_by(Appeal.created_at.desc())
         .offset(skip)
         .limit(limit)
         .all()
