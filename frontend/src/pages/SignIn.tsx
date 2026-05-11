@@ -165,6 +165,19 @@ const SignIn: React.FC = () => {
     }
   };
 
+  async function isEmailBanned(emailToCheck: string): Promise<boolean> {
+    try {
+      const res = await apiFetch(`/user/check-email-banned?email=${encodeURIComponent(emailToCheck)}`);
+      if (res.ok) {
+        const data = await res.json();
+        return data.banned === true;
+      }
+    } catch {
+      // non-critical — let backend catch it
+    }
+    return false;
+  }
+
   // REGISTER (email/password)
   const handleRegister = async () => {
     setErrorMessage(null);
@@ -182,6 +195,10 @@ const SignIn: React.FC = () => {
 
     setIsLoading(true);
     try {
+      if (await isEmailBanned(email)) {
+        setErrorMessage("This account is not permitted to register.");
+        return;
+      }
       const res = await createUserWithEmailAndPassword(auth, email, password);
       await registerUserInBackend(res.user, username);
       navigate("/calendar");
@@ -203,6 +220,10 @@ const SignIn: React.FC = () => {
 
   // Called after any OAuth sign-in to check if user needs a username
   async function handleOAuthResult(user: import("firebase/auth").User) {
+    if (user.email && await isEmailBanned(user.email)) {
+      setErrorMessage("This account is not permitted to register.");
+      return;
+    }
     // Check if user already exists in backend with a username
     try {
       const res = await apiFetch("/user/create", {

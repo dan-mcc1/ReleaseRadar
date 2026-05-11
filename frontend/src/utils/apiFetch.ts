@@ -1,5 +1,6 @@
 import { auth } from "../firebase";
 import { API_URL } from "../constants";
+import { isAccountRestricted } from "./accountState";
 
 /**
  * Fetch wrapper that automatically attaches the current user's Firebase ID
@@ -18,6 +19,12 @@ export async function apiFetch(
   path: string,
   options: RequestInit = {},
 ): Promise<Response> {
+  if (isAccountRestricted()) {
+    return new Response(JSON.stringify({ detail: "Account restricted." }), {
+      status: 403,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
   const token = await auth.currentUser?.getIdToken();
   const headers = new Headers(options.headers);
   if (token) headers.set("Authorization", `Bearer ${token}`);

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useAccountStatus, useSubmitAppeal } from "../hooks/api/useUser";
 
-export default function SuspensionBanModal() {
+export default function SuspensionBanModal({ asPage = false }: { asPage?: boolean }) {
   const { data: status } = useAccountStatus();
   const submitAppeal = useSubmitAppeal();
   const [message, setMessage] = useState("");
@@ -27,8 +27,12 @@ export default function SuspensionBanModal() {
     setSubmitted(true);
   }
 
+  const wrapperClass = asPage
+    ? "flex-1 flex items-center justify-center p-4"
+    : "fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4";
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+    <div className={wrapperClass}>
       <div className="bg-neutral-900 border border-neutral-700 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
         {/* Header */}
         <div className={`px-6 py-5 border-b border-neutral-800 ${isBan ? "bg-red-950/40" : "bg-warning-950/30"}`}>

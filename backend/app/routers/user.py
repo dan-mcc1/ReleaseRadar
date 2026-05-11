@@ -72,6 +72,10 @@ def create_user_route(
     email: str | None = Body(None),
     username: str | None = Body(None),
 ):
+    if email:
+        from app.models.banned_email import BannedEmail
+        if db.query(BannedEmail).filter(BannedEmail.email == email).first():
+            raise HTTPException(status_code=403, detail="This account is not permitted to register.")
     if username is not None:
         _validate_username(username)
         if not is_username_available(db, username):
@@ -265,6 +269,19 @@ def check_username_route(
     """Public endpoint — returns whether a username is available."""
     _validate_username(username)
     return {"available": is_username_available(db, username)}
+
+
+@router.get("/check-email-banned")
+@limiter.limit("10/minute")
+def check_email_banned(
+    request: Request,
+    email: str = Query(...),
+    db: Session = Depends(get_db),
+):
+    """Public endpoint — returns whether an email is on the ban list."""
+    from app.models.banned_email import BannedEmail
+    banned = db.query(BannedEmail).filter(BannedEmail.email == email.lower().strip()).first() is not None
+    return {"banned": banned}
 
 
 @router.get("/stats")

@@ -20,6 +20,13 @@ def get_current_user(
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
     from app.models.user import User  # local import avoids circular dependency
+    from app.models.banned_email import BannedEmail
+
+    # Block re-registrations: reject any token whose email is on the ban list
+    token_email = decoded_token.get("email", "")
+    if token_email and db.query(BannedEmail).filter(BannedEmail.email == token_email).first():
+        raise HTTPException(status_code=403, detail="Your account has been permanently banned.")
+
     user = db.query(User).filter(User.id == uid).first()
     if user:
         now = datetime.now(timezone.utc)

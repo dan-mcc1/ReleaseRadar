@@ -257,3 +257,24 @@ export function useAdminUnsilenceUser() {
     },
   });
 }
+
+export function useAdminBannedEmails() {
+  return useQuery({
+    queryKey: ["admin", "banned-emails"],
+    queryFn: () =>
+      queryFetch<{ id: number; email: string; user_id: string | null; banned_at: string }[]>(
+        "/admin/banned-emails"
+      ),
+  });
+}
+
+export function useAdminRemoveBannedEmail() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (entryId: number) =>
+      apiFetch(`/admin/banned-emails/${entryId}`, { method: "DELETE" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "banned-emails"] });
+    },
+  });
+}

@@ -113,6 +113,8 @@ def submit_report(
     if reason not in VALID_REPORT_REASONS:
         raise HTTPException(status_code=400, detail="Invalid reason.")
 
+    review_snapshot_kwargs = {}
+
     if reported_type == "review":
         try:
             review_id = int(reported_id)
@@ -123,6 +125,17 @@ def submit_report(
             raise HTTPException(status_code=404, detail="Review not found.")
         if review.user_id == uid:
             raise HTTPException(status_code=400, detail="You cannot report your own review.")
+        author = db.query(User).filter(User.id == review.user_id).first()
+        review_snapshot_kwargs = {
+            "snapshot_author_id": review.user_id,
+            "snapshot_author_username": author.username if author else review.user_id,
+            "snapshot_content_type": review.content_type,
+            "snapshot_content_id": review.content_id,
+            "snapshot_review_text": review.review_text,
+            "snapshot_review_created_at": review.created_at,
+        }
+
+    user_snapshot_kwargs = {}
 
     if reported_type == "user":
         if reported_id == uid:
@@ -130,6 +143,11 @@ def submit_report(
         target = db.query(User).filter(User.id == reported_id).first()
         if not target:
             raise HTTPException(status_code=404, detail="User not found.")
+        user_snapshot_kwargs = {
+            "snapshot_user_username": target.username,
+            "snapshot_user_email": target.email,
+            "snapshot_user_created_at": target.created_at,
+        }
 
     # Prevent duplicate pending reports from the same reporter
     existing = (
@@ -154,6 +172,8 @@ def submit_report(
             reported_id=reported_id,
             reason=reason,
             message=message or None,
+            **review_snapshot_kwargs,
+            **user_snapshot_kwargs,
         )
     )
     db.commit()

@@ -1,8 +1,11 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { type ReactNode } from "react";
 import "./App.css";
 import NavBar from "./components/NavBar";
 import InstallBanner from "./components/InstallBanner";
 import ProtectedRoute from "./components/ProtectedRoute";
+import { useAccountStatus } from "./hooks/api/useUser";
+import { setAccountRestricted } from "./utils/accountState";
 import LandingPage from "./pages/LandingPage";
 import CalendarPage from "./pages/CalendarPage";
 import Search from "./pages/Search";
@@ -40,6 +43,19 @@ import SpotlightTour from "./components/SpotlightTour";
 import WarningModal from "./components/WarningModal";
 import SuspensionBanModal from "./components/SuspensionBanModal";
 
+function BanGate({ children }: { children: ReactNode }) {
+  const { data: status, isPending } = useAccountStatus();
+  const isRestricted = !!(status?.is_banned || status?.is_suspended);
+
+  // Set synchronously during render so apiFetch blocks requests before any
+  // child component mounts and fires queries.
+  setAccountRestricted(isRestricted);
+
+  if (isPending) return null;
+  if (isRestricted) return <SuspensionBanModal asPage />;
+  return <>{children}</>;
+}
+
 function App() {
   return (
     <BrowserRouter>
@@ -49,7 +65,7 @@ function App() {
         <InstallBanner />
         <SpotlightTour />
         <WarningModal />
-        <SuspensionBanModal />
+        <BanGate>
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route
@@ -143,6 +159,7 @@ function App() {
             }
           />
         </Routes>
+        </BanGate>
         <Footer />
       </div>
     </BrowserRouter>

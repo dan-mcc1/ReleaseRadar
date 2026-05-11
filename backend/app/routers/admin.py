@@ -22,11 +22,35 @@ from app.models.report import Report
 from app.models.review import Review
 from app.models.appeal import Appeal
 from app.models.block import Block
+from app.models.banned_email import BannedEmail
 from app.models.favorite import Favorite
 from app.models.shelf import Shelf
 from app.models.shelf_item import ShelfItem
 
 router = APIRouter()
+
+
+def _add_banned_email(db: Session, user: User):
+    if user.email and not db.query(BannedEmail).filter(BannedEmail.email == user.email).first():
+        db.add(BannedEmail(email=user.email, user_id=user.id))
+
+
+def _remove_banned_email_by_user_id(db: Session, user_id: str):
+    db.query(BannedEmail).filter(BannedEmail.user_id == user_id).delete()
+
+
+def _disable_firebase_account(uid: str):
+    try:
+        auth.update_user(uid, disabled=True)
+    except auth.UserNotFoundError:
+        pass
+
+
+def _enable_firebase_account(uid: str):
+    try:
+        auth.update_user(uid, disabled=False)
+    except auth.UserNotFoundError:
+        pass
 
 
 @router.get("/stats")
@@ -214,6 +238,18 @@ def get_reports(
                     "content_id": review.content_id,
                     "text": review.review_text,
                     "created_at": review.created_at,
+                    "deleted": False,
+                }
+            elif r.snapshot_review_text is not None:
+                payload["review"] = {
+                    "id": int(r.reported_id),
+                    "author": r.snapshot_author_username or r.snapshot_author_id or "unknown",
+                    "author_id": r.snapshot_author_id or "",
+                    "content_type": r.snapshot_content_type or "",
+                    "content_id": r.snapshot_content_id or 0,
+                    "text": r.snapshot_review_text,
+                    "created_at": r.snapshot_review_created_at,
+                    "deleted": True,
                 }
             else:
                 payload["review"] = None
@@ -246,6 +282,7 @@ def get_reports(
                     "is_silenced": target.is_silenced,
                     "silenced_until": target.silenced_until,
                     "is_banned": target.is_banned,
+                    "deleted": False,
                     "reviews": [
                         {
                             "id": rv.id,
@@ -264,6 +301,22 @@ def get_reports(
                         }
                         for w in ratings
                     ],
+                }
+            elif r.snapshot_user_username is not None:
+                payload["reported_user"] = {
+                    "id": r.reported_id,
+                    "username": r.snapshot_user_username,
+                    "email": r.snapshot_user_email or "",
+                    "created_at": r.snapshot_user_created_at,
+                    "warning_count": 0,
+                    "is_suspended": False,
+                    "suspended_until": None,
+                    "is_silenced": False,
+                    "silenced_until": None,
+                    "is_banned": False,
+                    "deleted": True,
+                    "reviews": [],
+                    "ratings": [],
                 }
             else:
                 payload["reported_user"] = None
@@ -332,6 +385,7 @@ def accept_report(
         elif action == "ban":
             target.is_banned = True
             target.ban_reason = admin_notes or "Banned following a moderation review."
+            _add_banned_email(db, target)
 
         elif action == "delete_user":
             db.delete(target)
@@ -481,8 +535,35 @@ def ban_user(
         raise HTTPException(status_code=404, detail="User not found.")
     target.is_banned = True
     target.ban_reason = reason or "Banned by admin."
+    _add_banned_email(db, target)
     db.commit()
     return {"detail": "User banned."}
+
+
+@router.get("/banned-emails")
+def list_banned_emails(
+    user_id: str = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    rows = db.query(BannedEmail).order_by(BannedEmail.banned_at.desc()).all()
+    return [
+        {"id": r.id, "email": r.email, "user_id": r.user_id, "banned_at": r.banned_at}
+        for r in rows
+    ]
+
+
+@router.delete("/banned-emails/{entry_id}")
+def remove_banned_email(
+    entry_id: int,
+    user_id: str = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    entry = db.query(BannedEmail).filter(BannedEmail.id == entry_id).first()
+    if not entry:
+        raise HTTPException(status_code=404, detail="Entry not found.")
+    db.delete(entry)
+    db.commit()
+    return {"detail": "Email removed from ban list."}
 
 
 @router.post("/users/{target_user_id}/unban")
@@ -492,10 +573,10 @@ def unban_user(
     db: Session = Depends(get_db),
 ):
     target = db.query(User).filter(User.id == target_user_id).first()
-    if not target:
-        raise HTTPException(status_code=404, detail="User not found.")
-    target.is_banned = False
-    target.ban_reason = None
+    _remove_banned_email_by_user_id(db, target_user_id)
+    if target:
+        target.is_banned = False
+        target.ban_reason = None
     db.commit()
     return {"detail": "User unbanned."}
 
@@ -586,6 +667,7 @@ def approve_appeal(
         if appeal.appeal_type == "ban":
             target.is_banned = False
             target.ban_reason = None
+            _remove_banned_email_by_user_id(db, target.id)
         else:
             target.is_suspended = False
             target.suspended_until = None

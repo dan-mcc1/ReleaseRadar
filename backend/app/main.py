@@ -198,6 +198,7 @@ async def lifespan(app: FastAPI):
     import app.models.block  # noqa: F401
     import app.models.report  # noqa: F401
     import app.models.appeal  # noqa: F401
+    import app.models.banned_email  # noqa: F401
 
     Base.metadata.create_all(engine)
     task = asyncio.create_task(_activity_cleanup_loop())

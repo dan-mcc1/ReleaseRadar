@@ -8,6 +8,8 @@ import {
   useAdminAppeals,
   useApproveAppeal,
   useRejectAppeal,
+  useAdminBannedEmails,
+  useAdminRemoveBannedEmail,
 } from "../hooks/api/useModeration";
 
 type ReportStatus = "pending" | "accepted" | "rejected";
@@ -20,6 +22,7 @@ interface ReviewPayload {
   content_id: number;
   text: string;
   created_at: string;
+  deleted?: boolean;
 }
 
 interface UserPayload {
@@ -33,6 +36,7 @@ interface UserPayload {
   is_silenced: boolean;
   silenced_until: string | null;
   is_banned: boolean;
+  deleted?: boolean;
   reviews: {
     id: number;
     content_type: string;
@@ -124,7 +128,7 @@ function ReviewReportCard({
 
       {report.review ? (
         <div className="bg-neutral-900 rounded-lg p-3 space-y-1">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs text-neutral-500">Review by</span>
             <span className="text-sm font-medium text-neutral-300">
               @{report.review.author}
@@ -132,8 +136,13 @@ function ReviewReportCard({
             <span className="text-xs text-neutral-600 capitalize">
               {report.review.content_type} #{report.review.content_id}
             </span>
+            {report.review.deleted && (
+              <span className="text-xs bg-red-900/50 text-red-400 px-2 py-0.5 rounded-full">
+                deleted
+              </span>
+            )}
           </div>
-          <p className="text-sm text-neutral-300 leading-relaxed line-clamp-3">
+          <p className={`text-sm leading-relaxed line-clamp-3 ${report.review.deleted ? "text-neutral-500 italic" : "text-neutral-300"}`}>
             {report.review.text}
           </p>
         </div>
@@ -285,12 +294,19 @@ function UserReportCard({
               {target.username[0]?.toUpperCase()}
             </div>
             <div>
-              <p className="text-sm font-medium text-neutral-200">
-                @{target.username}
-              </p>
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-medium text-neutral-200">
+                  @{target.username}
+                </p>
+                {target.deleted && (
+                  <span className="text-xs bg-red-900/50 text-red-400 px-2 py-0.5 rounded-full">
+                    deleted
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-neutral-500">
                 {target.email} · joined{" "}
-                {new Date(target.created_at).toLocaleDateString()}
+                {target.created_at ? new Date(target.created_at).toLocaleDateString() : "unknown"}
               </p>
             </div>
             <div className="ml-auto flex items-center gap-2 flex-wrap">
@@ -744,9 +760,62 @@ function AppealCard({
   );
 }
 
+function BannedEmailsSection() {
+  const { data: entries = [], isLoading, refetch } = useAdminBannedEmails();
+  const removeMutation = useAdminRemoveBannedEmail();
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-neutral-400">
+          {entries.length} email{entries.length !== 1 ? "s" : ""} on the ban list
+        </p>
+        <button
+          onClick={() => refetch()}
+          disabled={isLoading}
+          className="p-1.5 text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800 disabled:opacity-40 rounded-lg transition-colors"
+          title="Refresh"
+        >
+          <svg className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+        </button>
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-2">
+          {[1, 2, 3].map((i) => <div key={i} className="h-12 bg-neutral-800 rounded-xl animate-pulse" />)}
+        </div>
+      ) : entries.length === 0 ? (
+        <p className="text-neutral-500 text-sm py-8 text-center">No banned emails.</p>
+      ) : (
+        <div className="space-y-2">
+          {entries.map((entry) => (
+            <div key={entry.id} className="flex items-center justify-between bg-neutral-800/60 border border-neutral-700 rounded-xl px-4 py-3">
+              <div>
+                <p className="text-sm text-neutral-200">{entry.email}</p>
+                {entry.user_id && (
+                  <p className="text-xs text-neutral-500 mt-0.5">UID: {entry.user_id}</p>
+                )}
+              </div>
+              <button
+                onClick={() => removeMutation.mutate(entry.id)}
+                disabled={removeMutation.isPending}
+                className="text-xs text-error-400 hover:text-error-300 disabled:opacity-50 transition-colors px-3 py-1.5 rounded-lg border border-error-700 hover:border-error-500"
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AdminModerationPage() {
   usePageTitle("Moderation");
-  const [view, setView] = useState<"reports" | "appeals">("reports");
+  const [view, setView] = useState<"reports" | "appeals" | "banned-emails">("reports");
   const [status, setStatus] = useState<ReportStatus>("pending");
   const [typeFilter, setTypeFilter] = useState<"all" | "review" | "user">(
     "all",
@@ -775,7 +844,7 @@ export default function AdminModerationPage() {
 
       {/* Top-level view toggle */}
       <div className="flex gap-1 bg-neutral-800 p-1 rounded-xl w-fit">
-        {(["reports", "appeals"] as const).map((v) => (
+        {(["reports", "appeals", "banned-emails"] as const).map((v) => (
           <button
             key={v}
             onClick={() => setView(v)}
@@ -785,13 +854,15 @@ export default function AdminModerationPage() {
                 : "text-neutral-400 hover:text-neutral-200"
             }`}
           >
-            {v}
+            {v === "banned-emails" ? "Banned Emails" : v}
           </button>
         ))}
       </div>
 
       {view === "appeals" ? (
         <AppealsQueue />
+      ) : view === "banned-emails" ? (
+        <BannedEmailsSection />
       ) : (
         <>
           {/* Status tabs */}

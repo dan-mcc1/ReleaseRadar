@@ -159,7 +159,7 @@ export default function Settings() {
   }[] = (blocksData as any) ?? [];
 
   const filteredWatchlistItems = useMemo(() => {
-    if (!watchlistNotifyItems) return [];
+    if (!Array.isArray(watchlistNotifyItems)) return [];
     return watchlistNotifyItems.filter((item) => {
       const matchesType =
         notifyTypeFilter === "all" || item.content_type === notifyTypeFilter;
@@ -170,7 +170,7 @@ export default function Settings() {
     });
   }, [watchlistNotifyItems, notifySearch, notifyTypeFilter]);
 
-  const allNotifyOn = watchlistNotifyItems?.every((i) => i.notify) ?? false;
+  const allNotifyOn = Array.isArray(watchlistNotifyItems) && watchlistNotifyItems.every((i) => i.notify);
 
   function patchPreferences(patch: Record<string, unknown>) {
     if (prefSaving) return;
