@@ -23,6 +23,7 @@ import VideoGallery from "../components/media/VideoGallery";
 import ContentRatingBadge from "../components/media/ContentRatingBadge";
 import BingePlanWidget from "../components/BingePlanWidget";
 import RewatchSection from "../components/RewatchSection";
+import EpisodeRatingChart from "../components/EpisodeRatingChart";
 
 type FullShowData = Show & {
   vote_average?: number;
@@ -233,6 +234,8 @@ export default function ShowInfo() {
         {show.seasons?.length > 0 && (
           <SeasonInfo showId={show.id} seasons={show.seasons} />
         )}
+
+        <EpisodeRatingChart showId={show.id} />
 
         {show.credits?.cast.length > 0 && <CastBar cast={show.credits.cast} />}
 

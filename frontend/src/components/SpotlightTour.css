@@ -81,6 +81,13 @@
   color: #d4d4d4;
 }
 
+/* Highlighted element ring */
+.driver-active-element {
+  outline: 2px solid rgba(124, 58, 237, 0.7) !important;
+  outline-offset: 2px !important;
+  border-radius: 6px !important;
+}
+
 /* Arrow (pointer from popover to element) */
 .rr-tour-popover .driver-popover-arrow-side-top.driver-popover-arrow {
   border-top-color: #171717;

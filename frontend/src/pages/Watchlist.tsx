@@ -29,6 +29,7 @@ import {
   useReorderWatchlist,
 } from "../hooks/api/useLists";
 import { useBingePlanBulk } from "../hooks/api/useBingePlan";
+import { useMyProviderIds } from "../hooks/api/useStreamingServices";
 
 type TabType = "all" | "movies" | "tv";
 type SortType =
@@ -132,6 +133,7 @@ export default function Watchlist() {
   usePageTitle("Watchlist");
   const navigate = useNavigate();
   const { data, isPending: loading } = useWatchlist();
+  const myProviderIds = useMyProviderIds();
   const results = data ?? { movies: [], shows: [] };
   const removeFromList = useRemoveFromList();
   const reorderWatchlist = useReorderWatchlist();
@@ -230,6 +232,7 @@ export default function Watchlist() {
     applyFilters(
       results.movies.filter((m) => m.title.toLowerCase().includes(q)),
       filters,
+      myProviderIds,
     ),
     sort,
   );
@@ -237,6 +240,7 @@ export default function Watchlist() {
     applyFilters(
       results.shows.filter((s) => s.name.toLowerCase().includes(q)),
       filters,
+      myProviderIds,
     ),
     sort,
   );
@@ -245,12 +249,12 @@ export default function Watchlist() {
     () =>
       isMyOrder
         ? buildCombined(
-            applyFilters(results.movies, filters),
-            applyFilters(results.shows, filters),
+            applyFilters(results.movies, filters, myProviderIds),
+            applyFilters(results.shows, filters, myProviderIds),
             query,
           )
         : [],
-    [isMyOrder, results.movies, results.shows, query, filters],
+    [isMyOrder, results.movies, results.shows, query, filters, myProviderIds],
   );
   const combinedByType = useMemo(
     () => ({
@@ -408,6 +412,7 @@ export default function Watchlist() {
               onChange={setFilters}
               availableGenres={availableGenres}
               availableCertifications={availableCertifications}
+              hasMyServices={myProviderIds.size > 0}
             />
           )}
         </div>

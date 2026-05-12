@@ -18,6 +18,8 @@ interface TourGroup {
   steps: { element?: string; title: string; description: string }[];
 }
 
+// Pre-computed at module level so they're stable references
+const GROUP_OFFSETS: number[] = [];
 const TOUR_GROUPS: TourGroup[] = [
   {
     path: "/calendar",
@@ -98,6 +100,14 @@ const TOUR_GROUPS: TourGroup[] = [
     ],
   },
 ];
+
+// Populate offsets and total after TOUR_GROUPS is defined
+let _offset = 0;
+for (const g of TOUR_GROUPS) {
+  GROUP_OFFSETS.push(_offset);
+  _offset += g.steps.length;
+}
+const TOTAL_STEPS = _offset;
 
 export default function SpotlightTour() {
   const authUser = useAuthUser();
@@ -193,17 +203,25 @@ export default function SpotlightTour() {
     const timer = setTimeout(() => {
       driverRef.current?.destroy();
 
+      const updateGlobalProgress = () => {
+        const current = driverRef.current?.getActiveIndex() ?? 0;
+        const globalCurrent = GROUP_OFFSETS[groupIndex] + current + 1;
+        const progressEl = document.querySelector(".driver-popover-progress-text");
+        if (progressEl) progressEl.textContent = `${globalCurrent} of ${TOTAL_STEPS}`;
+      };
+
       const driverInst = driver({
         animate: true,
         smoothScroll: true,
-        overlayOpacity: 0.65,
-        stagePadding: 8,
+        overlayOpacity: 0.75,
+        stagePadding: 6,
         allowClose: true,
         showProgress: true,
         popoverClass: "rr-tour-popover",
         nextBtnText: "Next →",
         prevBtnText: "← Back",
         doneBtnText: isLastGroup ? "Finish ✓" : "Next →",
+        onHighlighted: updateGlobalProgress,
         onNextClick: () => {
           const current = driverRef.current?.getActiveIndex() ?? 0;
           if (current < group.steps.length - 1) {

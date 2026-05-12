@@ -18,17 +18,15 @@ export default function Trending() {
   const page = Number(searchParams.get("page") ?? "1");
 
   const { data, isPending: loading } = useTrending(activeType, page);
-  const items = data?.results ?? [];
+
+  const rawItems = data?.results ?? [];
   const totalPages = data?.total_pages ?? 1;
 
-  const movies = activeType === "movie" ? (items as Movie[]) : [];
-  const shows = activeType === "tv" ? (items as Show[]) : [];
-  const results = { movies, shows, people: [] };
-  const total = items.length;
+  const movies = activeType === "movie" ? (rawItems as Movie[]) : [];
+  const shows = activeType === "tv" ? (rawItems as Show[]) : [];
 
   return (
     <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 py-8 pb-16">
-      {/* Page header */}
       <div className="mb-6" data-tour="trending-header">
         <div className="flex items-center gap-3 mb-1">
           <h1 className="text-3xl font-bold text-white">Trending</h1>
@@ -37,7 +35,6 @@ export default function Trending() {
         <p className="text-neutral-400">What everyone's watching right now</p>
       </div>
 
-      {/* Type tabs */}
       <div className="flex gap-1 mb-6">
         {TYPE_TABS.map((tab) => (
           <button
@@ -63,25 +60,19 @@ export default function Trending() {
         </div>
       )}
 
-      {!loading && total === 0 && (
+      {!loading && rawItems.length === 0 && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <p className="text-neutral-400">
-            No trending content available right now.
-          </p>
+          <p className="text-neutral-400">No trending content available right now.</p>
         </div>
       )}
 
-      {!loading && <MediaList results={results} paginated />}
+      {!loading && <MediaList results={{ movies, shows, people: [] }} paginated />}
 
-      {/* Pagination */}
       {!loading && totalPages > 1 && (
         <div className="flex items-center justify-center gap-4 mt-8">
           <button
             onClick={() =>
-              setSearchParams({
-                type: activeType,
-                page: String(Math.max(1, page - 1)),
-              })
+              setSearchParams({ type: activeType, page: String(Math.max(1, page - 1)) })
             }
             disabled={page === 1}
             className="px-4 py-2 rounded-lg text-sm font-medium bg-neutral-800 text-neutral-300 hover:bg-neutral-700 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
@@ -93,10 +84,7 @@ export default function Trending() {
           </span>
           <button
             onClick={() =>
-              setSearchParams({
-                type: activeType,
-                page: String(Math.min(totalPages, page + 1)),
-              })
+              setSearchParams({ type: activeType, page: String(Math.min(totalPages, page + 1)) })
             }
             disabled={page === totalPages}
             className="px-4 py-2 rounded-lg text-sm font-medium bg-neutral-800 text-neutral-300 hover:bg-neutral-700 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"

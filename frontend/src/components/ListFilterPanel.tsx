@@ -7,6 +7,7 @@ export interface ListFilters {
   yearMax: string;
   tmdbRatingMin: string;
   userRatings: number[]; // exact star values (1-5); 0 = unrated
+  myServicesOnly: boolean;
 }
 
 export const DEFAULT_FILTERS: ListFilters = {
@@ -16,6 +17,7 @@ export const DEFAULT_FILTERS: ListFilters = {
   yearMax: "",
   tmdbRatingMin: "",
   userRatings: [],
+  myServicesOnly: false,
 };
 
 export function countActiveFilters(f: ListFilters): number {
@@ -24,11 +26,16 @@ export function countActiveFilters(f: ListFilters): number {
     (f.certifications.length > 0 ? 1 : 0) +
     (f.yearMin || f.yearMax ? 1 : 0) +
     (f.tmdbRatingMin ? 1 : 0) +
-    (f.userRatings.length > 0 ? 1 : 0)
+    (f.userRatings.length > 0 ? 1 : 0) +
+    (f.myServicesOnly ? 1 : 0)
   );
 }
 
-export function applyFilters<T extends Movie | Show>(items: T[], f: ListFilters): T[] {
+export function applyFilters<T extends Movie | Show>(
+  items: T[],
+  f: ListFilters,
+  myProviderIds?: Set<number>,
+): T[] {
   if (countActiveFilters(f) === 0) return items;
   return items.filter((item) => {
     if (f.genres.length > 0) {
@@ -47,6 +54,10 @@ export function applyFilters<T extends Movie | Show>(items: T[], f: ListFilters)
       // 0 is the sentinel for "unrated"; otherwise match the exact star value
       const rating = item.user_rating ?? 0;
       if (!f.userRatings.includes(Math.round(rating))) return false;
+    }
+    if (f.myServicesOnly && myProviderIds && myProviderIds.size > 0) {
+      const ids = item.flatrate_provider_ids ?? [];
+      if (!ids.some((id) => myProviderIds.has(id))) return false;
     }
     return true;
   });
@@ -72,6 +83,7 @@ interface Props {
   availableGenres: string[];
   availableCertifications: string[];
   showUserRating?: boolean;
+  hasMyServices?: boolean;
 }
 
 function Pill({
@@ -104,6 +116,7 @@ export default function ListFilterPanel({
   availableGenres,
   availableCertifications,
   showUserRating = false,
+  hasMyServices = false,
 }: Props) {
   const sortedCerts = [...availableCertifications].sort((a, b) => {
     const ai = CERT_ORDER.indexOf(a);
@@ -144,6 +157,29 @@ export default function ListFilterPanel({
 
   return (
     <div className="bg-neutral-800/50 border border-neutral-700 rounded-xl p-4 space-y-4">
+      {/* My Services toggle */}
+      {hasMyServices && (
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs font-semibold text-neutral-300">On My Services</p>
+            <p className="text-xs text-neutral-500">Only show titles available on streaming services you have</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onChange({ ...filters, myServicesOnly: !filters.myServicesOnly })}
+            className={`relative inline-flex h-6 w-12 shrink-0 items-center rounded-full transition-colors ${
+              filters.myServicesOnly ? "bg-primary-600" : "bg-neutral-600"
+            }`}
+          >
+            <span
+              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                filters.myServicesOnly ? "translate-x-7" : "translate-x-1"
+              }`}
+            />
+          </button>
+        </div>
+      )}
+
       {/* Genres */}
       {availableGenres.length > 0 && (
         <div>

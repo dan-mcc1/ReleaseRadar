@@ -34,6 +34,7 @@ export type Show = {
   user_rating?: number | null;
   sort_key?: number;
   watchlist_id?: number;
+  flatrate_provider_ids?: number[];
 }
 
 export type Season = {
@@ -97,6 +98,7 @@ export type Movie = {
   user_rating?: number | null;
   sort_key?: number;
   watchlist_id?: number;
+  flatrate_provider_ids?: number[];
 }
 
 export type Genre = {

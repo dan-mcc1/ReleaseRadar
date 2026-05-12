@@ -13,7 +13,7 @@ export default function CalendarHeader({
   onGoToToday,
 }: Props) {
   return (
-    <header className="flex items-center justify-between border-b border-neutral-700 px-4 sm:px-6 py-3 sm:py-4 bg-neutral-900">
+    <header data-tour="calendar-view" className="flex items-center justify-between border-b border-neutral-700 px-4 sm:px-6 py-3 sm:py-4 bg-neutral-900">
       <div className="flex items-center gap-3">
         <span className="text-lg sm:text-2xl font-bold text-white">
           Release Radar

@@ -608,17 +608,23 @@ def _movie_query_options():
 
 
 def _show_query_options_list():
-    """Lightweight show options for list views — genres only, no seasons or providers."""
-    return [selectinload(Show.genres)]
+    """Lightweight show options for list views — genres and flatrate provider IDs only."""
+    return [
+        selectinload(Show.genres),
+        selectinload(Show.show_providers),
+    ]
 
 
 def _movie_query_options_list():
-    """Lightweight movie options for list views — genres only, no providers."""
-    return [selectinload(Movie.genres)]
+    """Lightweight movie options for list views — genres and flatrate provider IDs only."""
+    return [
+        selectinload(Movie.genres),
+        selectinload(Movie.movie_providers),
+    ]
 
 
 def serialize_show_list(show):
-    """Serialize a show for list views — omits seasons and providers."""
+    """Serialize a show for list views — omits full season/provider detail."""
     return {
         "id": show.id,
         "name": show.name,
@@ -636,11 +642,12 @@ def serialize_show_list(show):
         "vote_average": show.vote_average,
         "certification": show.certification,
         "genres": [{"id": g.id, "name": g.name} for g in show.genres],
+        "flatrate_provider_ids": [sp.provider_id for sp in show.show_providers if sp.flatrate],
     }
 
 
 def serialize_movie_list(movie):
-    """Serialize a movie for list views — omits providers."""
+    """Serialize a movie for list views — omits full provider detail."""
     return {
         "id": movie.id,
         "backdrop_path": movie.backdrop_path,
@@ -655,6 +662,7 @@ def serialize_movie_list(movie):
         "vote_average": movie.vote_average,
         "certification": movie.certification,
         "genres": [{"id": g.id, "name": g.name} for g in movie.genres],
+        "flatrate_provider_ids": [mp.provider_id for mp in movie.movie_providers if mp.flatrate],
     }
 
 

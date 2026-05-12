@@ -26,6 +26,14 @@ import {
 } from "../hooks/api/useWatchlistNotify";
 import { useShelves, useToggleShelfNotify } from "../hooks/api/useShelves";
 import ProUpgradeModal from "../components/ProUpgradeModal";
+import StreamingOptimizer from "../components/StreamingOptimizer";
+import {
+  useAllProviders,
+  useMyStreamingServices,
+  useAddStreamingService,
+  useRemoveStreamingService,
+} from "../hooks/api/useStreamingServices";
+import { BASE_IMAGE_URL } from "../constants";
 
 const USERNAME_RE = /^[a-zA-Z0-9_]{3,30}$/;
 
@@ -58,7 +66,7 @@ const TIMEZONE_OPTIONS: [string, string][] = [
   ["Pacific/Auckland", "Auckland (NZST)"],
 ];
 
-type Tab = "profile" | "notifications" | "privacy" | "account";
+type Tab = "profile" | "notifications" | "streaming" | "privacy" | "account";
 
 function AvatarPreview({
   avatarKey,
@@ -120,6 +128,7 @@ export default function Settings() {
   // Derive initial tab from URL hash
   const [activeTab, setActiveTab] = useState<Tab>(() => {
     if (location.hash === "#notifications") return "notifications";
+    if (location.hash === "#streaming") return "streaming";
     if (location.hash === "#privacy") return "privacy";
     if (location.hash === "#account") return "account";
     return "profile";
@@ -196,6 +205,13 @@ export default function Settings() {
   const [notifySearch, setNotifySearch] = useState("");
   const [notifyTypeFilter, setNotifyTypeFilter] = useState<"all" | "tv" | "movie">("all");
   const bulkToggleWatchlistNotify = useBulkToggleWatchlistNotify();
+  const { data: allProviders } = useAllProviders();
+  const { data: myServices } = useMyStreamingServices();
+  const addService = useAddStreamingService();
+  const removeService = useRemoveStreamingService();
+  const myServiceIds = new Set((myServices ?? []).map((p) => p.id));
+  const [providerSearch, setProviderSearch] = useState("");
+
   const { data: blocksData } = useMyBlocks();
   const unblockMutation = useUnblockUser();
   const blocks: { user_id: string; username: string | null; blocked_at: string }[] =
@@ -312,6 +328,7 @@ export default function Settings() {
   const tabs: { id: Tab; label: string }[] = [
     { id: "profile", label: "Profile" },
     { id: "notifications", label: "Notifications" },
+    { id: "streaming", label: "Streaming" },
     { id: "privacy", label: "Privacy" },
     { id: "account", label: "Account" },
   ];
@@ -865,6 +882,104 @@ export default function Settings() {
                 Upgrade to Premium to customize notifications
               </button>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Streaming tab ── */}
+      {activeTab === "streaming" && (
+        <div className="space-y-4">
+          {/* My Services */}
+          {myServices && myServices.length > 0 && (
+            <div className="bg-neutral-800 shadow-md rounded-lg p-4 space-y-3">
+              <h2 className="text-sm font-semibold text-neutral-400 uppercase tracking-wider">
+                My Services
+              </h2>
+              <div className="flex flex-wrap gap-3">
+                {myServices.map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => removeService.mutate(p.id)}
+                    title={`Remove ${p.name}`}
+                    className="relative group"
+                  >
+                    <img
+                      src={`${BASE_IMAGE_URL}/w92${p.logo_path}`}
+                      alt={p.name}
+                      className="w-14 h-14 rounded-xl ring-2 ring-primary-500 object-cover"
+                    />
+                    <span className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <p className="text-neutral-500 text-xs">Tap a service to remove it.</p>
+            </div>
+          )}
+
+          {/* Provider picker */}
+          <div className="bg-neutral-800 shadow-md rounded-lg p-4 space-y-3">
+            <h2 className="text-sm font-semibold text-neutral-400 uppercase tracking-wider">
+              Add Services
+            </h2>
+            <div className="relative">
+              <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-500 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input
+                type="text"
+                placeholder="Search providers…"
+                value={providerSearch}
+                onChange={(e) => setProviderSearch(e.target.value)}
+                className="w-full bg-neutral-700 border border-neutral-600 rounded-lg pl-8 pr-3 py-1.5 text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-primary-500"
+              />
+            </div>
+            <div className="flex flex-wrap gap-3 max-h-80 overflow-y-auto">
+              {(allProviders ?? [])
+                .filter((p) =>
+                  !myServiceIds.has(p.id) &&
+                  p.name.toLowerCase().includes(providerSearch.toLowerCase())
+                )
+                .map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => addService.mutate(p.id)}
+                    title={`Add ${p.name}`}
+                    className="relative group"
+                  >
+                    <img
+                      src={`${BASE_IMAGE_URL}/w92${p.logo_path}`}
+                      alt={p.name}
+                      className="w-14 h-14 rounded-xl object-cover opacity-60 group-hover:opacity-100 transition-opacity ring-1 ring-neutral-600"
+                    />
+                    <span className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                      </svg>
+                    </span>
+                  </button>
+                ))}
+              {(allProviders ?? []).filter(
+                (p) =>
+                  !myServiceIds.has(p.id) &&
+                  p.name.toLowerCase().includes(providerSearch.toLowerCase())
+              ).length === 0 && (
+                <p className="text-neutral-500 text-sm">
+                  {providerSearch ? "No providers match your search." : "All providers already added."}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Streaming optimizer */}
+          <div>
+            <h2 className="text-sm font-semibold text-neutral-400 uppercase tracking-wider mb-3 px-1">
+              Watchlist Optimizer
+            </h2>
+            <StreamingOptimizer />
           </div>
         </div>
       )}

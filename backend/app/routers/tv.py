@@ -186,6 +186,39 @@ def full_calendar(id: int, db: Session = Depends(get_db)):
     return calendar
 
 
+@router.get("/{id}/episode_ratings")
+def episode_ratings(id: int, db: Session = Depends(get_db)):
+    """
+    Return all episodes (excluding specials) with their vote_average,
+    grouped by season. Used for the episode quality chart on the show page.
+    """
+    show = db.query(Show).filter(Show.id == id).first()
+    if not show:
+        raise HTTPException(status_code=404, detail="Show not found")
+
+    episodes = (
+        db.query(Episode)
+        .filter(Episode.show_id == id, Episode.season_number > 0)
+        .order_by(Episode.season_number, Episode.episode_number)
+        .all()
+    )
+
+    seasons: dict[int, list] = {}
+    for ep in episodes:
+        seasons.setdefault(ep.season_number, []).append(
+            {
+                "episode_number": ep.episode_number,
+                "name": ep.name,
+                "vote_average": ep.vote_average if ep.vote_average else None,
+            }
+        )
+
+    return [
+        {"season_number": sn, "episodes": eps}
+        for sn, eps in sorted(seasons.items())
+    ]
+
+
 @router.get("/{id}/season/{season_number}/info")
 def full_season_info(id: int, season_number: int, db: Session = Depends(get_db)):
     """
