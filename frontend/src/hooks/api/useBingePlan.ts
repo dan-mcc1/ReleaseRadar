@@ -11,6 +11,9 @@ export interface BingePlan {
   remaining_minutes: number;
   eps_per_week_recent: number | null;
   completion_estimate: string | null;
+  finish_by_date: string | null;
+  eps_per_day_needed: number | null;
+  mins_per_day_needed: number | null;
 }
 
 export function useBingePlan(showId: number | undefined) {

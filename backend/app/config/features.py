@@ -13,6 +13,7 @@ PREMIUM_FEATURES: dict[str, bool] = {
     "watch_time_stats": True,
     "ical_sync": True,
     "binge_planner": False,
+    "finish_by_goal": False,
     "watchlist_notify_prompt": True,
     "notification_settings": True,
 }

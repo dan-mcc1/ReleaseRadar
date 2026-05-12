@@ -7,6 +7,7 @@ from fastapi import (
     Request,
     Query,
 )
+from datetime import date
 from pydantic import BaseModel
 from sqlalchemy import tuple_, union_all, select, literal, null, Float
 from sqlalchemy.orm import Session
@@ -30,7 +31,12 @@ from app.dependencies.auth import get_current_user
 from app.dependencies.subscription import feature_gate
 from app.core.limiter import limiter
 from app.services.episode_service import sync_show_episodes_background
-from app.services.binge_planner_service import get_binge_plan, get_binge_plans_bulk
+from app.services.binge_planner_service import (
+    get_binge_plan,
+    get_binge_plans_bulk,
+    set_finish_by_goal,
+    clear_finish_by_goal,
+)
 
 router = APIRouter()
 
@@ -316,3 +322,30 @@ def binge_plan_bulk(
     """Comma-separated show_ids — returns binge plan for each."""
     ids = [int(x) for x in show_ids.split(",") if x.strip().isdigit()][:50]
     return get_binge_plans_bulk(db, uid, ids)
+
+
+class FinishByBody(BaseModel):
+    target_date: date
+
+
+@router.post("/binge/{show_id}/finish-by")
+def set_finish_by(
+    show_id: int,
+    body: FinishByBody,
+    db: Session = Depends(get_db),
+    uid: str = Depends(feature_gate("finish_by_goal")),
+):
+    """Set (or update) a finish-by goal date for a show."""
+    set_finish_by_goal(db, uid, show_id, body.target_date)
+    return {"show_id": show_id, "target_date": body.target_date.isoformat()}
+
+
+@router.delete("/binge/{show_id}/finish-by")
+def delete_finish_by(
+    show_id: int,
+    db: Session = Depends(get_db),
+    uid: str = Depends(feature_gate("finish_by_goal")),
+):
+    """Clear the finish-by goal for a show."""
+    clear_finish_by_goal(db, uid, show_id)
+    return {"show_id": show_id, "cleared": True}

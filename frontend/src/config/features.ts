@@ -13,6 +13,7 @@ export const PREMIUM_FEATURES = {
   watchTimeStats: true,
   icalSync: true,
   bingePlanner: false,
+  finishByGoal: false,
   watchlistNotifyPrompt: true,
   notificationSettings: true,
 } as const;

@@ -315,6 +315,7 @@ export default function NavBar() {
 
   const libraryBadges: Record<string, number> = {
     "/activity": unreadRecs,
+    "/friends": pendingRequests,
   };
 
   const libraryLinks = [
@@ -324,6 +325,7 @@ export default function NavBar() {
     { name: "Stats", href: "/stats" },
     { name: "For You", href: "/for-you" },
     { name: "Activity", href: "/activity" },
+    { name: "Friends", href: "/friends" },
   ];
 
   return (

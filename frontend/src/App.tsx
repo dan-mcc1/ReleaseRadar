@@ -22,6 +22,7 @@ import ProfilePage from "./pages/ProfilePage";
 import BrowseGenres from "./pages/BrowseGenres";
 import FriendProfilePage from "./pages/FriendProfilePage";
 import ActivityFeedPage from "./pages/ActivityFeedPage";
+import FriendsPage from "./pages/FriendsPage";
 import EpisodeInfo from "./pages/EpisodeInfo";
 import BoxOffice from "./pages/BoxOffice";
 import CollectionInfo from "./pages/CollectionInfo";
@@ -88,6 +89,7 @@ function App() {
           <Route path="/trending" element={<Trending />} />
           <Route path="/browse-genres" element={<BrowseGenres />} />
           <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/friends" element={<FriendsPage />} />
           <Route path="/user/:username" element={<FriendProfilePage />} />
           <Route path="/activity" element={<ActivityFeedPage />} />
           <Route

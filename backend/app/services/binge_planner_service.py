@@ -1,9 +1,10 @@
 # app/services/binge_planner_service.py
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, func
-from datetime import datetime, timedelta, timezone
+from sqlalchemy import func
+from datetime import datetime, timedelta, timezone, date
 from app.models.episode import Episode
 from app.models.episode_watched import EpisodeWatched
+from app.models.finish_by_goal import FinishByGoal
 from app.models.season import Season
 from app.models.show import Show
 
@@ -12,7 +13,7 @@ _DEFAULT_EPISODE_RUNTIME = 40  # minutes — used when runtime is NULL
 
 def get_binge_plan(db: Session, user_id: str, show_id: int) -> dict:
     """
-    Return remaining runtime + pace estimate for a show.
+    Return remaining runtime + pace estimate for a show, including any finish-by goal.
     """
     show = db.query(Show).filter_by(id=show_id).first()
     if not show:
@@ -77,6 +78,23 @@ def get_binge_plan(db: Session, user_id: str, show_id: int) -> dict:
             months = round(completion_weeks / 4.33)
             completion_label = f"in {months} month{'s' if months != 1 else ''}"
 
+    # ── Finish-by goal ───────────────────────────────────────────────────────
+    goal = db.query(FinishByGoal).filter_by(user_id=user_id, show_id=show_id).first()
+    finish_by_date: str | None = None
+    eps_per_day_needed: float | None = None
+    mins_per_day_needed: float | None = None
+
+    if goal:
+        finish_by_date = goal.target_date.isoformat()
+        days_remaining = (goal.target_date - date.today()).days
+        if days_remaining > 0 and remaining_eps:
+            eps_per_day_needed = round(len(remaining_eps) / days_remaining, 1)
+            mins_per_day_needed = round(remaining_minutes / days_remaining)
+        elif days_remaining <= 0:
+            # Goal date has passed — still return it so UI can show it as overdue
+            eps_per_day_needed = None
+            mins_per_day_needed = None
+
     return {
         "show_id": show_id,
         "show_name": show.name,
@@ -86,9 +104,26 @@ def get_binge_plan(db: Session, user_id: str, show_id: int) -> dict:
         "remaining_minutes": remaining_minutes,
         "eps_per_week_recent": round(eps_per_week, 1) if eps_per_week else None,
         "completion_estimate": completion_label,
+        "finish_by_date": finish_by_date,
+        "eps_per_day_needed": eps_per_day_needed,
+        "mins_per_day_needed": mins_per_day_needed,
     }
 
 
 def get_binge_plans_bulk(db: Session, user_id: str, show_ids: list[int]) -> dict:
     """Return binge plan for multiple shows in one call."""
     return {str(sid): get_binge_plan(db, user_id, sid) for sid in show_ids}
+
+
+def set_finish_by_goal(db: Session, user_id: str, show_id: int, target_date: date) -> None:
+    goal = db.query(FinishByGoal).filter_by(user_id=user_id, show_id=show_id).first()
+    if goal:
+        goal.target_date = target_date
+    else:
+        db.add(FinishByGoal(user_id=user_id, show_id=show_id, target_date=target_date))
+    db.commit()
+
+
+def clear_finish_by_goal(db: Session, user_id: str, show_id: int) -> None:
+    db.query(FinishByGoal).filter_by(user_id=user_id, show_id=show_id).delete()
+    db.commit()
