@@ -10,6 +10,7 @@ export interface NotificationPrefs {
   profile_visibility: string;
   notify_new_seasons: boolean;
   notify_streaming_changes: boolean;
+  notify_trailers: boolean;
 }
 
 export function useNotificationPrefs() {

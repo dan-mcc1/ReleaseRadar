@@ -35,6 +35,7 @@ class PreferencesUpdate(BaseModel):
     profile_visibility: str | None = None
     notify_new_seasons: bool | None = None
     notify_streaming_changes: bool | None = None
+    notify_trailers: bool | None = None
 
 
 @router.get("/preferences")
@@ -51,6 +52,7 @@ def get_notification_preferences(
         "profile_visibility": user.profile_visibility or "friends_only",
         "notify_new_seasons": user.notify_new_seasons,
         "notify_streaming_changes": user.notify_streaming_changes,
+        "notify_trailers": user.notify_trailers,
     }
 
 
@@ -101,6 +103,17 @@ def update_notification_preferences(
             )
         user.notify_streaming_changes = body.notify_streaming_changes
 
+    if body.notify_trailers is not None:
+        if body.notify_trailers and not is_premium(uid, db):
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "error": "premium_required",
+                    "message": "This feature requires a Premium subscription.",
+                },
+            )
+        user.notify_trailers = body.notify_trailers
+
     db.commit()
     return {
         "email_notifications": user.email_notifications,
@@ -108,6 +121,7 @@ def update_notification_preferences(
         "profile_visibility": user.profile_visibility,
         "notify_new_seasons": user.notify_new_seasons,
         "notify_streaming_changes": user.notify_streaming_changes,
+        "notify_trailers": user.notify_trailers,
     }
 
 

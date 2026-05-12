@@ -328,3 +328,51 @@ def test_streaming_email(
         "message": f"Test streaming alert sent to {user.email}",
         "fake_alerts": [{"title": a["title"], "added": a["added"], "removed": a["removed"]} for a in fake_alerts],
     }
+
+
+@router.post("/test-trailer-email")
+def test_trailer_email(
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    """
+    Send a test trailer alert email to the current user with fake data.
+    Useful for previewing the email template without waiting for a real new trailer.
+
+    Requires an email address on file.
+    """
+    from app.services.email_service import send_trailer_alert_email
+
+    user = db.query(User).filter_by(id=uid).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not user.email:
+        raise HTTPException(status_code=400, detail="No email address on file")
+
+    fake_alerts = [
+        {
+            "title": "Dune: Part Two",
+            "content_type": "movie",
+            "content_id": 693134,
+            "poster_path": "/1pdfLvkbY9ohJlCjQH2CZjjYVvJ.jpg",
+            "videos": [
+                {"key": "Way9or4Yl_0", "name": "Official Trailer"},
+            ],
+        },
+        {
+            "title": "The Bear",
+            "content_type": "tv",
+            "content_id": 136315,
+            "poster_path": "/sHFlbKS3WLqMnp9t2ghADIJFnuQ.jpg",
+            "videos": [
+                {"key": "a_U5oaGjbXc", "name": "Season 3 Official Trailer"},
+            ],
+        },
+    ]
+
+    send_trailer_alert_email(user.email, user.username or "", fake_alerts, uid=uid)
+
+    return {
+        "message": f"Test trailer alert sent to {user.email}",
+        "fake_alerts": [{"title": a["title"], "videos": a["videos"]} for a in fake_alerts],
+    }

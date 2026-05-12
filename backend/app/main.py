@@ -55,6 +55,7 @@ from app.services.episode_service import (
     check_and_reactivate_watched_shows,
 )
 from app.services.streaming_notification_service import refresh_streaming_providers
+from app.services.trailer_notification_service import refresh_trailers
 
 
 async def _activity_cleanup_loop():
@@ -153,6 +154,28 @@ async def _episode_update_loop():
             db.close()
 
 
+async def _trailer_refresh_loop():
+    """Refresh trailers and notify users of new ones once a day at noon Eastern."""
+    eastern = ZoneInfo("America/New_York")
+    while True:
+        try:
+            now = datetime.now(eastern)
+            next_run = now.replace(hour=12, minute=0, second=0, microsecond=0)
+            if now >= next_run:
+                next_run += timedelta(days=1)
+            await asyncio.sleep((next_run - now).total_seconds())
+            print("[trailers] Starting trailer refresh...")
+            db = SessionLocal()
+            try:
+                await asyncio.to_thread(refresh_trailers, db)
+                print("[trailers] Done")
+            finally:
+                db.close()
+        except Exception as e:
+            print(f"[trailers] Loop error: {e}")
+            await asyncio.sleep(60)
+
+
 async def _streaming_refresh_loop():
     """Refresh streaming providers and notify users of changes once a day at 5am."""
     eastern = ZoneInfo("America/New_York")
@@ -201,17 +224,21 @@ async def lifespan(app: FastAPI):
     import app.models.appeal  # noqa: F401
     import app.models.banned_email  # noqa: F401
     import app.models.finish_by_goal  # noqa: F401
+    import app.models.movie_video  # noqa: F401
+    import app.models.show_video  # noqa: F401
 
     Base.metadata.create_all(engine)
     task = asyncio.create_task(_activity_cleanup_loop())
     digest_task = asyncio.create_task(_daily_digest_loop())
     vote_task = asyncio.create_task(_episode_update_loop())
     streaming_task = asyncio.create_task(_streaming_refresh_loop())
+    trailer_task = asyncio.create_task(_trailer_refresh_loop())
     yield
     task.cancel()
     digest_task.cancel()
     vote_task.cancel()
     streaming_task.cancel()
+    trailer_task.cancel()
 
 
 app = FastAPI(title="ReleaseRadar API", lifespan=lifespan, redirect_slashes=True)

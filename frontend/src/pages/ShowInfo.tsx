@@ -19,6 +19,7 @@ import RatingsRow from "../components/media/RatingsRow";
 import ExternalLinksSection from "../components/media/ExternalLinksSection";
 import RecommendationsGrid from "../components/media/RecommendationsGrid";
 import TrailerButton from "../components/media/TrailerButton";
+import VideoGallery from "../components/media/VideoGallery";
 import ContentRatingBadge from "../components/media/ContentRatingBadge";
 import BingePlanWidget from "../components/BingePlanWidget";
 import RewatchSection from "../components/RewatchSection";
@@ -234,6 +235,8 @@ export default function ShowInfo() {
         )}
 
         {show.credits?.cast.length > 0 && <CastBar cast={show.credits.cast} />}
+
+        <VideoGallery videos={show.videos?.results} />
 
         {show.external_ids && (
           <ExternalLinksSection externalIds={show.external_ids} />

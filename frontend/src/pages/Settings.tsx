@@ -145,6 +145,7 @@ export default function Settings() {
   const profileVisibility = prefs?.profile_visibility ?? "friends_only";
   const notifyNewSeasons = prefs?.notify_new_seasons ?? true;
   const notifyStreamingChanges = prefs?.notify_streaming_changes ?? true;
+  const notifyTrailers = prefs?.notify_trailers ?? true;
   const prefSaving = updatePrefsMutation.isPending;
   const isPremium =
     userMe?.subscription_tier === "premium" ||
@@ -563,6 +564,39 @@ export default function Settings() {
                 <span
                   className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
                     isPremium && notifyStreamingChanges ? "translate-x-7" : "translate-x-1"
+                  }`}
+                />
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between gap-6">
+              <div>
+                <p className="text-white font-medium flex items-center gap-2">
+                  Trailer Alerts
+                  {!isPremium && (
+                    <span className="text-[10px] font-bold uppercase tracking-wider bg-amber-400/15 text-amber-400 border border-amber-400/30 rounded-full px-2 py-0.5">
+                      Premium
+                    </span>
+                  )}
+                </p>
+                <p className="text-neutral-400 text-sm">
+                  Email me when a new official trailer drops for a tracked title.
+                </p>
+              </div>
+              <button
+                onClick={() =>
+                  isPremium
+                    ? patchPreferences({ notify_trailers: !notifyTrailers })
+                    : setShowUpgradeModal(true)
+                }
+                disabled={prefSaving && isPremium}
+                className={`relative inline-flex h-6 w-12 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
+                  isPremium && notifyTrailers ? "bg-primary-600" : "bg-neutral-600"
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    isPremium && notifyTrailers ? "translate-x-7" : "translate-x-1"
                   }`}
                 />
               </button>

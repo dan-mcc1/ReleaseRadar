@@ -20,6 +20,7 @@ import RatingsRow from "../components/media/RatingsRow";
 import ExternalLinksSection from "../components/media/ExternalLinksSection";
 import RecommendationsGrid from "../components/media/RecommendationsGrid";
 import TrailerButton from "../components/media/TrailerButton";
+import VideoGallery from "../components/media/VideoGallery";
 import ContentRatingBadge from "../components/media/ContentRatingBadge";
 
 type FullMovieData = Movie & {
@@ -299,6 +300,8 @@ export default function MovieInfo() {
         {movie.credits?.cast.length > 0 && (
           <CastBar cast={movie.credits.cast} />
         )}
+
+        <VideoGallery videos={movie.videos?.results} />
 
         {/* External links */}
         {movie.external_ids && (

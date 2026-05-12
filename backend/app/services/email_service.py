@@ -602,6 +602,97 @@ def send_streaming_alert_email(
     send_email(to_email, subject, _email_wrapper(body, uid))
 
 
+def send_trailer_alert_email(
+    to_email: str,
+    username: str,
+    alerts: list,
+    uid: str = "",
+):
+    """
+    Notify a user about new official trailers/teasers for their tracked content.
+    Each alert dict has: title, content_type, content_id, poster_path,
+    videos (list of {key, name, type}).
+    """
+    if not alerts:
+        return
+
+    YOUTUBE_THUMB = "https://img.youtube.com/vi/{key}/mqdefault.jpg"
+
+    def _video_rows(videos: list[dict]) -> str:
+        rows = ""
+        for v in videos[:3]:
+            key = v.get("key", "")
+            name = escape(v.get("name") or "Official Trailer")
+            thumb = YOUTUBE_THUMB.format(key=key)
+            yt_url = f"https://www.youtube.com/watch?v={key}"
+            rows += f"""
+<a href="{yt_url}" style="display:flex;align-items:center;gap:10px;
+   background:#262626;border:1px solid #404040;border-radius:8px;
+   padding:8px 10px;margin-top:6px;text-decoration:none;">
+  <img src="{thumb}" width="80" height="45"
+       style="border-radius:4px;object-fit:cover;flex-shrink:0;" />
+  <div>
+    <p style="margin:0;color:#f5f5f5;font-size:13px;font-weight:600;">{name}</p>
+    <p style="margin:2px 0 0;color:#737373;font-size:11px;">Trailer · YouTube</p>
+  </div>
+</a>"""
+        return rows
+
+    def _alert_card(a: dict) -> str:
+        content_type = a.get("content_type", "movie")
+        content_id = a.get("content_id")
+        content_url = (
+            f"{settings.FRONTEND_URL}/{content_type}/{content_id}"
+            if content_id
+            else settings.FRONTEND_URL
+        )
+        has_poster = bool(a.get("poster_path"))
+        poster = (
+            f'<a href="{content_url}" style="display:inline-block;flex-shrink:0;margin-right:12px;">'
+            f'<img src="{TMDB_IMAGE_BASE}{a["poster_path"]}" alt="{escape(a["title"])}" width="56" height="84"'
+            f' style="border-radius:6px;object-fit:cover;display:block;" /></a>'
+            if has_poster
+            else ""
+        )
+        layout_style = "display:flex;align-items:flex-start;" if has_poster else ""
+        videos_html = _video_rows(a.get("videos", []))
+        return f"""
+<div style="{layout_style}background:#171717;border:1px solid #404040;
+            border-radius:10px;padding:14px;margin-bottom:10px;">
+  {poster}
+  <div style="flex:1;min-width:0;">
+    <a href="{content_url}" style="color:#f5f5f5;font-size:15px;font-weight:600;
+       text-decoration:none;display:block;margin-bottom:4px;">{escape(a["title"])}</a>
+    {videos_html}
+  </div>
+</div>"""
+
+    count = len(alerts)
+    if count == 1:
+        subject = f"New trailer for {alerts[0]['title']} — Release Radar"
+    else:
+        subject = f"New trailers for {count} titles you're tracking — Release Radar"
+
+    cards = "".join(_alert_card(a) for a in alerts)
+    body = f"""
+<h2 style="margin:0 0 4px;color:#f5f5f5;font-size:20px;font-weight:700;">
+  Hi {escape(username) or 'there'} 👋
+</h2>
+<p style="margin:0 0 20px;color:#a3a3a3;font-size:14px;">
+  New trailer{'s are' if count > 1 else ' is'} out for {'titles' if count > 1 else 'a title'} you're tracking:
+</p>
+{cards}
+<div style="text-align:center;margin-top:24px;">
+  <a href="{settings.FRONTEND_URL}"
+     style="display:inline-block;background:#059669;color:#ffffff;font-weight:600;
+            font-size:14px;padding:12px 28px;border-radius:8px;text-decoration:none;">
+    Open Release Radar
+  </a>
+</div>"""
+
+    send_email(to_email, subject, _email_wrapper(body, uid))
+
+
 def send_email(to_email: str, subject: str, html_body: str):
     if not settings.RESEND_API_KEY:
         print(
