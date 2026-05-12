@@ -26,6 +26,8 @@ class User(Base):
     notify_new_seasons = Column(Boolean, default=True, server_default="true", nullable=False)
     notify_streaming_changes = Column(Boolean, default=True, server_default="true", nullable=False)
     notify_trailers = Column(Boolean, default=True, server_default="true", nullable=False)
+    digest_hour = Column(Integer, default=9, server_default="9", nullable=False)
+    digest_timezone = Column(String, default="America/New_York", server_default="America/New_York", nullable=False)
     onboarding_completed = Column(Boolean, default=False, server_default="false", nullable=False)
     letterboxd_prompted = Column(Boolean, default=False, server_default="false", nullable=False)
     is_suspended = Column(Boolean, default=False, server_default="false", nullable=False)

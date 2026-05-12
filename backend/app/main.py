@@ -1,7 +1,7 @@
 import asyncio
 import time
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 from zoneinfo import ZoneInfo
 from fastapi import FastAPI, Header, HTTPException, Request
 from slowapi.errors import RateLimitExceeded
@@ -103,34 +103,28 @@ async def _activity_cleanup_loop():
 
 
 async def _daily_digest_loop():
-    eastern = ZoneInfo("America/New_York")
-
+    """Fires at the top of every hour. Each function filters users by their preferred local hour."""
     while True:
         try:
-            now = datetime.now(eastern)
-            next_run = now.replace(hour=9, minute=0, second=0, microsecond=0)
-
-            if now >= next_run:
-                next_run += timedelta(days=1)
-
-            wait_seconds = (next_run - now).total_seconds()
-
-            print(f"[daily digest] Sleeping for {wait_seconds:.2f}s")
+            now = datetime.now(dt_timezone.utc)
+            next_hour = (now + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
+            wait_seconds = (next_hour - now).total_seconds()
+            print(f"[daily digest] Sleeping {wait_seconds:.0f}s until top of next hour...")
             await asyncio.sleep(wait_seconds)
 
-            print("[daily digest] Firing now...")
-
+            now_utc = datetime.now(dt_timezone.utc)
+            print(f"[daily digest] Hourly sweep firing at {now_utc.strftime('%H:%M')} UTC...")
             db = SessionLocal()
             try:
-                send_daily_digest_to_all(db)
-                send_season_premiere_alerts_to_all(db)
-                print("[daily digest] Done — emails sent")
+                send_daily_digest_to_all(db, now_utc=now_utc)
+                send_season_premiere_alerts_to_all(db, now_utc=now_utc)
+                print("[daily digest] Hourly sweep done")
             finally:
                 db.close()
 
         except Exception as e:
             print(f"[daily digest] Loop error: {e}")
-            await asyncio.sleep(60)  # prevent tight crash loop
+            await asyncio.sleep(60)
 
 
 async def _episode_update_loop():

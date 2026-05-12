@@ -1,5 +1,8 @@
 import hmac
 import hashlib
+from datetime import date, datetime, timedelta, timezone as dt_timezone
+from collections import defaultdict
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -20,8 +23,6 @@ from app.services.email_service import (
     format_air_time,
 )
 from app.config import settings
-from datetime import date, timedelta
-from collections import defaultdict
 
 router = APIRouter()
 
@@ -36,6 +37,8 @@ class PreferencesUpdate(BaseModel):
     notify_new_seasons: bool | None = None
     notify_streaming_changes: bool | None = None
     notify_trailers: bool | None = None
+    digest_hour: int | None = None
+    digest_timezone: str | None = None
 
 
 @router.get("/preferences")
@@ -53,6 +56,8 @@ def get_notification_preferences(
         "notify_new_seasons": user.notify_new_seasons,
         "notify_streaming_changes": user.notify_streaming_changes,
         "notify_trailers": user.notify_trailers,
+        "digest_hour": user.digest_hour if user.digest_hour is not None else 9,
+        "digest_timezone": user.digest_timezone or "America/New_York",
     }
 
 
@@ -114,6 +119,18 @@ def update_notification_preferences(
             )
         user.notify_trailers = body.notify_trailers
 
+    if body.digest_hour is not None:
+        if not (0 <= body.digest_hour <= 23):
+            raise HTTPException(status_code=422, detail="digest_hour must be between 0 and 23")
+        user.digest_hour = body.digest_hour
+
+    if body.digest_timezone is not None:
+        try:
+            ZoneInfo(body.digest_timezone)
+        except (ZoneInfoNotFoundError, KeyError):
+            raise HTTPException(status_code=422, detail="Invalid timezone")
+        user.digest_timezone = body.digest_timezone
+
     db.commit()
     return {
         "email_notifications": user.email_notifications,
@@ -122,6 +139,8 @@ def update_notification_preferences(
         "notify_new_seasons": user.notify_new_seasons,
         "notify_streaming_changes": user.notify_streaming_changes,
         "notify_trailers": user.notify_trailers,
+        "digest_hour": user.digest_hour,
+        "digest_timezone": user.digest_timezone,
     }
 
 
@@ -205,9 +224,9 @@ def _frequency_window(frequency: str) -> int:
     return {"daily": 1, "weekly": 7, "monthly": 30}.get(frequency, 1)
 
 
-def _should_send_today(frequency: str) -> bool:
+def _should_send_today(frequency: str, local_date: date | None = None) -> bool:
     """Return True if the digest should be sent today for the given frequency."""
-    today = date.today()
+    today = local_date if local_date is not None else date.today()
     if frequency == "daily":
         return True
     if frequency == "weekly":
@@ -217,11 +236,22 @@ def _should_send_today(frequency: str) -> bool:
     return False
 
 
-def send_season_premiere_alerts_to_all(db: Session):
+def _user_local_now(user: User, now_utc: datetime) -> datetime:
+    try:
+        tz = ZoneInfo(user.digest_timezone or "America/New_York")
+    except (ZoneInfoNotFoundError, KeyError):
+        tz = ZoneInfo("America/New_York")
+    return now_utc.astimezone(tz)
+
+
+def send_season_premiere_alerts_to_all(db: Session, now_utc: datetime | None = None):
     """
-    Send season-premiere alert emails to opted-in users.
-    Fires when a tracked show has a season premiering in exactly 30 or 7 days.
+    Runs every hour alongside the digest sweep. Sends season-premiere alerts
+    only to users whose local clock has just reached their preferred digest_hour.
     """
+    if now_utc is None:
+        now_utc = datetime.now(dt_timezone.utc)
+
     today = date.today()
     target_dates = {
         30: today + timedelta(days=30),
@@ -305,6 +335,10 @@ def send_season_premiere_alerts_to_all(db: Session):
 
     for user in users:
         try:
+            local_now = _user_local_now(user, now_utc)
+            preferred_hour = user.digest_hour if user.digest_hour is not None else 9
+            if local_now.hour != preferred_hour:
+                continue
             tracked = user_tracked[user.id]
             alerts = [
                 alert
@@ -320,21 +354,27 @@ def send_season_premiere_alerts_to_all(db: Session):
             print(f"[season alert] Failed for {user.email}: {e}")
 
 
-def send_daily_digest_to_all(db: Session):
+def send_daily_digest_to_all(db: Session, now_utc: datetime | None = None):
     """
-    Send digest emails to all opted-in users.
-    Respects each user's notification_frequency — weekly users only get emails
-    on Mondays, monthly users only on the 1st.
+    Runs every hour. Sends a digest to each opted-in user whose local clock
+    has just reached their preferred digest_hour.
     """
+    if now_utc is None:
+        now_utc = datetime.now(dt_timezone.utc)
+
     users = (
         db.query(User)
-        .filter(User.email_notifications == True, User.email != None)
+        .filter(User.email_notifications == True, User.email != None)  # noqa: E711,E712
         .all()
     )
     for user in users:
         try:
+            local_now = _user_local_now(user, now_utc)
+            preferred_hour = user.digest_hour if user.digest_hour is not None else 9
+            if local_now.hour != preferred_hour:
+                continue
             freq = user.notification_frequency or "daily"
-            if not _should_send_today(freq):
+            if not _should_send_today(freq, local_now.date()):
                 continue
             window = _frequency_window(freq)
             items = _build_items_for_window(db, user.id, window)

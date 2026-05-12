@@ -17,6 +17,7 @@ from app.services.watchlist_service import (
 )
 from app.services.episode_service import sync_show_episodes
 from app.services.activity_service import log_activity
+from app.models.activity import Activity
 from app.models.episode import Episode
 from app.models.episode_watched import EpisodeWatched
 from app.models.watchlist import Watchlist
@@ -160,9 +161,23 @@ def update_watched_rating(
 
     if rating is not None:
         title, poster = _get_item_title_and_poster(db, content_type, content_id)
-        log_activity(
-            db, user_id, "rated", content_type, content_id, title, poster, rating=rating
+        existing_activity = (
+            db.query(Activity)
+            .filter_by(
+                user_id=user_id,
+                activity_type="watched",
+                content_type=content_type,
+                content_id=content_id,
+            )
+            .first()
         )
+        if existing_activity:
+            existing_activity.rating = rating
+            existing_activity.created_at = datetime.utcnow()
+        else:
+            log_activity(
+                db, user_id, "watched", content_type, content_id, title, poster, rating=rating
+            )
 
     db.commit()
     db.refresh(entry)

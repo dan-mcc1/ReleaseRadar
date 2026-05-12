@@ -92,8 +92,12 @@ function ActivityRow({
   const nameLabel = isMe ? "You" : (item.username ?? "Someone");
   const contentPath = `/${item.content_type === "movie" ? "movie" : "tv"}/${item.content_id}`;
 
+  const watchedLabel =
+    item.activity_type === "watched" && item.rating != null
+      ? "watched & rated"
+      : "watched";
   const badge = {
-    watched: { color: "text-success-400", icon: "✓", label: "watched" },
+    watched: { color: "text-success-400", icon: "✓", label: watchedLabel },
     currently_watching: {
       color: "text-highlight-400",
       icon: "▶",
@@ -150,7 +154,8 @@ function ActivityRow({
             </p>
           )}
 
-        {item.activity_type === "rated" && item.rating != null && (
+        {(item.activity_type === "rated" || item.activity_type === "watched") &&
+          item.rating != null && (
           <div className="mt-1">
             <StarDisplay rating={item.rating} />
           </div>

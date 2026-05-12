@@ -38,7 +38,16 @@ def log_activity(
             Activity.season_number == season_number,
             Activity.episode_number == episode_number,
         )
-    q.delete()
+    q.delete(synchronize_session=False)
+
+    # Collapse preceding "started watching" entries into the watched event
+    if activity_type == "watched":
+        db.query(Activity).filter(
+            Activity.user_id == user_id,
+            Activity.activity_type.in_(["currently_watching", "want_to_watch"]),
+            Activity.content_type == content_type,
+            Activity.content_id == content_id,
+        ).delete(synchronize_session=False)
 
     entry = Activity(
         user_id=user_id,

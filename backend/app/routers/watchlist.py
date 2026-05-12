@@ -247,17 +247,19 @@ def get_notify_prefs(
         for mid, title in db.query(Movie.id, Movie.title).filter(Movie.id.in_(movie_ids)).all():
             movie_names[mid] = title
 
-    return [
-        {
+    result = []
+    for r in rows:
+        name_map = show_names if r.content_type == "tv" else movie_names
+        name = name_map.get(r.content_id)
+        if name is None:
+            continue  # skip orphaned watchlist entries with no cached media data
+        result.append({
             "content_type": r.content_type,
             "content_id": r.content_id,
-            "name": (show_names if r.content_type == "tv" else movie_names).get(
-                r.content_id, f"{'Show' if r.content_type == 'tv' else 'Movie'} #{r.content_id}"
-            ),
+            "name": name,
             "notify": r.notify,
-        }
-        for r in rows
-    ]
+        })
+    return result
 
 
 class NotifyPrefUpdate(BaseModel):

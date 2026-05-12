@@ -11,6 +11,8 @@ export interface NotificationPrefs {
   notify_new_seasons: boolean;
   notify_streaming_changes: boolean;
   notify_trailers: boolean;
+  digest_hour: number;
+  digest_timezone: string;
 }
 
 export function useNotificationPrefs() {

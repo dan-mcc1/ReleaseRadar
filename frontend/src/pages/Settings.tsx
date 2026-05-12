@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useMyBlocks, useUnblockUser } from "../hooks/api/useModeration";
 import { isPremiumFeature } from "../config/features";
 import { signOut } from "firebase/auth";
@@ -28,6 +28,35 @@ import { useShelves, useToggleShelfNotify } from "../hooks/api/useShelves";
 import ProUpgradeModal from "../components/ProUpgradeModal";
 
 const USERNAME_RE = /^[a-zA-Z0-9_]{3,30}$/;
+
+const TIMEZONE_OPTIONS: [string, string][] = [
+  ["UTC", "UTC"],
+  ["America/New_York", "Eastern (ET)"],
+  ["America/Chicago", "Central (CT)"],
+  ["America/Denver", "Mountain (MT)"],
+  ["America/Los_Angeles", "Pacific (PT)"],
+  ["America/Phoenix", "Arizona (MT)"],
+  ["America/Anchorage", "Alaska (AKT)"],
+  ["Pacific/Honolulu", "Hawaii (HT)"],
+  ["America/Toronto", "Toronto (ET)"],
+  ["America/Vancouver", "Vancouver (PT)"],
+  ["America/Sao_Paulo", "São Paulo (BRT)"],
+  ["Europe/London", "London (GMT)"],
+  ["Europe/Paris", "Paris (CET)"],
+  ["Europe/Berlin", "Berlin (CET)"],
+  ["Europe/Rome", "Rome (CET)"],
+  ["Europe/Madrid", "Madrid (CET)"],
+  ["Europe/Amsterdam", "Amsterdam (CET)"],
+  ["Africa/Johannesburg", "Johannesburg (SAST)"],
+  ["Asia/Kolkata", "India (IST)"],
+  ["Asia/Singapore", "Singapore (SGT)"],
+  ["Asia/Shanghai", "China (CST)"],
+  ["Asia/Tokyo", "Tokyo (JST)"],
+  ["Asia/Seoul", "Seoul (KST)"],
+  ["Australia/Sydney", "Sydney (AEST)"],
+  ["Australia/Melbourne", "Melbourne (AEST)"],
+  ["Pacific/Auckland", "Auckland (NZST)"],
+];
 
 type Tab = "profile" | "notifications" | "privacy" | "account";
 
@@ -146,6 +175,19 @@ export default function Settings() {
   const notifyNewSeasons = prefs?.notify_new_seasons ?? true;
   const notifyStreamingChanges = prefs?.notify_streaming_changes ?? true;
   const notifyTrailers = prefs?.notify_trailers ?? true;
+  const digestHour = prefs?.digest_hour ?? 9;
+  const digestTimezone = prefs?.digest_timezone ?? "America/New_York";
+  const [timezoneOpen, setTimezoneOpen] = useState(false);
+  const timezoneRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (timezoneRef.current && !timezoneRef.current.contains(e.target as Node)) {
+        setTimezoneOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
   const prefSaving = updatePrefsMutation.isPending;
   const isPremium =
     userMe?.subscription_tier === "premium" ||
@@ -469,38 +511,99 @@ export default function Settings() {
             </div>
 
             {emailNotifications && (
-              <div>
-                <p className="text-white font-medium mb-1">Digest Frequency</p>
-                <p className="text-neutral-400 text-sm mb-3">
-                  How often to receive your release digest. Weekly emails cover the full upcoming week; monthly cover the whole month.
-                </p>
-                <div className="flex gap-2">
-                  {(["daily", "weekly", "monthly"] as const).map((freq) => {
-                    const locked = freq === "daily" && isPremiumFeature("notificationSettings") && !isPremium;
-                    return (
-                      <button
-                        key={freq}
-                        onClick={() =>
-                          locked ? setShowUpgradeModal(true) : patchPreferences({ notification_frequency: freq })
-                        }
-                        disabled={prefSaving && !locked}
-                        className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium transition-colors disabled:opacity-50 ${
-                          notificationFrequency === freq && !locked
-                            ? "bg-primary-600 text-white"
-                            : "bg-neutral-700 text-neutral-300 hover:bg-neutral-600"
-                        }`}
-                      >
-                        {freq.charAt(0).toUpperCase() + freq.slice(1)}
-                        {locked && (
-                          <svg className="w-3.5 h-3.5 text-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                          </svg>
-                        )}
-                      </button>
-                    );
-                  })}
+              <>
+                <div>
+                  <p className="text-white font-medium mb-1">Digest Frequency</p>
+                  <p className="text-neutral-400 text-sm mb-3">
+                    How often to receive your release digest. Weekly emails cover the full upcoming week; monthly cover the whole month.
+                  </p>
+                  <div className="flex gap-2">
+                    {(["daily", "weekly", "monthly"] as const).map((freq) => {
+                      const locked = freq === "daily" && isPremiumFeature("notificationSettings") && !isPremium;
+                      return (
+                        <button
+                          key={freq}
+                          onClick={() =>
+                            locked ? setShowUpgradeModal(true) : patchPreferences({ notification_frequency: freq })
+                          }
+                          disabled={prefSaving && !locked}
+                          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium transition-colors disabled:opacity-50 ${
+                            notificationFrequency === freq && !locked
+                              ? "bg-primary-600 text-white"
+                              : "bg-neutral-700 text-neutral-300 hover:bg-neutral-600"
+                          }`}
+                        >
+                          {freq.charAt(0).toUpperCase() + freq.slice(1)}
+                          {locked && (
+                            <svg className="w-3.5 h-3.5 text-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                            </svg>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+
+                <div>
+                  <p className="text-white font-medium mb-1">Digest Time</p>
+                  <p className="text-neutral-400 text-sm mb-3">
+                    What time of day to receive your digest email.
+                  </p>
+                  <div className="flex flex-wrap gap-3">
+                    <select
+                      value={digestHour}
+                      onChange={(e) => patchPreferences({ digest_hour: Number(e.target.value) })}
+                      disabled={prefSaving}
+                      className="bg-neutral-700 text-neutral-100 text-sm px-3 py-1.5 rounded-lg border border-neutral-600 focus:outline-none focus:ring-2 focus:ring-primary-400 disabled:opacity-50"
+                    >
+                      {Array.from({ length: 24 }, (_, h) => {
+                        const period = h < 12 ? "AM" : "PM";
+                        const h12 = h % 12 === 0 ? 12 : h % 12;
+                        return (
+                          <option key={h} value={h}>
+                            {h12}:00 {period}
+                          </option>
+                        );
+                      })}
+                    </select>
+                    <div ref={timezoneRef} className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setTimezoneOpen((o) => !o)}
+                        disabled={prefSaving}
+                        className="bg-neutral-700 text-neutral-100 text-sm px-3 py-1.5 rounded-lg border border-neutral-600 focus:outline-none focus:ring-2 focus:ring-primary-400 disabled:opacity-50 flex items-center gap-2 min-w-44"
+                      >
+                        <span className="flex-1 text-left">
+                          {TIMEZONE_OPTIONS.find(([v]) => v === digestTimezone)?.[1] ?? digestTimezone}
+                        </span>
+                        <svg className={`w-3.5 h-3.5 text-neutral-400 transition-transform ${timezoneOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                      {timezoneOpen && (
+                        <ul className="absolute left-0 top-full mt-1 z-50 bg-neutral-800 border border-neutral-600 rounded-lg shadow-lg overflow-y-auto max-h-[170px] min-w-full">
+                          {TIMEZONE_OPTIONS.map(([value, label]) => (
+                            <li key={value}>
+                              <button
+                                type="button"
+                                onClick={() => { patchPreferences({ digest_timezone: value }); setTimezoneOpen(false); }}
+                                className={`w-full text-left px-3 py-2 text-sm transition-colors ${
+                                  digestTimezone === value
+                                    ? "bg-primary-600 text-white"
+                                    : "text-neutral-100 hover:bg-neutral-700"
+                                }`}
+                              >
+                                {label}
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </>
             )}
 
             <div className="flex items-center justify-between gap-6">
