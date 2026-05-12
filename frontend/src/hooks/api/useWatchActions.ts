@@ -93,6 +93,9 @@ export function useUpdateWatchStatus() {
       queryClient.invalidateQueries({
         queryKey: ["recommendations", "forYou", user.uid],
       });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.profileSummary(user.uid),
+      });
     },
   });
 }

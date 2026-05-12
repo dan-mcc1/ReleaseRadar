@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   useShelves,
@@ -9,7 +9,6 @@ import {
 } from "../hooks/api/useShelves";
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useUserMe } from "../hooks/api/useUser";
-import { isPremiumFeature } from "../config/features";
 import ProUpgradeModal from "../components/ProUpgradeModal";
 
 export default function ShelvesPage() {
@@ -22,6 +21,8 @@ export default function ShelvesPage() {
   const updateShelf = useUpdateShelf();
 
   const isPremium = userMe == null ? null : userMe.subscription_tier !== "free";
+  const FREE_SHELF_LIMIT = 3;
+  const atFreeLimit = isPremium === false && shelves.length >= FREE_SHELF_LIMIT;
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   const [newName, setNewName] = useState("");
@@ -30,13 +31,8 @@ export default function ShelvesPage() {
   const [editName, setEditName] = useState("");
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
 
-  useEffect(() => {
-    if (isPremiumFeature("shelves") && isPremium === false)
-      setShowUpgradeModal(true);
-  }, [isPremium]);
-
   async function handleCreate() {
-    if (isPremiumFeature("shelves") && !isPremium) {
+    if (atFreeLimit) {
       setShowUpgradeModal(true);
       return;
     }
@@ -80,25 +76,36 @@ export default function ShelvesPage() {
         className="flex items-center justify-between"
         data-tour="shelves-header"
       >
-        <h1 className="text-2xl font-bold text-neutral-100">My Shelves</h1>
+        <div>
+          <h1 className="text-2xl font-bold text-neutral-100">My Shelves</h1>
+          {isPremium === false && (
+            <p className="text-xs text-neutral-500 mt-0.5">
+              {shelves.length} / {FREE_SHELF_LIMIT} shelves used
+              {atFreeLimit && (
+                <button
+                  onClick={() => setShowUpgradeModal(true)}
+                  className="ml-1.5 text-highlight-400 hover:text-highlight-300 transition-colors"
+                >
+                  Upgrade for unlimited
+                </button>
+              )}
+            </p>
+          )}
+        </div>
         {!showCreate && (
           <button
-            onClick={() => setShowCreate(true)}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-sky-600 hover:bg-sky-500 text-white rounded-xl transition-colors"
+            onClick={() => atFreeLimit ? setShowUpgradeModal(true) : setShowCreate(true)}
+            className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white rounded-xl transition-colors ${atFreeLimit ? "bg-neutral-700 hover:bg-neutral-600" : "bg-sky-600 hover:bg-sky-500"}`}
           >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M12 4v16m-8-8h16"
-              />
-            </svg>
+            {atFreeLimit ? (
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+            ) : (
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m-8-8h16" />
+              </svg>
+            )}
             New Shelf
           </button>
         )}
@@ -257,7 +264,6 @@ export default function ShelvesPage() {
         <ProUpgradeModal
           onClose={() => setShowUpgradeModal(false)}
           feature="shelves"
-          navigateBackOnClose
         />
       )}
 

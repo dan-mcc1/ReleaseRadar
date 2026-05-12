@@ -8,7 +8,7 @@
 # mirrored in frontend/src/config/features.ts so the UI gates match.
 
 PREMIUM_FEATURES: dict[str, bool] = {
-    "shelves": True,
+    "shelves": False,
     "rewatch": True,
     "watch_time_stats": True,
     "ical_sync": True,

@@ -2,11 +2,13 @@ from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.dependencies.auth import get_current_user
-from app.dependencies.subscription import feature_gate
+from app.dependencies.subscription import is_premium
 from app.db.session import SessionLocal
 from app.models.shelf import Shelf
 from app.services import shelf_service
 from app.services.episode_service import sync_show_episodes_background
+
+FREE_SHELF_LIMIT = 3
 
 
 def get_db():
@@ -42,9 +44,19 @@ class ShelfNotifyUpdate(BaseModel):
 @router.post("")
 def create_shelf(
     body: ShelfCreate,
-    user_id: str = Depends(feature_gate("shelves")),
+    user_id: str = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    if not is_premium(user_id, db):
+        count = db.query(Shelf).filter_by(user_id=user_id).count()
+        if count >= FREE_SHELF_LIMIT:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "error": "premium_required",
+                    "message": f"Free accounts are limited to {FREE_SHELF_LIMIT} shelves. Upgrade to Premium for unlimited shelves.",
+                },
+            )
     shelf = shelf_service.create_shelf(db, user_id, body.name, body.description)
     return {"id": shelf.id, "name": shelf.name, "description": shelf.description, "created_at": shelf.created_at.isoformat() if shelf.created_at else None, "item_count": 0}
 
@@ -61,7 +73,7 @@ def list_shelves(
 def update_shelf(
     shelf_id: int,
     body: ShelfUpdate,
-    user_id: str = Depends(feature_gate("shelves")),
+    user_id: str = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     shelf = shelf_service.update_shelf(db, user_id, shelf_id, body.name, body.description)
@@ -71,7 +83,7 @@ def update_shelf(
 @router.delete("/{shelf_id}", status_code=204)
 def delete_shelf(
     shelf_id: int,
-    user_id: str = Depends(feature_gate("shelves")),
+    user_id: str = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     shelf_service.delete_shelf(db, user_id, shelf_id)
@@ -82,7 +94,7 @@ def add_item(
     shelf_id: int,
     body: ShelfItemAdd,
     background_tasks: BackgroundTasks,
-    user_id: str = Depends(feature_gate("shelves")),
+    user_id: str = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     item = shelf_service.add_to_shelf(db, user_id, shelf_id, body.content_type, body.content_id)
@@ -96,7 +108,7 @@ def remove_item(
     shelf_id: int,
     content_type: str,
     content_id: int,
-    user_id: str = Depends(feature_gate("shelves")),
+    user_id: str = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     shelf_service.remove_from_shelf(db, user_id, shelf_id, content_type, content_id)

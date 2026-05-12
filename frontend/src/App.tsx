@@ -44,14 +44,14 @@ import WarningModal from "./components/WarningModal";
 import SuspensionBanModal from "./components/SuspensionBanModal";
 
 function BanGate({ children }: { children: ReactNode }) {
-  const { data: status, isPending } = useAccountStatus();
+  const { data: status, isLoading } = useAccountStatus();
   const isRestricted = !!(status?.is_banned || status?.is_suspended);
 
   // Set synchronously during render so apiFetch blocks requests before any
   // child component mounts and fires queries.
   setAccountRestricted(isRestricted);
 
-  if (isPending) return null;
+  if (isLoading) return null;
   if (isRestricted) return <SuspensionBanModal asPage />;
   return <>{children}</>;
 }

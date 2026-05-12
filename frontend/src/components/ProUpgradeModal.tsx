@@ -58,21 +58,17 @@ const PRO_FEATURES = [
 interface Props {
   onClose: () => void;
   feature?: UpgradeFeature;
-  /** When true, dismissing the modal also navigates back (for full-page gates like Shelves). */
-  navigateBackOnClose?: boolean;
 }
 
 export default function ProUpgradeModal({
   onClose,
   feature = "general",
-  navigateBackOnClose = false,
 }: Props) {
   const navigate = useNavigate();
   const { title, subtitle } = FEATURE_COPY[feature];
 
   function handleDismiss() {
     onClose();
-    if (navigateBackOnClose) navigate(-1);
   }
 
   return (

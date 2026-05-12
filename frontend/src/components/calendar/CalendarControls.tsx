@@ -12,6 +12,8 @@ interface Props {
   onFilterTypeChange: (v: "all" | "tv" | "movie") => void;
   watchFilter: "all" | "watched" | "unwatched";
   onWatchFilterChange: (v: "all" | "watched" | "unwatched") => void;
+  currentlyWatchingFilter: boolean;
+  onCurrentlyWatchingFilterChange: (v: boolean) => void;
   centerLabel: string;
   onPrev: () => void;
   onNext: () => void;
@@ -30,6 +32,8 @@ export default function CalendarControls({
   onFilterTypeChange,
   watchFilter,
   onWatchFilterChange,
+  currentlyWatchingFilter,
+  onCurrentlyWatchingFilterChange,
   centerLabel,
   onPrev,
   onNext,
@@ -129,7 +133,7 @@ export default function CalendarControls({
                 />
               </svg>
               <span className="hidden sm:inline">Filter</span>
-              {(filterType !== "all" || watchFilter !== "all") && (
+              {(filterType !== "all" || watchFilter !== "all" || currentlyWatchingFilter) && (
                 <span className="w-2 h-2 rounded-full bg-primary-400" />
               )}
             </button>
@@ -184,11 +188,25 @@ export default function CalendarControls({
                     )}
                   </div>
                 </div>
-                {(filterType !== "all" || watchFilter !== "all") && (
+                <div>
+                  <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-1.5">
+                    Show
+                  </p>
+                  <button
+                    onClick={() => onCurrentlyWatchingFilterChange(!currentlyWatchingFilter)}
+                    className={`w-full flex items-center gap-2 py-1.5 px-3 text-sm font-medium rounded-lg border transition-colors
+                      ${currentlyWatchingFilter ? "bg-highlight-600 border-highlight-500 text-white" : "bg-neutral-800 border-neutral-600 text-neutral-300 hover:bg-neutral-700 hover:text-white"}`}
+                  >
+                    <span className={`flex-shrink-0 w-2 h-2 rounded-full ${currentlyWatchingFilter ? "bg-white animate-pulse" : "bg-neutral-500"}`} />
+                    Currently Watching only
+                  </button>
+                </div>
+                {(filterType !== "all" || watchFilter !== "all" || currentlyWatchingFilter) && (
                   <button
                     onClick={() => {
                       onFilterTypeChange("all");
                       onWatchFilterChange("all");
+                      onCurrentlyWatchingFilterChange(false);
                     }}
                     className="text-xs text-neutral-400 hover:text-white transition-colors text-left"
                   >

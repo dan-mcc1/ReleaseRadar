@@ -37,6 +37,7 @@ from app.routers import (
     rewatch,
     import_router,
     moderation,
+    export_router,
 )
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -279,5 +280,6 @@ app.include_router(news.router, prefix="/news", tags=["news"])
 app.include_router(rewatch.router, prefix="/rewatch", tags=["rewatch"])
 app.include_router(import_router.router, prefix="/import", tags=["import"])
 app.include_router(moderation.router, prefix="/moderation", tags=["moderation"])
+app.include_router(export_router.router, prefix="/export", tags=["export"])
 if settings.ENVIRONMENT != "production":
     app.include_router(dev.router, prefix="/dev", tags=["dev"])

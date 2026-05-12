@@ -8,7 +8,7 @@
 // backend enforcement stays in sync.
 
 export const PREMIUM_FEATURES = {
-  shelves: true,
+  shelves: false,
   rewatch: true,
   watchTimeStats: true,
   icalSync: true,

@@ -131,6 +131,8 @@ export default function ShelfCalendarView({ shelfId }: Props) {
         onFilterTypeChange={setFilterType}
         watchFilter={watchFilter}
         onWatchFilterChange={setWatchFilter}
+        currentlyWatchingFilter={false}
+        onCurrentlyWatchingFilterChange={() => {}}
         centerLabel={getCenterLabel()}
         onPrev={handlePrev}
         onNext={handleNext}

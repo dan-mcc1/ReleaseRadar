@@ -6,6 +6,7 @@ import ProUpgradeModal from "../ProUpgradeModal";
 import { useAuthUser } from "../../hooks/useAuthUser";
 import { useUserMe } from "../../hooks/api/useUser";
 import { useCalendarData } from "../../hooks/useCalendarData";
+import { useCurrentlyWatching } from "../../hooks/api/useLists";
 import CalendarHeader from "./CalendarHeader";
 import CalendarControls, { ViewMode } from "./CalendarControls";
 import CalendarMonthGrid from "./CalendarMonthGrid";
@@ -18,6 +19,7 @@ import {
   getDaysInMonth,
   getWeekDays,
   countUpcomingThisMonth,
+  type CurrentlyWatchingIds,
 } from "../../utils/calendarUtils";
 
 const monthNames = [
@@ -39,6 +41,7 @@ export default function CalendarView() {
   const user = useAuthUser();
   const { data: userMe } = useUserMe();
   const { shows, movies, isLoading, maybePrefetch } = useCalendarData();
+  const { data: cwData } = useCurrentlyWatching();
   const isPremium = userMe?.subscription_tier === "premium" || userMe?.subscription_tier === "admin";
 
   const today = new Date();
@@ -56,6 +59,7 @@ export default function CalendarView() {
     "all" | "watched" | "unwatched"
   >("all");
   const [showWatchlist, setShowWatchlist] = useState(false);
+  const [currentlyWatchingFilter, setCurrentlyWatchingFilter] = useState(false);
   const [showSyncModal, setShowSyncModal] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
@@ -65,6 +69,14 @@ export default function CalendarView() {
     [shows, movies],
   );
 
+  const cwIds = useMemo((): CurrentlyWatchingIds | undefined => {
+    if (!currentlyWatchingFilter || !cwData) return undefined;
+    return {
+      showIds: new Set((cwData as any).shows?.map((s: any) => s.id as number) ?? []),
+      movieIds: new Set((cwData as any).movies?.map((m: any) => m.id as number) ?? []),
+    };
+  }, [currentlyWatchingFilter, cwData]);
+
   const daysOfMonth = useMemo(
     () =>
       getDaysInMonth(
@@ -73,13 +85,14 @@ export default function CalendarView() {
         allItems,
         filterType,
         watchFilter,
+        cwIds,
       ),
-    [currentMonth, currentYear, allItems, filterType, watchFilter],
+    [currentMonth, currentYear, allItems, filterType, watchFilter, cwIds],
   );
 
   const weekDays = useMemo(
-    () => getWeekDays(selectedDate, allItems, filterType, watchFilter),
-    [selectedDate, allItems, filterType, watchFilter],
+    () => getWeekDays(selectedDate, allItems, filterType, watchFilter, cwIds),
+    [selectedDate, allItems, filterType, watchFilter, cwIds],
   );
 
   const selectedDateItems = useMemo(
@@ -88,8 +101,9 @@ export default function CalendarView() {
         getItemsForDate(allItems, selectedDate),
         filterType,
         watchFilter,
+        cwIds,
       ),
-    [selectedDate, allItems, filterType, watchFilter],
+    [selectedDate, allItems, filterType, watchFilter, cwIds],
   );
 
   const upcomingThisMonth = useMemo(
@@ -99,9 +113,9 @@ export default function CalendarView() {
 
   const todayItemCount = useMemo(
     () =>
-      applyFilters(getItemsForDate(allItems, today), filterType, watchFilter)
+      applyFilters(getItemsForDate(allItems, today), filterType, watchFilter, cwIds)
         .length,
-    [allItems, filterType, watchFilter],
+    [allItems, filterType, watchFilter, cwIds],
   );
 
   // Navigation handlers — only set date/month/year state + call maybePrefetch
@@ -201,6 +215,8 @@ export default function CalendarView() {
         onFilterTypeChange={setFilterType}
         watchFilter={watchFilter}
         onWatchFilterChange={setWatchFilter}
+        currentlyWatchingFilter={currentlyWatchingFilter}
+        onCurrentlyWatchingFilterChange={setCurrentlyWatchingFilter}
         centerLabel={getCenterLabel()}
         onPrev={handlePrev}
         onNext={handleNext}

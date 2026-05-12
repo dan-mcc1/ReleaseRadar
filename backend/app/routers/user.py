@@ -472,6 +472,19 @@ def complete_onboarding_route(
     return {"onboarding_completed": True}
 
 
+@router.post("/dismiss-letterboxd-prompt")
+def dismiss_letterboxd_prompt(
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    user = db.query(User).filter_by(id=uid).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.letterboxd_prompted = True
+    db.commit()
+    return {"letterboxd_prompted": True}
+
+
 @router.post("/subscription/cancel")
 def cancel_subscription(
     db: Session = Depends(get_db),

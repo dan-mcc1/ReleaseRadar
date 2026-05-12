@@ -14,6 +14,7 @@ interface DBUser {
   created_at: string;
   subscription_tier: string;
   onboarding_completed: boolean;
+  letterboxd_prompted: boolean;
   warning_count: number;
   has_unread_warning: boolean;
   is_silenced: boolean;

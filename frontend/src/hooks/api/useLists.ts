@@ -142,6 +142,9 @@ export function useRemoveFromList() {
         "currently-watching": queryKeys.currentlyWatching(user.uid),
       };
       queryClient.invalidateQueries({ queryKey: keyMap[list] });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.profileSummary(user.uid),
+      });
     },
   });
 }

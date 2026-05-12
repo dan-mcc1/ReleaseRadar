@@ -26,6 +26,7 @@ class User(Base):
     notify_new_seasons = Column(Boolean, default=True, server_default="true", nullable=False)
     notify_streaming_changes = Column(Boolean, default=True, server_default="true", nullable=False)
     onboarding_completed = Column(Boolean, default=False, server_default="false", nullable=False)
+    letterboxd_prompted = Column(Boolean, default=False, server_default="false", nullable=False)
     is_suspended = Column(Boolean, default=False, server_default="false", nullable=False)
     suspended_until = Column(DateTime(timezone=True), nullable=True)
     suspension_reason = Column(Text, nullable=True)
