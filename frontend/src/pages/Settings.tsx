@@ -134,6 +134,14 @@ export default function Settings() {
     return "profile";
   });
 
+  // Sync tab when hash changes (e.g. tour navigation between settings tabs)
+  useEffect(() => {
+    if (location.hash === "#notifications") setActiveTab("notifications");
+    else if (location.hash === "#streaming") setActiveTab("streaming");
+    else if (location.hash === "#privacy") setActiveTab("privacy");
+    else if (location.hash === "#account") setActiveTab("account");
+  }, [location.hash]);
+
   const { data: userMe } = useUserMe();
   const { data: prefs } = useNotificationPrefs();
   const updatePrefsMutation = useUpdateNotificationPrefs();
@@ -888,7 +896,7 @@ export default function Settings() {
 
       {/* ── Streaming tab ── */}
       {activeTab === "streaming" && (
-        <div className="space-y-4">
+        <div className="space-y-4" data-tour="streaming-settings">
           {/* My Services */}
           {myServices && myServices.length > 0 && (
             <div className="bg-neutral-800 shadow-md rounded-lg p-4 space-y-3">

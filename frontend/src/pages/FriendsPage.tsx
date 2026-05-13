@@ -46,7 +46,7 @@ export default function FriendsPage() {
 
   return (
     <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-8">
-      <h1 className="text-2xl font-bold text-neutral-100 mb-6">Friends</h1>
+      <h1 className="text-2xl font-bold text-neutral-100 mb-6" data-tour="friends-header">Friends</h1>
 
       <div className="lg:grid lg:grid-cols-3 lg:gap-8 lg:items-start">
         {/* Sidebar: search always visible on desktop, tab on mobile */}

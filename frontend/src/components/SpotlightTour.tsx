@@ -95,7 +95,30 @@ const TOUR_GROUPS: TourGroup[] = [
         element: "#notifications",
         title: "🔔 Notifications",
         description:
-          "Turn on email notifications to get a daily digest, season premiere alerts, and streaming availability updates.",
+          "Turn on email notifications to get a daily digest, season premiere alerts, trailer drops, and streaming availability updates. You can also customize what time you receive your daily digest.",
+      },
+    ],
+  },
+  {
+    path: "/settings",
+    hash: "#streaming",
+    steps: [
+      {
+        element: "[data-tour='streaming-settings']",
+        title: "📡 Streaming Services",
+        description:
+          "Tell ReleaseRadar which streaming services you subscribe to. Use the Watchlist Optimizer to see which services cover the most of your watchlist — and which ones you might not need.",
+      },
+    ],
+  },
+  {
+    path: "/friends",
+    steps: [
+      {
+        element: "[data-tour='friends-header']",
+        title: "👥 Friends",
+        description:
+          "Search for friends, follow their watchlists, and see what they're watching. Compare taste, share recommendations, and track what everyone's into.",
       },
     ],
   },
@@ -121,6 +144,7 @@ export default function SpotlightTour() {
 
   async function endTour() {
     sessionStorage.removeItem(SESSION_KEY);
+    navigate("/calendar");
     await apiFetch("/user/complete-onboarding", { method: "POST" });
     if (authUser) {
       queryClient.invalidateQueries({
@@ -190,9 +214,10 @@ export default function SpotlightTour() {
     const group = TOUR_GROUPS[groupIndex];
 
     // Navigate to the correct page if needed
-    if (location.pathname !== group.path) {
+    const expectedHash = group.hash ?? "";
+    if (location.pathname !== group.path || location.hash !== expectedHash) {
       navigatingRef.current = true;
-      navigate(group.path + (group.hash ?? ""));
+      navigate(group.path + expectedHash);
       return;
     }
 
@@ -263,7 +288,7 @@ export default function SpotlightTour() {
     return () => {
       clearTimeout(timer);
     };
-  }, [location.pathname, dbUser?.onboarding_completed, dbUser?.letterboxd_prompted, isLoading]);
+  }, [location.pathname, location.hash, dbUser?.onboarding_completed, dbUser?.letterboxd_prompted, isLoading]);
 
   // Show the Letterboxd import prompt before the tour begins
   if (!isLoading && authUser && dbUser && !dbUser.onboarding_completed && !dbUser.letterboxd_prompted) {
