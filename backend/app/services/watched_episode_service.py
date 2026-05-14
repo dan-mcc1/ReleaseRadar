@@ -1,5 +1,6 @@
 # app/services/episode_watched_service.py
 from sqlalchemy.orm import Session
+from sqlalchemy import select, exists, union_all, literal
 from datetime import datetime
 from app.models.episode_watched import EpisodeWatched
 from app.models.episode import Episode
@@ -331,20 +332,27 @@ def _maybe_auto_complete_show(db: Session, user_id: str, show_id: int) -> bool:
     from app.models.show import Show
     from app.models.season import Season
 
-    in_watchlist = (
-        db.query(Watchlist)
-        .filter_by(user_id=user_id, content_type="tv", content_id=show_id)
-        .first()
+    # Single UNION ALL EXISTS instead of two separate .first() queries
+    tracked_subq = union_all(
+        select(literal(1))
+        .select_from(Watchlist)
+        .where(
+            Watchlist.user_id == user_id,
+            Watchlist.content_type == "tv",
+            Watchlist.content_id == show_id,
+        ),
+        select(literal(1))
+        .select_from(CurrentlyWatching)
+        .where(
+            CurrentlyWatching.user_id == user_id,
+            CurrentlyWatching.content_type == "tv",
+            CurrentlyWatching.content_id == show_id,
+        ),
     )
-    in_currently_watching = (
-        db.query(CurrentlyWatching)
-        .filter_by(user_id=user_id, content_type="tv", content_id=show_id)
-        .first()
-    )
-    if not in_watchlist and not in_currently_watching:
+    if not db.execute(select(exists(tracked_subq.subquery()))).scalar():
         return False
 
-    # Quick count check — skip expensive TMDB sync if episodes are clearly remaining
+    # Quick count check — skip expensive TMDb sync if episodes are clearly remaining
     stored_count = (
         db.query(Episode)
         .filter(Episode.show_id == show_id, Episode.season_number > 0)
@@ -356,15 +364,11 @@ def _maybe_auto_complete_show(db: Session, user_id: str, show_id: int) -> bool:
     if watched_count < stored_count:
         return False
 
-    # Full check — may sync unseen seasons from TMDB to confirm nothing is left
-    result = get_next_unwatched_episode(db, user_id, show_id)
-    if not result.get("finished"):
-        return False
-
-    # For in-production shows, only auto-complete when a season is truly finished.
-    # This prevents the weekly-airing bounce where the user watches the latest
-    # available episode but more are still coming in the same season.
+    # For in-production shows, skip the TMDb sync entirely unless the user has
+    # already watched the last stored episode of the latest season. This avoids
+    # a potential 500ms+ TMDb network call on every mid-season episode mark.
     show = db.query(Show).filter_by(id=show_id).first()
+    last_episode = None
     if show and show.in_production:
         last_episode = (
             db.query(Episode)
@@ -374,8 +378,32 @@ def _maybe_auto_complete_show(db: Session, user_id: str, show_id: int) -> bool:
         )
         if not last_episode:
             return False
+        has_watched_last = (
+            db.query(EpisodeWatched)
+            .filter_by(
+                user_id=user_id,
+                show_id=show_id,
+                season_number=last_episode.season_number,
+                episode_number=last_episode.episode_number,
+            )
+            .first()
+        ) is not None
+        if not has_watched_last:
+            return False
 
-        # Primary: TMDB explicitly tagged the last episode as a finale
+    # Full check — may sync unseen seasons from TMDb to confirm nothing is left
+    result = get_next_unwatched_episode(db, user_id, show_id)
+    if not result.get("finished"):
+        return False
+
+    # For in-production shows, only auto-complete when a season is truly finished.
+    # This prevents the weekly-airing bounce where the user watches the latest
+    # available episode but more are still coming in the same season.
+    if show and show.in_production:
+        if not last_episode:
+            return False
+
+        # Primary: TMDb explicitly tagged the last episode as a finale
         finale_types = ("season_finale", "series_finale", "mid_season")
         is_season_complete = last_episode.episode_type in finale_types
 
@@ -405,10 +433,9 @@ def _maybe_auto_complete_show(db: Session, user_id: str, show_id: int) -> bool:
     # and leave tracking_count unchanged
     add_to_watched(db, user_id, "tv", show_id)
 
-    if in_watchlist:
-        remove_from_watchlist(db, user_id, "tv", show_id)
-    if in_currently_watching:
-        remove_from_currently_watching(db, user_id, "tv", show_id)
+    # Both remove functions handle "not found" gracefully — call unconditionally
+    remove_from_watchlist(db, user_id, "tv", show_id)
+    remove_from_currently_watching(db, user_id, "tv", show_id)
 
     print(f"[auto-complete] Show {show_id} auto-moved to Watched for user {user_id}")
     return True

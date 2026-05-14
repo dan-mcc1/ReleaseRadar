@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, Date, Text, Float
+from sqlalchemy import Column, Integer, String, Boolean, Date, DateTime, Text, Float
 from sqlalchemy.orm import relationship
 from app.db.base import Base
 
@@ -26,6 +26,7 @@ class Show(Base):
     air_timezone = Column(String, nullable=True)
     vote_average = Column(Float, nullable=True)
     certification = Column(String, nullable=True)
+    updated_at = Column(DateTime(timezone=True), nullable=True)
 
     genres = relationship(
         "Genre", secondary="show_genre", back_populates="shows", passive_deletes=True

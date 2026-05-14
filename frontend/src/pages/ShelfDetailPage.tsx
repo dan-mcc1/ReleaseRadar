@@ -4,6 +4,7 @@ import { useShelves, useShelfItems, useRemoveFromShelf } from "../hooks/api/useS
 import MediaCard from "../components/MediaCard";
 import { usePageTitle } from "../hooks/usePageTitle";
 import ShelfCalendarView from "../components/calendar/ShelfCalendarView";
+import { Movie, Show } from "../types/calendar";
 
 export default function ShelfDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -18,8 +19,8 @@ export default function ShelfDetailPage() {
   const { data: items, isLoading } = useShelfItems(shelfId);
   const removeFromShelf = useRemoveFromShelf();
 
-  const movies: unknown[] = items?.movies ?? [];
-  const shows: unknown[] = items?.shows ?? [];
+  const movies: Movie[] = items?.movies ?? [];
+  const shows: Show[] = items?.shows ?? [];
   const totalItems = movies.length + shows.length;
 
   async function handleRemove(contentType: "movie" | "tv", contentId: number) {
@@ -109,7 +110,7 @@ export default function ShelfDetailPage() {
                 </span>
               </h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {(movies as { id: number }[]).map((item) => (
+                {movies.map((item) => (
                   <MediaCard
                     key={`movie-${item.id}`}
                     type="movie"
@@ -130,7 +131,7 @@ export default function ShelfDetailPage() {
                 </span>
               </h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {(shows as { id: number }[]).map((item) => (
+                {shows.map((item) => (
                   <MediaCard
                     key={`tv-${item.id}`}
                     type="tv"

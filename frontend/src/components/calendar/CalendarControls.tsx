@@ -1,7 +1,6 @@
 // frontend/src/components/calendar/CalendarControls.tsx
 import { useRef, useState } from "react";
 import { User } from "firebase/auth";
-import WatchlistModal from "../WatchlistModal";
 
 export type ViewMode = "month" | "week" | "day";
 
@@ -19,9 +18,6 @@ interface Props {
   onNext: () => void;
   user: User | null;
   onSyncCalendar: () => void;
-  showWatchlist: boolean;
-  onOpenWatchlist: () => void;
-  onCloseWatchlist: () => void;
   showActions?: boolean;
 }
 
@@ -39,9 +35,6 @@ export default function CalendarControls({
   onNext,
   user,
   onSyncCalendar,
-  showWatchlist,
-  onOpenWatchlist,
-  onCloseWatchlist,
   showActions = true,
 }: Props) {
   const [showFilters, setShowFilters] = useState(false);
@@ -260,21 +253,6 @@ export default function CalendarControls({
               </svg>
               Sync
             </button>
-          )}
-          {showActions && user && (
-            <>
-              <button
-                onClick={onOpenWatchlist}
-                className="rounded-lg bg-neutral-700 border border-neutral-600 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium text-neutral-200 hover:bg-neutral-600 hover:text-white transition-colors"
-              >
-                <span className="sm:hidden">List</span>
-                <span className="hidden sm:inline">Watchlist</span>
-              </button>
-              <WatchlistModal
-                isOpen={showWatchlist}
-                onClose={onCloseWatchlist}
-              />
-            </>
           )}
         </div>
       </div>

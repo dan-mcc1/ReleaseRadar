@@ -28,7 +28,7 @@ import {
   useRemoveFromList,
   useReorderWatchlist,
 } from "../hooks/api/useLists";
-import { useBingePlanBulk } from "../hooks/api/useBingePlan";
+import { useShowProgressBulk, ShowProgress } from "../hooks/api/useBingePlan";
 import { useMyProviderIds } from "../hooks/api/useStreamingServices";
 
 type TabType = "all" | "movies" | "tv";
@@ -43,6 +43,8 @@ type SortType =
   | "popularity_desc"
   | "tmdb_rating_desc"
   | "tmdb_rating_asc"
+  | "time_remaining_asc"
+  | "time_remaining_desc"
   | "my_order";
 
 type CombinedItem = (Movie | Show) & {
@@ -65,9 +67,19 @@ function getYear(item: Movie | Show): string {
   return getDate(item).slice(0, 4) || "—";
 }
 
+function getTimeRemaining(item: Movie | Show, bingePlans?: Record<string, ShowProgress>): number {
+  if ("name" in item) {
+    // TV show — use remaining minutes from progress data, fall back to Infinity so unknowns sort last
+    return bingePlans?.[String(item.id)]?.remaining_minutes ?? Infinity;
+  }
+  // Movie — runtime is the time remaining since it's unwatched
+  return (item as Movie).runtime ?? 0;
+}
+
 function applySort<T extends Movie | (Show & { added_at?: string | null })>(
   items: T[],
   sort: SortType,
+  bingePlans?: Record<string, ShowProgress>,
 ): T[] {
   const sorted = [...items];
   switch (sort) {
@@ -96,6 +108,14 @@ function applySort<T extends Movie | (Show & { added_at?: string | null })>(
     case "tmdb_rating_asc":
       return sorted.sort(
         (a, b) => (a.vote_average ?? 0) - (b.vote_average ?? 0),
+      );
+    case "time_remaining_asc":
+      return sorted.sort(
+        (a, b) => getTimeRemaining(a, bingePlans) - getTimeRemaining(b, bingePlans),
+      );
+    case "time_remaining_desc":
+      return sorted.sort(
+        (a, b) => getTimeRemaining(b, bingePlans) - getTimeRemaining(a, bingePlans),
       );
     default:
       return sorted;
@@ -139,7 +159,7 @@ export default function Watchlist() {
   const reorderWatchlist = useReorderWatchlist();
 
   const tvShowIds = results.shows.map((s) => s.id);
-  const { data: bingePlans } = useBingePlanBulk(tvShowIds);
+  const { data: bingePlans } = useShowProgressBulk(tvShowIds);
   const [activeTab, setActiveTab] = useState<TabType>("all");
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortType>("my_order");
@@ -235,6 +255,7 @@ export default function Watchlist() {
       myProviderIds,
     ),
     sort,
+    bingePlans,
   );
   const filteredShows = applySort(
     applyFilters(
@@ -243,6 +264,7 @@ export default function Watchlist() {
       myProviderIds,
     ),
     sort,
+    bingePlans,
   );
 
   const combinedItems = useMemo(
@@ -404,6 +426,8 @@ export default function Watchlist() {
               <option value="popularity_desc">Most Popular</option>
               <option value="tmdb_rating_desc">TMDB Rating: High → Low</option>
               <option value="tmdb_rating_asc">TMDB Rating: Low → High</option>
+              <option value="time_remaining_asc">Time Remaining: Shortest First</option>
+              <option value="time_remaining_desc">Time Remaining: Longest First</option>
             </select>
           </div>
           {showFilters && (

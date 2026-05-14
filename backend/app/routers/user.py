@@ -1,8 +1,10 @@
 # app/routers/user.py
 import re
 import random
+from concurrent.futures import ThreadPoolExecutor
 from fastapi import APIRouter, Depends, HTTPException, Body, Query, Request
 from app.core.limiter import limiter
+from app.db.session import SessionLocal
 from pydantic import EmailStr
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_
@@ -17,15 +19,10 @@ from app.services.user_service import (
     get_profile_watchlist_preview,
     get_profile_watched_preview,
 )
-from app.services.friends_service import (
-    get_friends,
-    get_incoming_requests,
-    get_outgoing_requests,
-    get_followers,
-)
+from app.services.friends_service import get_friends, get_social_preview
 from app.models.friendship import Friendship
 from app.services.user_service import get_profile_watchlist, get_profile_watched
-from app.services.favorite_service import get_favorites
+from app.services.favorite_service import get_favorites, get_favorites_preview
 from app.services.stats_service import get_user_stats
 from app.services.watch_time_service import get_watch_time_stats
 from datetime import datetime, timezone
@@ -119,9 +116,6 @@ def get_account_status(
     now = datetime.now(timezone.utc)
     active_suspension = user.is_suspended and (
         user.suspended_until is None or now < user.suspended_until
-    )
-    has_pending_appeal = (
-        db.query(Appeal).filter_by(user_id=uid, status="pending").first() is not None
     )
     pending_appeal = db.query(Appeal).filter_by(user_id=uid, status="pending").first()
     return {
@@ -312,24 +306,42 @@ def get_profile_summary(
     user = get_user(db, uid)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+
+    user_data = {
+        "id": user.id,
+        "email": user.email,
+        "username": user.username,
+        "avatar_key": user.avatar_key,
+        "bio": user.bio,
+        "profile_visibility": user.profile_visibility,
+        "created_at": user.created_at,
+        "subscription_tier": user.subscription_tier,
+    }
+
+    def _with_session(fn):
+        s = SessionLocal()
+        try:
+            return fn(s)
+        finally:
+            s.close()
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        f_watchlist = executor.submit(_with_session, lambda s: get_profile_watchlist_preview(s, uid))
+        f_watched = executor.submit(_with_session, lambda s: get_profile_watched_preview(s, uid))
+        f_favorites = executor.submit(_with_session, lambda s: get_favorites_preview(s, uid))
+        f_friends = executor.submit(_with_session, lambda s: get_friends(s, uid))
+        # social runs on the existing db session while the 4 threads are executing
+        social = get_social_preview(db, uid)
+
     return {
-        "user": {
-            "id": user.id,
-            "email": user.email,
-            "username": user.username,
-            "avatar_key": user.avatar_key,
-            "bio": user.bio,
-            "profile_visibility": user.profile_visibility,
-            "created_at": user.created_at,
-            "subscription_tier": user.subscription_tier,
-        },
-        "favorites": get_favorites(db, uid),
-        "watchlist": get_profile_watchlist_preview(db, uid),
-        "watched": get_profile_watched_preview(db, uid),
-        "friends": get_friends(db, uid),
-        "incoming_requests": get_incoming_requests(db, uid),
-        "outgoing_requests": get_outgoing_requests(db, uid),
-        "followers": get_followers(db, uid),
+        "user": user_data,
+        "favorites": f_favorites.result(),
+        "watchlist": f_watchlist.result(),
+        "watched": f_watched.result(),
+        "friends": f_friends.result(),
+        "incoming_requests": social["incoming_requests"],
+        "outgoing_requests": social["outgoing_requests"],
+        "followers": social["followers"],
     }
 
 

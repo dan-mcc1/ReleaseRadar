@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useBingePlan } from "../hooks/api/useBingePlan";
+import { useShowProgress } from "../hooks/api/useBingePlan";
 import { useSetFinishByGoal, useClearFinishByGoal } from "../hooks/api/useFinishByGoal";
 import { useSubscription } from "../hooks/api/useSubscription";
 import { isPremiumFeature } from "../config/features";
@@ -22,7 +22,7 @@ function fmtDate(iso: string): string {
 
 export default function BingePlanWidget({ showId }: { showId: number }) {
   const { isPremium } = useSubscription();
-  const { data, isPending } = useBingePlan(showId);
+  const { data, isPending } = useShowProgress(showId);
   const setGoal = useSetFinishByGoal(showId);
   const clearGoal = useClearFinishByGoal(showId);
   const [editing, setEditing] = useState(false);
@@ -57,7 +57,7 @@ export default function BingePlanWidget({ showId }: { showId: number }) {
           <circle cx="12" cy="12" r="10" />
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2" />
         </svg>
-        <h3 className="text-sm font-semibold text-white">Binge Planner</h3>
+        <h3 className="text-sm font-semibold text-white">Progress</h3>
       </div>
 
       {/* Progress bar */}

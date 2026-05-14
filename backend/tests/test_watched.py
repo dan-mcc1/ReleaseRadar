@@ -90,7 +90,9 @@ class TestWatchedRemove:
         remove_from_watched(client)
         db.expire_all()
         m = db.query(Movie).filter_by(id=550).first()
-        assert m is None
+        # tracking_count hits 0 → record is retained until 90-day cleanup job removes it
+        assert m is not None
+        assert m.tracking_count == 0
 
     def test_remove_does_not_delete_movie_when_other_user_tracks(self, db, seed_movie):
         from app.models.movie import Movie

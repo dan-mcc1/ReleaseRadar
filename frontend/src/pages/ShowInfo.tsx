@@ -129,7 +129,7 @@ export default function ShowInfo() {
         </div>
 
         {/* Genre pills + content rating */}
-        {(show.genres?.length > 0 || certification) && (
+        {((show.genres && show.genres.length > 0) || certification) && (
           <div className="flex flex-wrap items-center gap-2">
             {certification && <ContentRatingBadge rating={certification} />}
             {show.genres?.map((genre) => (
@@ -231,7 +231,7 @@ export default function ShowInfo() {
 
         {show.providers && <WhereToWatch providers={show.providers} />}
 
-        {show.seasons?.length > 0 && (
+        {show.seasons && show.seasons.length > 0 && (
           <SeasonInfo showId={show.id} seasons={show.seasons} />
         )}
 

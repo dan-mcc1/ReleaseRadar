@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Boolean, Integer, String, Text, DateTime
+from sqlalchemy import Column, Boolean, Integer, String, Text, DateTime, Index
 from sqlalchemy.sql import func
 from app.db.base import Base
 
@@ -15,3 +15,5 @@ class Appeal(Base):
     admin_notes = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     resolved_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (Index("ix_appeal_user_status", "user_id", "status"),)

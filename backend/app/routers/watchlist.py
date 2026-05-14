@@ -24,7 +24,6 @@ from app.services.watchlist_service import (
 from app.models.watchlist import Watchlist
 from app.models.watched import Watched
 from app.models.currently_watching import CurrentlyWatching
-from app.models.user import User
 from app.models.show import Show
 from app.models.movie import Movie
 from app.dependencies.auth import get_current_user
@@ -54,25 +53,6 @@ def add_item(
         raise HTTPException(
             status_code=400, detail="content_type must be 'movie' or 'tv'"
         )
-
-    # with_for_update() acquires a row-level lock on the user row so concurrent
-    # add requests for the same user serialize here instead of racing past the limit.
-    user = db.query(User).filter(User.id == uid).with_for_update().first()
-    if not user or user.subscription_tier == "free":
-        tracked = (
-            db.query(Watchlist).filter(Watchlist.user_id == uid).count()
-            + db.query(CurrentlyWatching).filter(CurrentlyWatching.user_id == uid).count()
-        )
-        if tracked >= 30:
-            raise HTTPException(
-                status_code=403,
-                detail={
-                    "error": "tracking_limit_reached",
-                    "message": "Free accounts can track up to 30 titles.",
-                    "limit": 30,
-                    "current": tracked,
-                },
-            )
 
     result = add_to_watchlist(db, uid, content_type, content_id, notify=notify)
     if content_type == "tv":
@@ -305,8 +285,8 @@ def update_notify_pref(
     return {"content_type": item.content_type, "content_id": item.content_id, "notify": item.notify}
 
 
-@router.get("/binge/{show_id}")
-def binge_plan(
+@router.get("/progress/{show_id}")
+def show_progress(
     show_id: int,
     db: Session = Depends(get_db),
     uid: str = Depends(feature_gate("binge_planner")),
@@ -315,22 +295,25 @@ def binge_plan(
     return get_binge_plan(db, uid, show_id)
 
 
-@router.get("/binge-bulk")
-def binge_plan_bulk(
-    show_ids: str,
+class ProgressBulkBody(BaseModel):
+    show_ids: list[int]
+
+
+@router.post("/progress-bulk")
+def show_progress_bulk(
+    body: ProgressBulkBody,
     db: Session = Depends(get_db),
     uid: str = Depends(feature_gate("binge_planner")),
 ):
-    """Comma-separated show_ids — returns binge plan for each."""
-    ids = [int(x) for x in show_ids.split(",") if x.strip().isdigit()][:50]
-    return get_binge_plans_bulk(db, uid, ids)
+    """Returns progress for each show in the request body."""
+    return get_binge_plans_bulk(db, uid, body.show_ids)
 
 
 class FinishByBody(BaseModel):
     target_date: date
 
 
-@router.post("/binge/{show_id}/finish-by")
+@router.post("/progress/{show_id}/finish-by")
 def set_finish_by(
     show_id: int,
     body: FinishByBody,
@@ -342,7 +325,7 @@ def set_finish_by(
     return {"show_id": show_id, "target_date": body.target_date.isoformat()}
 
 
-@router.delete("/binge/{show_id}/finish-by")
+@router.delete("/progress/{show_id}/finish-by")
 def delete_finish_by(
     show_id: int,
     db: Session = Depends(get_db),

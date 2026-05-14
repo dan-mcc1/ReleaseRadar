@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone as dt_timezone
@@ -39,12 +40,14 @@ from app.routers import (
     moderation,
     export_router,
     streaming,
+    watch_status,
 )
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from app.db.session import SessionLocal, engine
 from app.db.base import Base
-from app.services.activity_service import delete_old_activity
+from app.services.activity_service import delete_old_activity, lift_expired_moderation
 from app.services.recommendation_service import delete_old_recommendations
 from app.routers.notifications import (
     send_daily_digest_to_all,
@@ -54,9 +57,12 @@ from app.services.vote_update_service import update_all_vote_averages
 from app.services.episode_service import (
     refresh_episodes_for_active_shows,
     check_and_reactivate_watched_shows,
+    prune_stale_cache,
 )
 from app.services.streaming_notification_service import refresh_streaming_providers
 from app.services.trailer_notification_service import refresh_trailers
+
+logger = logging.getLogger(__name__)
 
 
 async def _activity_cleanup_loop():
@@ -66,16 +72,13 @@ async def _activity_cleanup_loop():
             db = SessionLocal()
             deleted_activity = delete_old_activity(db)
             if deleted_activity:
-                print(
-                    f"[activity cleanup] Removed {deleted_activity} old activity entries"
-                )
+                logger.info("activity cleanup: removed %d old activity entries", deleted_activity)
             deleted_recs = delete_old_recommendations(db)
             if deleted_recs:
-                print(
-                    f"[activity cleanup] Removed {deleted_recs} expired recommendations"
-                )
+                logger.info("activity cleanup: removed %d expired recommendations", deleted_recs)
+            lift_expired_moderation(db)
         except Exception as e:
-            print(f"[activity cleanup] Error: {e}")
+            logger.error("activity cleanup error: %s", e)
         finally:
             db.close()
         await asyncio.sleep(3600)  # 1 hour
@@ -110,21 +113,21 @@ async def _daily_digest_loop():
             now = datetime.now(dt_timezone.utc)
             next_hour = (now + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
             wait_seconds = (next_hour - now).total_seconds()
-            print(f"[daily digest] Sleeping {wait_seconds:.0f}s until top of next hour...")
+            logger.info("daily digest: sleeping %.0fs until top of next hour", wait_seconds)
             await asyncio.sleep(wait_seconds)
 
             now_utc = datetime.now(dt_timezone.utc)
-            print(f"[daily digest] Hourly sweep firing at {now_utc.strftime('%H:%M')} UTC...")
+            logger.info("daily digest: hourly sweep firing at %s UTC", now_utc.strftime("%H:%M"))
             db = SessionLocal()
             try:
                 send_daily_digest_to_all(db, now_utc=now_utc)
                 send_season_premiere_alerts_to_all(db, now_utc=now_utc)
-                print("[daily digest] Hourly sweep done")
+                logger.info("daily digest: hourly sweep done")
             finally:
                 db.close()
 
         except Exception as e:
-            print(f"[daily digest] Loop error: {e}")
+            logger.error("daily digest loop error: %s", e)
             await asyncio.sleep(60)
 
 
@@ -137,14 +140,15 @@ async def _episode_update_loop():
         if now >= next_run:
             next_run += timedelta(days=1)
         await asyncio.sleep((next_run - now).total_seconds())
-        print("[vote update] Starting daily vote_average refresh...")
+        logger.info("vote update: starting daily vote_average refresh")
         try:
             db = SessionLocal()
             refresh_episodes_for_active_shows(db)
             check_and_reactivate_watched_shows(db)
             await asyncio.to_thread(update_all_vote_averages, db)
+            prune_stale_cache(db)
         except Exception as e:
-            print(f"[vote update] Error: {e}")
+            logger.error("vote update error: %s", e)
         finally:
             db.close()
 
@@ -159,15 +163,15 @@ async def _trailer_refresh_loop():
             if now >= next_run:
                 next_run += timedelta(days=1)
             await asyncio.sleep((next_run - now).total_seconds())
-            print("[trailers] Starting trailer refresh...")
+            logger.info("trailers: starting trailer refresh")
             db = SessionLocal()
             try:
                 await asyncio.to_thread(refresh_trailers, db)
-                print("[trailers] Done")
+                logger.info("trailers: done")
             finally:
                 db.close()
         except Exception as e:
-            print(f"[trailers] Loop error: {e}")
+            logger.error("trailers loop error: %s", e)
             await asyncio.sleep(60)
 
 
@@ -181,15 +185,15 @@ async def _streaming_refresh_loop():
             if now >= next_run:
                 next_run += timedelta(days=1)
             await asyncio.sleep((next_run - now).total_seconds())
-            print("[streaming] Starting provider refresh...")
+            logger.info("streaming: starting provider refresh")
             db = SessionLocal()
             try:
                 await asyncio.to_thread(refresh_streaming_providers, db)
-                print("[streaming] Done")
+                logger.info("streaming: done")
             finally:
                 db.close()
         except Exception as e:
-            print(f"[streaming] Loop error: {e}")
+            logger.error("streaming loop error: %s", e)
             await asyncio.sleep(60)
 
 
@@ -252,6 +256,7 @@ async def log_request_time(request: Request, call_next):
     return response
 
 
+app.add_middleware(GZipMiddleware, minimum_size=500)
 app.add_middleware(
     TrustedHostMiddleware,
     allowed_hosts=[
@@ -306,5 +311,6 @@ app.include_router(import_router.router, prefix="/import", tags=["import"])
 app.include_router(moderation.router, prefix="/moderation", tags=["moderation"])
 app.include_router(export_router.router, prefix="/export", tags=["export"])
 app.include_router(streaming.router, prefix="/streaming", tags=["streaming"])
+app.include_router(watch_status.router, prefix="/watch-status", tags=["watch-status"])
 if settings.ENVIRONMENT != "production":
     app.include_router(dev.router, prefix="/dev", tags=["dev"])

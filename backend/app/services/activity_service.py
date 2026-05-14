@@ -1,9 +1,12 @@
+import logging
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from app.models.activity import Activity
 from app.models.friendship import Friendship
 from app.models.user import User
+
+logger = logging.getLogger(__name__)
 
 
 def delete_old_activity(db: Session, days: int = 7) -> int:
@@ -164,3 +167,28 @@ def get_friends_activity(db: Session, user_id: str, limit: int = 30) -> list:
     )
 
     return [_serialize_activity(a, username) for a, username in rows]
+
+
+def lift_expired_moderation(db: Session) -> None:
+    """Bulk-clear suspensions and temporary silences that have passed their end date."""
+    now = datetime.now(timezone.utc)
+
+    lifted = (
+        db.query(User)
+        .filter(User.is_suspended == True, User.suspended_until != None, User.suspended_until <= now)  # noqa: E712
+        .update(
+            {"is_suspended": False, "suspended_until": None, "suspension_reason": None},
+            synchronize_session=False,
+        )
+    )
+
+    cleared = (
+        db.query(User)
+        .filter(User.is_silenced == False, User.silenced_until != None, User.silenced_until <= now)  # noqa: E712
+        .update({"silenced_until": None}, synchronize_session=False)
+    )
+
+    db.commit()
+
+    if lifted or cleared:
+        logger.info("moderation cleanup: lifted %d suspension(s), cleared %d silence(s)", lifted, cleared)

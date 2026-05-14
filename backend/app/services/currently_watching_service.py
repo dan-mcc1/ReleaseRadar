@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, union_all, select, literal, null
 from app.models.currently_watching import CurrentlyWatching
@@ -130,17 +131,13 @@ def remove_from_currently_watching(
         if content_type == "movie":
             movie = db.query(Movie).filter_by(id=content_id).first()
             if movie:
-                movie.tracking_count -= 1
-                if movie.tracking_count <= 0:
-                    db.delete(movie)
+                movie.tracking_count = max(0, movie.tracking_count - 1)
+                movie.updated_at = datetime.now(timezone.utc)
         elif content_type == "tv":
             show = db.query(Show).filter_by(id=content_id).first()
             if show:
-                show.tracking_count -= 1
-                if show.tracking_count <= 0:
-                    db.query(EpisodeWatched).filter_by(show_id=content_id).delete()
-                    db.query(Episode).filter_by(show_id=content_id).delete()
-                    db.delete(show)
+                show.tracking_count = max(0, show.tracking_count - 1)
+                show.updated_at = datetime.now(timezone.utc)
 
     db.commit()
     return {"message": "Removed from currently watching"}

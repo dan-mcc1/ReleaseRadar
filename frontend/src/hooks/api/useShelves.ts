@@ -20,6 +20,7 @@ export function useShelves() {
     queryKey: queryKeys.shelves(user?.uid ?? ""),
     queryFn: () => apiFetch("/shelf").then((r) => r.json() as Promise<Shelf[]>),
     enabled: !!user,
+    staleTime: 60_000,
   });
 }
 

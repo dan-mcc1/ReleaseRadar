@@ -1,6 +1,6 @@
-# app/services/watch_time_service.py
+from concurrent.futures import ThreadPoolExecutor
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_, extract
+from sqlalchemy import func, and_, extract, union
 from app.models.watched import Watched
 from app.models.episode_watched import EpisodeWatched
 from app.models.movie import Movie
@@ -8,7 +8,7 @@ from app.models.show import Show
 from app.models.episode import Episode
 from app.models.genre import Genre, MovieGenre, ShowGenre
 from app.models.provider import Provider, ShowProvider, MovieProvider
-from datetime import datetime, timezone
+from app.db.session import SessionLocal
 
 
 _HUMOR_FACTS = [
@@ -42,169 +42,191 @@ def _humor_fact(total_minutes: int) -> str:
 
 
 def get_watch_time_stats(db: Session, user_id: str, year: int | None = None) -> dict:
-    # ── Movie runtime ──────────────────────────────────────────────────────────
-    movie_q = (
-        db.query(func.coalesce(func.sum(Movie.runtime), 0))
-        .join(Watched, and_(Watched.content_id == Movie.id, Watched.content_type == "movie"))
-        .filter(Watched.user_id == user_id, Movie.runtime.isnot(None))
-    )
-    if year:
-        movie_q = movie_q.filter(extract("year", Watched.watched_at) == year)
-    movie_minutes: int = movie_q.scalar() or 0
+    def _with_session(fn):
+        s = SessionLocal()
+        try:
+            return fn(s)
+        finally:
+            s.close()
 
-    # ── Episode runtime ────────────────────────────────────────────────────────
-    ep_q = (
-        db.query(func.coalesce(func.sum(Episode.runtime), 0))
-        .join(EpisodeWatched, EpisodeWatched.episode_id == Episode.id)
-        .filter(EpisodeWatched.user_id == user_id, Episode.runtime.isnot(None))
-    )
-    if year:
-        ep_q = ep_q.filter(extract("year", EpisodeWatched.watched_at) == year)
-    ep_minutes: int = ep_q.scalar() or 0
+    # Combined count + runtime for movies in one query
+    def _movie_stats(s):
+        q = (
+            s.query(
+                func.count(Watched.id).label("cnt"),
+                func.coalesce(func.sum(Movie.runtime), 0).label("mins"),
+            )
+            .outerjoin(Movie, Watched.content_id == Movie.id)
+            .filter(Watched.user_id == user_id, Watched.content_type == "movie")
+        )
+        if year:
+            q = q.filter(extract("year", Watched.watched_at) == year)
+        row = q.one()
+        return int(row.cnt), int(row.mins)
 
-    total_minutes = movie_minutes + ep_minutes
+    # Combined count + runtime for episodes in one query
+    def _ep_stats(s):
+        q = (
+            s.query(
+                func.count(EpisodeWatched.id).label("cnt"),
+                func.coalesce(func.sum(Episode.runtime), 0).label("mins"),
+            )
+            .outerjoin(Episode, and_(
+                Episode.show_id == EpisodeWatched.show_id,
+                Episode.season_number == EpisodeWatched.season_number,
+                Episode.episode_number == EpisodeWatched.episode_number,
+            ))
+            .filter(EpisodeWatched.user_id == user_id)
+        )
+        if year:
+            q = q.filter(extract("year", EpisodeWatched.watched_at) == year)
+        row = q.one()
+        return int(row.cnt), int(row.mins)
 
-    # ── Counts ─────────────────────────────────────────────────────────────────
-    movies_q = db.query(func.count(Watched.id)).filter(
-        Watched.user_id == user_id, Watched.content_type == "movie"
-    )
-    if year:
-        movies_q = movies_q.filter(extract("year", Watched.watched_at) == year)
-    movies_count: int = movies_q.scalar() or 0
+    def _movie_genres(s):
+        q = (
+            s.query(Genre.name, func.coalesce(func.sum(Movie.runtime), 30).label("mins"))
+            .join(MovieGenre, Genre.id == MovieGenre.genre_id)
+            .join(Movie, Movie.id == MovieGenre.movie_id)
+            .join(Watched, and_(Watched.content_id == Movie.id, Watched.content_type == "movie"))
+            .filter(Watched.user_id == user_id)
+            .group_by(Genre.name)
+        )
+        if year:
+            q = q.filter(extract("year", Watched.watched_at) == year)
+        return q.all()
 
-    eps_q = db.query(func.count(EpisodeWatched.id)).filter(EpisodeWatched.user_id == user_id)
-    if year:
-        eps_q = eps_q.filter(extract("year", EpisodeWatched.watched_at) == year)
-    episodes_count: int = eps_q.scalar() or 0
+    def _show_genres(s):
+        q = (
+            s.query(Genre.name, func.coalesce(func.sum(Episode.runtime), 30).label("mins"))
+            .join(ShowGenre, Genre.id == ShowGenre.genre_id)
+            .join(Show, Show.id == ShowGenre.show_id)
+            .join(EpisodeWatched, EpisodeWatched.show_id == Show.id)
+            .join(Episode, and_(
+                Episode.show_id == EpisodeWatched.show_id,
+                Episode.season_number == EpisodeWatched.season_number,
+                Episode.episode_number == EpisodeWatched.episode_number,
+            ))
+            .filter(EpisodeWatched.user_id == user_id)
+            .group_by(Genre.name)
+        )
+        if year:
+            q = q.filter(extract("year", EpisodeWatched.watched_at) == year)
+        return q.all()
 
-    # ── Genre breakdown ────────────────────────────────────────────────────────
-    movie_genre_rows = (
-        db.query(Genre.name, func.coalesce(func.sum(Movie.runtime), 30).label("mins"))
-        .join(MovieGenre, Genre.id == MovieGenre.genre_id)
-        .join(Movie, Movie.id == MovieGenre.movie_id)
-        .join(Watched, and_(Watched.content_id == Movie.id, Watched.content_type == "movie"))
-        .filter(Watched.user_id == user_id)
-        .group_by(Genre.name)
-    )
-    if year:
-        movie_genre_rows = movie_genre_rows.filter(extract("year", Watched.watched_at) == year)
+    def _movie_providers(s):
+        q = (
+            s.query(
+                Provider.name, Provider.logo_path,
+                func.coalesce(func.sum(Movie.runtime), 90).label("mins"),
+            )
+            .join(MovieProvider, Provider.id == MovieProvider.provider_id)
+            .join(Movie, Movie.id == MovieProvider.movie_id)
+            .join(Watched, and_(Watched.content_id == Movie.id, Watched.content_type == "movie"))
+            .filter(Watched.user_id == user_id, MovieProvider.flatrate == True)
+            .group_by(Provider.id, Provider.name, Provider.logo_path)
+        )
+        if year:
+            q = q.filter(extract("year", Watched.watched_at) == year)
+        return q.all()
 
-    show_genre_rows = (
-        db.query(Genre.name, func.coalesce(func.sum(Episode.runtime), 30).label("mins"))
-        .join(ShowGenre, Genre.id == ShowGenre.genre_id)
-        .join(Show, Show.id == ShowGenre.show_id)
-        .join(EpisodeWatched, EpisodeWatched.show_id == Show.id)
-        .join(Episode, and_(
-            Episode.show_id == EpisodeWatched.show_id,
-            Episode.season_number == EpisodeWatched.season_number,
-            Episode.episode_number == EpisodeWatched.episode_number,
-        ))
-        .filter(EpisodeWatched.user_id == user_id)
-        .group_by(Genre.name)
-    )
-    if year:
-        show_genre_rows = show_genre_rows.filter(extract("year", EpisodeWatched.watched_at) == year)
+    def _show_providers(s):
+        q = (
+            s.query(
+                Provider.name, Provider.logo_path,
+                func.coalesce(func.sum(Episode.runtime), 30).label("mins"),
+            )
+            .join(ShowProvider, Provider.id == ShowProvider.provider_id)
+            .join(Show, Show.id == ShowProvider.show_id)
+            .join(EpisodeWatched, EpisodeWatched.show_id == Show.id)
+            .join(Episode, and_(
+                Episode.show_id == EpisodeWatched.show_id,
+                Episode.season_number == EpisodeWatched.season_number,
+                Episode.episode_number == EpisodeWatched.episode_number,
+            ))
+            .filter(EpisodeWatched.user_id == user_id, ShowProvider.flatrate == True)
+            .group_by(Provider.id, Provider.name, Provider.logo_path)
+        )
+        if year:
+            q = q.filter(extract("year", EpisodeWatched.watched_at) == year)
+        return q.all()
+
+    def _binge(s):
+        q = (
+            s.query(
+                func.date(EpisodeWatched.watched_at).label("day"),
+                func.coalesce(func.sum(Episode.runtime), 0).label("day_mins"),
+            )
+            .join(Episode, and_(
+                Episode.show_id == EpisodeWatched.show_id,
+                Episode.season_number == EpisodeWatched.season_number,
+                Episode.episode_number == EpisodeWatched.episode_number,
+            ))
+            .filter(EpisodeWatched.user_id == user_id, Episode.runtime.isnot(None))
+        )
+        if year:
+            q = q.filter(extract("year", EpisodeWatched.watched_at) == year)
+        row = (
+            q.group_by(func.date(EpisodeWatched.watched_at))
+            .order_by(func.coalesce(func.sum(Episode.runtime), 0).desc())
+            .limit(1)
+            .first()
+        )
+        return {
+            "date": str(row.day) if row else None,
+            "minutes": int(row.day_mins) if row else 0,
+        }
+
+    # Union of movie + episode years in a single round-trip; runs on the
+    # existing db session on the main thread while the 4 threads run in parallel.
+    def _years(s):
+        movie_yr = s.query(
+            func.extract("year", Watched.watched_at).label("yr")
+        ).filter(Watched.user_id == user_id, Watched.content_type == "movie").distinct()
+        ep_yr = s.query(
+            func.extract("year", EpisodeWatched.watched_at).label("yr")
+        ).filter(EpisodeWatched.user_id == user_id).distinct()
+        rows = s.execute(union(movie_yr, ep_yr)).fetchall()
+        return sorted({int(r[0]) for r in rows if r[0]}, reverse=True)
+
+    # All 7 queries fire in parallel; years runs on the main thread concurrently.
+    with ThreadPoolExecutor(max_workers=7) as ex:
+        f_movie = ex.submit(_with_session, _movie_stats)
+        f_ep = ex.submit(_with_session, _ep_stats)
+        f_movie_genres = ex.submit(_with_session, _movie_genres)
+        f_show_genres = ex.submit(_with_session, _show_genres)
+        f_movie_providers = ex.submit(_with_session, _movie_providers)
+        f_show_providers = ex.submit(_with_session, _show_providers)
+        f_binge = ex.submit(_with_session, _binge)
+        all_years = _years(db)
+
+    movies_count, movie_minutes = f_movie.result()
+    episodes_count, ep_minutes = f_ep.result()
+    longest_binge = f_binge.result()
 
     genre_mins: dict[str, int] = {}
-    for name, mins in movie_genre_rows.all():
+    for name, mins in f_movie_genres.result():
         genre_mins[name] = genre_mins.get(name, 0) + int(mins)
-    for name, mins in show_genre_rows.all():
+    for name, mins in f_show_genres.result():
         genre_mins[name] = genre_mins.get(name, 0) + int(mins)
-
     top_genres = sorted(
         [{"name": k, "minutes": v} for k, v in genre_mins.items()],
         key=lambda x: x["minutes"],
         reverse=True,
     )[:8]
 
-    # ── Platform breakdown (flatrate providers only) ───────────────────────────
-    movie_provider_rows = (
-        db.query(Provider.name, Provider.logo_path,
-                 func.coalesce(func.sum(Movie.runtime), 90).label("mins"))
-        .join(MovieProvider, Provider.id == MovieProvider.provider_id)
-        .join(Movie, Movie.id == MovieProvider.movie_id)
-        .join(Watched, and_(Watched.content_id == Movie.id, Watched.content_type == "movie"))
-        .filter(Watched.user_id == user_id, MovieProvider.flatrate == True)
-        .group_by(Provider.id, Provider.name, Provider.logo_path)
-    )
-    if year:
-        movie_provider_rows = movie_provider_rows.filter(extract("year", Watched.watched_at) == year)
-
-    show_provider_rows = (
-        db.query(Provider.name, Provider.logo_path,
-                 func.coalesce(func.sum(Episode.runtime), 30).label("mins"))
-        .join(ShowProvider, Provider.id == ShowProvider.provider_id)
-        .join(Show, Show.id == ShowProvider.show_id)
-        .join(EpisodeWatched, EpisodeWatched.show_id == Show.id)
-        .join(Episode, and_(
-            Episode.show_id == EpisodeWatched.show_id,
-            Episode.season_number == EpisodeWatched.season_number,
-            Episode.episode_number == EpisodeWatched.episode_number,
-        ))
-        .filter(EpisodeWatched.user_id == user_id, ShowProvider.flatrate == True)
-        .group_by(Provider.id, Provider.name, Provider.logo_path)
-    )
-    if year:
-        show_provider_rows = show_provider_rows.filter(extract("year", EpisodeWatched.watched_at) == year)
-
     platform_data: dict[str, dict] = {}
-    for name, logo, mins in movie_provider_rows.all():
+    for name, logo, mins in f_movie_providers.result():
         if name not in platform_data:
             platform_data[name] = {"name": name, "logo_path": logo, "minutes": 0}
         platform_data[name]["minutes"] += int(mins)
-    for name, logo, mins in show_provider_rows.all():
+    for name, logo, mins in f_show_providers.result():
         if name not in platform_data:
             platform_data[name] = {"name": name, "logo_path": logo, "minutes": 0}
         platform_data[name]["minutes"] += int(mins)
+    top_platforms = sorted(platform_data.values(), key=lambda x: x["minutes"], reverse=True)[:5]
 
-    top_platforms = sorted(
-        list(platform_data.values()),
-        key=lambda x: x["minutes"],
-        reverse=True,
-    )[:5]
-
-    # ── Longest single-day binge ───────────────────────────────────────────────
-    binge_q = (
-        db.query(
-            func.date(EpisodeWatched.watched_at).label("day"),
-            func.coalesce(func.sum(Episode.runtime), 0).label("day_mins"),
-        )
-        .join(Episode, and_(
-            Episode.show_id == EpisodeWatched.show_id,
-            Episode.season_number == EpisodeWatched.season_number,
-            Episode.episode_number == EpisodeWatched.episode_number,
-        ))
-        .filter(EpisodeWatched.user_id == user_id, Episode.runtime.isnot(None))
-    )
-    if year:
-        binge_q = binge_q.filter(extract("year", EpisodeWatched.watched_at) == year)
-    binge_q = (
-        binge_q
-        .group_by(func.date(EpisodeWatched.watched_at))
-        .order_by(func.coalesce(func.sum(Episode.runtime), 0).desc())
-        .limit(1)
-    )
-    binge_row = binge_q.first()
-    longest_binge = {
-        "date": str(binge_row.day) if binge_row else None,
-        "minutes": int(binge_row.day_mins) if binge_row else 0,
-    }
-
-    # ── Available years (for year picker) ─────────────────────────────────────
-    movie_years = db.query(
-        func.extract("year", Watched.watched_at).label("yr")
-    ).filter(Watched.user_id == user_id, Watched.content_type == "movie").distinct()
-
-    ep_years = db.query(
-        func.extract("year", EpisodeWatched.watched_at).label("yr")
-    ).filter(EpisodeWatched.user_id == user_id).distinct()
-
-    all_years = sorted(
-        {int(r.yr) for r in movie_years.all() if r.yr}
-        | {int(r.yr) for r in ep_years.all() if r.yr},
-        reverse=True,
-    )
-
+    total_minutes = movie_minutes + ep_minutes
     humor = _humor_fact(total_minutes) if total_minutes > 0 else None
 
     return {

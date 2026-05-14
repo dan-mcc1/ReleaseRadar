@@ -1,5 +1,5 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { type ReactNode } from "react";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { lazy, Suspense, useEffect, type ReactNode } from "react";
 import "./App.css";
 import NavBar from "./components/NavBar";
 import InstallBanner from "./components/InstallBanner";
@@ -8,41 +8,50 @@ import { useAccountStatus } from "./hooks/api/useUser";
 import { setAccountRestricted } from "./utils/accountState";
 import LandingPage from "./pages/LandingPage";
 import CalendarPage from "./pages/CalendarPage";
-import Search from "./pages/Search";
 import SignIn from "./pages/SignIn";
-import Settings from "./pages/Settings";
-import Upcoming from "./pages/Upcoming";
 import MovieInfo from "./pages/MovieInfo";
 import ShowInfo from "./pages/ShowInfo";
-import PersonInfo from "./pages/PersonInfo";
-import Watched from "./pages/Watched";
-import Watchlist from "./pages/Watchlist";
-import Trending from "./pages/Trending";
-import ProfilePage from "./pages/ProfilePage";
-import BrowseGenres from "./pages/BrowseGenres";
-import FriendProfilePage from "./pages/FriendProfilePage";
-import ActivityFeedPage from "./pages/ActivityFeedPage";
-import FriendsPage from "./pages/FriendsPage";
-import EpisodeInfo from "./pages/EpisodeInfo";
-import BoxOffice from "./pages/BoxOffice";
-import CollectionInfo from "./pages/CollectionInfo";
-import ForYou from "./pages/ForYou";
-import Unsubscribe from "./pages/Unsubscribe";
-import ShelvesPage from "./pages/ShelvesPage";
-import ShelfDetailPage from "./pages/ShelfDetailPage";
-import Pricing from "./pages/Pricing";
-import BillingSettings from "./pages/BillingSettings";
-import AdminPage from "./pages/AdminPage";
-import AdminModerationPage from "./pages/AdminModerationPage";
-import AdminUsersPage from "./pages/AdminUsersPage";
-import News from "./pages/News";
-import CommunityGuidelines from "./pages/CommunityGuidelines";
-import StatsPage from "./pages/StatsPage";
-import ImportPage from "./pages/ImportPage";
 import Footer from "./components/Footer";
 import SpotlightTour from "./components/SpotlightTour";
 import WarningModal from "./components/WarningModal";
 import SuspensionBanModal from "./components/SuspensionBanModal";
+
+const Search = lazy(() => import("./pages/Search"));
+const Settings = lazy(() => import("./pages/Settings"));
+const Upcoming = lazy(() => import("./pages/Upcoming"));
+const PersonInfo = lazy(() => import("./pages/PersonInfo"));
+const Watched = lazy(() => import("./pages/Watched"));
+const Watchlist = lazy(() => import("./pages/Watchlist"));
+const Trending = lazy(() => import("./pages/Trending"));
+const ProfilePage = lazy(() => import("./pages/ProfilePage"));
+const BrowseGenres = lazy(() => import("./pages/BrowseGenres"));
+const FriendProfilePage = lazy(() => import("./pages/FriendProfilePage"));
+const ActivityFeedPage = lazy(() => import("./pages/ActivityFeedPage"));
+const FriendsPage = lazy(() => import("./pages/FriendsPage"));
+const EpisodeInfo = lazy(() => import("./pages/EpisodeInfo"));
+const BoxOffice = lazy(() => import("./pages/BoxOffice"));
+const CollectionInfo = lazy(() => import("./pages/CollectionInfo"));
+const ForYou = lazy(() => import("./pages/ForYou"));
+const Unsubscribe = lazy(() => import("./pages/Unsubscribe"));
+const ShelvesPage = lazy(() => import("./pages/ShelvesPage"));
+const ShelfDetailPage = lazy(() => import("./pages/ShelfDetailPage"));
+const Pricing = lazy(() => import("./pages/Pricing"));
+const BillingSettings = lazy(() => import("./pages/BillingSettings"));
+const AdminPage = lazy(() => import("./pages/AdminPage"));
+const AdminModerationPage = lazy(() => import("./pages/AdminModerationPage"));
+const AdminUsersPage = lazy(() => import("./pages/AdminUsersPage"));
+const News = lazy(() => import("./pages/News"));
+const CommunityGuidelines = lazy(() => import("./pages/CommunityGuidelines"));
+const StatsPage = lazy(() => import("./pages/StatsPage"));
+const ImportPage = lazy(() => import("./pages/ImportPage"));
+
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+  return null;
+}
 
 function BanGate({ children }: { children: ReactNode }) {
   const { data: status, isLoading } = useAccountStatus();
@@ -61,12 +70,14 @@ function App() {
   return (
     <BrowserRouter>
       <div className="flex flex-col min-h-screen bg-neutral-950 text-neutral-100">
+        <ScrollToTop />
         <NavBar />
         <div className="h-16 shrink-0" />
         <InstallBanner />
         <SpotlightTour />
         <WarningModal />
         <BanGate>
+        <Suspense fallback={null}>
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route
@@ -161,6 +172,7 @@ function App() {
             }
           />
         </Routes>
+        </Suspense>
         </BanGate>
         <Footer />
       </div>

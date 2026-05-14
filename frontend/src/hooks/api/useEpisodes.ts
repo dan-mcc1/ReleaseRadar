@@ -102,6 +102,9 @@ export function useToggleEpisode() {
       queryClient.invalidateQueries({
         queryKey: ["watchStatus", user.uid],
       });
+      queryClient.invalidateQueries({
+        queryKey: ["showProgress", user.uid, showId],
+      });
     },
   });
 }
@@ -178,6 +181,9 @@ export function useToggleSeason() {
       });
       queryClient.invalidateQueries({
         queryKey: ["watchStatus", user.uid],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["showProgress", user.uid, showId],
       });
     },
   });

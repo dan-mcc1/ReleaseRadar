@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { queryFetch } from "./queryFetch";
 import { useAuthUser } from "../useAuthUser";
 
-export interface BingePlan {
+export interface ShowProgress {
   show_id: number;
   show_name: string;
   total_episodes: number;
@@ -16,26 +16,33 @@ export interface BingePlan {
   mins_per_day_needed: number | null;
 }
 
-export function useBingePlan(showId: number | undefined) {
+export function useShowProgress(showId: number | undefined) {
   const user = useAuthUser();
   return useQuery({
-    queryKey: ["bingePlan", user?.uid ?? "", showId],
-    queryFn: () => queryFetch<BingePlan>(`/watchlist/binge/${showId}`),
+    queryKey: ["showProgress", user?.uid ?? "", showId],
+    queryFn: () => queryFetch<ShowProgress>(`/watchlist/progress/${showId}`),
     enabled: !!user && !!showId,
     staleTime: 60_000,
   });
 }
 
-export function useBingePlanBulk(showIds: number[]) {
+export function useShowProgressBulk(showIds: number[]) {
   const user = useAuthUser();
-  const idsStr = showIds.sort().join(",");
+  const sortedIds = [...showIds].sort((a, b) => a - b);
   return useQuery({
-    queryKey: ["bingePlan", "bulk", user?.uid ?? "", idsStr],
+    queryKey: ["showProgress", "bulk", user?.uid ?? "", sortedIds],
     queryFn: () =>
-      queryFetch<Record<string, BingePlan>>(
-        `/watchlist/binge-bulk?show_ids=${idsStr}`,
-      ),
+      queryFetch<Record<string, ShowProgress>>(`/watchlist/progress-bulk`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ show_ids: sortedIds }),
+      }),
     enabled: !!user && showIds.length > 0,
     staleTime: 60_000,
   });
 }
+
+// Back-compat aliases — remove once all call sites are updated
+export type BingePlan = ShowProgress;
+export const useBingePlan = useShowProgress;
+export const useBingePlanBulk = useShowProgressBulk;

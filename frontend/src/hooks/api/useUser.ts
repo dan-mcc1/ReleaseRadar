@@ -168,6 +168,7 @@ export function useProfileSummary() {
     queryKey: queryKeys.profileSummary(user?.uid ?? ""),
     queryFn: () => queryFetch<ProfileSummary>("/user/profile-summary"),
     enabled: !!user,
+    staleTime: 60_000,
   });
 }
 

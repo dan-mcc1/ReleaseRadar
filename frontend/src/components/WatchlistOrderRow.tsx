@@ -1,7 +1,7 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { BASE_IMAGE_URL } from "../constants";
-import type { BingePlan } from "../hooks/api/useBingePlan";
+import type { ShowProgress } from "../hooks/api/useBingePlan";
 import ContentRatingBadge from "./media/ContentRatingBadge";
 
 function fmtMins(mins: number): string {
@@ -23,7 +23,7 @@ interface WatchlistOrderRowProps {
   userRating?: number | null;
   genres?: { id: number; name: string }[];
   certification?: string | null;
-  bingePlan?: BingePlan | null;
+  bingePlan?: ShowProgress | null;
   isFirst: boolean;
   isLast: boolean;
   isDragDisabled?: boolean;

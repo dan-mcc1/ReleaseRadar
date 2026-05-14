@@ -1,8 +1,9 @@
 # app/services/episode_service.py
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 from app.models.episode import Episode
+from app.models.movie import Movie
 from app.models.show import Show
 from app.services.tmdb_client import get
 
@@ -188,13 +189,35 @@ def maybe_sync_show_episodes(db: Session, show_id: int):
 def sync_show_episodes_background(show_id: int):
     """
     Background task: sync all episodes for a show using its own DB session.
-    Intended to be called via FastAPI BackgroundTasks, not directly.
+    Queries season numbers directly from the Season table (avoids lazy-loading
+    the relationship) then calls sync_season_episodes per season, which is the
+    proven reliable path used by mark-season-as-watched.
     """
     from app.db.session import SessionLocal
+    from app.models.season import Season
 
     db = SessionLocal()
     try:
-        maybe_sync_show_episodes(db, show_id)
+        show = db.query(Show).filter_by(id=show_id).first()
+        if not show:
+            return
+
+        season_numbers = [
+            row.season_number
+            for row in db.query(Season.season_number)
+            .filter(Season.show_id == show_id, Season.season_number > 0)
+            .all()
+        ]
+
+        if not season_numbers:
+            n = show.number_of_seasons or 0
+            season_numbers = list(range(1, n + 1))
+
+        for season_number in season_numbers:
+            try:
+                sync_season_episodes(db, show_id, season_number)
+            except Exception as e:
+                print(f"[episode sync] Error syncing show {show_id} season {season_number}: {e}")
     except Exception as e:
         print(f"[episode sync] Error syncing show {show_id}: {e}")
     finally:
@@ -650,3 +673,34 @@ def check_and_reactivate_watched_shows(db: Session):
 
     if reactivated:
         print(f"[episode refresh] Reactivated {reactivated} show(s) with new seasons")
+
+
+def prune_stale_cache(db: Session) -> None:
+    """Delete Show/Movie cache rows that have no trackers and haven't been touched in 90 days."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=90)
+
+    stale_shows = (
+        db.query(Show)
+        .filter(Show.tracking_count == 0, Show.updated_at < cutoff)
+        .all()
+    )
+    for show in stale_shows:
+        db.query(Episode).filter_by(show_id=show.id).delete()
+        db.delete(show)
+
+    stale_movies = (
+        db.query(Movie)
+        .filter(Movie.tracking_count == 0, Movie.updated_at < cutoff)
+        .all()
+    )
+    for movie in stale_movies:
+        db.delete(movie)
+
+    db.commit()
+
+    total = len(stale_shows) + len(stale_movies)
+    if total:
+        print(
+            f"[cache prune] Removed {len(stale_shows)} show(s) and "
+            f"{len(stale_movies)} movie(s) with tracking_count=0 and updated_at < 90 days ago"
+        )

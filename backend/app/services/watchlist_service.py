@@ -1,7 +1,9 @@
 # app/services/watchlist_service.py
+from concurrent.futures import ThreadPoolExecutor
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import and_, select, exists, literal, union_all, func
-from datetime import datetime
+from datetime import datetime, timezone
+from fastapi import HTTPException
 from app.models.watchlist import Watchlist
 from app.models.watched import Watched
 from app.models.currently_watching import CurrentlyWatching
@@ -12,12 +14,41 @@ from app.models.episode_watched import EpisodeWatched
 from app.models.genre import Genre, ShowGenre, MovieGenre
 from app.models.provider import Provider, ShowProvider, MovieProvider
 from app.models.season import Season
+from app.models.user import User
+from app.db.session import SessionLocal, _is_sqlite
 from app.services.tmdb_movies import fetch_movie_from_tmdb
 from app.services.tmdb_tv import fetch_show_from_tmdb
 from app.services.activity_service import log_activity
 from app.services.tvmaze_service import fetch_show_air_time
 from sqlalchemy import text
 from collections import defaultdict
+
+
+_TRACKING_LIMIT = 30
+
+
+def assert_can_track(db: Session, uid: str) -> None:
+    """Raise 403 if a free-tier user has hit the tracking limit."""
+    user = db.query(User).filter(User.id == uid).first()
+    if user and user.subscription_tier != "free":
+        return
+    tracked = db.execute(
+        text(
+            "SELECT (SELECT COUNT(*) FROM watchlist WHERE user_id = :u)"
+            " + (SELECT COUNT(*) FROM currently_watching WHERE user_id = :u)"
+        ),
+        {"u": uid},
+    ).scalar()
+    if tracked >= _TRACKING_LIMIT:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "tracking_limit_reached",
+                "message": f"Free accounts can track up to {_TRACKING_LIMIT} titles.",
+                "limit": _TRACKING_LIMIT,
+                "current": tracked,
+            },
+        )
 
 # -------------------------
 # Serialization helpers
@@ -295,6 +326,7 @@ def ensure_movie_in_db(db: Session, content_id: int, already_tracked: bool) -> M
     if movie:
         if not already_tracked:
             movie.tracking_count += 1
+            movie.updated_at = datetime.now(timezone.utc)
         return movie
 
     movie_data = fetch_movie_from_tmdb(
@@ -330,6 +362,7 @@ def ensure_movie_in_db(db: Session, content_id: int, already_tracked: bool) -> M
         tracking_count=1,
         vote_average=movie_data.get("vote_average"),
         certification=certification,
+        updated_at=datetime.now(timezone.utc),
     )
     db.add(movie)
     db.flush()
@@ -347,6 +380,7 @@ def ensure_show_in_db(db: Session, content_id: int, already_tracked: bool) -> Sh
     if show:
         if not already_tracked:
             show.tracking_count += 1
+            show.updated_at = datetime.now(timezone.utc)
         return show
 
     show_data = fetch_show_from_tmdb(content_id, "watch/providers,images,content_ratings")
@@ -381,6 +415,7 @@ def ensure_show_in_db(db: Session, content_id: int, already_tracked: bool) -> Sh
         air_timezone=air_timezone,
         vote_average=show_data.get("vote_average"),
         certification=certification,
+        updated_at=datetime.now(timezone.utc),
     )
     db.add(show)
     db.flush()
@@ -420,19 +455,41 @@ def add_to_watchlist(db: Session, user_id: str, content_type: str, content_id: i
     """
     Add a movie or show to the user's watchlist.
     """
-    existing = (
-        db.query(Watchlist)
-        .filter_by(user_id=user_id, content_type=content_type, content_id=content_id)
-        .first()
-    )
-    if existing:
-        return existing
+    # Single round-trip: existing check + other-list check + max sort_key + tier + tracked count
+    row = db.execute(text("""
+        SELECT
+            (SELECT id FROM watchlist
+             WHERE user_id = :uid AND content_type = :ctype AND content_id = :cid
+             LIMIT 1) AS existing_id,
+            (SELECT COALESCE(MAX(sort_key), 0) FROM watchlist WHERE user_id = :uid) AS max_sort_key,
+            EXISTS(
+                SELECT 1 FROM currently_watching
+                WHERE user_id = :uid AND content_type = :ctype AND content_id = :cid
+                UNION ALL
+                SELECT 1 FROM watched
+                WHERE user_id = :uid AND content_type = :ctype AND content_id = :cid
+            ) AS already_tracked,
+            COALESCE((SELECT subscription_tier FROM "user" WHERE id = :uid), 'free') AS subscription_tier,
+            (SELECT COUNT(*) FROM watchlist WHERE user_id = :uid) +
+            (SELECT COUNT(*) FROM currently_watching WHERE user_id = :uid) AS tracked_count
+    """), {"uid": user_id, "ctype": content_type, "cid": content_id}).first()
 
-    already_tracked = _is_on_other_list(db, user_id, content_type, content_id)
+    if row.existing_id is not None:
+        return {"id": row.existing_id, "content_type": content_type, "content_id": content_id}
 
-    max_sort_key = (
-        db.query(func.max(Watchlist.sort_key)).filter_by(user_id=user_id).scalar()
-    ) or 0
+    if row.subscription_tier == "free" and row.tracked_count >= _TRACKING_LIMIT:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "tracking_limit_reached",
+                "message": f"Free accounts can track up to {_TRACKING_LIMIT} titles.",
+                "limit": _TRACKING_LIMIT,
+                "current": row.tracked_count,
+            },
+        )
+
+    already_tracked = bool(row.already_tracked)
+    max_sort_key = row.max_sort_key or 0
 
     entry = Watchlist(
         user_id=user_id,
@@ -446,30 +503,23 @@ def add_to_watchlist(db: Session, user_id: str, content_type: str, content_id: i
 
     if content_type == "movie":
         media = ensure_movie_in_db(db, content_id, already_tracked)
-        log_activity(
-            db,
-            user_id,
-            "want_to_watch",
-            content_type,
-            content_id,
-            media.title,
-            media.poster_path,
-        )
+        log_activity(db, user_id, "want_to_watch", content_type, content_id, media.title, media.poster_path)
     elif content_type == "tv":
         media = ensure_show_in_db(db, content_id, already_tracked)
-        log_activity(
-            db,
-            user_id,
-            "want_to_watch",
-            content_type,
-            content_id,
-            media.name,
-            media.poster_path,
-        )
+        log_activity(db, user_id, "want_to_watch", content_type, content_id, media.name, media.poster_path)
 
+    # entry.id is populated by log_activity's db.flush() — no post-commit SELECT needed
+    result = {
+        "id": entry.id,
+        "user_id": entry.user_id,
+        "content_type": entry.content_type,
+        "content_id": entry.content_id,
+        "added_at": entry.added_at.isoformat() if entry.added_at else None,
+        "sort_key": entry.sort_key,
+        "notify": entry.notify,
+    }
     db.commit()
-    db.refresh(entry)
-    return entry
+    return result
 
 
 def _renormalize_sort_keys(db: Session, user_id: str) -> None:
@@ -553,38 +603,38 @@ def remove_from_watchlist(
     """
     Remove a movie or show from the user's watchlist.
     """
-    entry = (
-        db.query(Watchlist)
-        .filter_by(user_id=user_id, content_type=content_type, content_id=content_id)
-        .first()
-    )
+    # Single round-trip: find watchlist entry + check if still tracked elsewhere
+    row = db.execute(text("""
+        SELECT
+            (SELECT id FROM watchlist
+             WHERE user_id = :uid AND content_type = :ctype AND content_id = :cid
+             LIMIT 1) AS watchlist_id,
+            EXISTS(
+                SELECT 1 FROM currently_watching
+                WHERE user_id = :uid AND content_type = :ctype AND content_id = :cid
+                UNION ALL
+                SELECT 1 FROM watched
+                WHERE user_id = :uid AND content_type = :ctype AND content_id = :cid
+            ) AS still_tracked
+    """), {"uid": user_id, "ctype": content_type, "cid": content_id}).first()
 
-    if not entry:
+    if row.watchlist_id is None:
         return {"message": "Item not found in watchlist"}
 
-    db.delete(entry)
+    db.execute(text("DELETE FROM watchlist WHERE id = :id"), {"id": row.watchlist_id})
 
-    # Only decrement tracking_count if not still on any other list
-    still_tracked = _is_on_other_list(db, user_id, content_type, content_id)
-
-    # If the user is no longer on any list for this TV show, clear their episode progress
-    if not still_tracked and content_type == "tv":
-        db.query(EpisodeWatched).filter_by(user_id=user_id, show_id=content_id).delete()
-
-    if content_type == "movie":
-        movie = db.query(Movie).filter_by(id=content_id).first()
-        if movie and not still_tracked:
-            movie.tracking_count -= 1
-            if movie.tracking_count <= 0:
-                db.delete(movie)
-    elif content_type == "tv":
-        show = db.query(Show).filter_by(id=content_id).first()
-        if show and not still_tracked:
-            show.tracking_count -= 1
-            if show.tracking_count <= 0:
-                db.query(EpisodeWatched).filter_by(show_id=content_id).delete()
-                db.query(Episode).filter_by(show_id=content_id).delete()
-                db.delete(show)
+    if not bool(row.still_tracked):
+        if content_type == "tv":
+            db.query(EpisodeWatched).filter_by(user_id=user_id, show_id=content_id).delete()
+            db.query(Show).filter(Show.id == content_id, Show.tracking_count > 0).update(
+                {Show.tracking_count: Show.tracking_count - 1, Show.updated_at: datetime.now(timezone.utc)},
+                synchronize_session=False,
+            )
+        elif content_type == "movie":
+            db.query(Movie).filter(Movie.id == content_id, Movie.tracking_count > 0).update(
+                {Movie.tracking_count: Movie.tracking_count - 1, Movie.updated_at: datetime.now(timezone.utc)},
+                synchronize_session=False,
+            )
 
     db.commit()
     return {"message": "Removed from watchlist"}
@@ -597,6 +647,35 @@ def _show_query_options():
         selectinload(Show.genres),
         selectinload(Show.show_providers).selectinload(ShowProvider.provider),
     ]
+
+
+def serialize_show_calendar(show):
+    """Minimal show shape for calendar views — only fields rendered by calendar components."""
+    return {
+        "id": show.id,
+        "name": show.name,
+        "poster_path": show.poster_path,
+        "backdrop_path": show.backdrop_path,
+        "logo_path": show.logo_path,
+        "air_time": show.air_time,
+        "air_timezone": show.air_timezone,
+    }
+
+
+def serialize_movie_calendar(movie):
+    """Minimal movie shape for calendar views — scalar columns only, no JOINs needed."""
+    return {
+        "id": movie.id,
+        "title": movie.title,
+        "overview": movie.overview,
+        "poster_path": movie.poster_path,
+        "backdrop_path": movie.backdrop_path,
+        "logo_path": movie.logo_path,
+        "release_date": movie.release_date,
+        "runtime": movie.runtime,
+        "status": movie.status,
+        "vote_average": movie.vote_average,
+    }
 
 
 def _movie_query_options():
@@ -708,10 +787,130 @@ def _get_watchlist_items(db: Session, user_id: str, content_type: str):
     ]
 
 
+def _fetch_watchlist_movies_pg(s: Session, user_id: str) -> list[dict]:
+    rows = s.execute(text("""
+        SELECT
+            m.id, m.backdrop_path, m.logo_path, m.overview, m.poster_path,
+            m.release_date, m.runtime, m.status, m.title,
+            m.tracking_count, m.vote_average, m.certification,
+            w.added_at, w.sort_key, w.id AS watchlist_id,
+            COALESCE(
+                json_agg(DISTINCT jsonb_build_object('id', g.id, 'name', g.name))
+                    FILTER (WHERE g.id IS NOT NULL),
+                '[]'::json
+            ) AS genres,
+            COALESCE(
+                array_agg(DISTINCT mp.provider_id)
+                    FILTER (WHERE mp.flatrate = true AND mp.provider_id IS NOT NULL),
+                ARRAY[]::integer[]
+            ) AS flatrate_provider_ids
+        FROM watchlist w
+        JOIN movie m ON m.id = w.content_id AND w.content_type = 'movie'
+        LEFT JOIN movie_genre mg ON mg.movie_id = m.id
+        LEFT JOIN genre g ON g.id = mg.genre_id
+        LEFT JOIN movie_provider mp ON mp.movie_id = m.id
+        WHERE w.user_id = :uid
+        GROUP BY m.id, w.added_at, w.sort_key, w.id
+        ORDER BY w.sort_key
+    """), {"uid": user_id}).mappings().all()
+    return [
+        {
+            "id": r["id"],
+            "backdrop_path": r["backdrop_path"],
+            "logo_path": r["logo_path"],
+            "overview": r["overview"],
+            "poster_path": r["poster_path"],
+            "release_date": r["release_date"],
+            "runtime": r["runtime"],
+            "status": r["status"],
+            "title": r["title"],
+            "tracking_count": r["tracking_count"],
+            "vote_average": r["vote_average"],
+            "certification": r["certification"],
+            "genres": r["genres"],
+            "flatrate_provider_ids": r["flatrate_provider_ids"],
+            "added_at": r["added_at"].isoformat() if r["added_at"] else None,
+            "sort_key": r["sort_key"],
+            "watchlist_id": r["watchlist_id"],
+        }
+        for r in rows
+    ]
+
+
+def _fetch_watchlist_shows_pg(s: Session, user_id: str) -> list[dict]:
+    rows = s.execute(text("""
+        SELECT
+            sh.id, sh.name, sh.backdrop_path, sh.logo_path, sh.first_air_date,
+            sh.last_air_date, sh.in_production, sh.number_of_seasons,
+            sh.number_of_episodes, sh.overview, sh.poster_path, sh.status,
+            sh.tracking_count, sh.vote_average, sh.certification,
+            w.added_at, w.sort_key, w.id AS watchlist_id,
+            COALESCE(
+                json_agg(DISTINCT jsonb_build_object('id', g.id, 'name', g.name))
+                    FILTER (WHERE g.id IS NOT NULL),
+                '[]'::json
+            ) AS genres,
+            COALESCE(
+                array_agg(DISTINCT sp.provider_id)
+                    FILTER (WHERE sp.flatrate = true AND sp.provider_id IS NOT NULL),
+                ARRAY[]::integer[]
+            ) AS flatrate_provider_ids
+        FROM watchlist w
+        JOIN show sh ON sh.id = w.content_id AND w.content_type = 'tv'
+        LEFT JOIN show_genre sg ON sg.show_id = sh.id
+        LEFT JOIN genre g ON g.id = sg.genre_id
+        LEFT JOIN show_provider sp ON sp.show_id = sh.id
+        WHERE w.user_id = :uid
+        GROUP BY sh.id, w.added_at, w.sort_key, w.id
+        ORDER BY w.sort_key
+    """), {"uid": user_id}).mappings().all()
+    return [
+        {
+            "id": r["id"],
+            "name": r["name"],
+            "backdrop_path": r["backdrop_path"],
+            "logo_path": r["logo_path"],
+            "first_air_date": r["first_air_date"],
+            "last_air_date": r["last_air_date"],
+            "in_production": r["in_production"],
+            "number_of_seasons": r["number_of_seasons"],
+            "number_of_episodes": r["number_of_episodes"],
+            "overview": r["overview"],
+            "poster_path": r["poster_path"],
+            "status": r["status"],
+            "tracking_count": r["tracking_count"],
+            "vote_average": r["vote_average"],
+            "certification": r["certification"],
+            "genres": r["genres"],
+            "flatrate_provider_ids": r["flatrate_provider_ids"],
+            "added_at": r["added_at"].isoformat() if r["added_at"] else None,
+            "sort_key": r["sort_key"],
+            "watchlist_id": r["watchlist_id"],
+        }
+        for r in rows
+    ]
+
+
 def get_watchlist(db: Session, user_id: str):
-    movies = _get_watchlist_items(db, user_id, "movie")
-    shows = _get_watchlist_items(db, user_id, "tv")
-    return {"movies": movies, "shows": shows}
+    # SQLite (tests) doesn't support json_agg — fall back to ORM path.
+    if _is_sqlite:
+        return {
+            "movies": _get_watchlist_items(db, user_id, "movie"),
+            "shows": _get_watchlist_items(db, user_id, "tv"),
+        }
+
+    def _with_session(fn):
+        s = SessionLocal()
+        try:
+            return fn(s)
+        finally:
+            s.close()
+
+    with ThreadPoolExecutor(max_workers=2) as ex:
+        f_movies = ex.submit(_with_session, lambda s: _fetch_watchlist_movies_pg(s, user_id))
+        f_shows = ex.submit(_with_session, lambda s: _fetch_watchlist_shows_pg(s, user_id))
+
+    return {"movies": f_movies.result(), "shows": f_shows.result()}
 
 
 def get_watchlist_status(id: int, db: Session, user_id: str, content_type: str):
@@ -772,13 +971,8 @@ def get_tv_calendar(
     if not show_ids:
         return []
 
-    # 2. Load show metadata + relationships
-    shows = (
-        db.query(Show)
-        .options(*_show_query_options())
-        .filter(Show.id.in_(show_ids))
-        .all()
-    )
+    # 2. Load show metadata — scalar columns only, no relationship joins needed
+    shows = db.query(Show).filter(Show.id.in_(show_ids)).all()
 
     # 3. Load episodes, optionally filtered to the requested date window
     eps_query = db.query(Episode).filter(Episode.show_id.in_(show_ids))
@@ -811,7 +1005,7 @@ def get_tv_calendar(
     # When date-filtering, omit shows that have no episodes in the window
     filtering = bool(from_date or to_date)
     return [
-        {"show": serialize_show(show), "episodes": eps_by_show[show.id]}
+        {"show": serialize_show_calendar(show), "episodes": eps_by_show[show.id]}
         for show in shows
         if not filtering or eps_by_show[show.id]
     ]

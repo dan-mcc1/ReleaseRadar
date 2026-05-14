@@ -129,6 +129,15 @@ def get_friends(
     return friends_service.get_friends(db, uid)
 
 
+@router.get("/requests/incoming/count")
+def get_incoming_count(
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    """Return the count of pending incoming friend requests."""
+    return {"count": friends_service.get_incoming_request_count(db, uid)}
+
+
 @router.get("/requests/incoming")
 def get_incoming(
     db: Session = Depends(get_db),

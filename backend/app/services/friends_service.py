@@ -1,7 +1,7 @@
 # app/services/friends_service.py
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, and_
+from sqlalchemy import or_, and_, func, literal, null
 from fastapi import HTTPException
 
 from app.models.friendship import Friendship
@@ -189,81 +189,153 @@ def get_friends(db: Session, user_id: str) -> list[dict]:
     """
     Return all accepted friends with their user info.
     """
-    friendships = (
-        db.query(Friendship)
-        .filter(
-            or_(Friendship.requester_id == user_id, Friendship.addressee_id == user_id),
-            Friendship.status == "accepted",
+    requester_side = (
+        db.query(Friendship.id.label("friendship_id"), User.id.label("friend_id"), User.username.label("friend_username"))
+        .join(User, User.id == Friendship.addressee_id)
+        .filter(Friendship.requester_id == user_id, Friendship.status == "accepted")
+    )
+    addressee_side = (
+        db.query(Friendship.id.label("friendship_id"), User.id.label("friend_id"), User.username.label("friend_username"))
+        .join(User, User.id == Friendship.requester_id)
+        .filter(Friendship.addressee_id == user_id, Friendship.status == "accepted")
+    )
+    rows = requester_side.order_by(None).union_all(addressee_side.order_by(None)).all()
+    return [
+        {"friendship_id": r.friendship_id, "friend": {"id": r.friend_id, "username": r.friend_username}}
+        for r in rows
+    ]
+
+
+def get_social_preview(db: Session, user_id: str) -> dict:
+    """Fetch incoming requests, outgoing requests, and followers in a single UNION query."""
+    incoming_q = (
+        db.query(
+            literal("incoming").label("kind"),
+            Friendship.id.label("friendship_id"),
+            Friendship.created_at,
+            Friendship.message,
+            User.id.label("user_id"),
+            User.username,
         )
-        .all()
+        .join(User, User.id == Friendship.requester_id)
+        .filter(Friendship.addressee_id == user_id, Friendship.status == "pending")
+    )
+    outgoing_q = (
+        db.query(
+            literal("outgoing").label("kind"),
+            Friendship.id.label("friendship_id"),
+            Friendship.created_at,
+            null().label("message"),
+            User.id.label("user_id"),
+            User.username,
+        )
+        .join(User, User.id == Friendship.addressee_id)
+        .filter(Friendship.requester_id == user_id, Friendship.status == "pending")
+    )
+    followers_q = (
+        db.query(
+            literal("follower").label("kind"),
+            Friendship.id.label("friendship_id"),
+            Friendship.created_at,
+            null().label("message"),
+            User.id.label("user_id"),
+            User.username,
+        )
+        .join(User, User.id == Friendship.requester_id)
+        .filter(Friendship.addressee_id == user_id, Friendship.status == "following")
     )
 
-    friend_ids = [
-        f.addressee_id if f.requester_id == user_id else f.requester_id
-        for f in friendships
-    ]
-    users = {u.id: u for u in db.query(User).filter(User.id.in_(friend_ids)).all()}
-
-    return [
-        {
-            "friendship_id": f.id,
-            "friend": _serialize_user(
-                users[f.addressee_id if f.requester_id == user_id else f.requester_id]
-            ),
-        }
-        for f in friendships
-        if (f.addressee_id if f.requester_id == user_id else f.requester_id) in users
-    ]
+    incoming, outgoing, followers = [], [], []
+    rows = sorted(
+        incoming_q.order_by(None)
+        .union_all(outgoing_q.order_by(None))
+        .union_all(followers_q.order_by(None))
+        .all(),
+        key=lambda r: r.created_at or "",
+        reverse=True,
+    )
+    for r in rows:
+        if r.kind == "incoming":
+            incoming.append({
+                "friendship_id": r.friendship_id,
+                "from_user": {"id": r.user_id, "username": r.username},
+                "created_at": r.created_at,
+                "message": r.message,
+            })
+        elif r.kind == "outgoing":
+            outgoing.append({
+                "friendship_id": r.friendship_id,
+                "to_user": {"id": r.user_id, "username": r.username},
+                "created_at": r.created_at,
+            })
+        else:
+            followers.append({
+                "friendship_id": r.friendship_id,
+                "follower": {"id": r.user_id, "username": r.username},
+            })
+    return {"incoming_requests": incoming, "outgoing_requests": outgoing, "followers": followers}
 
 
 def get_incoming_requests(db: Session, user_id: str) -> list[dict]:
     """
     Return all pending requests addressed to this user.
     """
-    friendships = (
-        db.query(Friendship)
+    rows = (
+        db.query(
+            Friendship.id,
+            Friendship.created_at,
+            Friendship.message,
+            User.id.label("user_id"),
+            User.username,
+        )
+        .join(User, User.id == Friendship.requester_id)
         .filter(Friendship.addressee_id == user_id, Friendship.status == "pending")
         .order_by(Friendship.created_at.desc())
         .all()
     )
-
-    requester_ids = [f.requester_id for f in friendships]
-    users = {u.id: u for u in db.query(User).filter(User.id.in_(requester_ids)).all()}
-
     return [
         {
-            "friendship_id": f.id,
-            "from_user": _serialize_user(users[f.requester_id]),
-            "created_at": f.created_at,
-            "message": f.message,
+            "friendship_id": r.id,
+            "from_user": {"id": r.user_id, "username": r.username},
+            "created_at": r.created_at,
+            "message": r.message,
         }
-        for f in friendships
-        if f.requester_id in users
+        for r in rows
     ]
+
+
+def get_incoming_request_count(db: Session, user_id: str) -> int:
+    return (
+        db.query(func.count(Friendship.id))
+        .filter(Friendship.addressee_id == user_id, Friendship.status == "pending")
+        .scalar()
+        or 0
+    )
 
 
 def get_outgoing_requests(db: Session, user_id: str) -> list[dict]:
     """
     Return all pending requests sent by this user.
     """
-    friendships = (
-        db.query(Friendship)
+    rows = (
+        db.query(
+            Friendship.id,
+            Friendship.created_at,
+            User.id.label("user_id"),
+            User.username,
+        )
+        .join(User, User.id == Friendship.addressee_id)
         .filter(Friendship.requester_id == user_id, Friendship.status == "pending")
         .order_by(Friendship.created_at.desc())
         .all()
     )
-
-    addressee_ids = [f.addressee_id for f in friendships]
-    users = {u.id: u for u in db.query(User).filter(User.id.in_(addressee_ids)).all()}
-
     return [
         {
-            "friendship_id": f.id,
-            "to_user": _serialize_user(users[f.addressee_id]),
-            "created_at": f.created_at,
+            "friendship_id": r.id,
+            "to_user": {"id": r.user_id, "username": r.username},
+            "created_at": r.created_at,
         }
-        for f in friendships
-        if f.addressee_id in users
+        for r in rows
     ]
 
 
@@ -297,18 +369,18 @@ def get_followers(db: Session, user_id: str) -> list[dict]:
     """
     Return users who are following this user (one-way, not yet mutual friends).
     """
-    followings = (
-        db.query(Friendship)
+    rows = (
+        db.query(
+            Friendship.id,
+            User.id.label("user_id"),
+            User.username,
+        )
+        .join(User, User.id == Friendship.requester_id)
         .filter(Friendship.addressee_id == user_id, Friendship.status == "following")
         .order_by(Friendship.created_at.desc())
         .all()
     )
-
-    follower_ids = [f.requester_id for f in followings]
-    users = {u.id: u for u in db.query(User).filter(User.id.in_(follower_ids)).all()}
-
     return [
-        {"friendship_id": f.id, "follower": _serialize_user(users[f.requester_id])}
-        for f in followings
-        if f.requester_id in users
+        {"friendship_id": r.id, "follower": {"id": r.user_id, "username": r.username}}
+        for r in rows
     ]

@@ -58,7 +58,6 @@ export default function CalendarView() {
   const [watchFilter, setWatchFilter] = useState<
     "all" | "watched" | "unwatched"
   >("all");
-  const [showWatchlist, setShowWatchlist] = useState(false);
   const [currentlyWatchingFilter, setCurrentlyWatchingFilter] = useState(false);
   const [showSyncModal, setShowSyncModal] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
@@ -222,9 +221,6 @@ export default function CalendarView() {
         onNext={handleNext}
         user={user}
         onSyncCalendar={() => (!isPremiumFeature("icalSync") || isPremium) ? setShowSyncModal(true) : setShowUpgradeModal(true)}
-        showWatchlist={showWatchlist}
-        onOpenWatchlist={() => setShowWatchlist(true)}
-        onCloseWatchlist={() => setShowWatchlist(false)}
       />
 
       {/* Initial-release disclaimer */}

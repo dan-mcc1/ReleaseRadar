@@ -19,6 +19,7 @@ export function useFriendRequestsIncoming() {
     queryKey: queryKeys.friendRequestsIncoming(user?.uid ?? ""),
     queryFn: () => queryFetch("/friends/requests/incoming"),
     enabled: !!user,
+    staleTime: 30_000,
   });
 }
 

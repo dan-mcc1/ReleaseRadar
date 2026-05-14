@@ -14,11 +14,11 @@ export function useNavCounts() {
     queryKey: queryKeys.navCounts(user?.uid ?? ""),
     queryFn: async (): Promise<NavCounts> => {
       const [incomingRes, unreadRes] = await Promise.all([
-        queryFetch<{ friendship_id: number }[]>("/friends/requests/incoming"),
+        queryFetch<{ count: number }>("/friends/requests/incoming/count"),
         queryFetch<{ count: number }>("/recommendations/unread-count"),
       ]);
       return {
-        pendingRequests: incomingRes.length,
+        pendingRequests: incomingRes.count,
         unreadRecs: unreadRes.count,
       };
     },

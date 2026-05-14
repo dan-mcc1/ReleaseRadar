@@ -1,12 +1,29 @@
 # app/dependencies/auth.py
 from datetime import datetime, timezone
+from threading import Lock
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
+from cachetools import TTLCache
 from app.core.firebase import verify_token
 from app.db.session import get_db
 
 bearer_scheme = HTTPBearer()
+
+# Cache the full set of banned emails; refreshed every 5 minutes.
+_banned_cache: TTLCache = TTLCache(maxsize=1, ttl=300)
+_banned_lock = Lock()
+
+
+def _is_email_banned(email: str, db: Session) -> bool:
+    with _banned_lock:
+        banned_set = _banned_cache.get("emails")
+        if banned_set is None:
+            from app.models.banned_email import BannedEmail
+            rows = db.query(BannedEmail.email).all()
+            banned_set = frozenset(r.email for r in rows)
+            _banned_cache["emails"] = banned_set
+    return email in banned_set
 
 
 def get_current_user(
@@ -20,14 +37,12 @@ def get_current_user(
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
     from app.models.user import User  # local import avoids circular dependency
-    from app.models.banned_email import BannedEmail
 
-    # Block re-registrations: reject any token whose email is on the ban list
     token_email = decoded_token.get("email", "")
-    if token_email and db.query(BannedEmail).filter(BannedEmail.email == token_email).first():
+    if token_email and _is_email_banned(token_email, db):
         raise HTTPException(status_code=403, detail="Your account has been permanently banned.")
 
-    user = db.query(User).filter(User.id == uid).first()
+    user = db.get(User, uid)
     if user:
         now = datetime.now(timezone.utc)
 
@@ -35,12 +50,8 @@ def get_current_user(
             raise HTTPException(status_code=403, detail="Your account has been banned.")
 
         if user.is_suspended:
-            if user.suspended_until and now >= user.suspended_until:
-                user.is_suspended = False
-                user.suspended_until = None
-                user.suspension_reason = None
-                db.commit()
-            else:
+            # Suspension may have expired; background task lifts it on the next hourly sweep.
+            if not (user.suspended_until and now >= user.suspended_until):
                 until = (
                     user.suspended_until.strftime("%Y-%m-%d") if user.suspended_until else "further notice"
                 )
@@ -48,11 +59,6 @@ def get_current_user(
                     status_code=403,
                     detail=f"Your account has been suspended until {until}.",
                 )
-
-        # Auto-lift expired temporary silences
-        if not user.is_silenced and user.silenced_until and now >= user.silenced_until:
-            user.silenced_until = None
-            db.commit()
 
     return uid
 
@@ -74,7 +80,7 @@ def require_not_silenced(
 ):
     """Use on endpoints that create content — blocks silenced users."""
     from app.models.user import User
-    user = db.query(User).filter(User.id == uid).first()
+    user = db.get(User, uid)
     if user:
         now = datetime.now(timezone.utc)
         if user.is_silenced:

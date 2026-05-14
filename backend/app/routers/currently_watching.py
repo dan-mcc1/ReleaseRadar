@@ -4,7 +4,7 @@ from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.services import currently_watching_service, activity_service
 from app.services.currently_watching_service import _get_currently_watching_items
-from app.services.watchlist_service import _get_item_title_and_poster
+from app.services.watchlist_service import _get_item_title_and_poster, assert_can_track
 from app.services.episode_service import sync_show_episodes_background
 from app.core.limiter import limiter
 
@@ -49,6 +49,7 @@ def add_currently_watching(
         raise HTTPException(
             status_code=400, detail="content_type must be 'movie' or 'tv'"
         )
+    assert_can_track(db, uid)
     entry = currently_watching_service.add_to_currently_watching(
         db, uid, content_type, content_id
     )
