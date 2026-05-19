@@ -189,35 +189,12 @@ def maybe_sync_show_episodes(db: Session, show_id: int):
 def sync_show_episodes_background(show_id: int):
     """
     Background task: sync all episodes for a show using its own DB session.
-    Queries season numbers directly from the Season table (avoids lazy-loading
-    the relationship) then calls sync_season_episodes per season, which is the
-    proven reliable path used by mark-season-as-watched.
     """
     from app.db.session import SessionLocal
-    from app.models.season import Season
 
     db = SessionLocal()
     try:
-        show = db.query(Show).filter_by(id=show_id).first()
-        if not show:
-            return
-
-        season_numbers = [
-            row.season_number
-            for row in db.query(Season.season_number)
-            .filter(Season.show_id == show_id, Season.season_number > 0)
-            .all()
-        ]
-
-        if not season_numbers:
-            n = show.number_of_seasons or 0
-            season_numbers = list(range(1, n + 1))
-
-        for season_number in season_numbers:
-            try:
-                sync_season_episodes(db, show_id, season_number)
-            except Exception as e:
-                print(f"[episode sync] Error syncing show {show_id} season {season_number}: {e}")
+        sync_show_episodes(db, show_id)
     except Exception as e:
         print(f"[episode sync] Error syncing show {show_id}: {e}")
     finally:

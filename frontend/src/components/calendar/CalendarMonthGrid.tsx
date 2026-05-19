@@ -30,24 +30,26 @@ export default function CalendarMonthGrid({
   onSelectDay,
 }: Props) {
   return (
-    <div className="flex flex-auto flex-col">
-      <div className="grid grid-cols-7 text-center text-xs font-semibold uppercase tracking-wider text-neutral-500 bg-neutral-900 border-b border-neutral-700">
+    <div className="flex flex-auto flex-col bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden">
+      {/* Day-of-week header */}
+      <div className="grid grid-cols-7 border-b border-neutral-800">
         {DAY_NAMES.map(([letter, full], i) => (
-          <div key={i} className="py-2.5">
-            <span className="sm:hidden">{letter}</span>
-            <span className="hidden sm:inline">
-              {letter}
-              {full}
+          <div key={i} className="py-3 px-2 sm:px-3">
+            <span className="font-mono text-[10px] sm:text-[11px] tracking-[0.06em] uppercase text-neutral-500">
+              <span className="sm:hidden">{letter}</span>
+              <span className="hidden sm:inline">{letter}{full}</span>
             </span>
           </div>
         ))}
       </div>
-      <div className="flex-auto bg-neutral-700 grid-rows-auto">
+
+      {/* Grid body */}
+      <div className="flex-auto bg-neutral-800">
         <div className="w-full grid grid-cols-7 gap-px">
           {emptyCells.map((_, idx) => (
             <div
               key={`empty-${idx}`}
-              className="bg-neutral-950 min-h-[5rem] sm:min-h-[8rem] max-h-[14rem]"
+              className="bg-neutral-950/60 min-h-[5rem] sm:min-h-[8rem] h-full"
             />
           ))}
           {days.map((day) => (

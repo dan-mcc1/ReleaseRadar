@@ -27,6 +27,8 @@ interface WatchButtonProps {
   refreshKey?: number;
   /** Icon-only mode with tighter padding — use in space-constrained rows. */
   compact?: boolean;
+  /** Skip the "notify me?" prompt — use when the content has already released/ended. */
+  skipNotifyPrompt?: boolean;
 }
 
 // ── Icons ──────────────────────────────────────────────────────────────────
@@ -127,6 +129,7 @@ export default function WatchButton({
   initialRating,
   onStatusChange,
   compact = false,
+  skipNotifyPrompt = false,
 }: WatchButtonProps) {
   const user = useAuthUser();
   const { isPremium } = useSubscription();
@@ -172,7 +175,7 @@ export default function WatchButton({
     if (watchStatus === targetStatus) return;
 
     // Show notification prompt — gated by features config
-    if ((!isPremiumFeature("watchlistNotifyPrompt") || isPremium) && targetStatus === "Want To Watch" && watchStatus === "none" && notify === undefined) {
+    if ((!isPremiumFeature("watchlistNotifyPrompt") || isPremium) && targetStatus === "Want To Watch" && watchStatus === "none" && notify === undefined && !skipNotifyPrompt) {
       setShowNotifyPrompt(true);
       return;
     }

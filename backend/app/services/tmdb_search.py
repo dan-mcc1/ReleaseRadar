@@ -140,6 +140,74 @@ def get_movie_upcoming(min_date: str, max_date: str, page: int = 1):
     }
 
 
+@lru_cache(maxsize=4)
+def get_tv_airing_today(page: int = 1):
+    data = get("/tv/airing_today", params={"language": "en-US", "page": page})
+    return {
+        "results": data.get("results", []),
+        "total_pages": min(data.get("total_pages", 1), 500),
+    }
+
+
+@lru_cache(maxsize=4)
+def get_movie_now_playing(page: int = 1):
+    data = get("/movie/now_playing", params={"language": "en-US", "page": page})
+    return {
+        "results": data.get("results", []),
+        "total_pages": min(data.get("total_pages", 1), 500),
+    }
+
+
+@lru_cache(maxsize=4)
+def get_tv_popular(page: int = 1):
+    data = get("/tv/popular", params={"language": "en-US", "page": page})
+    return {
+        "results": data.get("results", []),
+        "total_pages": min(data.get("total_pages", 1), 500),
+    }
+
+
+@lru_cache(maxsize=4)
+def get_movie_popular(page: int = 1):
+    data = get("/movie/popular", params={"language": "en-US", "page": page})
+    return {
+        "results": data.get("results", []),
+        "total_pages": min(data.get("total_pages", 1), 500),
+    }
+
+
+@lru_cache(maxsize=4)
+def get_multi_popular_results():
+    tv = get_tv_popular()
+    movies = get_movie_popular()
+    return {"movies": movies["results"], "shows": tv["results"]}
+
+
+@lru_cache(maxsize=4)
+def get_tv_top_rated(page: int = 1):
+    data = get("/tv/top_rated", params={"language": "en-US", "page": page})
+    return {
+        "results": data.get("results", []),
+        "total_pages": min(data.get("total_pages", 1), 500),
+    }
+
+
+@lru_cache(maxsize=4)
+def get_movie_top_rated(page: int = 1):
+    data = get("/movie/top_rated", params={"language": "en-US", "page": page})
+    return {
+        "results": data.get("results", []),
+        "total_pages": min(data.get("total_pages", 1), 500),
+    }
+
+
+@lru_cache(maxsize=4)
+def get_multi_top_rated_results():
+    tv = get_tv_top_rated()
+    movies = get_movie_top_rated()
+    return {"movies": movies["results"], "shows": tv["results"]}
+
+
 @lru_cache(maxsize=1024)
 def get_tv_upcoming(min_date: str, max_date: str, page: int = 1):
     data = get(
@@ -148,8 +216,8 @@ def get_tv_upcoming(min_date: str, max_date: str, page: int = 1):
             "include_adult": "false",
             "language": "en-US",
             "sort_by": "popularity.desc",
-            "air_date.gte": min_date,
-            "air_date.lte": max_date,
+            "first_air_date.gte": min_date,
+            "first_air_date.lte": max_date,
             "page": page,
         },
     )

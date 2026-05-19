@@ -21,6 +21,17 @@ interface Props {
   showActions?: boolean;
 }
 
+const ChevronLeft = () => (
+  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+  </svg>
+);
+const ChevronRight = () => (
+  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+  </svg>
+);
+
 export default function CalendarControls({
   viewMode,
   onViewChange,
@@ -33,226 +44,132 @@ export default function CalendarControls({
   centerLabel,
   onPrev,
   onNext,
-  user,
-  onSyncCalendar,
-  showActions = true,
 }: Props) {
   const [showFilters, setShowFilters] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
-
-  const ChevronLeft = () => (
-    <svg
-      className="w-4 h-4"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={2}
-    >
-      <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-    </svg>
-  );
-  const ChevronRight = () => (
-    <svg
-      className="w-4 h-4"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={2}
-    >
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-    </svg>
-  );
+  const hasActiveFilters = filterType !== "all" || watchFilter !== "all" || currentlyWatchingFilter;
 
   return (
-    <div className="border-b border-neutral-700 bg-neutral-900">
+    <div className="border-b border-neutral-800 bg-neutral-950">
       {/* Mobile period nav */}
-      <div className="flex lg:hidden items-center justify-between px-4 pt-2 pb-1">
+      <div className="flex lg:hidden items-center justify-between px-6 pt-3 pb-1.5">
         <button
           onClick={onPrev}
-          className="h-8 w-8 flex items-center justify-center text-neutral-400 hover:text-white hover:bg-neutral-700 rounded-lg transition-colors"
+          className="h-9 w-9 flex items-center justify-center text-neutral-400 hover:text-white hover:bg-neutral-800 rounded-lg transition-colors border border-neutral-800"
         >
           <ChevronLeft />
         </button>
-        <div className="text-sm font-semibold text-neutral-100 text-center">
-          {centerLabel}
-        </div>
+        <span className="text-sm font-semibold text-neutral-100">{centerLabel}</span>
         <button
           onClick={onNext}
-          className="h-8 w-8 flex items-center justify-center text-neutral-400 hover:text-white hover:bg-neutral-700 rounded-lg transition-colors"
+          className="h-9 w-9 flex items-center justify-center text-neutral-400 hover:text-white hover:bg-neutral-800 rounded-lg transition-colors border border-neutral-800"
         >
           <ChevronRight />
         </button>
       </div>
 
-      <div className="relative flex items-center gap-2 px-4 py-2.5">
-        {/* LEFT: view toggle + filter */}
-        <div className="flex items-center gap-2">
-          {/* View mode toggle */}
-          <div className="inline-flex rounded-lg border border-neutral-600 overflow-hidden">
-            {(["day", "week", "month"] as ViewMode[]).map((mode, idx, arr) => (
-              <button
-                key={mode}
-                onClick={() => onViewChange(mode)}
-                className={`py-1.5 text-xs sm:text-sm font-medium capitalize transition-colors px-2 sm:px-3
-                  ${viewMode === mode ? "bg-primary-600 text-white" : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700 hover:text-white"}
-                  ${idx < arr.length - 1 ? "border-r border-neutral-600" : ""}`}
-              >
-                <span className="sm:hidden">
-                  {mode === "month" ? "Mo" : mode === "week" ? "Wk" : "Day"}
-                </span>
-                <span className="hidden sm:inline capitalize">{mode}</span>
-              </button>
-            ))}
-          </div>
-
-          {/* Filter dropdown */}
-          <div className="relative" ref={filterRef}>
+      <div className="flex items-center gap-3 px-6 lg:px-10 py-3">
+        {/* View mode toggle (mobile / ShelfCalendar usage) */}
+        <div className="flex lg:hidden items-center bg-neutral-900 border border-neutral-800 rounded-lg p-0.5">
+          {(["day", "week", "month"] as ViewMode[]).map((mode) => (
             <button
-              onClick={() => setShowFilters((v) => !v)}
-              className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg border transition-colors
-                ${showFilters ? "bg-neutral-700 border-neutral-500 text-white" : "bg-neutral-800 border-neutral-600 text-neutral-300 hover:bg-neutral-700 hover:text-white"}`}
+              key={mode}
+              onClick={() => onViewChange(mode)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md capitalize transition-colors ${
+                viewMode === mode
+                  ? "bg-neutral-700 text-white shadow-sm"
+                  : "text-neutral-400 hover:text-neutral-200"
+              }`}
             >
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M3 4h18M7 8h10M11 12h2"
-                />
-              </svg>
-              <span className="hidden sm:inline">Filter</span>
-              {(filterType !== "all" || watchFilter !== "all" || currentlyWatchingFilter) && (
-                <span className="w-2 h-2 rounded-full bg-primary-400" />
-              )}
+              {mode === "month" ? "Mo" : mode === "week" ? "Wk" : "Day"}
             </button>
+          ))}
+        </div>
 
-            {showFilters && (
-              <div className="absolute left-0 top-full mt-1.5 z-20 w-56 rounded-xl border border-neutral-600 bg-neutral-800 shadow-xl p-3 flex flex-col gap-3">
-                <div>
-                  <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-1.5">
-                    Type
-                  </p>
-                  <div className="inline-flex rounded-lg border border-neutral-600 overflow-hidden w-full">
-                    {(["all", "movie", "tv"] as const).map(
-                      (value, idx, arr) => (
-                        <button
-                          key={value}
-                          onClick={() => onFilterTypeChange(value)}
-                          className={`flex-1 py-1.5 text-sm font-medium transition-colors
-                          ${filterType === value ? "bg-primary-600 text-white" : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700 hover:text-white"}
-                          ${idx < arr.length - 1 ? "border-r border-neutral-600" : ""}`}
-                        >
-                          {value === "all"
-                            ? "All"
-                            : value === "movie"
-                              ? "Movies"
-                              : "TV"}
-                        </button>
-                      ),
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-1.5">
-                    Status
-                  </p>
-                  <div className="inline-flex rounded-lg border border-neutral-600 overflow-hidden w-full">
-                    {(["all", "unwatched", "watched"] as const).map(
-                      (value, idx, arr) => (
-                        <button
-                          key={value}
-                          onClick={() => onWatchFilterChange(value)}
-                          className={`flex-1 py-1.5 text-sm font-medium transition-colors
-                          ${watchFilter === value ? "bg-emerald-600 text-white" : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700 hover:text-white"}
-                          ${idx < arr.length - 1 ? "border-r border-neutral-600" : ""}`}
-                        >
-                          {value === "all"
-                            ? "All"
-                            : value === "watched"
-                              ? "Watched"
-                              : "Unwatched"}
-                        </button>
-                      ),
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-1.5">
-                    Show
-                  </p>
-                  <button
-                    onClick={() => onCurrentlyWatchingFilterChange(!currentlyWatchingFilter)}
-                    className={`w-full flex items-center gap-2 py-1.5 px-3 text-sm font-medium rounded-lg border transition-colors
-                      ${currentlyWatchingFilter ? "bg-highlight-600 border-highlight-500 text-white" : "bg-neutral-800 border-neutral-600 text-neutral-300 hover:bg-neutral-700 hover:text-white"}`}
-                  >
-                    <span className={`flex-shrink-0 w-2 h-2 rounded-full ${currentlyWatchingFilter ? "bg-white animate-pulse" : "bg-neutral-500"}`} />
-                    Currently Watching only
-                  </button>
-                </div>
-                {(filterType !== "all" || watchFilter !== "all" || currentlyWatchingFilter) && (
-                  <button
-                    onClick={() => {
-                      onFilterTypeChange("all");
-                      onWatchFilterChange("all");
-                      onCurrentlyWatchingFilterChange(false);
-                    }}
-                    className="text-xs text-neutral-400 hover:text-white transition-colors text-left"
-                  >
-                    Clear filters
-                  </button>
-                )}
-              </div>
+        {/* Filter dropdown */}
+        <div className="relative" ref={filterRef}>
+          <button
+            onClick={() => setShowFilters((v) => !v)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+              showFilters || hasActiveFilters
+                ? "bg-neutral-800 border-neutral-700 text-white"
+                : "bg-neutral-900 border-neutral-800 text-neutral-400 hover:text-neutral-200 hover:border-neutral-700"
+            }`}
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 4h18M7 8h10M11 12h2" />
+            </svg>
+            <span>Filters</span>
+            {hasActiveFilters && (
+              <span className="w-1.5 h-1.5 rounded-full bg-primary-400" />
             )}
-          </div>
-        </div>
-
-        {/* CENTER: desktop period nav */}
-        <div className="hidden lg:flex absolute left-1/2 -translate-x-1/2 items-center gap-1">
-          <button
-            onClick={onPrev}
-            className="h-8 w-8 flex items-center justify-center text-neutral-400 hover:text-white hover:bg-neutral-700 rounded-lg transition-colors"
-          >
-            <ChevronLeft />
           </button>
-          <div className="px-3 text-base font-semibold text-neutral-100 whitespace-nowrap min-w-[180px] text-center">
-            {centerLabel}
-          </div>
-          <button
-            onClick={onNext}
-            className="h-8 w-8 flex items-center justify-center text-neutral-400 hover:text-white hover:bg-neutral-700 rounded-lg transition-colors"
-          >
-            <ChevronRight />
-          </button>
-        </div>
 
-        {/* RIGHT: Sync + Watchlist */}
-        <div className="ml-auto flex items-center gap-2">
-          {showActions && user && (
-            <button
-              onClick={onSyncCalendar}
-              title="Sync with Google Calendar, Outlook, or Apple Calendar"
-              className="rounded-lg bg-neutral-700 border border-neutral-600 px-3 py-1.5 text-xs sm:text-sm font-medium text-neutral-200 hover:bg-neutral-600 hover:text-white transition-colors flex items-center gap-1.5"
-            >
-              <svg
-                className="w-4 h-4 flex-shrink-0"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                />
-              </svg>
-              Sync
-            </button>
+          {showFilters && (
+            <div className="absolute left-0 top-full mt-2 z-20 w-56 rounded-xl border border-neutral-700 bg-neutral-900 shadow-2xl p-3 flex flex-col gap-3">
+              <div>
+                <p className="font-mono text-[10px] tracking-widest uppercase text-neutral-500 mb-2">Type</p>
+                <div className="flex rounded-lg border border-neutral-700 overflow-hidden">
+                  {(["all", "movie", "tv"] as const).map((value, idx, arr) => (
+                    <button
+                      key={value}
+                      onClick={() => onFilterTypeChange(value)}
+                      className={`flex-1 py-1.5 text-xs font-medium transition-colors ${
+                        filterType === value
+                          ? "bg-primary-600 text-white"
+                          : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700"
+                      } ${idx < arr.length - 1 ? "border-r border-neutral-700" : ""}`}
+                    >
+                      {value === "all" ? "All" : value === "movie" ? "Movies" : "TV"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="font-mono text-[10px] tracking-widest uppercase text-neutral-500 mb-2">Status</p>
+                <div className="flex rounded-lg border border-neutral-700 overflow-hidden">
+                  {(["all", "unwatched", "watched"] as const).map((value, idx, arr) => (
+                    <button
+                      key={value}
+                      onClick={() => onWatchFilterChange(value)}
+                      className={`flex-1 py-1.5 text-xs font-medium transition-colors ${
+                        watchFilter === value
+                          ? "bg-primary-600 text-white"
+                          : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700"
+                      } ${idx < arr.length - 1 ? "border-r border-neutral-700" : ""}`}
+                    >
+                      {value === "all" ? "All" : value === "watched" ? "Watched" : "Unwatched"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="font-mono text-[10px] tracking-widest uppercase text-neutral-500 mb-2">Show</p>
+                <button
+                  onClick={() => onCurrentlyWatchingFilterChange(!currentlyWatchingFilter)}
+                  className={`w-full flex items-center gap-2 py-1.5 px-3 text-xs font-medium rounded-lg border transition-colors ${
+                    currentlyWatchingFilter
+                      ? "bg-highlight-600 border-highlight-500 text-white"
+                      : "bg-neutral-800 border-neutral-700 text-neutral-300 hover:bg-neutral-700"
+                  }`}
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${currentlyWatchingFilter ? "bg-white animate-pulse" : "bg-neutral-500"}`} />
+                  Currently Watching only
+                </button>
+              </div>
+              {hasActiveFilters && (
+                <button
+                  onClick={() => {
+                    onFilterTypeChange("all");
+                    onWatchFilterChange("all");
+                    onCurrentlyWatchingFilterChange(false);
+                  }}
+                  className="text-xs text-neutral-500 hover:text-neutral-200 transition-colors text-left"
+                >
+                  Clear filters
+                </button>
+              )}
+            </div>
           )}
         </div>
       </div>

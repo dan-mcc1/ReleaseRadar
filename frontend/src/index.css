@@ -78,6 +78,11 @@
   --color-info-500: #3b82f6;
   --color-info-700: #1d4ed8;
 
+  /* ── Typography ── */
+  --font-sans: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --font-serif: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+
   /* ── Accent: Highlight (Purple) ── */
   --color-highlight-50: #f5f3ff;
   --color-highlight-100: #ede9fe;

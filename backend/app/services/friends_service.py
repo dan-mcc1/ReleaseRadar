@@ -365,6 +365,152 @@ def cancel_friend_request(db: Session, requester_id: str, friendship_id: int):
     db.commit()
 
 
+def get_suggested_friends(db: Session, user_id: str, limit: int = 10) -> list[dict]:
+    """
+    Hybrid suggestion algorithm:
+    1. Friends-of-friends ranked by mutual connection count
+    2. Popular users (most total connections) as fallback
+    Private profiles and blocked/banned users are excluded.
+    """
+    # Build the set of IDs to exclude from suggestions
+    connected_req = db.query(Friendship.addressee_id).filter(
+        Friendship.requester_id == user_id,
+        Friendship.status.in_(["accepted", "following", "pending"]),
+    )
+    connected_addr = db.query(Friendship.requester_id).filter(
+        Friendship.addressee_id == user_id,
+        Friendship.status.in_(["accepted", "following", "pending"]),
+    )
+    blocked_ids = db.query(Block.blocked_id).filter(Block.blocker_id == user_id)
+    blocker_ids = db.query(Block.blocker_id).filter(Block.blocked_id == user_id)
+
+    exclude_ids: set[str] = {user_id}
+    for (uid,) in connected_req.all():
+        exclude_ids.add(uid)
+    for (uid,) in connected_addr.all():
+        exclude_ids.add(uid)
+    for (uid,) in blocked_ids.all():
+        exclude_ids.add(uid)
+    for (uid,) in blocker_ids.all():
+        exclude_ids.add(uid)
+
+    my_friend_ids = list(exclude_ids - {user_id})
+
+    # --- Step 1: friends-of-friends ---
+    fof_counts: dict[str, int] = {}
+    if my_friend_ids:
+        fof_req = (
+            db.query(Friendship.addressee_id)
+            .filter(
+                Friendship.requester_id.in_(my_friend_ids),
+                Friendship.status.in_(["accepted", "following"]),
+            )
+            .all()
+        )
+        fof_addr = (
+            db.query(Friendship.requester_id)
+            .filter(
+                Friendship.addressee_id.in_(my_friend_ids),
+                Friendship.status.in_(["accepted", "following"]),
+            )
+            .all()
+        )
+        for (uid,) in fof_req:
+            if uid not in exclude_ids:
+                fof_counts[uid] = fof_counts.get(uid, 0) + 1
+        for (uid,) in fof_addr:
+            if uid not in exclude_ids:
+                fof_counts[uid] = fof_counts.get(uid, 0) + 1
+
+    suggestions: list[dict] = []
+    if fof_counts:
+        sorted_fof = sorted(fof_counts.items(), key=lambda x: x[1], reverse=True)
+        fof_ids = [uid for uid, _ in sorted_fof[:limit]]
+        fof_users = (
+            db.query(User)
+            .filter(
+                User.id.in_(fof_ids),
+                User.username.isnot(None),
+                User.profile_visibility != "private",
+                User.is_banned == False,
+            )
+            .all()
+        )
+        user_map = {u.id: u for u in fof_users}
+        for uid, mutual in sorted_fof[:limit]:
+            if uid in user_map:
+                u = user_map[uid]
+                suggestions.append(
+                    {
+                        "id": u.id,
+                        "username": u.username,
+                        "profile_visibility": u.profile_visibility or "friends_only",
+                        "mutual_friends": mutual,
+                        "reason": "mutual_friends",
+                    }
+                )
+
+    # --- Step 2: popular users fallback ---
+    if len(suggestions) < limit:
+        needed = limit - len(suggestions)
+        already_suggested = exclude_ids | {s["id"] for s in suggestions}
+
+        # Count total connections per user via UNION subquery
+        # Union the raw queries before subquery-ing so column labels are preserved
+        req_counts_q = (
+            db.query(
+                Friendship.requester_id.label("uid"),
+                func.count().label("cnt"),
+            )
+            .filter(Friendship.status.in_(["accepted", "following"]))
+            .group_by(Friendship.requester_id)
+        )
+        addr_counts_q = (
+            db.query(
+                Friendship.addressee_id.label("uid"),
+                func.count().label("cnt"),
+            )
+            .filter(Friendship.status.in_(["accepted", "following"]))
+            .group_by(Friendship.addressee_id)
+        )
+        combined = req_counts_q.union_all(addr_counts_q).subquery()
+        total_counts_sub = (
+            db.query(
+                combined.c.uid,
+                func.sum(combined.c.cnt).label("total"),
+            )
+            .group_by(combined.c.uid)
+            .subquery()
+        )
+
+        popular_rows = (
+            db.query(User, total_counts_sub.c.total)
+            .join(total_counts_sub, User.id == total_counts_sub.c.uid)
+            .filter(
+                User.id.notin_(list(already_suggested)),
+                User.username.isnot(None),
+                User.profile_visibility != "private",
+                User.is_banned == False,
+            )
+            .order_by(total_counts_sub.c.total.desc())
+            .limit(needed)
+            .all()
+        )
+
+        for u, _ in popular_rows:
+            suggestions.append(
+                {
+                    "id": u.id,
+                    "username": u.username,
+                    "profile_visibility": u.profile_visibility or "friends_only",
+                    "mutual_friends": 0,
+                    "reason": "popular",
+                }
+            )
+
+    return suggestions[:limit]
+
+
 def get_followers(db: Session, user_id: str) -> list[dict]:
     """
     Return users who are following this user (one-way, not yet mutual friends).

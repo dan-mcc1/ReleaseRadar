@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import type { Show, Movie } from "../types/calendar";
-import { useNavigate } from "react-router-dom";
-import MediaCard from "../components/MediaCard";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { BASE_IMAGE_URL } from "../constants";
 import ListFilterPanel, {
   DEFAULT_FILTERS,
   type ListFilters,
@@ -10,6 +10,7 @@ import ListFilterPanel, {
 } from "../components/ListFilterPanel";
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useWatched, useRemoveFromList } from "../hooks/api/useLists";
+import { useMyProviderIds } from "../hooks/api/useStreamingServices";
 
 type TabType = "all" | "movies" | "tv";
 type SortType =
@@ -25,6 +26,8 @@ type SortType =
   | "rating_asc"
   | "tmdb_rating_desc"
   | "tmdb_rating_asc";
+
+type CombinedItem = (Movie | Show) & { _contentType: "movie" | "tv" };
 
 function getTitle(item: Movie | Show) {
   return "title" in item ? item.title : item.name;
@@ -92,14 +95,91 @@ function applySort<T extends Movie | Show>(items: T[], sort: SortType): T[] {
   }
 }
 
+function WatchedCard({
+  item,
+  onNavigate,
+  onRemove,
+}: {
+  item: CombinedItem;
+  onNavigate: () => void;
+  onRemove: () => void;
+}) {
+  const title = getTitle(item);
+  const userRating = item.user_rating;
+
+  return (
+    <div className="flex flex-col gap-2 group/card">
+      <div className="relative cursor-pointer" onClick={onNavigate}>
+        <div className="aspect-[2/3] rounded-xl overflow-hidden bg-neutral-800">
+          {item.poster_path ? (
+            <img
+              src={`${BASE_IMAGE_URL}/w342${item.poster_path}`}
+              alt={title}
+              className="w-full h-full object-cover transition-opacity duration-200 group-hover/card:opacity-85"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center p-3 text-center">
+              <span className="text-neutral-600 text-xs leading-tight">
+                {title}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* User rating badge */}
+        {userRating != null && (
+          <div className="absolute top-2 right-2 min-w-[1.5rem] h-6 px-1.5 rounded-full bg-primary-500 text-neutral-950 flex items-center justify-center shadow-lg text-[11px] font-bold leading-none">
+            {userRating}
+          </div>
+        )}
+
+        {/* Remove button */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+          title="Remove from watched"
+          className="absolute top-2 left-2 w-6 h-6 rounded-full bg-black/70 text-neutral-400 flex items-center justify-center opacity-0 group-hover/card:opacity-100 transition-opacity hover:text-white hover:bg-black/90"
+        >
+          <svg
+            className="w-3 h-3"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2.5}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M6 18L18 6M6 6l12 12"
+            />
+          </svg>
+        </button>
+      </div>
+
+      <div>
+        <p className="text-[13.5px] font-semibold text-neutral-100 leading-tight tracking-tight truncate">
+          {title}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default function Watched() {
   usePageTitle("Watched");
   const navigate = useNavigate();
   const { data, isLoading } = useWatched();
   const removeFromList = useRemoveFromList();
-  const [activeTab, setActiveTab] = useState<TabType>("all");
+  const myProviderIds = useMyProviderIds();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = (searchParams.get("tab") as TabType) ?? "all";
+  function setActiveTab(tab: TabType) {
+    setSearchParams((p) => { p.set("tab", tab); return p; }, { replace: true });
+  }
   const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<SortType>("default");
+  const [sort, setSort] = useState<SortType>("watched_desc");
   const [filters, setFilters] = useState<ListFilters>(DEFAULT_FILTERS);
   const [showFilters, setShowFilters] = useState(false);
 
@@ -132,13 +212,13 @@ export default function Watched() {
   }
 
   const totalCount = results.movies.length + results.shows.length;
-  const showMovies = activeTab === "all" || activeTab === "movies";
-  const showTV = activeTab === "all" || activeTab === "tv";
   const q = query.toLowerCase();
+
   const filteredMovies = applySort(
     applyFilters(
       results.movies.filter((m) => m.title.toLowerCase().includes(q)),
       filters,
+      myProviderIds,
     ),
     sort,
   );
@@ -146,9 +226,34 @@ export default function Watched() {
     applyFilters(
       results.shows.filter((s) => s.name.toLowerCase().includes(q)),
       filters,
+      myProviderIds,
     ),
     sort,
   );
+
+  const gridItems: CombinedItem[] = useMemo(() => {
+    switch (activeTab) {
+      case "movies":
+        return filteredMovies.map((m) => ({
+          ...m,
+          _contentType: "movie" as const,
+        }));
+      case "tv":
+        return filteredShows.map((s) => ({
+          ...s,
+          _contentType: "tv" as const,
+        }));
+      case "all":
+      default:
+        return [
+          ...filteredMovies.map((m) => ({
+            ...m,
+            _contentType: "movie" as const,
+          })),
+          ...filteredShows.map((s) => ({ ...s, _contentType: "tv" as const })),
+        ];
+    }
+  }, [activeTab, filteredMovies, filteredShows]);
 
   const tabs: { id: TabType; label: string; count: number }[] = [
     { id: "all", label: "All", count: totalCount },
@@ -156,70 +261,37 @@ export default function Watched() {
     { id: "tv", label: "TV Shows", count: results.shows.length },
   ];
 
+  const hasResults = gridItems.length > 0;
+
   return (
-    <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-8 pb-16">
-      <div className="mb-8">
-        <div className="flex items-center gap-3 mb-1">
-          <h1 className="text-3xl font-bold text-white">Watched</h1>
-          <span className="bg-success-600/20 text-success-400 border border-success-600/30 text-sm font-medium px-2.5 py-0.5 rounded-full">
-            {totalCount}
-          </span>
-        </div>
-        <p className="text-neutral-400">Everything you've already seen</p>
-      </div>
-
-      {isLoading && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <div
-              key={i}
-              className="rounded-xl overflow-hidden bg-neutral-800 border border-neutral-700 flex flex-col animate-pulse"
-            >
-              <div className="aspect-[2/3] bg-neutral-700" />
-              <div className="p-3 flex flex-col gap-2">
-                <div className="h-4 bg-neutral-700 rounded w-3/4" />
-                <div className="h-3 bg-neutral-700 rounded w-1/2" />
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {!isLoading && (
-        <div className="flex gap-1 border-b border-neutral-700 mb-6">
-          {tabs.map((tab) => (
+    <div className="w-full px-6 sm:px-10 pt-8 pb-16">
+      {/* Header */}
+      <div>
+        <p className="font-mono text-[11px] tracking-[0.12em] uppercase text-neutral-500">
+          {totalCount} title{totalCount !== 1 ? "s" : ""} watched
+        </p>
+        <div className="flex items-baseline gap-4 mt-2 flex-wrap">
+          <h1
+            className="text-4xl font-normal leading-tight tracking-tight"
+            style={{ fontFamily: "var(--font-serif)" }}
+          >
+            Already{" "}
+            <em className="text-primary-400" style={{ fontStyle: "italic" }}>
+              watched
+            </em>
+          </h1>
+          <div className="flex-1" />
+          <div className="flex items-center gap-2">
             <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`px-4 py-2.5 text-sm font-medium transition-all duration-150 border-b-2 -mb-px ${
-                activeTab === tab.id
-                  ? "border-success-500 text-success-400"
-                  : "border-transparent text-neutral-400 hover:text-neutral-200"
+              onClick={() => setShowFilters((v) => !v)}
+              className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors ${
+                showFilters || activeFilterCount > 0
+                  ? "bg-primary-600/20 border-primary-600/40 text-primary-300"
+                  : "bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-neutral-200 hover:border-neutral-600"
               }`}
             >
-              {tab.label}
-              {tab.count > 0 && (
-                <span
-                  className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-full ${
-                    activeTab === tab.id
-                      ? "bg-success-600/30 text-success-300"
-                      : "bg-neutral-700 text-neutral-400"
-                  }`}
-                >
-                  {tab.count}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {totalCount > 0 && (
-        <div className="mb-6 space-y-3">
-          <div className="flex gap-3">
-            <div className="relative flex-1">
               <svg
-                className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500"
+                className="w-3.5 h-3.5"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -228,41 +300,12 @@ export default function Watched() {
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                  d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z"
                 />
               </svg>
-              <input
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search watched…"
-                className="w-full bg-neutral-800 border border-neutral-700 text-neutral-200 placeholder-neutral-500 rounded-lg pl-9 pr-4 py-2 text-sm focus:outline-none focus:border-neutral-500"
-              />
-              {query && (
-                <button
-                  onClick={() => setQuery("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-300"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              )}
-            </div>
-            <button
-              onClick={() => setShowFilters((v) => !v)}
-              className={`flex items-center gap-1.5 shrink-0 text-sm px-3 py-2 rounded-lg border transition-colors ${
-                showFilters || activeFilterCount > 0
-                  ? "bg-success-600/20 border-success-600/40 text-success-300"
-                  : "bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-neutral-200 hover:border-neutral-600"
-              }`}
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" />
-              </svg>
-              <span className="hidden sm:inline">Filters</span>
+              Filters
               {activeFilterCount > 0 && (
-                <span className="bg-success-600 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center leading-none">
+                <span className="bg-primary-600 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center leading-none">
                   {activeFilterCount}
                 </span>
               )}
@@ -270,9 +313,8 @@ export default function Watched() {
             <select
               value={sort}
               onChange={(e) => setSort(e.target.value as SortType)}
-              className="w-28 sm:w-auto shrink-0 text-sm bg-neutral-800 border border-neutral-700 text-neutral-300 rounded-lg px-3 py-2 focus:outline-none focus:border-neutral-500"
+              className="text-sm bg-neutral-800 border border-neutral-700 text-neutral-300 rounded-lg px-3 py-1.5 focus:outline-none focus:border-neutral-500"
             >
-              <option value="default">Sort: Default</option>
               <option value="watched_desc">Recently Watched</option>
               <option value="watched_asc">Oldest Watched</option>
               <option value="title_asc">Title: A → Z</option>
@@ -280,11 +322,79 @@ export default function Watched() {
               <option value="date_desc">Release Date: Newest</option>
               <option value="date_asc">Release Date: Oldest</option>
               <option value="popularity_desc">Most Popular</option>
-              <option value="rating_desc">Rating: High → Low</option>
-              <option value="rating_asc">Rating: Low → High</option>
+              <option value="rating_desc">My Rating: High → Low</option>
+              <option value="rating_asc">My Rating: Low → High</option>
               <option value="tmdb_rating_desc">TMDB Rating: High → Low</option>
               <option value="tmdb_rating_asc">TMDB Rating: Low → High</option>
             </select>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-0 border-b border-neutral-800 mt-6">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-3.5 py-3 text-sm font-medium inline-flex items-center gap-1.5 border-b-2 -mb-px transition-colors ${
+                activeTab === tab.id
+                  ? "border-primary-500 text-neutral-100"
+                  : "border-transparent text-neutral-500 hover:text-neutral-300"
+              }`}
+            >
+              {tab.label}
+              <span className="font-mono text-[10.5px] text-neutral-500 leading-none translate-y-px">
+                {tab.count}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Search + filter panel */}
+      {!isLoading && totalCount > 0 && (
+        <div className="mt-4 space-y-3">
+          <div className="relative max-w-xs">
+            <svg
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-500"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+              />
+            </svg>
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search…"
+              className="w-full bg-neutral-800/60 border border-neutral-700 text-neutral-200 placeholder-neutral-600 rounded-lg pl-8 pr-8 py-1.5 text-sm focus:outline-none focus:border-neutral-500"
+            />
+            {query && (
+              <button
+                onClick={() => setQuery("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-300"
+              >
+                <svg
+                  className="w-3.5 h-3.5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            )}
           </div>
           {showFilters && (
             <ListFilterPanel
@@ -292,14 +402,28 @@ export default function Watched() {
               onChange={setFilters}
               availableGenres={availableGenres}
               availableCertifications={availableCertifications}
+              hasMyServices={myProviderIds.size > 0}
               showUserRating
             />
           )}
         </div>
       )}
 
+      {/* Loading skeleton */}
+      {isLoading && (
+        <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 mt-8">
+          {Array.from({ length: 12 }).map((_, i) => (
+            <div key={i} className="flex flex-col gap-2 animate-pulse">
+              <div className="aspect-[2/3] rounded-xl bg-neutral-800" />
+              <div className="h-3 bg-neutral-800 rounded w-3/4" />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Empty watched list */}
       {!isLoading && totalCount === 0 && (
-        <div className="flex flex-col items-center justify-center py-20 text-center">
+        <div className="flex flex-col items-center justify-center py-24 text-center mt-8">
           <div className="w-16 h-16 rounded-full bg-neutral-800 border border-neutral-700 flex items-center justify-center mb-4">
             <svg
               className="w-8 h-8 text-neutral-500"
@@ -323,78 +447,51 @@ export default function Watched() {
           </p>
           <button
             onClick={() => navigate("/trending")}
-            className="bg-success-600 hover:bg-success-500 text-white text-sm font-medium px-5 py-2 rounded-lg transition-colors"
+            className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-medium px-5 py-2 rounded-lg transition-colors"
           >
             Browse Trending
           </button>
         </div>
       )}
 
-      {totalCount > 0 &&
-        filteredMovies.length === 0 &&
-        filteredShows.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <p className="text-neutral-400 font-medium mb-1">
-              {activeFilterCount > 0
-                ? "No results match your filters"
-                : `No results for "${query}"`}
+      {/* No results */}
+      {!isLoading && totalCount > 0 && !hasResults && (
+        <div className="flex flex-col items-center justify-center py-24 text-center mt-8">
+          <p className="text-neutral-400 font-medium mb-1">
+            {activeFilterCount > 0
+              ? "No results match your filters"
+              : `No results for "${query}"`}
+          </p>
+          {activeFilterCount > 0 ? (
+            <button
+              onClick={() => setFilters(DEFAULT_FILTERS)}
+              className="text-primary-400 hover:text-primary-300 text-sm mt-1 transition-colors"
+            >
+              Clear filters
+            </button>
+          ) : (
+            <p className="text-neutral-500 text-sm">
+              Try a different search term
             </p>
-            {activeFilterCount > 0 ? (
-              <button
-                onClick={() => setFilters(DEFAULT_FILTERS)}
-                className="text-success-400 hover:text-success-300 text-sm mt-1 transition-colors"
-              >
-                Clear filters
-              </button>
-            ) : (
-              <p className="text-neutral-500 text-sm">Try a different search term</p>
-            )}
-          </div>
-        )}
-
-      {showMovies && filteredMovies.length > 0 && (
-        <div className="mb-10">
-          {activeTab === "all" && (
-            <h2 className="text-lg font-semibold text-neutral-200 mb-4 flex items-center gap-2">
-              Movies
-              <span className="text-xs text-neutral-500 font-normal bg-neutral-800 border border-neutral-700 px-2 py-0.5 rounded-full">
-                {filteredMovies.length}
-              </span>
-            </h2>
           )}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {filteredMovies.map((item) => (
-              <MediaCard
-                key={`movie-${item.id}`}
-                type="movie"
-                item={item}
-                onRemove={onRemove}
-              />
-            ))}
-          </div>
         </div>
       )}
 
-      {showTV && filteredShows.length > 0 && (
-        <div>
-          {activeTab === "all" && (
-            <h2 className="text-lg font-semibold text-neutral-200 mb-4 flex items-center gap-2">
-              TV Shows
-              <span className="text-xs text-neutral-500 font-normal bg-neutral-800 border border-neutral-700 px-2 py-0.5 rounded-full">
-                {filteredShows.length}
-              </span>
-            </h2>
-          )}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {filteredShows.map((item) => (
-              <MediaCard
-                key={`tv-${item.id}`}
-                type="tv"
-                item={item}
-                onRemove={onRemove}
-              />
-            ))}
-          </div>
+      {/* Poster grid */}
+      {!isLoading && hasResults && (
+        <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-4 gap-y-6 mt-8">
+          {gridItems.map((item) => (
+            <WatchedCard
+              key={`${item._contentType}-${item.id}`}
+              item={item}
+              onNavigate={() =>
+                navigate(
+                  `/${item._contentType === "movie" ? "movie" : "tv"}/${item.id}`,
+                )
+              }
+              onRemove={() => onRemove(item._contentType, item.id)}
+            />
+          ))}
         </div>
       )}
     </div>

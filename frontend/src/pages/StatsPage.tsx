@@ -15,31 +15,42 @@ function fmtMins(mins: number): string {
 }
 
 function fmtHours(mins: number): string {
-  const h = Math.round(mins / 60);
-  return `${h.toLocaleString()}h`;
+  return `${Math.round(mins / 60).toLocaleString()}h`;
 }
 
-function StatCard({
-  label,
-  value,
+const PLATFORM_HUES = [160, 200, 285, 250, 30, 300, 180, 50];
+
+function StatBlock({
+  eyebrow,
+  title,
   sub,
-  accent,
+  children,
 }: {
-  label: string;
-  value: string;
-  sub?: string;
-  accent?: string;
+  eyebrow: string;
+  title: string;
+  sub: string;
+  children: React.ReactNode;
 }) {
   return (
-    <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5 flex flex-col gap-1">
-      <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500">{label}</p>
-      <p className={`text-3xl font-bold ${accent ?? "text-white"}`}>{value}</p>
-      {sub && <p className="text-sm text-neutral-400">{sub}</p>}
+    <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6">
+      <div className="flex items-baseline gap-3 mb-5">
+        <span className="font-mono text-[10px] text-neutral-500 tracking-[0.14em] uppercase shrink-0">
+          {eyebrow}
+        </span>
+        <h3
+          className="m-0 font-normal tracking-tight text-[22px] leading-none text-white"
+          style={{ fontFamily: "'IBM Plex Sans', sans-serif", fontStyle: "italic" }}
+        >
+          {title}
+        </h3>
+        <span className="flex-1" />
+        <span className="text-xs text-neutral-500 shrink-0">{sub}</span>
+      </div>
+      {children}
     </div>
   );
 }
 
-/** The shareable card — designed to look great as a screenshot. */
 function WrappedCard({
   stats,
   year,
@@ -61,10 +72,8 @@ function WrappedCard({
         width: 360,
         background: "linear-gradient(135deg, #0a0a0a 0%, #111827 50%, #0a0a0a 100%)",
         border: "1px solid rgba(255,255,255,0.08)",
-        fontFamily: "system-ui, -apple-system, sans-serif",
       }}
     >
-      {/* Gradient blobs */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
@@ -72,9 +81,7 @@ function WrappedCard({
             "radial-gradient(ellipse at 10% 20%, rgba(16,185,129,0.18) 0%, transparent 60%), radial-gradient(ellipse at 90% 80%, rgba(139,92,246,0.18) 0%, transparent 60%)",
         }}
       />
-
       <div className="relative z-10 p-8 flex flex-col gap-6">
-        {/* Header */}
         <div className="flex items-start justify-between">
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -90,16 +97,11 @@ function WrappedCard({
               <p className="text-sm text-neutral-400 mt-0.5">@{username}</p>
             )}
           </div>
-          {/* Big year badge */}
-          <div
-            className="text-4xl font-black text-neutral-800"
-            style={{ letterSpacing: "-0.04em" }}
-          >
+          <div className="text-4xl font-black text-neutral-800" style={{ letterSpacing: "-0.04em" }}>
             {yearLabel}
           </div>
         </div>
 
-        {/* Hero stat */}
         <div
           className="rounded-2xl p-5 text-center"
           style={{
@@ -110,10 +112,7 @@ function WrappedCard({
           <p className="text-xs font-semibold uppercase tracking-widest text-neutral-400 mb-1">
             Total Watch Time
           </p>
-          <p
-            className="font-black text-white"
-            style={{ fontSize: 52, lineHeight: 1, letterSpacing: "-0.04em" }}
-          >
+          <p className="font-black text-white" style={{ fontSize: 52, lineHeight: 1, letterSpacing: "-0.04em" }}>
             {totalHours.toLocaleString()}
             <span className="text-3xl text-primary-400"> hrs</span>
           </p>
@@ -122,47 +121,24 @@ function WrappedCard({
           </p>
         </div>
 
-        {/* Grid stats */}
         <div className="grid grid-cols-2 gap-3">
-          <div
-            className="rounded-xl p-4"
-            style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}
-          >
-            <p className="text-xs text-neutral-500 mb-1">Top Genre</p>
-            <p className="text-base font-bold text-white truncate">
-              {topGenre ?? "—"}
-            </p>
-          </div>
-          <div
-            className="rounded-xl p-4"
-            style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}
-          >
-            <p className="text-xs text-neutral-500 mb-1">Top Platform</p>
-            <p className="text-base font-bold text-white truncate">
-              {topPlatform ?? "—"}
-            </p>
-          </div>
-          <div
-            className="rounded-xl p-4"
-            style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}
-          >
-            <p className="text-xs text-neutral-500 mb-1">Movies</p>
-            <p className="text-xl font-bold text-highlight-400">
-              {fmtHours(stats.movie_minutes)}
-            </p>
-          </div>
-          <div
-            className="rounded-xl p-4"
-            style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}
-          >
-            <p className="text-xs text-neutral-500 mb-1">TV Shows</p>
-            <p className="text-xl font-bold text-primary-400">
-              {fmtHours(stats.episode_minutes)}
-            </p>
-          </div>
+          {[
+            { label: "Top Genre", val: topGenre ?? "—" },
+            { label: "Top Platform", val: topPlatform ?? "—" },
+            { label: "Movies", val: fmtHours(stats.movie_minutes) },
+            { label: "TV Shows", val: fmtHours(stats.episode_minutes) },
+          ].map(({ label, val }) => (
+            <div
+              key={label}
+              className="rounded-xl p-4"
+              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}
+            >
+              <p className="text-xs text-neutral-500 mb-1">{label}</p>
+              <p className="text-base font-bold text-white truncate">{val}</p>
+            </div>
+          ))}
         </div>
 
-        {/* Longest binge */}
         {stats.longest_binge.minutes > 0 && (
           <div
             className="rounded-xl p-4 flex items-center gap-3"
@@ -176,10 +152,10 @@ function WrappedCard({
                 {stats.longest_binge.date && (
                   <span className="text-neutral-400 font-normal">
                     {" "}·{" "}
-                    {new Date(stats.longest_binge.date + "T00:00:00").toLocaleDateString(
-                      undefined,
-                      { month: "short", day: "numeric" },
-                    )}
+                    {new Date(stats.longest_binge.date + "T00:00:00").toLocaleDateString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                    })}
                   </span>
                 )}
               </p>
@@ -187,17 +163,13 @@ function WrappedCard({
           </div>
         )}
 
-        {/* Humor fact */}
         {stats.humor_fact && (
           <p className="text-xs text-neutral-500 text-center leading-relaxed italic">
             With that time, {stats.humor_fact}.
           </p>
         )}
 
-        {/* Footer */}
-        <p className="text-center text-xs text-neutral-700 -mt-2">
-          releaseradar.co
-        </p>
+        <p className="text-center text-xs text-neutral-700 -mt-2">releaseradar.co</p>
       </div>
     </div>
   );
@@ -217,7 +189,11 @@ export default function StatsPage() {
 
   const { data: stats, isPending, isError } = useWatchTimeStats(selectedYear);
   const { data: baseStats } = useUserStats();
-  const streak = (baseStats as { streak?: { current: number; longest: number; today_logged: boolean } } | undefined)?.streak;
+  const streak = (
+    baseStats as
+      | { streak?: { current: number; longest: number; today_logged: boolean } }
+      | undefined
+  )?.streak;
 
   if (subLoading) {
     return (
@@ -238,7 +214,8 @@ export default function StatsPage() {
         <div>
           <h1 className="text-2xl font-bold text-white mb-2">Watch Time Stats</h1>
           <p className="text-neutral-400 max-w-sm">
-            See your total watch time, top genres, top platforms, your personal Wrapped card, and more — Premium only.
+            See your total watch time, top genres, top platforms, your personal Wrapped card, and
+            more — Premium only.
           </p>
         </div>
         <button
@@ -269,30 +246,54 @@ export default function StatsPage() {
 
   const totalHours = Math.round(stats.total_minutes / 60);
   const totalDays = (stats.total_minutes / 1440).toFixed(1);
+  const tvPct = stats.total_minutes > 0
+    ? Math.round((stats.episode_minutes / stats.total_minutes) * 100)
+    : 0;
+  const avgPerDayMins = selectedYear
+    ? Math.round(stats.total_minutes / 365)
+    : stats.available_years.length > 0
+    ? Math.round(stats.total_minutes / (stats.available_years.length * 365))
+    : Math.round(stats.total_minutes / 365);
 
-  const years = stats.available_years.length > 0
-    ? stats.available_years
-    : [currentYear];
+  const years = stats.available_years.length > 0 ? stats.available_years : [currentYear];
+  const yearLabel = selectedYear ?? "All Time";
+
+  if (stats.total_minutes === 0) {
+    return (
+      <div className="text-center py-24 text-neutral-500">
+        <p className="text-lg text-white mb-1">No watch history yet</p>
+        <p className="text-sm">
+          {selectedYear
+            ? `Nothing tracked in ${selectedYear}.`
+            : "Start watching to see your stats."}
+        </p>
+      </div>
+    );
+  }
 
   return (
-    <div className="w-full max-w-4xl mx-auto px-4 py-8 space-y-8">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Your Stats</h1>
-          <p className="text-sm text-neutral-400 mt-0.5">
-            Watch time, genres, platforms, and more
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3 flex-wrap">
+    <div className="w-full pb-12">
+      {/* ── Page header ── */}
+      <div className="px-8 pt-8 pb-4">
+        <p className="font-mono text-[10.5px] tracking-[0.14em] text-neutral-500 uppercase mb-2">
+          Your year on Release Radar{username ? ` · @${username}` : ""}
+        </p>
+        <div className="flex items-end gap-6 flex-wrap">
+          <h1
+            className="text-[44px] leading-none tracking-tight text-white m-0"
+            style={{ fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 300 }}
+          >
+            <em className="text-primary-400 not-italic font-light">{yearLabel}</em>
+            {", in hours"}
+          </h1>
+          <span className="flex-1" />
           {/* Year picker */}
-          <div className="flex items-center gap-2 bg-neutral-900 border border-neutral-700 rounded-xl px-1 py-1">
+          <div className="flex items-center bg-neutral-900 border border-neutral-800 rounded-xl p-1 gap-0.5">
             <button
               onClick={() => setSelectedYear(null)}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                 selectedYear === null
-                  ? "bg-neutral-700 text-white"
+                  ? "bg-neutral-750 text-white"
                   : "text-neutral-400 hover:text-white"
               }`}
             >
@@ -302,9 +303,9 @@ export default function StatsPage() {
               <button
                 key={y}
                 onClick={() => setSelectedYear(y)}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                className={`px-3 py-1.5 rounded-lg text-sm font-mono transition-colors ${
                   selectedYear === y
-                    ? "bg-neutral-700 text-white"
+                    ? "bg-neutral-750 text-white"
                     : "text-neutral-400 hover:text-white"
                 }`}
               >
@@ -312,33 +313,24 @@ export default function StatsPage() {
               </button>
             ))}
           </div>
-
-          {/* Wrapped button */}
+          {/* Wrapped toggle */}
           <button
             onClick={() => setShowWrapped(!showWrapped)}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-primary-600 to-highlight-600 hover:from-primary-500 hover:to-highlight-500 text-white text-sm font-semibold transition-all"
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold transition-all"
           >
-            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M14 8h.01" />
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-            </svg>
-            {showWrapped ? "Hide Card" : "View Wrapped Card"}
+            {showWrapped ? "Hide card" : "Share wrapped →"}
           </button>
         </div>
       </div>
 
-      {/* Wrapped card (shareable) */}
+      {/* ── Wrapped card (toggle) ── */}
       {showWrapped && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-center gap-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-primary-400" />
-            <p className="text-sm text-neutral-400">
+        <div className="px-8 pb-4">
+          <div className="flex flex-col items-center gap-3">
+            <p className="text-xs text-neutral-500">
               Screenshot this card to share your{" "}
               {selectedYear ? `${selectedYear} Wrapped` : "all-time stats"}
             </p>
-          </div>
-          <div className="flex justify-center">
             <div ref={cardRef}>
               <WrappedCard stats={stats} year={selectedYear} username={username} />
             </div>
@@ -346,226 +338,419 @@ export default function StatsPage() {
         </div>
       )}
 
-      {/* Watch streak */}
-      {streak && (streak.current > 0 || streak.longest > 0) && (
-        <div className="grid grid-cols-2 gap-4">
+      {/* ── Hero: total + streaks ── */}
+      <div
+        className="px-8 pb-6"
+        style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 20 }}
+      >
+        {/* Total watch time */}
+        <div className="relative overflow-hidden bg-neutral-900 border border-neutral-800 rounded-2xl p-8">
           <div
-            className={`bg-neutral-900 border rounded-2xl p-5 flex items-center gap-4 ${
-              streak.current > 0
-                ? "border-orange-500/40"
-                : "border-neutral-800"
-            }`}
-          >
-            <span className="text-4xl flex-shrink-0" aria-hidden="true">
-              {streak.current > 0 ? "🔥" : "💤"}
-            </span>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
-                Current Streak
-              </p>
-              <p className={`text-3xl font-bold ${streak.current > 0 ? "text-orange-400" : "text-white"}`}>
-                {streak.current}
-                <span className="text-base font-normal text-neutral-400 ml-1">
-                  day{streak.current !== 1 ? "s" : ""}
-                </span>
-              </p>
-              {streak.today_logged && (
-                <p className="text-xs text-orange-400 mt-0.5">Logged today</p>
-              )}
-              {!streak.today_logged && streak.current > 0 && (
-                <p className="text-xs text-neutral-500 mt-0.5">Log something to keep it going!</p>
-              )}
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background:
+                "radial-gradient(80% 60% at 80% 30%, rgba(16,185,129,0.10), transparent 65%)",
+            }}
+          />
+          <div className="relative">
+            <p className="font-mono text-[10px] tracking-[0.16em] text-neutral-500 uppercase mb-4">
+              Total watch time
+            </p>
+            <div className="flex items-baseline gap-3">
+              <span
+                className="text-white leading-none"
+                style={{
+                  fontFamily: "'IBM Plex Sans', sans-serif",
+                  fontStyle: "italic",
+                  fontWeight: 300,
+                  fontSize: 120,
+                  letterSpacing: "-0.04em",
+                  lineHeight: 0.9,
+                }}
+              >
+                {totalHours.toLocaleString()}
+              </span>
+              <span
+                className="text-primary-400"
+                style={{
+                  fontFamily: "'IBM Plex Sans', sans-serif",
+                  fontStyle: "italic",
+                  fontWeight: 300,
+                  fontSize: 44,
+                  letterSpacing: "-0.02em",
+                }}
+              >
+                hrs
+              </span>
             </div>
-          </div>
-
-          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5 flex items-center gap-4">
-            <span className="text-4xl flex-shrink-0" aria-hidden="true">🏆</span>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
-                Longest Streak
-              </p>
-              <p className="text-3xl font-bold text-white">
-                {streak.longest}
-                <span className="text-base font-normal text-neutral-400 ml-1">
-                  day{streak.longest !== 1 ? "s" : ""}
-                </span>
-              </p>
-              {streak.current === streak.longest && streak.longest > 1 && (
-                <p className="text-xs text-primary-400 mt-0.5">Personal best!</p>
-              )}
-            </div>
+            <p className="text-sm text-neutral-400 mt-4 leading-relaxed">
+              {stats.movies_count} movies · {stats.episodes_count} episodes · {totalDays} full days
+              in front of the screen.
+            </p>
+            {stats.humor_fact && (
+              <div className="mt-5 px-4 py-3.5 bg-neutral-950 border border-neutral-800 rounded-xl flex items-start gap-3 max-w-xl">
+                <span className="text-primary-400 text-xl leading-none mt-0.5 shrink-0">"</span>
+                <p className="text-[13.5px] text-neutral-200 leading-relaxed m-0">
+                  With that time, {stats.humor_fact}.
+                </p>
+              </div>
+            )}
           </div>
         </div>
-      )}
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <StatCard
-          label="Total Hours"
-          value={totalHours.toLocaleString() + "h"}
-          sub={`${totalDays} days`}
-          accent="text-primary-400"
-        />
-        <StatCard
-          label="Movies"
-          value={stats.movies_count.toLocaleString()}
-          sub={fmtMins(stats.movie_minutes)}
-          accent="text-highlight-400"
-        />
-        <StatCard
-          label="Episodes"
-          value={stats.episodes_count.toLocaleString()}
-          sub={fmtMins(stats.episode_minutes)}
-          accent="text-info-400"
-        />
-        <StatCard
-          label="Binge Record"
-          value={stats.longest_binge.minutes > 0 ? fmtMins(stats.longest_binge.minutes) : "—"}
-          sub={
-            stats.longest_binge.date
-              ? new Date(stats.longest_binge.date + "T00:00:00").toLocaleDateString(
-                  undefined,
-                  { month: "short", day: "numeric", year: "numeric" },
-                )
-              : undefined
-          }
-          accent="text-warning-400"
-        />
+        {/* Streak cards */}
+        <div style={{ display: "grid", gridTemplateRows: "1fr 1fr", gap: 14 }}>
+          {/* Current streak */}
+          <div
+            className="rounded-2xl p-5 flex flex-col justify-between text-white relative overflow-hidden"
+            style={{
+              background:
+                "linear-gradient(135deg, #4a1500 0%, #1f0800 100%)",
+            }}
+          >
+            <p className="font-mono text-[10px] tracking-[0.16em] uppercase opacity-70 m-0">
+              ● Current streak
+            </p>
+            <div className="flex items-baseline gap-2">
+              <span
+                style={{
+                  fontFamily: "'IBM Plex Sans', sans-serif",
+                  fontStyle: "italic",
+                  fontWeight: 300,
+                  fontSize: 64,
+                  lineHeight: 1,
+                  letterSpacing: "-0.03em",
+                }}
+              >
+                {streak?.current ?? 0}
+              </span>
+              <span className="text-lg opacity-70">days</span>
+            </div>
+            <p className="text-xs opacity-75 m-0">
+              {streak?.today_logged
+                ? "✓ Logged today — keep it rolling"
+                : streak?.current
+                ? "Log something to keep it going!"
+                : "Start a streak by logging something"}
+            </p>
+          </div>
+
+          {/* Longest streak */}
+          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5 flex flex-col justify-between">
+            <p className="font-mono text-[10px] tracking-[0.16em] text-neutral-500 uppercase m-0">
+              Longest streak
+            </p>
+            <div className="flex items-baseline gap-2">
+              <span
+                className="text-white"
+                style={{
+                  fontFamily: "'IBM Plex Sans', sans-serif",
+                  fontStyle: "italic",
+                  fontWeight: 300,
+                  fontSize: 56,
+                  lineHeight: 1,
+                  letterSpacing: "-0.03em",
+                }}
+              >
+                {streak?.longest ?? 0}
+              </span>
+              <span className="text-sm text-neutral-400">days</span>
+            </div>
+            <p className="text-xs text-neutral-500 m-0">
+              {streak?.current === streak?.longest && (streak?.longest ?? 0) > 1
+                ? "Personal best — you're on it now!"
+                : "Personal best"}
+            </p>
+          </div>
+        </div>
       </div>
 
-      {/* Humor fact */}
-      {stats.humor_fact && (
-        <div className="bg-neutral-900/60 border border-neutral-800 rounded-2xl p-4 flex items-start gap-3">
-          <span className="text-2xl flex-shrink-0">💡</span>
-          <p className="text-sm text-neutral-300 leading-relaxed">
-            With your {totalHours.toLocaleString()} hours of watch time,{" "}
-            <span className="text-white font-medium">{stats.humor_fact}</span>.
-          </p>
-        </div>
-      )}
-
-      <div className="grid sm:grid-cols-2 gap-6">
-        {/* Top Genres */}
-        {stats.top_genres.length > 0 && (
-          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
-            <h2 className="text-base font-semibold text-white mb-4">Top Genres</h2>
-            <div className="space-y-3">
-              {stats.top_genres.map((g, i) => {
-                const maxMins = stats.top_genres[0].minutes;
-                const pct = Math.round((g.minutes / maxMins) * 100);
-                return (
-                  <div key={g.name}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm text-neutral-200">{g.name}</span>
-                      <span className="text-xs text-neutral-500">{fmtHours(g.minutes)}</span>
-                    </div>
-                    <div className="h-1.5 bg-neutral-800 rounded-full overflow-hidden">
-                      <div
-                        className="h-full rounded-full"
-                        style={{
-                          width: `${pct}%`,
-                          background:
-                            i === 0
-                              ? "linear-gradient(90deg, #10b981, #8b5cf6)"
-                              : "rgba(16,185,129,0.4)",
-                        }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+      {/* ── KPI row ── */}
+      <div
+        className="px-8 pb-6"
+        style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}
+      >
+        {[
+          {
+            label: "Movies",
+            value: stats.movies_count.toLocaleString(),
+            sub: fmtMins(stats.movie_minutes) + " watched",
+          },
+          {
+            label: "Episodes",
+            value: stats.episodes_count.toLocaleString(),
+            sub: fmtMins(stats.episode_minutes) + " watched",
+          },
+          {
+            label: "Binge record",
+            value:
+              stats.longest_binge.minutes > 0 ? fmtMins(stats.longest_binge.minutes) : "—",
+            sub: stats.longest_binge.date
+              ? new Date(stats.longest_binge.date + "T00:00:00").toLocaleDateString(undefined, {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })
+              : "No binge days yet",
+          },
+          {
+            label: "Average / day",
+            value: fmtMins(avgPerDayMins),
+            sub: selectedYear ? `Over ${yearLabel}` : "All time average",
+          },
+        ].map((k) => (
+          <div
+            key={k.label}
+            className="bg-neutral-900 border border-neutral-800 rounded-xl px-5 py-4"
+          >
+            <p className="font-mono text-[10px] text-neutral-500 tracking-[0.13em] uppercase m-0">
+              {k.label}
+            </p>
+            <p
+              className="text-white mt-1.5 mb-1 leading-none"
+              style={{
+                fontFamily: "'IBM Plex Sans', sans-serif",
+                fontStyle: "italic",
+                fontWeight: 300,
+                fontSize: 34,
+                letterSpacing: "-0.02em",
+              }}
+            >
+              {k.value}
+            </p>
+            <p className="text-[11.5px] text-neutral-500 m-0">{k.sub}</p>
           </div>
-        )}
+        ))}
+      </div>
 
-        {/* Top Platforms */}
-        {stats.top_platforms.length > 0 && (
-          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
-            <h2 className="text-base font-semibold text-white mb-4">Top Platforms</h2>
-            <div className="space-y-3">
-              {stats.top_platforms.map((p, i) => {
-                const maxMins = stats.top_platforms[0].minutes;
-                const pct = Math.round((p.minutes / maxMins) * 100);
-                return (
-                  <div key={p.name} className="flex items-center gap-3">
-                    {p.logo_path ? (
-                      <img
-                        src={`${BASE_IMAGE_URL}/w45${p.logo_path}`}
-                        alt={p.name}
-                        className="w-7 h-7 rounded-lg object-cover flex-shrink-0"
-                      />
-                    ) : (
-                      <div className="w-7 h-7 rounded-lg bg-neutral-700 flex-shrink-0" />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm text-neutral-200 truncate">{p.name}</span>
-                        <span className="text-xs text-neutral-500 ml-2 flex-shrink-0">
-                          {fmtHours(p.minutes)}
+      {/* ── Genres + Platforms ── */}
+      {(stats.top_genres.length > 0 || stats.top_platforms.length > 0) && (
+        <div
+          className="px-8 pb-6"
+          style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}
+        >
+          {stats.top_genres.length > 0 && (
+            <StatBlock eyebrow="01" title="Top genres" sub="What you actually watched">
+              <div className="space-y-4">
+                {stats.top_genres.map((g, i) => {
+                  const max = stats.top_genres[0].minutes;
+                  const pct = Math.round((g.minutes / max) * 100);
+                  return (
+                    <div key={g.name}>
+                      <div className="flex items-baseline justify-between mb-1.5">
+                        <span className="text-[13.5px] text-neutral-200 font-medium">
+                          <span className="font-mono text-[10px] text-neutral-500 mr-2">
+                            0{i + 1}
+                          </span>
+                          {g.name}
+                        </span>
+                        <span className="font-mono text-[11.5px] text-neutral-500">
+                          {fmtHours(g.minutes)}
                         </span>
                       </div>
-                      <div className="h-1.5 bg-neutral-800 rounded-full overflow-hidden">
+                      <div className="h-1 bg-neutral-800 rounded-full overflow-hidden">
                         <div
                           className="h-full rounded-full"
                           style={{
                             width: `${pct}%`,
                             background:
                               i === 0
-                                ? "linear-gradient(90deg, #8b5cf6, #10b981)"
-                                : "rgba(139,92,246,0.4)",
+                                ? "#10b981"
+                                : `oklch(0.52 0.11 ${[200, 250, 90, 285, 160][i % 5]})`,
                           }}
                         />
                       </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
+            </StatBlock>
+          )}
+
+          {stats.top_platforms.length > 0 && (
+            <StatBlock eyebrow="02" title="Top platforms" sub="Where you watched">
+              <div className="space-y-4">
+                {stats.top_platforms.map((p, i) => {
+                  const max = stats.top_platforms[0].minutes;
+                  const pct = Math.round((p.minutes / max) * 100);
+                  const hue = PLATFORM_HUES[i % PLATFORM_HUES.length];
+                  return (
+                    <div key={p.name} className="flex items-center gap-3">
+                      {p.logo_path ? (
+                        <img
+                          src={`${BASE_IMAGE_URL}/w45${p.logo_path}`}
+                          alt={p.name}
+                          className="w-8 h-8 rounded-lg object-cover shrink-0"
+                        />
+                      ) : (
+                        <div
+                          className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center text-white text-xs font-bold"
+                          style={{
+                            background: `linear-gradient(135deg, oklch(0.55 0.14 ${hue}), oklch(0.35 0.14 ${hue}))`,
+                          }}
+                        >
+                          {p.name[0]}
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-baseline justify-between mb-1.5">
+                          <span className="text-[13.5px] text-neutral-200 font-medium truncate">
+                            {p.name}
+                          </span>
+                          <span className="font-mono text-[11.5px] text-neutral-500 ml-2 shrink-0">
+                            {fmtHours(p.minutes)}
+                          </span>
+                        </div>
+                        <div className="h-1 bg-neutral-800 rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full"
+                            style={{
+                              width: `${pct}%`,
+                              background:
+                                i === 0
+                                  ? "#10b981"
+                                  : `oklch(0.52 0.11 ${hue})`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </StatBlock>
+          )}
+        </div>
+      )}
+
+      {/* ── TV vs Movies + Wrapped mini card ── */}
+      <div
+        className="px-8 pb-4"
+        style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 20 }}
+      >
+        {/* TV vs Movies */}
+        <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6">
+          <div className="flex items-baseline gap-3 mb-4">
+            <span className="font-mono text-[10px] text-neutral-500 tracking-[0.14em] uppercase">
+              03
+            </span>
+            <h3
+              className="m-0 font-normal tracking-tight text-[22px] leading-none text-white"
+              style={{ fontFamily: "'IBM Plex Sans', sans-serif", fontStyle: "italic" }}
+            >
+              TV vs Movies
+            </h3>
+            <span className="flex-1" />
+            <span className="font-mono text-[11px] text-neutral-500">
+              {tvPct}% TV · {100 - tvPct}% Movies
+            </span>
+          </div>
+
+          <div className="h-7 bg-neutral-800 rounded-xl overflow-hidden flex">
+            {stats.episode_minutes > 0 && (
+              <div
+                className="h-full flex items-center justify-end pr-3"
+                style={{
+                  width: `${tvPct}%`,
+                  background: "#10b981",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: "#001a10",
+                }}
+              >
+                {fmtHours(stats.episode_minutes)} TV
+              </div>
+            )}
+            {stats.movie_minutes > 0 && (
+              <div
+                className="h-full flex items-center justify-start pl-3"
+                style={{
+                  width: `${100 - tvPct}%`,
+                  background: "oklch(0.55 0.18 285)",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: "#fff",
+                }}
+              >
+                {fmtHours(stats.movie_minutes)} Movies
+              </div>
+            )}
+          </div>
+
+          {stats.movies_count > 0 && stats.episodes_count > 0 && (
+            <p className="text-[12.5px] text-neutral-500 leading-relaxed mt-5">
+              {tvPct > 60
+                ? "You leaned hard into series this year"
+                : tvPct > 40
+                ? "A solid mix of series and films"
+                : "You were mostly a cinema person this period"}
+              {" — "}
+              about{" "}
+              <strong className="text-neutral-300 font-medium">
+                {(stats.episodes_count / Math.max(1, stats.movies_count)).toFixed(1)} episodes
+              </strong>{" "}
+              for every movie. The average movie you watched was{" "}
+              <strong className="text-neutral-300 font-medium">
+                {fmtMins(Math.round(stats.movie_minutes / Math.max(1, stats.movies_count)))}
+              </strong>
+              , and the average TV session was{" "}
+              <strong className="text-neutral-300 font-medium">
+                {fmtMins(Math.round(stats.episode_minutes / Math.max(1, stats.episodes_count)))}
+              </strong>
+              .
+            </p>
+          )}
+        </div>
+
+        {/* Wrapped sidebar */}
+        <div
+          className="rounded-2xl p-5 relative overflow-hidden border border-neutral-800"
+          style={{
+            background:
+              "linear-gradient(135deg, oklch(0.20 0.09 160) 0%, oklch(0.10 0.04 230) 100%)",
+          }}
+        >
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background:
+                "radial-gradient(80% 60% at 80% 20%, rgba(16,185,129,0.18), transparent 65%)",
+            }}
+          />
+          <div className="relative flex flex-col h-full gap-3">
+            <div>
+              <p className="font-mono text-[10px] tracking-[0.16em] text-white/60 uppercase m-0">
+                {selectedYear ? `${selectedYear} Wrapped` : "All-Time Wrapped"}
+              </p>
+              <p
+                className="text-primary-400 mt-1 leading-none"
+                style={{
+                  fontFamily: "'IBM Plex Sans', sans-serif",
+                  fontStyle: "italic",
+                  fontWeight: 300,
+                  fontSize: 40,
+                  letterSpacing: "-0.02em",
+                }}
+              >
+                {totalHours.toLocaleString()} hours
+              </p>
+              {stats.top_genres[0] && stats.top_platforms[0] && (
+                <p className="text-xs text-white/60 mt-1">
+                  Top genre · {stats.top_genres[0].name} · Top platform · {stats.top_platforms[0].name}
+                </p>
+              )}
+            </div>
+            <div className="flex gap-2 mt-auto">
+              <button
+                onClick={() => setShowWrapped(!showWrapped)}
+                className="flex-1 py-2 px-3 rounded-lg bg-primary-500 hover:bg-primary-400 text-neutral-950 text-sm font-semibold transition-colors"
+              >
+                {showWrapped ? "Hide card" : "View card →"}
+              </button>
             </div>
           </div>
-        )}
+        </div>
       </div>
-
-      {/* TV vs Movies breakdown */}
-      {stats.total_minutes > 0 && (
-        <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
-          <h2 className="text-base font-semibold text-white mb-4">TV vs Movies</h2>
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-primary-400 w-20 text-right">
-              {fmtHours(stats.episode_minutes)} TV
-            </span>
-            <div className="flex-1 h-4 bg-neutral-800 rounded-full overflow-hidden flex">
-              {stats.episode_minutes > 0 && (
-                <div
-                  className="h-full bg-primary-500 transition-all"
-                  style={{
-                    width: `${Math.round((stats.episode_minutes / stats.total_minutes) * 100)}%`,
-                  }}
-                />
-              )}
-              {stats.movie_minutes > 0 && (
-                <div
-                  className="h-full bg-highlight-500 transition-all"
-                  style={{
-                    width: `${Math.round((stats.movie_minutes / stats.total_minutes) * 100)}%`,
-                  }}
-                />
-              )}
-            </div>
-            <span className="text-sm text-highlight-400 w-24">
-              {fmtHours(stats.movie_minutes)} Movies
-            </span>
-          </div>
-        </div>
-      )}
-
-      {stats.total_minutes === 0 && (
-        <div className="text-center py-16 text-neutral-500">
-          <p className="text-lg">No watch history yet</p>
-          <p className="text-sm mt-1">
-            {selectedYear ? `Nothing tracked in ${selectedYear}.` : "Start watching to see your stats."}
-          </p>
-        </div>
-      )}
     </div>
   );
 }

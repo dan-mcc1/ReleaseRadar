@@ -5,7 +5,7 @@ from app.core.limiter import limiter
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.services import friends_service
-from app.services.friends_service import get_followers
+from app.services.friends_service import get_followers, get_suggested_friends
 from app.services.user_service import search_users_by_username
 from app.services.activity_service import (
     get_friends_activity,
@@ -38,6 +38,17 @@ def search_users(
         }
         for u in users
     ]
+
+
+@router.get("/suggestions")
+@limiter.limit("20/minute")
+def suggest_friends(
+    request: Request,
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    """Return suggested users to connect with."""
+    return get_suggested_friends(db, uid)
 
 
 @router.post("/request")

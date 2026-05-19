@@ -1,5 +1,8 @@
 import { useState } from "react";
-import { useStreamingOptimizer, type OptimizerItem } from "../hooks/api/useStreamingServices";
+import {
+  useStreamingOptimizer,
+  type OptimizerItem,
+} from "../hooks/api/useStreamingServices";
 import { BASE_IMAGE_URL } from "../constants";
 
 function ProviderLogo({
@@ -24,7 +27,7 @@ function ProviderLogo({
 }
 
 function ItemPoster({ item }: { item: OptimizerItem }) {
-  const to = item.type === "tv" ? `/show/${item.id}` : `/movie/${item.id}`;
+  const to = item.type === "tv" ? `/tv/${item.id}` : `/movie/${item.id}`;
   return (
     <a href={to} title={item.title} className="shrink-0 group">
       {item.poster_path ? (
@@ -46,13 +49,7 @@ function ItemPoster({ item }: { item: OptimizerItem }) {
   );
 }
 
-function CoverageBar({
-  covered,
-  total,
-}: {
-  covered: number;
-  total: number;
-}) {
+function CoverageBar({ covered, total }: { covered: number; total: number }) {
   const pct = total === 0 ? 0 : Math.round((covered / total) * 100);
   return (
     <div>
@@ -77,14 +74,35 @@ export default function StreamingOptimizer() {
   const [showAllProviders, setShowAllProviders] = useState(false);
   const [showUncovered, setShowUncovered] = useState(false);
   const [showNoStreaming, setShowNoStreaming] = useState(false);
+  const [expandedSuggestions, setExpandedSuggestions] = useState<Set<number>>(new Set());
+
+  function toggleSuggestion(id: number) {
+    setExpandedSuggestions((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   if (isLoading) {
     return (
       <div className="bg-neutral-800 shadow-md rounded-lg p-4">
         <div className="flex items-center gap-2 text-neutral-400 text-sm">
           <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+            <circle
+              className="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              strokeWidth="4"
+            />
+            <path
+              className="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8v8H4z"
+            />
           </svg>
           Analyzing your watchlist…
         </div>
@@ -95,7 +113,9 @@ export default function StreamingOptimizer() {
   if (error || !data) {
     return (
       <div className="bg-neutral-800 shadow-md rounded-lg p-4">
-        <p className="text-neutral-400 text-sm">Could not load optimizer. Try again later.</p>
+        <p className="text-neutral-400 text-sm">
+          Could not load optimizer. Try again later.
+        </p>
       </div>
     );
   }
@@ -103,7 +123,9 @@ export default function StreamingOptimizer() {
   if (data.total_items === 0) {
     return (
       <div className="bg-neutral-800 shadow-md rounded-lg p-4">
-        <p className="text-neutral-400 text-sm">Add items to your watchlist to see streaming coverage.</p>
+        <p className="text-neutral-400 text-sm">
+          Add items to your watchlist to see streaming coverage.
+        </p>
       </div>
     );
   }
@@ -129,13 +151,22 @@ export default function StreamingOptimizer() {
         <h2 className="text-sm font-semibold text-neutral-400 uppercase tracking-wider">
           Coverage Overview
         </h2>
-        <CoverageBar covered={data.my_services_coverage} total={data.total_items} />
+        <CoverageBar
+          covered={data.my_services_coverage}
+          total={data.total_items}
+        />
         <div className="flex gap-4 text-xs text-neutral-500">
           <span>
-            <span className="text-neutral-300">{data.items_with_streaming}</span> available on streaming
+            <span className="text-neutral-300">
+              {data.items_with_streaming}
+            </span>{" "}
+            available on streaming
           </span>
           <span>
-            <span className="text-neutral-300">{data.no_streaming_items.length}</span> not on any service
+            <span className="text-neutral-300">
+              {data.no_streaming_items.length}
+            </span>{" "}
+            not on any service
           </span>
         </div>
       </div>
@@ -152,20 +183,56 @@ export default function StreamingOptimizer() {
             </p>
           </div>
           <div className="space-y-2">
-            {suggestionsNotOwned.map((s) => (
-              <div
-                key={s.id}
-                className="flex items-center gap-3 bg-neutral-700/50 rounded-lg px-3 py-2.5"
-              >
-                <ProviderLogo logoPath={s.logo_path} name={s.name} size={40} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-white text-sm font-medium truncate">{s.name}</p>
-                  <p className="text-primary-400 text-xs">
-                    +{s.adds_count} item{s.adds_count !== 1 ? "s" : ""} covered
-                  </p>
+            {suggestionsNotOwned.map((s) => {
+              const isOpen = expandedSuggestions.has(s.id);
+              return (
+                <div key={s.id} className="bg-neutral-700/50 rounded-lg overflow-hidden">
+                  <button
+                    onClick={() => toggleSuggestion(s.id)}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-neutral-700/70 transition-colors"
+                  >
+                    <ProviderLogo logoPath={s.logo_path} name={s.name} size={40} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white text-sm font-medium truncate">{s.name}</p>
+                      <p className="text-primary-400 text-xs">
+                        +{s.adds_count} item{s.adds_count !== 1 ? "s" : ""} covered
+                      </p>
+                    </div>
+                    <svg
+                      className={`w-4 h-4 text-neutral-400 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`}
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {isOpen && s.adds_items.length > 0 && (
+                    <div className="px-3 pb-3 space-y-2 border-t border-neutral-600/50 pt-2">
+                      {s.adds_items.map((item) => (
+                        <a
+                          key={`${item.type}-${item.id}`}
+                          href={item.type === "tv" ? `/tv/${item.id}` : `/movie/${item.id}`}
+                          className="flex items-center gap-2.5 hover:bg-neutral-700/60 rounded px-1 py-0.5 transition-colors"
+                        >
+                          {item.poster_path ? (
+                            <img
+                              src={`${BASE_IMAGE_URL}/w45${item.poster_path}`}
+                              alt={item.title}
+                              className="w-6 h-9 rounded object-cover shrink-0"
+                            />
+                          ) : (
+                            <div className="w-6 h-9 rounded bg-neutral-600 shrink-0" />
+                          )}
+                          <span className="text-neutral-300 text-xs truncate">{item.title}</span>
+                        </a>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -179,16 +246,26 @@ export default function StreamingOptimizer() {
           <div className="space-y-2">
             {visibleProviders.map((p) => {
               const pct =
-                data.total_items === 0 ? 0 : Math.round((p.count / data.total_items) * 100);
+                data.total_items === 0
+                  ? 0
+                  : Math.round((p.count / data.total_items) * 100);
               return (
                 <div key={p.id} className="flex items-center gap-3">
-                  <ProviderLogo logoPath={p.logo_path} name={p.name} size={36} />
+                  <ProviderLogo
+                    logoPath={p.logo_path}
+                    name={p.name}
+                    size={36}
+                  />
                   <div className="flex-1 min-w-0">
                     <div className="flex justify-between text-xs mb-1">
-                      <span className={`font-medium ${p.you_have ? "text-white" : "text-neutral-400"}`}>
+                      <span
+                        className={`font-medium ${p.you_have ? "text-white" : "text-neutral-400"}`}
+                      >
                         {p.name}
                         {p.you_have && (
-                          <span className="ml-1.5 text-primary-400 text-xs">✓ yours</span>
+                          <span className="ml-1.5 text-primary-400 text-xs">
+                            ✓ yours
+                          </span>
                         )}
                       </span>
                       <span className="text-neutral-500 tabular-nums">
@@ -227,15 +304,22 @@ export default function StreamingOptimizer() {
               Not Covered by Your Services
             </h2>
             <p className="text-neutral-500 text-xs mt-0.5">
-              {data.uncovered_items.length} item{data.uncovered_items.length !== 1 ? "s" : ""} available on other services
+              {data.uncovered_items.length} item
+              {data.uncovered_items.length !== 1 ? "s" : ""} available on other
+              services
             </p>
           </div>
           <div className="space-y-2">
             {visibleUncovered.map((item) => (
-              <div key={`${item.type}-${item.id}`} className="flex items-center gap-3">
+              <div
+                key={`${item.type}-${item.id}`}
+                className="flex items-center gap-3"
+              >
                 <ItemPoster item={item} />
                 <div className="flex-1 min-w-0">
-                  <p className="text-white text-sm font-medium truncate">{item.title}</p>
+                  <p className="text-white text-sm font-medium truncate">
+                    {item.title}
+                  </p>
                   {item.available_on && item.available_on.length > 0 ? (
                     <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                       {item.available_on.slice(0, 4).map((p) => (
@@ -254,7 +338,9 @@ export default function StreamingOptimizer() {
                       )}
                     </div>
                   ) : (
-                    <p className="text-neutral-500 text-xs mt-0.5">Not on any service</p>
+                    <p className="text-neutral-500 text-xs mt-0.5">
+                      Not on any service
+                    </p>
                   )}
                 </div>
               </div>
@@ -281,14 +367,18 @@ export default function StreamingOptimizer() {
               Not Available to Stream
             </h2>
             <p className="text-neutral-500 text-xs mt-0.5">
-              {data.no_streaming_items.length} item{data.no_streaming_items.length !== 1 ? "s" : ""} with no flatrate streaming option
+              {data.no_streaming_items.length} item
+              {data.no_streaming_items.length !== 1 ? "s" : ""} with no flatrate
+              streaming option
             </p>
           </div>
           <div className="grid grid-cols-2 gap-2">
             {visibleNoStreaming.map((item) => (
               <a
                 key={`${item.type}-${item.id}`}
-                href={item.type === "tv" ? `/show/${item.id}` : `/movie/${item.id}`}
+                href={
+                  item.type === "tv" ? `/tv/${item.id}` : `/movie/${item.id}`
+                }
                 className="flex items-center gap-2 bg-neutral-700/40 rounded-lg px-2 py-1.5 hover:bg-neutral-700 transition-colors"
               >
                 {item.poster_path ? (
@@ -300,7 +390,9 @@ export default function StreamingOptimizer() {
                 ) : (
                   <div className="w-6 h-9 rounded bg-neutral-600 shrink-0" />
                 )}
-                <span className="text-neutral-300 text-xs truncate">{item.title}</span>
+                <span className="text-neutral-300 text-xs truncate">
+                  {item.title}
+                </span>
               </a>
             ))}
           </div>

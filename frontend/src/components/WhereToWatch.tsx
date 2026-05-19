@@ -16,6 +16,7 @@ function deduplicateProviders(list: WatchProvider[]): WatchProvider[] {
 
 interface WhereToWatchProps {
   providers: Provider;
+  hideTitle?: boolean;
 }
 
 interface ProviderCardProps {
@@ -68,7 +69,7 @@ function ProviderCard({
   return <div key={providerId}>{content}</div>;
 }
 
-export default function WhereToWatch({ providers }: WhereToWatchProps) {
+export default function WhereToWatch({ providers, hideTitle = false }: WhereToWatchProps) {
   const user = useAuthUser();
   const myProviderIds = useMyProviderIds();
 
@@ -83,7 +84,7 @@ export default function WhereToWatch({ providers }: WhereToWatchProps) {
 
   return (
     <div className="mt-8">
-      <h2 className="text-xl font-semibold mb-3">Where to Watch</h2>
+      {!hideTitle && <h2 className="text-xl font-semibold mb-3">Where to Watch</h2>}
       {providers.flatrate && (
         <div className="mb-4">
           <h3 className="font-medium mb-2">Streaming</h3>

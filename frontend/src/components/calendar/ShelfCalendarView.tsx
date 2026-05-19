@@ -138,9 +138,6 @@ export default function ShelfCalendarView({ shelfId }: Props) {
         onNext={handleNext}
         user={user}
         onSyncCalendar={() => {}}
-        showWatchlist={false}
-        onOpenWatchlist={() => {}}
-        onCloseWatchlist={() => {}}
         showActions={false}
       />
 

@@ -82,6 +82,34 @@ interface GenreList {
   tv: GenreItem[];
 }
 
+export function useAiringToday() {
+  return useQuery({
+    queryKey: queryKeys.airingToday(),
+    queryFn: () => queryFetch<{ results: Show[]; total_pages: number }>("/search/tv/airing-today"),
+  });
+}
+
+export function useNowPlaying() {
+  return useQuery({
+    queryKey: queryKeys.nowPlaying(),
+    queryFn: () => queryFetch<{ results: Movie[]; total_pages: number }>("/search/movie/now-playing"),
+  });
+}
+
+export function usePopularMulti() {
+  return useQuery({
+    queryKey: queryKeys.popularMulti(),
+    queryFn: () => queryFetch<{ movies: Movie[]; shows: Show[] }>("/search/multi/popular"),
+  });
+}
+
+export function useTopRatedMulti() {
+  return useQuery({
+    queryKey: queryKeys.topRatedMulti(),
+    queryFn: () => queryFetch<{ movies: Movie[]; shows: Show[] }>("/search/multi/top-rated"),
+  });
+}
+
 export function useGenres() {
   return useQuery({
     queryKey: queryKeys.genres(),

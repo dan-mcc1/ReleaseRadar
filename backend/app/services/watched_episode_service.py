@@ -61,8 +61,6 @@ def add_episode_watched(
     db.commit()
     db.refresh(entry)
 
-    _maybe_auto_complete_show(db, user_id, show_id)
-
     return entry
 
 
@@ -144,7 +142,7 @@ def add_season_watched(db: Session, user_id: str, show_id: int, season_number: i
             )
     db.commit()
 
-    _maybe_auto_complete_show(db, user_id, show_id)
+    maybe_auto_complete_show(db, user_id, show_id)
 
     return {"message": f"Season {season_number} marked as watched"}
 
@@ -317,7 +315,7 @@ def get_watched_episodes_by_show(db: Session, user_id: str, show_id: int):
     ]
 
 
-def _maybe_auto_complete_show(db: Session, user_id: str, show_id: int) -> bool:
+def maybe_auto_complete_show(db: Session, user_id: str, show_id: int) -> bool:
     """
     After marking episode(s) as watched, auto-move the show to Watched status
     if all episodes have been seen. Returns True if auto-completed.

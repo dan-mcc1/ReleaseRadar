@@ -8,18 +8,27 @@ from app.models.watchlist import Watchlist
 from app.models.currently_watching import CurrentlyWatching
 from app.models.show import Show
 from app.models.movie import Movie
+from app.services.provider_utils import canonical_provider_id, canonical_provider_name, is_canonical, all_ids_for_service
 
 router = APIRouter()
 
 
 @router.get("/providers")
 def list_all_providers(db: Session = Depends(get_db)):
-    """Return all known providers from the DB for the service picker."""
-    providers = db.query(Provider).order_by(Provider.name).all()
-    return [
-        {"id": p.id, "name": p.name, "logo_path": p.logo_path}
-        for p in providers
-    ]
+    """Return all known providers from the DB for the service picker, deduplicated to canonical entries."""
+    providers = db.query(Provider).all()
+    # Build a map of canonical_id → best entry, preferring the canonical provider's
+    # own row so its logo is used instead of a variant's (e.g. "AMC+ Apple TV Channel").
+    canonical_map: dict[int, dict] = {}
+    for p in providers:
+        cpid = canonical_provider_id(p.id)
+        if cpid not in canonical_map or p.id == cpid:
+            canonical_map[cpid] = {
+                "id": cpid,
+                "name": canonical_provider_name(p.id, p.name),
+                "logo_path": p.logo_path,
+            }
+    return sorted(canonical_map.values(), key=lambda x: x["name"])
 
 
 @router.get("/services")
@@ -27,25 +36,30 @@ def get_my_services(
     db: Session = Depends(get_db),
     user_id: str = Depends(get_current_user),
 ):
-    """Return the provider IDs the current user has saved."""
+    """Return the provider IDs the current user has saved, normalized to canonical IDs."""
     rows = (
         db.query(UserStreamingService)
         .filter(UserStreamingService.user_id == user_id)
         .all()
     )
-    provider_ids = [r.provider_id for r in rows]
-    if not provider_ids:
+    canonical_ids = list({canonical_provider_id(r.provider_id) for r in rows})
+    if not canonical_ids:
         return []
-    providers = (
-        db.query(Provider)
-        .filter(Provider.id.in_(provider_ids))
-        .order_by(Provider.name)
-        .all()
-    )
-    return [
-        {"id": p.id, "name": p.name, "logo_path": p.logo_path}
-        for p in providers
-    ]
+    # For each canonical ID, look up the canonical Provider row first; if it doesn't
+    # exist in the DB (only variants do), fall back to any variant row for logo/name data.
+    result = []
+    for cpid in canonical_ids:
+        lookup_ids = all_ids_for_service(cpid)
+        rows_in_group = db.query(Provider).filter(Provider.id.in_(lookup_ids)).all()
+        # Prefer the canonical row's logo; fall back to any variant that exists.
+        p = next((x for x in rows_in_group if x.id == cpid), rows_in_group[0] if rows_in_group else None)
+        if p:
+            result.append({
+                "id": cpid,
+                "name": canonical_provider_name(p.id, p.name),
+                "logo_path": p.logo_path,
+            })
+    return sorted(result, key=lambda x: x["name"])
 
 
 @router.post("/services/{provider_id}", status_code=201)
@@ -54,17 +68,29 @@ def add_service(
     db: Session = Depends(get_db),
     user_id: str = Depends(get_current_user),
 ):
-    provider = db.query(Provider).filter(Provider.id == provider_id).first()
-    if not provider:
+    group_ids = all_ids_for_service(provider_id)
+    # Find providers that actually exist in the DB for this service group.
+    existing_providers = db.query(Provider).filter(Provider.id.in_(group_ids)).all()
+    if not existing_providers:
         raise HTTPException(status_code=404, detail="Provider not found")
 
-    existing = (
+    # Prefer the canonical ID if it has a DB row; otherwise use the lowest-id variant
+    # that does — we must store an ID that satisfies the FK constraint on provider.
+    cpid = canonical_provider_id(provider_id)
+    actual = next((p for p in existing_providers if p.id == cpid), min(existing_providers, key=lambda p: p.id))
+    store_id = actual.id
+
+    # Check whether any variant of this service is already saved (avoids duplicates).
+    already_saved = (
         db.query(UserStreamingService)
-        .filter_by(user_id=user_id, provider_id=provider_id)
+        .filter(
+            UserStreamingService.user_id == user_id,
+            UserStreamingService.provider_id.in_(group_ids),
+        )
         .first()
     )
-    if not existing:
-        db.add(UserStreamingService(user_id=user_id, provider_id=provider_id))
+    if not already_saved:
+        db.add(UserStreamingService(user_id=user_id, provider_id=store_id))
         db.commit()
     return {"ok": True}
 
@@ -101,7 +127,7 @@ def streaming_optimizer(
         }
 
     user_provider_ids: set[int] = {
-        r.provider_id
+        canonical_provider_id(r.provider_id)
         for r in db.query(UserStreamingService)
         .filter(UserStreamingService.user_id == user_id)
         .all()
@@ -136,12 +162,12 @@ def streaming_optimizer(
         else []
     )
 
-    # item -> set of provider ids (flatrate)
+    # item -> set of canonical provider ids (flatrate)
     item_providers: dict[tuple[str, int], set[int]] = {item: set() for item in all_items}
     for sp in show_provider_rows:
-        item_providers[("tv", sp.show_id)].add(sp.provider_id)
+        item_providers[("tv", sp.show_id)].add(canonical_provider_id(sp.provider_id))
     for mp in movie_provider_rows:
-        item_providers[("movie", mp.movie_id)].add(mp.provider_id)
+        item_providers[("movie", mp.movie_id)].add(canonical_provider_id(mp.provider_id))
 
     # provider -> set of items it covers
     provider_items: dict[int, set[tuple[str, int]]] = {}
@@ -174,7 +200,7 @@ def streaming_optimizer(
             continue
         coverage_by_provider.append({
             "id": p.id,
-            "name": p.name,
+            "name": canonical_provider_name(p.id, p.name),
             "logo_path": p.logo_path,
             "count": len(items_covered),
             "you_have": pid in user_provider_ids,
@@ -196,7 +222,7 @@ def streaming_optimizer(
         for pid in item_providers.get((ct, cid), set()):
             p = providers.get(pid)
             if p:
-                available.append({"id": p.id, "name": p.name, "logo_path": p.logo_path})
+                available.append({"id": p.id, "name": canonical_provider_name(p.id, p.name), "logo_path": p.logo_path})
         available.sort(key=lambda x: x["name"])
         info["available_on"] = available
         uncovered_items.append(info)
@@ -225,11 +251,18 @@ def streaming_optimizer(
             break
         p = providers.get(best_pid)
         if p:
+            adds_items = []
+            for ct, cid in sorted(newly_covered, key=lambda x: (x[0], x[1])):
+                info = item_info(ct, cid)
+                if info:
+                    adds_items.append(info)
+            adds_items.sort(key=lambda x: x["title"])
             suggested_combo.append({
                 "id": p.id,
-                "name": p.name,
+                "name": canonical_provider_name(p.id, p.name),
                 "logo_path": p.logo_path,
                 "adds_count": len(newly_covered),
+                "adds_items": adds_items,
                 "you_have": best_pid in user_provider_ids,
             })
         temp_remaining -= newly_covered
@@ -251,12 +284,15 @@ def remove_service(
     db: Session = Depends(get_db),
     user_id: str = Depends(get_current_user),
 ):
-    row = (
+    # Delete canonical ID and any legacy variant IDs for the same service.
+    ids_to_delete = all_ids_for_service(provider_id)
+    (
         db.query(UserStreamingService)
-        .filter_by(user_id=user_id, provider_id=provider_id)
-        .first()
+        .filter(
+            UserStreamingService.user_id == user_id,
+            UserStreamingService.provider_id.in_(ids_to_delete),
+        )
+        .delete(synchronize_session=False)
     )
-    if row:
-        db.delete(row)
-        db.commit()
+    db.commit()
     return {"ok": True}

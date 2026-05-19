@@ -40,14 +40,14 @@ def get_current_user(
 
     token_email = decoded_token.get("email", "")
     if token_email and _is_email_banned(token_email, db):
-        raise HTTPException(status_code=403, detail="Your account has been permanently banned.")
+        raise HTTPException(status_code=403, detail={"code": "account_banned", "message": "Your account has been permanently banned."})
 
     user = db.get(User, uid)
     if user:
         now = datetime.now(timezone.utc)
 
         if user.is_banned:
-            raise HTTPException(status_code=403, detail="Your account has been banned.")
+            raise HTTPException(status_code=403, detail={"code": "account_banned", "message": "Your account has been banned."})
 
         if user.is_suspended:
             # Suspension may have expired; background task lifts it on the next hourly sweep.
@@ -57,7 +57,7 @@ def get_current_user(
                 )
                 raise HTTPException(
                     status_code=403,
-                    detail=f"Your account has been suspended until {until}.",
+                    detail={"code": "account_suspended", "message": f"Your account has been suspended until {until}."},
                 )
 
     return uid

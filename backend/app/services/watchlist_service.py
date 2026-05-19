@@ -18,6 +18,7 @@ from app.models.user import User
 from app.db.session import SessionLocal, _is_sqlite
 from app.services.tmdb_movies import fetch_movie_from_tmdb
 from app.services.tmdb_tv import fetch_show_from_tmdb
+from app.services.provider_utils import canonical_provider_id, canonical_provider_name
 from app.services.activity_service import log_activity
 from app.services.tvmaze_service import fetch_show_air_time
 from sqlalchemy import text
@@ -59,21 +60,27 @@ def serialize_providers(junction_rows):
     """
     Convert ShowProvider/MovieProvider rows into the
     {flatrate: [...], rent: [...], buy: [...]} shape the frontend expects.
+    Provider variants (e.g. "Netflix basic with ads") are collapsed to their
+    canonical entry so duplicates never reach the frontend.
     """
-    result = {}
+    # Use dicts keyed by canonical_id to deduplicate within each section.
+    # Prefer the canonical provider's own logo over a variant's logo (e.g. don't
+    # show the "AMC+ Apple TV Channel" logo when plain "AMC+" is also available).
+    sections: dict[str, dict[int, dict]] = {}
     for row in junction_rows:
         p = row.provider
+        cpid = canonical_provider_id(p.id)
         entry = {
-            "provider_id": p.id,
-            "provider_name": p.name,
+            "provider_id": cpid,
+            "provider_name": canonical_provider_name(p.id, p.name),
             "logo_path": p.logo_path,
         }
-        if row.flatrate:
-            result.setdefault("flatrate", []).append(entry)
-        if row.rent:
-            result.setdefault("rent", []).append(entry)
-        if row.buy:
-            result.setdefault("buy", []).append(entry)
+        for ptype in ("flatrate", "rent", "buy"):
+            if getattr(row, ptype):
+                section = sections.setdefault(ptype, {})
+                if cpid not in section or p.id == cpid:
+                    section[cpid] = entry
+    result = {ptype: list(entries.values()) for ptype, entries in sections.items()}
     return result or None
 
 
@@ -187,22 +194,23 @@ def _upsert_providers(db: Session, us_providers: dict, link_model, **link_kwargs
     """
     us_providers is the TMDB US provider dict:
     {"flatrate": [...], "rent": [...], "buy": [...]}
-    Each provider appears once in the provider table; the junction row
-    tracks which types (flatrate/rent/buy) it offers for this media item.
+    Provider variants are collapsed to their canonical ID before storing so the
+    DB stays clean and the optimizer/watchlist filter always see canonical IDs.
     """
-    provider_map = {}
+    provider_map: dict[int, dict] = {}
     for ptype in ("flatrate", "rent", "buy"):
         for p in us_providers.get(ptype, []):
-            pid = p["provider_id"]
-            if pid not in provider_map:
-                provider_map[pid] = {
-                    "name": p["provider_name"],
+            raw_pid = p["provider_id"]
+            cpid = canonical_provider_id(raw_pid)
+            if cpid not in provider_map:
+                provider_map[cpid] = {
+                    "name": canonical_provider_name(raw_pid, p["provider_name"]),
                     "logo_path": p.get("logo_path"),
                     "flatrate": False,
                     "rent": False,
                     "buy": False,
                 }
-            provider_map[pid][ptype] = True
+            provider_map[cpid][ptype] = True
 
     if not provider_map:
         return

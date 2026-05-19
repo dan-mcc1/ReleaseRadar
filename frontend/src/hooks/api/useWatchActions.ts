@@ -141,6 +141,10 @@ export function useUpdateWatchStatus() {
       if (newKey) {
         queryClient.invalidateQueries({ queryKey: newKey });
       }
+      // Refresh For You recommendations since tracked content changed.
+      queryClient.invalidateQueries({
+        queryKey: ["recommendations", "forYou", user.uid],
+      });
     },
   });
 }

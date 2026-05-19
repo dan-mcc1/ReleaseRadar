@@ -48,6 +48,36 @@ def get_user_shelves(db: Session, user_id: str) -> list[dict]:
         .order_by(Shelf.created_at)
         .all()
     )
+
+    shelf_ids = [shelf.id for shelf, _ in rows]
+    posters_by_shelf: dict[int, list[str]] = defaultdict(list)
+
+    if shelf_ids and not _is_sqlite:
+        subq = (
+            db.query(
+                ShelfItem.shelf_id,
+                func.coalesce(Movie.poster_path, Show.poster_path).label("poster_path"),
+                func.row_number().over(
+                    partition_by=ShelfItem.shelf_id,
+                    order_by=ShelfItem.id,
+                ).label("rn"),
+            )
+            .outerjoin(Movie, and_(Movie.id == ShelfItem.content_id, ShelfItem.content_type == "movie"))
+            .outerjoin(Show, and_(Show.id == ShelfItem.content_id, ShelfItem.content_type == "tv"))
+            .filter(
+                ShelfItem.shelf_id.in_(shelf_ids),
+                func.coalesce(Movie.poster_path, Show.poster_path).isnot(None),
+            )
+            .subquery()
+        )
+        poster_rows = (
+            db.query(subq.c.shelf_id, subq.c.poster_path)
+            .filter(subq.c.rn <= 4)
+            .all()
+        )
+        for shelf_id, poster_path in poster_rows:
+            posters_by_shelf[shelf_id].append(poster_path)
+
     return [
         {
             "id": shelf.id,
@@ -56,6 +86,7 @@ def get_user_shelves(db: Session, user_id: str) -> list[dict]:
             "created_at": shelf.created_at.isoformat() if shelf.created_at else None,
             "item_count": count,
             "notify": shelf.notify,
+            "preview_posters": posters_by_shelf[shelf.id],
         }
         for shelf, count in rows
     ]

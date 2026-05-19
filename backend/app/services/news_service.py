@@ -3,6 +3,7 @@ import httpx
 from app.config import settings
 
 _cache: dict[str, tuple[float, dict]] = {}
+_cache_version = 2  # bump to invalidate cached TV results after query change
 CACHE_TTL = 3600  # 1 hour — conserves the 100 req/day free tier limit
 
 NEWSAPI_BASE = "https://newsapi.org/v2"
@@ -60,10 +61,10 @@ def get_movie_news(page: int = 1, page_size: int = 20) -> dict:
 
 def get_tv_news(page: int = 1, page_size: int = 20) -> dict:
     return _fetch(
-        f"tv:{page}:{page_size}",
+        f"tv:{page}:{page_size}:v{_cache_version}",
         "everything",
         {
-            "q": "\"TV show\" OR \"television series\" OR \"streaming series\" OR \"season premiere\" OR \"season finale\" OR \"series cancelled\" OR \"series renewed\" OR \"show cancelled\" OR \"show renewed\" OR \"TV series\"",
+            "q": "(\"TV show\" OR \"television series\" OR \"streaming series\" OR \"season premiere\" OR \"season finale\" OR \"series cancelled\" OR \"series renewed\" OR \"show cancelled\" OR \"show renewed\" OR \"TV series\") NOT (baseball OR football OR basketball OR soccer OR NFL OR NBA OR MLB OR NCAA OR \"college football\" OR \"college baseball\" OR \"college basketball\" OR hockey OR tennis OR golf OR Olympics OR tournament OR playoff OR standings OR roster OR draft OR trade)",
             "language": "en",
             "sortBy": "publishedAt",
             "page": page,

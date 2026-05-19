@@ -3,6 +3,7 @@ import { queryKeys } from "./queryKeys";
 import { queryFetch } from "./queryFetch";
 import { apiFetch } from "../../utils/apiFetch";
 import { useAuthUser } from "../useAuthUser";
+import { isAccountRestricted } from "../../utils/accountState";
 
 interface DBUser {
   id: string;
@@ -39,7 +40,9 @@ export function useAccountStatus() {
     queryKey: ["accountStatus", user?.uid ?? ""],
     queryFn: () => queryFetch<AccountStatus>("/user/account-status"),
     enabled: !!user,
-    refetchInterval: 60_000,
+    // Only poll when the account is actually restricted so we can detect when
+    // a ban/suspension is lifted. Normal users get zero background polling.
+    refetchInterval: isAccountRestricted() ? 5 * 60_000 : false,
   });
 }
 

@@ -10,6 +10,7 @@ export interface Shelf {
   created_at: string | null;
   item_count: number;
   notify: boolean;
+  preview_posters: string[];
 }
 
 // ── Queries ──────────────────────────────────────────────────────────────────

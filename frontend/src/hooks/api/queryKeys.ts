@@ -6,6 +6,10 @@ export const queryKeys = {
   trendingMulti: () => ["trending", "multi"] as const,
   upcoming: (type: "movie" | "tv", page: number) => ["upcoming", type, page] as const,
   comingSoon: () => ["upcoming", "comingSoon"] as const,
+  airingToday: () => ["airingToday"] as const,
+  nowPlaying: () => ["nowPlaying"] as const,
+  popularMulti: () => ["popular", "multi"] as const,
+  topRatedMulti: () => ["topRated", "multi"] as const,
   genres: () => ["genres"] as const,
   genreResults: (type: string, genreId: number, page: number) =>
     ["genres", type, genreId, page] as const,
@@ -14,6 +18,7 @@ export const queryKeys = {
   person: (id: string) => ["person", id] as const,
   collection: (id: string) => ["collection", id] as const,
   mediaDetail: (type: "movie" | "tv", id: string) => ["media", type, id] as const,
+  mediaDetailFull: (type: "movie" | "tv", id: string) => ["media", type, id, "full"] as const,
   aggregateRating: (type: string, id: string) => ["reviews", "aggregate", type, id] as const,
   externalScores: (imdbId: string) => ["reviews", "externalScores", imdbId] as const,
 
@@ -36,6 +41,7 @@ export const queryKeys = {
   friendRequestsIncoming: (uid: string) => ["friends", "incoming", uid] as const,
   friendRequestsOutgoing: (uid: string) => ["friends", "outgoing", uid] as const,
   followers: (uid: string) => ["friends", "followers", uid] as const,
+  friendSuggestions: (uid: string) => ["friends", "suggestions", uid] as const,
   friendProfile: (username: string) => ["friends", "profile", username] as const,
 
   // User

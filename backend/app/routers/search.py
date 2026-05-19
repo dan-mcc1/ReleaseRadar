@@ -7,6 +7,10 @@ from app.services.tmdb_search import (
     get_movie_trending_results,
     get_movie_upcoming,
     get_tv_upcoming,
+    get_tv_airing_today,
+    get_movie_now_playing,
+    get_multi_popular_results,
+    get_multi_top_rated_results,
     get_person_search_results,
     get_genre_list,
     get_tv_by_genre,
@@ -83,3 +87,23 @@ def tv_upcoming(min_date: str, max_date: str, page: int = Query(1, ge=1)):
 @router.get("/movie/upcoming")
 def movie_upcoming(min_date: str, max_date: str, page: int = Query(1, ge=1)):
     return get_movie_upcoming(min_date, max_date, page)
+
+
+@router.get("/tv/airing-today")
+def tv_airing_today(page: int = Query(1, ge=1)):
+    return get_tv_airing_today(page)
+
+
+@router.get("/movie/now-playing")
+def movie_now_playing(page: int = Query(1, ge=1)):
+    return get_movie_now_playing(page)
+
+
+@router.get("/multi/popular")
+def multi_popular():
+    return get_multi_popular_results()
+
+
+@router.get("/multi/top-rated")
+def multi_top_rated():
+    return get_multi_top_rated_results()

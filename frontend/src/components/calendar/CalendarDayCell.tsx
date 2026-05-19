@@ -27,27 +27,27 @@ export default function CalendarDayCell({
   return (
     <div
       onClick={() => onSelect(day.date)}
-      className={`relative px-1 sm:px-2 py-1 sm:py-2 overflow-y-auto border border-neutral-700/50 cursor-pointer transition-colors duration-150 ${
+      className={`relative px-1.5 sm:px-2.5 py-2 overflow-y-auto cursor-pointer transition-colors duration-150 ${
         isCompact ? "min-h-20 sm:min-h-32" : "min-h-32 sm:min-h-48"
       } ${
         isToday
-          ? "bg-primary-900 font-bold"
+          ? "bg-primary-500/8 ring-inset ring-1 ring-primary-500/20"
           : isSelected
-            ? "bg-neutral-700 ring-2 ring-inset ring-primary-500"
-            : "bg-neutral-800 hover:bg-neutral-750"
+            ? "bg-neutral-700/60 ring-inset ring-1 ring-primary-500/40"
+            : "bg-neutral-900 hover:bg-neutral-850"
       }`}
     >
       <time
         dateTime={isoDate}
-        className={`text-xs sm:text-sm font-semibold ${
+        className={`font-mono text-xs sm:text-sm font-semibold ${
           isToday
-            ? "text-white"
+            ? "text-primary-400"
             : isSelected
               ? "text-primary-300"
-              : "text-neutral-300"
+              : "text-neutral-400"
         }`}
       >
-        {day.date.getDate()}
+        {day.date.getDate().toString().padStart(2, "0")}
       </time>
 
       {isLoading
@@ -55,7 +55,7 @@ export default function CalendarDayCell({
             (_, idx) => (
               <div
                 key={idx}
-                className="mt-1 h-8 sm:h-14 rounded-md bg-neutral-700 animate-pulse"
+                className="mt-1.5 h-7 sm:h-12 rounded-md bg-neutral-800 animate-pulse"
               />
             ),
           )
@@ -63,11 +63,11 @@ export default function CalendarDayCell({
             const title =
               "episode_number" in item
                 ? `${item.showData.name} - ${item.name}`
-                : item.title;
+                : (item as any).title;
             return (
               <div
                 key={idx}
-                className="relative mt-1 h-8 sm:h-14 rounded-md overflow-hidden group"
+                className="relative mt-1.5 h-10 sm:h-20 rounded-md overflow-hidden group"
               >
                 {item.showData.backdrop_path && (
                   <img
@@ -76,16 +76,16 @@ export default function CalendarDayCell({
                     className="absolute inset-0 h-full w-full object-cover"
                   />
                 )}
-                <div className="absolute inset-0 bg-black/50" />
-                <div className="relative z-10 flex h-full items-center justify-center px-1">
+                <div className="absolute inset-0 bg-black/55" />
+                <div className="relative z-10 flex h-full items-center justify-center px-1.5">
                   {item.showData.logo_path ? (
                     <img
                       src={`${BASE_IMAGE_URL}/w300${item.showData.logo_path}`}
                       alt={title}
-                      className="max-h-5 sm:max-h-9 object-contain drop-shadow-md"
+                      className="max-h-5 sm:max-h-10 object-contain drop-shadow-md"
                     />
                   ) : (
-                    <span className="text-white text-[7px] sm:text-[9px] font-semibold text-center line-clamp-2 drop-shadow">
+                    <span className="text-white text-[10px] sm:text-xs font-semibold text-center line-clamp-2 drop-shadow leading-tight">
                       {title}
                     </span>
                   )}
@@ -95,7 +95,7 @@ export default function CalendarDayCell({
                     item.showData.air_time,
                     item.showData.air_timezone,
                   ) && (
-                    <div className="absolute bottom-0.5 right-1 z-10 hidden sm:block text-white/75 text-[7px] font-medium drop-shadow">
+                    <div className="absolute bottom-0.5 right-1 z-10 hidden sm:block text-white/60 text-[7px] font-mono drop-shadow">
                       {formatAirTimeToLocal(
                         item.showData.air_time,
                         item.showData.air_timezone,

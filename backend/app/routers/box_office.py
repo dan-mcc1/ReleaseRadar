@@ -96,9 +96,13 @@ def _build_leaderboard(year: int, month: int, limit: int) -> list[dict]:
                 "id": mid,
                 "title": m.get("title"),
                 "poster_path": m.get("poster_path"),
+                "backdrop_path": m.get("backdrop_path"),
                 "release_date": m.get("release_date"),
                 "revenue": revenue,
                 "budget": m.get("budget") or 0,
+                "vote_average": m.get("vote_average") or 0,
+                "runtime": m.get("runtime") or 0,
+                "genres": m.get("genres") or [],
             }
         )
         rank += 1

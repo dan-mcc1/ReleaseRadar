@@ -1,11 +1,15 @@
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { BASE_IMAGE_URL } from "../constants";
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "../hooks/api/queryKeys";
 import { queryFetch } from "../hooks/api/queryFetch";
-import { useWatchedEpisodes, useToggleEpisode, useAnnotateEpisode } from "../hooks/api/useEpisodes";
+import {
+  useWatchedEpisodes,
+  useToggleEpisode,
+  useAnnotateEpisode,
+} from "../hooks/api/useEpisodes";
 
 interface CastMember {
   id: number;
@@ -32,6 +36,7 @@ interface EpisodeData {
   runtime: number | null;
   still_path: string | null;
   vote_average: number | null;
+  vote_count: number | null;
   episode_type: string | null;
   credits?: {
     cast: CastMember[];
@@ -43,37 +48,29 @@ interface EpisodeData {
   };
 }
 
+interface AdjacentEpisode {
+  episode_number: number;
+  season_number: number;
+  name: string;
+  still_path: string | null;
+}
+
 function getEpisodeTag(
   episodeNumber: number,
   episodeType: string | null | undefined,
   inProduction: boolean | null | undefined,
-): { label: string; classes: string } | null {
+): { label: string; bg: string; color: string } | null {
   if (episodeNumber === 1) {
-    return {
-      label: "Season Premiere",
-      classes:
-        "bg-primary-600/20 text-primary-300 border border-primary-500/40",
-    };
+    return { label: "Season Premiere", bg: "bg-primary-500/15", color: "text-primary-400" };
   }
   if (episodeType === "finale") {
     if (inProduction === false) {
-      return {
-        label: "Series Finale",
-        classes: "bg-error-700/20 text-error-300 border border-error-500/40",
-      };
+      return { label: "Series Finale", bg: "bg-error-500/15", color: "text-error-400" };
     }
-    return {
-      label: "Season Finale",
-      classes:
-        "bg-warning-600/20 text-warning-300 border border-warning-500/40",
-    };
+    return { label: "Season Finale", bg: "bg-warning-500/15", color: "text-warning-400" };
   }
   if (episodeType === "mid_season") {
-    return {
-      label: "Mid-Season Finale",
-      classes:
-        "bg-warning-600/20 text-warning-300 border border-warning-500/40",
-    };
+    return { label: "Mid-Season Finale", bg: "bg-warning-500/15", color: "text-warning-400" };
   }
   return null;
 }
@@ -84,42 +81,12 @@ function formatRuntime(minutes: number) {
   return h > 0 ? `${h}h ${m > 0 ? `${m}m` : ""}`.trim() : `${m}m`;
 }
 
-function PersonCard({
-  name,
-  character,
-  profilePath,
-}: {
-  name: string;
-  character?: string;
-  profilePath: string | null;
-}) {
-  return (
-    <div className="flex-shrink-0 w-24 text-center">
-      {profilePath ? (
-        <img
-          src={`${BASE_IMAGE_URL}/w342${profilePath}`}
-          alt={name}
-          className="w-24 h-36 object-cover rounded-xl mb-1"
-        />
-      ) : (
-        <div className="w-24 h-36 rounded-xl bg-neutral-700 flex items-center justify-center mb-1">
-          <svg
-            className="w-8 h-8 text-neutral-500"
-            viewBox="0 0 24 24"
-            fill="currentColor"
-          >
-            <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z" />
-          </svg>
-        </div>
-      )}
-      <p className="text-xs font-medium text-neutral-200 line-clamp-2">
-        {name}
-      </p>
-      {character && (
-        <p className="text-xs text-neutral-500 line-clamp-1">{character}</p>
-      )}
-    </div>
-  );
+function formatAirDate(dateStr: string) {
+  return new Date(dateStr + "T00:00:00").toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).toUpperCase();
 }
 
 export default function EpisodeInfo() {
@@ -128,17 +95,12 @@ export default function EpisodeInfo() {
     season: string;
     episode: string;
   }>();
+  const navigate = useNavigate();
 
   const episodeQuery = useQuery<EpisodeData>({
-    queryKey: queryKeys.episodeDetail(
-      showId ?? "",
-      season ?? "",
-      episode ?? "",
-    ),
+    queryKey: queryKeys.episodeDetail(showId ?? "", season ?? "", episode ?? ""),
     queryFn: () =>
-      queryFetch<EpisodeData>(
-        `/tv/${showId}/season/${season}/episode/${episode}`,
-      ),
+      queryFetch<EpisodeData>(`/tv/${showId}/season/${season}/episode/${episode}`),
     enabled: !!showId && !!season && !!episode,
   });
 
@@ -146,6 +108,27 @@ export default function EpisodeInfo() {
     queryKey: queryKeys.mediaDetail("tv", showId ?? ""),
     queryFn: () => queryFetch(`/tv/${showId}`),
     enabled: !!showId,
+  });
+
+  const prevEpNum = Number(episode) - 1;
+  const nextEpNum = Number(episode) + 1;
+
+  const prevEpisodeQuery = useQuery<AdjacentEpisode>({
+    queryKey: queryKeys.episodeDetail(showId ?? "", season ?? "", String(prevEpNum)),
+    queryFn: () =>
+      queryFetch<AdjacentEpisode>(
+        `/tv/${showId}/season/${season}/episode/${prevEpNum}`,
+      ),
+    enabled: !!showId && !!season && prevEpNum >= 1,
+  });
+
+  const nextEpisodeQuery = useQuery<AdjacentEpisode>({
+    queryKey: queryKeys.episodeDetail(showId ?? "", season ?? "", String(nextEpNum)),
+    queryFn: () =>
+      queryFetch<AdjacentEpisode>(
+        `/tv/${showId}/season/${season}/episode/${nextEpNum}`,
+      ),
+    enabled: !!showId && !!season,
   });
 
   const watchedEpisodesQuery = useWatchedEpisodes(Number(showId ?? 0));
@@ -156,11 +139,12 @@ export default function EpisodeInfo() {
   const showName = showQuery.data?.name ?? null;
   const showInProduction = showQuery.data?.in_production ?? null;
 
-  const watchedEntry = watchedEpisodesQuery.data?.find(
-    (e) =>
-      e.season_number === Number(season) &&
-      e.episode_number === Number(episode),
-  ) ?? null;
+  const watchedEntry =
+    watchedEpisodesQuery.data?.find(
+      (e) =>
+        e.season_number === Number(season) &&
+        e.episode_number === Number(episode),
+    ) ?? null;
   const isWatched = watchedEntry !== null;
 
   const [notesDraft, setNotesDraft] = useState<string>(() => watchedEntry?.notes ?? "");
@@ -211,7 +195,7 @@ export default function EpisodeInfo() {
 
   if (episodeQuery.isError || !data) {
     return (
-      <div className="w-full max-w-3xl mx-auto px-4 py-16 text-center">
+      <div className="w-full max-w-3xl mx-auto px-6 py-16 text-center">
         <p className="text-error-400 text-lg">
           {episodeQuery.error?.message ?? "Episode not found."}
         </p>
@@ -227,178 +211,187 @@ export default function EpisodeInfo() {
     );
   }
 
-  const trailer = data.videos?.results.find(
-    (v) => v.site === "YouTube" && (v.type === "Clip" || v.type === "Trailer"),
-  );
-  const directors =
-    data.credits?.crew.filter((c) => c.job === "Director") ?? [];
-  const writers =
-    data.credits?.crew.filter(
-      (c) => c.job === "Writer" || c.job === "Teleplay",
-    ) ?? [];
+  const directors = data.credits?.crew.filter((c) => c.job === "Director") ?? [];
+  const writers = data.credits?.crew.filter(
+    (c) => c.job === "Writer" || c.job === "Teleplay",
+  ) ?? [];
   const guestStars = data.credits?.guest_stars ?? [];
   const regularCast = data.credits?.cast ?? [];
-  const allCast = [...guestStars, ...regularCast].slice(0, 20);
+  const allCast = [...guestStars, ...regularCast].slice(0, 12);
 
   const heroSrc = data.still_path
     ? `${BASE_IMAGE_URL}/w1280${data.still_path}`
     : null;
 
+  const episodeTag = getEpisodeTag(
+    data.episode_number,
+    data.episode_type,
+    showInProduction,
+  );
+
+  const seasonCode = `S${String(data.season_number).padStart(2, "0")}`;
+  const episodeCode = `E${String(data.episode_number).padStart(2, "0")}`;
+
+  const prevEp = prevEpisodeQuery.data;
+  const nextEp = nextEpisodeQuery.data;
+
   return (
-    <div className="w-full max-w-4xl mx-auto px-4 py-8 space-y-8">
+    <div className="min-h-screen bg-neutral-950 text-neutral-100">
+
       {/* Breadcrumb */}
-      <nav className="flex items-center gap-1.5 text-sm text-neutral-400 flex-wrap">
+      <div className="px-6 md:px-10 pt-6 pb-3 flex items-center gap-2.5 font-mono text-[11.5px] tracking-wider flex-wrap">
         {showName && showId && (
           <>
-            <Link
-              to={`/tv/${showId}`}
-              className="hover:text-white transition-colors"
-            >
+            <Link to={`/tv/${showId}`} className="text-neutral-500 hover:text-neutral-300 transition-colors">
               {showName}
             </Link>
-            <span>/</span>
+            <span className="text-neutral-700">/</span>
           </>
         )}
-        <Link
-          to={`/tv/${showId}`}
-          className="hover:text-white transition-colors"
-        >
+        <Link to={`/tv/${showId}`} className="text-neutral-500 hover:text-neutral-300 transition-colors">
           Season {data.season_number}
         </Link>
-        <span>/</span>
-        <span className="text-neutral-200">Episode {data.episode_number}</span>
-      </nav>
+        <span className="text-neutral-700">/</span>
+        <span className="text-neutral-200 font-medium">
+          Episode {String(data.episode_number).padStart(2, "0")}
+        </span>
+      </div>
 
-      {/* Hero image */}
+      {/* Hero still */}
       {heroSrc && (
-        <div className="rounded-2xl overflow-hidden aspect-video w-full">
-          <img
-            src={heroSrc}
-            alt={data.name}
-            className="w-full h-full object-cover"
-          />
+        <div className="px-6 md:px-10 pb-7 flex justify-center">
+          <div
+            className="relative rounded-2xl overflow-hidden w-full max-w-5xl"
+            style={{ aspectRatio: "16/9" }}
+          >
+            <img
+              src={heroSrc}
+              alt={data.name}
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/60" />
+          </div>
         </div>
       )}
 
-      {/* Title + metadata */}
-      <div>
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-2 flex-wrap">
-              <span className="bg-highlight-600/20 text-highlight-400 border border-highlight-600/30 text-xs font-medium px-2 py-0.5 rounded">
-                S{String(data.season_number).padStart(2, "0")}E
-                {String(data.episode_number).padStart(2, "0")}
+      {/* Title + watched panel */}
+      <div className="px-6 md:px-10 pb-6 grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-7 items-start">
+        <div>
+          {/* Badge row */}
+          <div className="flex items-center gap-2 mb-3 flex-wrap">
+            <span className="px-2.5 py-1 font-mono text-[11px] font-semibold tracking-widest bg-primary-500/15 text-primary-400 rounded-md">
+              {seasonCode} · {episodeCode}
+            </span>
+            {episodeTag && (
+              <span className={`px-2.5 py-1 text-[11px] font-semibold tracking-wide uppercase rounded-md ${episodeTag.bg} ${episodeTag.color}`}>
+                {episodeTag.label}
               </span>
-              {(() => {
-                const tag = getEpisodeTag(
-                  data.episode_number,
-                  data.episode_type,
-                  showInProduction,
-                );
-                return tag ? (
-                  <span
-                    className={`text-xs font-medium px-2 py-0.5 rounded ${tag.classes}`}
-                  >
-                    {tag.label}
-                  </span>
-                ) : null;
-              })()}
-              {data.vote_average != null && data.vote_average > 0 && (
-                <span className="flex items-center gap-1 text-xs text-amber-400">
-                  <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
-                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-                  </svg>
-                  {data.vote_average.toFixed(1)}
-                </span>
-              )}
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">
-              {data.name}
-            </h1>
-            <div className="flex items-center gap-3 text-sm text-neutral-400 flex-wrap">
-              {data.air_date && (
-                <span>
-                  {new Date(data.air_date + "T00:00:00").toLocaleDateString(
-                    undefined,
-                    { year: "numeric", month: "long", day: "numeric" },
-                  )}
-                </span>
-              )}
-              {data.runtime != null && data.runtime > 0 && (
-                <>
-                  <span className="text-neutral-600">·</span>
-                  <span>{formatRuntime(data.runtime)}</span>
-                </>
-              )}
-            </div>
+            )}
+            {data.vote_average != null && data.vote_average > 0 && (
+              <span className="px-2.5 py-1 text-[11px] font-semibold bg-warning-400/12 text-warning-400 rounded-md">
+                ★ {data.vote_average.toFixed(1)}
+                {data.vote_count != null && data.vote_count > 0 && (
+                  <span className="text-warning-600 ml-1">· {data.vote_count.toLocaleString()}</span>
+                )}
+              </span>
+            )}
+            {data.runtime != null && data.runtime > 0 && (
+              <span className="px-2.5 py-1 text-[11px] font-semibold font-mono tracking-widest bg-neutral-800 text-neutral-400 border border-neutral-700 rounded-md">
+                {formatRuntime(data.runtime).toUpperCase()}
+              </span>
+            )}
+            {data.air_date && (
+              <span className="font-mono text-[11px] text-neutral-600 tracking-widest">
+                · {formatAirDate(data.air_date)}
+              </span>
+            )}
           </div>
 
-          {/* Watched toggle */}
-          <button
-            onClick={toggleWatched}
-            disabled={toggleEpisode.isPending}
-            className={`flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl font-medium text-sm transition-all disabled:opacity-50 ${
-              isWatched
-                ? "bg-success-700/30 border border-success-600/50 text-success-400 hover:bg-error-900/30 hover:border-error-600/40 hover:text-error-400"
-                : "bg-neutral-800 border border-neutral-600 text-neutral-300 hover:bg-success-900/30 hover:border-success-600/40 hover:text-success-400"
-            }`}
-          >
-            {toggleEpisode.isPending ? (
-              <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-            ) : isWatched ? (
-              <svg
-                className="w-4 h-4"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2.5}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M5 13l4 4L19 7"
-                />
-              </svg>
-            ) : (
-              <svg
-                className="w-4 h-4"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <circle cx="12" cy="12" r="9" />
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M5 13l4 4L19 7"
-                />
-              </svg>
-            )}
-            {isWatched ? "Watched" : "Mark Watched"}
-          </button>
+          {/* Episode label */}
+          <div className="font-mono text-[10.5px] tracking-[0.15em] uppercase text-neutral-600 mb-1.5">
+            Episode title
+          </div>
+
+          {/* Main title */}
+          <h1 className="font-sans font-light italic text-5xl md:text-6xl lg:text-7xl tracking-tight leading-[0.95] text-neutral-50 mb-0">
+            {data.name}
+          </h1>
+        </div>
+
+        {/* Watched panel */}
+        <div
+          className={`rounded-2xl p-4 border transition-all ${
+            isWatched
+              ? "bg-primary-500/10 border-transparent"
+              : "bg-neutral-900 border-neutral-800"
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <button
+              onClick={toggleWatched}
+              disabled={toggleEpisode.isPending}
+              className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 transition-all disabled:opacity-50 ${
+                isWatched
+                  ? "bg-primary-500 text-neutral-950"
+                  : "bg-neutral-800 text-neutral-500 border border-neutral-700 hover:border-primary-500/50"
+              }`}
+            >
+              {toggleEpisode.isPending ? (
+                <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+              ) : isWatched ? (
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              ) : (
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14M5 12h14" />
+                </svg>
+              )}
+            </button>
+            <div className="flex-1 min-w-0">
+              <div className="text-[13.5px] font-semibold">
+                {isWatched ? "Watched" : "Mark as watched"}
+              </div>
+              <div className="text-[11px] text-neutral-500 mt-0.5">
+                {isWatched ? "Logged to your activity" : "Logs to your activity"}
+              </div>
+            </div>
+          </div>
+          {isWatched && (
+            <button
+              onClick={toggleWatched}
+              disabled={toggleEpisode.isPending}
+              className="mt-3 w-full py-1.5 text-[11.5px] font-medium bg-transparent text-neutral-500 border border-neutral-700 rounded-lg hover:text-neutral-300 hover:border-neutral-600 transition-colors disabled:opacity-50"
+            >
+              Unmark watched
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Rating + Notes (only when watched) */}
+      {/* Rating + Notes — only when watched */}
       {isWatched && (
-        <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 space-y-4">
-          {/* Star rating */}
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500 mb-2">Your Rating</p>
-            <div className="flex items-center gap-1">
+        <div className="px-6 md:px-10 pb-7 grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Rating */}
+          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
+            <div className="font-mono text-[10.5px] tracking-[0.15em] uppercase text-neutral-600 mb-4">
+              Your rating
+            </div>
+            <div className="flex items-center gap-2">
               {[1, 2, 3, 4, 5].map((star) => (
                 <button
                   key={star}
-                  onClick={() => setEpisodeRating(watchedEntry?.rating === star ? null : star)}
+                  onClick={() =>
+                    setEpisodeRating(watchedEntry?.rating === star ? null : star)
+                  }
                   disabled={annotateEpisode.isPending}
-                  className="disabled:opacity-50"
+                  className="disabled:opacity-50 transition-transform hover:scale-110"
                 >
                   <svg
-                    className={`w-6 h-6 transition-colors ${
+                    className={`w-8 h-8 transition-colors ${
                       (watchedEntry?.rating ?? 0) >= star
-                        ? "fill-amber-400 text-amber-400"
-                        : "fill-neutral-700 text-neutral-700 hover:fill-amber-400/50"
+                        ? "fill-warning-400 text-warning-400"
+                        : "fill-neutral-800 text-neutral-800 hover:fill-warning-400/40"
                     }`}
                     viewBox="0 0 24 24"
                   >
@@ -407,19 +400,28 @@ export default function EpisodeInfo() {
                 </button>
               ))}
               {watchedEntry?.rating != null && (
-                <span className="ml-2 text-sm text-amber-400">{watchedEntry.rating}/5</span>
+                <span className="ml-3 font-sans italic text-[32px] leading-none text-warning-400 tracking-tight">
+                  {watchedEntry.rating}
+                  <span className="text-neutral-600 not-italic text-2xl">/5</span>
+                </span>
               )}
             </div>
           </div>
 
           {/* Notes */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500">Notes</p>
+          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <span className="font-mono text-[10.5px] tracking-[0.15em] uppercase text-neutral-600">
+                Your notes
+              </span>
+              <span className="flex-1" />
               {!notesOpen && (
                 <button
-                  onClick={() => { setNotesDraft(watchedEntry?.notes ?? ""); setNotesOpen(true); }}
-                  className="text-xs text-primary-400 hover:text-primary-300 transition-colors"
+                  onClick={() => {
+                    setNotesDraft(watchedEntry?.notes ?? "");
+                    setNotesOpen(true);
+                  }}
+                  className="text-[11.5px] text-primary-400 hover:text-primary-300 font-medium transition-colors"
                 >
                   {watchedEntry?.notes ? "Edit" : "+ Add note"}
                 </button>
@@ -433,7 +435,7 @@ export default function EpisodeInfo() {
                   maxLength={2000}
                   rows={3}
                   placeholder="What did you think?"
-                  className="w-full bg-neutral-800 border border-neutral-700 rounded-xl px-3 py-2 text-sm text-neutral-200 placeholder-neutral-500 resize-none focus:outline-none focus:border-primary-500"
+                  className="w-full bg-neutral-800 border border-neutral-700 rounded-xl px-3 py-2 text-sm text-neutral-200 placeholder-neutral-600 resize-none focus:outline-none focus:border-primary-500 font-sans"
                 />
                 <div className="flex items-center gap-2 justify-end">
                   <button
@@ -452,43 +454,60 @@ export default function EpisodeInfo() {
                 </div>
               </div>
             ) : watchedEntry?.notes ? (
-              <p className="text-sm text-neutral-300 leading-relaxed">{watchedEntry.notes}</p>
+              <p className="font-sans italic text-base text-neutral-300 leading-relaxed">
+                "{watchedEntry.notes}"
+              </p>
             ) : (
-              <p className="text-sm text-neutral-600 italic">No notes yet.</p>
+              <p className="font-sans italic text-sm text-neutral-600">
+                No notes yet.
+              </p>
             )}
           </div>
         </div>
       )}
 
-      {/* Overview */}
-      {data.overview && (
-        <div>
-          <h2 className="text-lg font-semibold text-white mb-2">Overview</h2>
-          <p className="text-neutral-300 leading-relaxed">{data.overview}</p>
-        </div>
-      )}
-
-      {/* Crew */}
-      {(directors.length > 0 || writers.length > 0) && (
-        <div className="flex flex-wrap gap-6">
-          {directors.length > 0 && (
+      {/* Synopsis + Crew side rail */}
+      {(data.overview || directors.length > 0 || writers.length > 0) && (
+        <div className="px-6 md:px-10 pb-7 grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-9">
+          {data.overview && (
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500 mb-1">
-                Directed by
-              </p>
-              <p className="text-neutral-200 text-sm">
-                {directors.map((d) => d.name).join(", ")}
+              <div className="mb-4">
+                <div className="font-mono text-[10.5px] tracking-[0.12em] uppercase text-neutral-500">Synopsis</div>
+                <div className="h-px w-full bg-neutral-800 mt-2" />
+              </div>
+              <p className="font-sans font-light text-xl md:text-2xl leading-relaxed text-neutral-200 max-w-2xl">
+                {data.overview}
               </p>
             </div>
           )}
-          {writers.length > 0 && (
+
+          {(directors.length > 0 || writers.length > 0) && (
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500 mb-1">
-                Written by
-              </p>
-              <p className="text-neutral-200 text-sm">
-                {writers.map((w) => w.name).join(", ")}
-              </p>
+              <div className="font-mono text-[10.5px] tracking-[0.15em] uppercase text-neutral-600 mb-4">
+                Crew
+              </div>
+              <div className="flex flex-col gap-4">
+                {directors.length > 0 && (
+                  <div>
+                    <div className="font-mono text-[10px] text-neutral-600 tracking-[0.08em] uppercase">
+                      Directed by
+                    </div>
+                    <div className="font-sans italic text-lg mt-1 tracking-tight text-neutral-200">
+                      {directors.map((d) => d.name).join(", ")}
+                    </div>
+                  </div>
+                )}
+                {writers.length > 0 && (
+                  <div>
+                    <div className="font-mono text-[10px] text-neutral-600 tracking-[0.08em] uppercase">
+                      Written by
+                    </div>
+                    <div className="font-sans italic text-lg mt-1 tracking-tight text-neutral-200">
+                      {writers.map((w) => w.name).join(", ")}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -496,61 +515,104 @@ export default function EpisodeInfo() {
 
       {/* Cast */}
       {allCast.length > 0 && (
-        <div>
-          <h2 className="text-lg font-semibold text-white mb-3">Cast</h2>
-          <div className="flex gap-4 overflow-x-auto pb-2">
+        <div className="px-6 md:px-10 pb-7">
+          <div className="mb-5">
+            <div className="flex items-center justify-between">
+              <div className="font-mono text-[10.5px] tracking-[0.12em] uppercase text-neutral-500">Cast</div>
+              <span className="font-mono text-[10px] text-neutral-700">{allCast.length}</span>
+            </div>
+            <div className="h-px w-full bg-neutral-800 mt-2" />
+          </div>
+          <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-4">
             {allCast.map((person) => (
               <Link
                 key={`${person.id}-${person.character}`}
                 to={`/person/${person.id}`}
+                className="text-left group"
               >
-                <PersonCard
-                  name={person.name}
-                  character={person.character}
-                  profilePath={person.profile_path}
-                />
+                <div className="aspect-square rounded-full overflow-hidden mb-2.5 bg-neutral-800 border border-neutral-700 group-hover:border-neutral-500 transition-colors">
+                  {person.profile_path ? (
+                    <img
+                      src={`${BASE_IMAGE_URL}/w185${person.profile_path}`}
+                      alt={person.name}
+                      className="w-full h-full object-cover object-[center_30%]"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-neutral-500 font-semibold text-base">
+                      {person.name.split(" ").map((x) => x[0]).join("").slice(0, 2)}
+                    </div>
+                  )}
+                </div>
+                <p className="text-[12px] font-semibold text-neutral-200 leading-tight line-clamp-2 group-hover:text-white transition-colors">
+                  {person.name}
+                </p>
+                {person.character && (
+                  <p className="text-[11px] text-neutral-500 mt-0.5 line-clamp-1">
+                    as {person.character}
+                  </p>
+                )}
               </Link>
             ))}
           </div>
         </div>
       )}
 
-      {/* Trailer / clip */}
-      {trailer && (
-        <div>
-          <h2 className="text-lg font-semibold text-white mb-3">Video</h2>
-          <div className="aspect-video rounded-xl overflow-hidden">
-            <iframe
-              src={`https://www.youtube.com/embed/${trailer.key}`}
-              title={data.name}
-              className="w-full h-full"
-              allowFullScreen
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Back to show */}
-      <div className="pt-4 border-t border-neutral-800">
-        <Link
-          to={`/tv/${showId}`}
-          className="inline-flex items-center gap-2 text-sm text-neutral-400 hover:text-white transition-colors"
-        >
-          <svg
-            className="w-4 h-4"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2}
+      {/* Prev / Next episode nav */}
+      <div className="px-6 md:px-10 pb-10">
+        <div className="h-px w-full bg-neutral-800 mb-5" />
+        <div className="grid grid-cols-2 gap-3.5">
+          {/* Previous */}
+          <button
+            onClick={() =>
+              prevEp &&
+              navigate(`/tv/${showId}/episode/${season}/${prevEp.episode_number}`)
+            }
+            disabled={!prevEp && prevEpNum >= 1}
+            className={`flex items-center gap-4 p-4 rounded-xl border text-left transition-all ${
+              prevEp
+                ? "bg-neutral-900 border-neutral-800 hover:border-neutral-700 cursor-pointer"
+                : "bg-neutral-900/40 border-neutral-800/40 opacity-40 cursor-default"
+            }`}
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M15 19l-7-7 7-7"
-            />
-          </svg>
-          Back to {showName ?? "show"}
-        </Link>
+            <svg className="w-4 h-4 text-neutral-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+            <div className="min-w-0">
+              <div className="font-mono text-[10px] text-neutral-600 tracking-[0.08em] uppercase mb-1">
+                ← Previous · {seasonCode} E{String(prevEpNum).padStart(2, "0")}
+              </div>
+              <div className="font-sans italic text-[17px] tracking-tight text-neutral-200 truncate">
+                {prevEp?.name ?? "—"}
+              </div>
+            </div>
+          </button>
+
+          {/* Next */}
+          <button
+            onClick={() =>
+              nextEp &&
+              navigate(`/tv/${showId}/episode/${season}/${nextEp.episode_number}`)
+            }
+            disabled={!nextEp}
+            className={`flex items-center gap-4 p-4 rounded-xl border text-right justify-end transition-all ${
+              nextEp
+                ? "bg-primary-500/10 border-transparent hover:bg-primary-500/15 cursor-pointer"
+                : "bg-neutral-900/40 border-neutral-800/40 opacity-40 cursor-default"
+            }`}
+          >
+            <div className="min-w-0">
+              <div className="font-mono text-[10px] text-primary-600 tracking-[0.08em] uppercase mb-1">
+                Next · {seasonCode} E{String(nextEpNum).padStart(2, "0")} →
+              </div>
+              <div className="font-sans italic text-[17px] tracking-tight text-neutral-200 truncate">
+                {nextEp?.name ?? "—"}
+              </div>
+            </div>
+            <svg className="w-4 h-4 text-primary-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -8,6 +8,7 @@ from app.services.tmdb_tv import (
 from app.models.show import Show
 from app.models.episode import Episode
 from app.db.session import get_db
+from app.services.provider_utils import normalize_tmdb_watch_providers
 from app.services.watchlist_service import serialize_show, _show_query_options
 
 router = APIRouter()
@@ -34,7 +35,7 @@ def get_show_info(
 
 
 @router.get("/{id}/full")
-def get_full_show_info(id: int):
+def get_full_show_info(id: int, db: Session = Depends(get_db)):
     append = ",".join(
         [
             "watch/providers",
@@ -49,6 +50,30 @@ def get_full_show_info(id: int):
     show_data = fetch_show_from_tmdb(id, append)
     if not show_data:
         raise HTTPException(status_code=404, detail="Show not found")
+
+    # Prefer DB-stored image paths so the detail page always matches list pages.
+    # Also extract logo_path from TMDb images if the DB doesn't have one.
+    db_show = db.query(Show).filter(Show.id == id).first()
+    if db_show:
+        if db_show.backdrop_path:
+            show_data["backdrop_path"] = db_show.backdrop_path
+        if db_show.poster_path:
+            show_data["poster_path"] = db_show.poster_path
+        if db_show.logo_path:
+            show_data["logo_path"] = db_show.logo_path
+
+    # Fall back to first English logo from TMDb images if still no logo
+    if not show_data.get("logo_path"):
+        logos = show_data.get("images", {}).get("logos", [])
+        en_logos = [l for l in logos if l.get("iso_639_1") in ("en", None)]
+        if en_logos:
+            show_data["logo_path"] = en_logos[0]["file_path"]
+        elif logos:
+            show_data["logo_path"] = logos[0]["file_path"]
+
+    us_providers = show_data.get("watch/providers", {}).get("results", {}).get("US")
+    if us_providers:
+        normalize_tmdb_watch_providers(us_providers)
 
     return show_data
 

@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useShelves, useShelfItems, useRemoveFromShelf } from "../hooks/api/useShelves";
 import MediaCard from "../components/MediaCard";
 import { usePageTitle } from "../hooks/usePageTitle";
@@ -10,7 +9,11 @@ export default function ShelfDetailPage() {
   const { id } = useParams<{ id: string }>();
   const shelfId = Number(id);
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<"items" | "calendar">("items");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = (searchParams.get("tab") as "items" | "calendar") ?? "items";
+  function setActiveTab(tab: "items" | "calendar") {
+    setSearchParams((p) => { p.set("tab", tab); return p; }, { replace: true });
+  }
 
   const { data: shelves = [] } = useShelves();
   const shelf = shelves.find((s) => s.id === shelfId);

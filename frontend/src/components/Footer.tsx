@@ -1,6 +1,8 @@
 import { Link } from "react-router-dom";
+import { useAuthUser } from "../hooks/useAuthUser";
 
 export default function Footer() {
+  const user = useAuthUser();
   const year = new Date().getFullYear();
 
   return (
@@ -43,17 +45,25 @@ export default function Footer() {
             >
               Box Office
             </Link>
-            <Link
-              to="/settings"
-              className="hover:text-neutral-300 transition-colors"
-            >
-              Settings
-            </Link>
+            {user && (
+              <Link
+                to="/settings"
+                className="hover:text-neutral-300 transition-colors"
+              >
+                Settings
+              </Link>
+            )}
             <Link
               to="/community-guidelines"
               className="hover:text-neutral-300 transition-colors"
             >
               Community Guidelines
+            </Link>
+            <Link
+              to="/feedback"
+              className="hover:text-neutral-300 transition-colors"
+            >
+              Feedback
             </Link>
           </div>
 

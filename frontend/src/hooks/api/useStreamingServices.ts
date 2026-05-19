@@ -82,6 +82,7 @@ export interface OptimizerSuggestion {
   name: string;
   logo_path: string;
   adds_count: number;
+  adds_items: OptimizerItem[];
   you_have: boolean;
 }
 

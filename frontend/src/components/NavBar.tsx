@@ -19,6 +19,8 @@ import { apiFetch } from "../utils/apiFetch";
 import { useNavCounts, useNavAvatar } from "../hooks/api/useNavCounts";
 import { queryKeys } from "../hooks/api/queryKeys";
 import { useUserMe } from "../hooks/api/useUser";
+import { useRecommendationsInbox, useMarkRecRead } from "../hooks/api/useRecommendations";
+import { useFriendRequestsIncoming, useRespondToFriendRequest } from "../hooks/api/useFriends";
 
 interface SearchResult {
   id: number;
@@ -29,9 +31,39 @@ interface SearchResult {
   profile_path?: string | null;
 }
 
+interface RecommendationItem {
+  id: number;
+  sender_username: string | null;
+  content_type: "movie" | "tv";
+  content_id: number;
+  content_title: string | null;
+  content_poster_path: string | null;
+  message: string | null;
+  is_read: boolean;
+  created_at: string;
+}
+
+interface FriendRequest {
+  friendship_id: number;
+  from_user: { id: string; username: string };
+  created_at: string;
+  message?: string | null;
+}
+
+function timeAgo(isoString: string) {
+  const diff = Date.now() - new Date(isoString).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(isoString).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
 const discoverLinks = [
-  { name: "Trending", href: "/trending" },
-  { name: "Upcoming", href: "/upcoming" },
+  { name: "Trending & Upcoming", href: "/trending" },
   { name: "Browse", href: "/browse-genres" },
   { name: "Box Office", href: "/box-office" },
   { name: "News", href: "/news" },
@@ -71,15 +103,15 @@ function NavDropdown({
       <MenuButton
         className={classNames(
           isActive
-            ? "bg-neutral-950/50 text-white"
-            : "text-neutral-300 hover:bg-white/5 hover:text-white",
-          "inline-flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+            ? "bg-neutral-800 text-white"
+            : "text-neutral-400 hover:text-neutral-100 hover:bg-neutral-900",
+          "inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-[13.5px] font-medium tracking-[-0.01em] transition-colors",
         )}
       >
         {label}
         {totalBadge > 0 && <Badge count={totalBadge} />}
         <svg
-          className="w-3.5 h-3.5 opacity-60"
+          className="w-3 h-3 opacity-50"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -94,7 +126,7 @@ function NavDropdown({
       </MenuButton>
       <MenuItems
         modal={false}
-        className="absolute left-0 z-20 mt-1 w-44 origin-top-left rounded-lg bg-neutral-800 border border-white/10 py-1 shadow-xl transition data-closed:scale-95 data-closed:opacity-0 data-enter:duration-100 data-enter:ease-out data-leave:duration-75 data-leave:ease-in"
+        className="absolute left-0 z-20 mt-1.5 w-44 origin-top-left rounded-xl bg-neutral-900 border border-neutral-700/70 py-1 shadow-2xl shadow-black/40 transition data-closed:scale-95 data-closed:opacity-0 data-enter:duration-100 data-enter:ease-out data-leave:duration-75 data-leave:ease-in"
       >
         {links.map((link) => {
           const badge = badges?.[link.href] ?? 0;
@@ -104,9 +136,9 @@ function NavDropdown({
                 to={link.href}
                 className={classNames(
                   currentPath === link.href
-                    ? "text-white bg-white/10"
-                    : "text-neutral-300",
-                  "flex items-center justify-between px-4 py-2 text-sm hover:bg-white/5 hover:text-white data-focus:bg-white/5 data-focus:outline-hidden",
+                    ? "text-white bg-white/8"
+                    : "text-neutral-400",
+                  "flex items-center justify-between px-3 py-2 text-[13px] font-medium hover:bg-white/5 hover:text-white data-focus:bg-white/5 data-focus:outline-hidden transition-colors",
                 )}
               >
                 {link.name}
@@ -132,8 +164,12 @@ export default function NavBar() {
   const [dropdownResults, setDropdownResults] = useState<SearchResult[]>([]);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [dropdownLoading, setDropdownLoading] = useState(false);
+  const [searchFocused, setSearchFocused] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const notifRef = useRef<HTMLDivElement>(null);
   const esRef = useRef<EventSource | null>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const dropdownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dropdownAbortRef = useRef<AbortController | null>(null);
 
@@ -143,6 +179,17 @@ export default function NavBar() {
   const pendingRequests = navCounts?.pendingRequests ?? 0;
   const unreadRecs = navCounts?.unreadRecs ?? 0;
   const showUpgradeCta = user && userMe?.subscription_tier === "free";
+  const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/.test(navigator.platform);
+  const hasNotifications = pendingRequests > 0 || unreadRecs > 0;
+
+  const { data: recsRaw } = useRecommendationsInbox();
+  const { data: requestsRaw } = useFriendRequestsIncoming();
+  const notifRecs = ((recsRaw ?? []) as RecommendationItem[]).filter(r => !r.is_read).slice(0, 4);
+  const notifRequests = ((requestsRaw ?? []) as FriendRequest[]).slice(0, 4);
+  const totalNotifs = notifRecs.length + notifRequests.length;
+
+  const markRecRead = useMarkRecRead();
+  const respondToRequest = useRespondToFriendRequest();
 
   function cancelPendingDropdown() {
     if (dropdownTimerRef.current) clearTimeout(dropdownTimerRef.current);
@@ -162,6 +209,18 @@ export default function NavBar() {
       setDropdownOpen(false);
     }
   };
+
+  // ⌘K / Ctrl+K focuses search
+  useEffect(() => {
+    function handleGlobalKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    }
+    document.addEventListener("keydown", handleGlobalKey);
+    return () => document.removeEventListener("keydown", handleGlobalKey);
+  }, []);
 
   // Debounced search for dropdown
   useEffect(() => {
@@ -217,7 +276,7 @@ export default function NavBar() {
     };
   }, [searchQuery]);
 
-  // Close dropdown on outside click
+  // Close dropdowns on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (
@@ -225,6 +284,9 @@ export default function NavBar() {
         !searchContainerRef.current.contains(e.target as Node)
       ) {
         setDropdownOpen(false);
+      }
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+        setNotifOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClick);
@@ -267,6 +329,8 @@ export default function NavBar() {
                 unreadRecs: data.unread_recs ?? old?.unreadRecs ?? 0,
               }),
             );
+            queryClient.invalidateQueries({ queryKey: queryKeys.recommendationsInbox(uid) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.friendRequestsIncoming(uid) });
           }
         } catch {
           // ignore malformed events
@@ -331,16 +395,16 @@ export default function NavBar() {
   return (
     <Disclosure
       as="nav"
-      className="fixed top-0 left-0 right-0 z-50 bg-primary-800 after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-white/10"
+      className="fixed top-0 left-0 right-0 z-50 bg-neutral-950 border-b border-neutral-800/70"
     >
-      <div className="mx-auto max-w-7xl px-4 lg:px-8">
-        <div className="relative flex h-16 items-center justify-between">
+      <div className="px-4 lg:px-10">
+        <div className="relative flex h-16 items-center gap-6">
           {/* Mobile hamburger + back button */}
-          <div className="absolute inset-y-0 left-0 flex items-center gap-0.5 lg:hidden">
+          <div className="flex items-center gap-0.5 lg:hidden">
             {location.pathname !== "/" && (
               <button
                 onClick={() => navigate(-1)}
-                className="inline-flex items-center justify-center rounded-md p-2 text-neutral-400 hover:bg-white/5 hover:text-white"
+                className="inline-flex items-center justify-center rounded-lg p-2 text-neutral-400 hover:bg-neutral-900 hover:text-white transition-colors"
                 aria-label="Go back"
               >
                 <svg
@@ -358,65 +422,67 @@ export default function NavBar() {
                 </svg>
               </button>
             )}
-            <DisclosureButton className="group relative inline-flex items-center justify-center rounded-md p-2 bg-neutral-700 text-neutral-400 hover:bg-white/5 hover:text-white focus:outline-2 focus:-outline-offset-1 focus:outline-indigo-500">
+            <DisclosureButton className="group relative inline-flex items-center justify-center rounded-lg p-2 text-neutral-400 hover:bg-neutral-900 hover:text-white transition-colors focus:outline-none">
               <span className="absolute -inset-0.5" />
               <span className="sr-only">Open main menu</span>
               <Bars3Icon
                 aria-hidden="true"
-                className="block size-6 group-data-open:hidden"
+                className="block size-5 group-data-open:hidden"
               />
               <XMarkIcon
                 aria-hidden="true"
-                className="hidden size-6 group-data-open:block"
+                className="hidden size-5 group-data-open:block"
               />
             </DisclosureButton>
           </div>
 
-          {/* Logo + desktop nav */}
-          <div className="flex flex-1 items-center justify-center lg:items-stretch lg:justify-start">
-            <div className="flex shrink-0 items-center text-white">
-              <a href="/calendar" className="flex items-center gap-2 shrink-0">
-                <img
-                  src="/favicon-1024.png"
-                  className="h-15 w-auto"
-                  alt="Logo"
-                />
-                <span className="text-xl font-bold">Release Radar</span>
-              </a>
-            </div>
+          {/* Logo */}
+          <a href="/calendar" className="flex items-center gap-2.5 shrink-0">
+            <img
+              src="/favicon-1024.png"
+              className="h-7 w-auto"
+              alt="Logo"
+            />
+            <span className="text-white font-semibold text-[16px] tracking-[-0.02em] hidden sm:block">
+              Release Radar
+            </span>
+          </a>
 
-            <div className="hidden lg:ml-6 lg:flex lg:items-center lg:gap-1">
-              <Link
-                to="/calendar"
-                className={classNames(
-                  location.pathname === "/calendar"
-                    ? "bg-neutral-950/50 text-white"
-                    : "text-neutral-300 hover:bg-white/5 hover:text-white",
-                  "rounded-md px-3 py-2 text-sm font-medium",
-                )}
-              >
-                Calendar
-              </Link>
+          {/* Desktop nav */}
+          <nav className="hidden lg:flex items-center gap-1">
+            <Link
+              to="/calendar"
+              className={classNames(
+                location.pathname === "/calendar"
+                  ? "bg-neutral-800 text-white"
+                  : "text-neutral-400 hover:text-neutral-100 hover:bg-neutral-900",
+                "rounded-lg px-3 py-1.5 text-[13.5px] font-medium tracking-[-0.01em] transition-colors",
+              )}
+            >
+              Calendar
+            </Link>
 
+            <NavDropdown
+              label="Discover"
+              links={discoverLinks}
+              currentPath={location.pathname}
+            />
+
+            {user && (
               <NavDropdown
-                label="Discover"
-                links={discoverLinks}
+                label="My Library"
+                links={libraryLinks}
+                badges={libraryBadges}
                 currentPath={location.pathname}
               />
+            )}
+          </nav>
 
-              {user && (
-                <NavDropdown
-                  label="My Library"
-                  links={libraryLinks}
-                  badges={libraryBadges}
-                  currentPath={location.pathname}
-                />
-              )}
-            </div>
-          </div>
+          {/* Spacer */}
+          <div className="flex-1" />
 
-          {/* Right side: search + avatar/sign in */}
-          <div className="absolute inset-y-0 right-0 flex items-center pr-2 lg:static lg:inset-auto lg:ml-6 lg:pr-0 space-x-2">
+          {/* Right side */}
+          <div className="flex items-center gap-2">
             {showUpgradeCta && (
               <Link
                 to="/pricing"
@@ -428,37 +494,63 @@ export default function NavBar() {
                 Upgrade
               </Link>
             )}
+
+            {/* Search bar */}
             <div ref={searchContainerRef} className="relative hidden lg:block">
-              <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-400 pointer-events-none z-10">
+              <div
+                className={classNames(
+                  "flex items-center gap-2 h-9 px-3 rounded-xl border transition-colors cursor-text w-72",
+                  searchFocused
+                    ? "bg-neutral-900 border-neutral-600"
+                    : "bg-neutral-900 border-neutral-700/70",
+                )}
+                onClick={() => searchInputRef.current?.focus()}
+              >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
                   viewBox="0 0 24 24"
                   fill="currentColor"
-                  className="w-5 h-5"
+                  className="w-[15px] h-[15px] text-neutral-500 shrink-0"
                 >
                   <path d="M10 2a8 8 0 105.293 14.293l4.707 4.707 1.414-1.414-4.707-4.707A8 8 0 0010 2zm0 2a6 6 0 110 12 6 6 0 010-12z" />
                 </svg>
-              </span>
-              <input
-                type="text"
-                value={searchQuery}
-                onKeyDown={handleKeyDown}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onFocus={() =>
-                  dropdownResults.length > 0 && setDropdownOpen(true)
-                }
-                placeholder="Search..."
-                className="pl-10 w-56 py-1.5 rounded-md bg-primary-700 border border-primary-800/50 text-white text-sm placeholder-neutral-300 focus:outline-none focus:ring-2 focus:ring-neutral-950/50 transition"
-              />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={searchQuery}
+                  onKeyDown={handleKeyDown}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onFocus={() => {
+                    setSearchFocused(true);
+                    if (dropdownResults.length > 0) setDropdownOpen(true);
+                  }}
+                  onBlur={() => setSearchFocused(false)}
+                  placeholder="Search shows, movies, people"
+                  className="flex-1 bg-transparent text-white text-[13px] placeholder-neutral-500 focus:outline-none min-w-0"
+                />
+                {searchQuery ? (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setSearchQuery(""); }}
+                    className="text-neutral-500 hover:text-neutral-300 transition-colors shrink-0"
+                  >
+                    <XMarkIcon className="w-3.5 h-3.5" />
+                  </button>
+                ) : (
+                  <span className="font-mono text-[11px] px-1.5 py-0.5 border border-neutral-700 rounded text-neutral-600 shrink-0 select-none">
+                    {isMac ? "⌘K" : "Ctrl K"}
+                  </span>
+                )}
+              </div>
 
               {dropdownOpen && (
-                <div className="absolute top-full mt-1 right-0 w-72 bg-neutral-800 border border-white/10 rounded-lg shadow-xl z-50 overflow-hidden">
+                <div className="absolute top-full mt-1.5 right-0 w-80 bg-neutral-900 border border-neutral-700/70 rounded-xl shadow-2xl shadow-black/50 z-50 overflow-hidden">
                   {dropdownLoading && dropdownResults.length === 0 ? (
-                    <div className="px-4 py-3 text-sm text-neutral-400">
+                    <div className="px-4 py-3 text-[13px] text-neutral-500">
                       Searching…
                     </div>
                   ) : dropdownResults.length === 0 ? (
-                    <div className="px-4 py-3 text-sm text-neutral-400">
+                    <div className="px-4 py-3 text-[13px] text-neutral-500">
                       No results found.
                     </div>
                   ) : (
@@ -491,7 +583,7 @@ export default function NavBar() {
                             }}
                             className="flex items-center gap-3 px-3 py-2 hover:bg-white/5 transition-colors"
                           >
-                            <div className="flex-shrink-0 w-8 h-12 rounded overflow-hidden bg-neutral-700">
+                            <div className="flex-shrink-0 w-8 h-12 rounded-lg overflow-hidden bg-neutral-800">
                               {imgPath ? (
                                 <img
                                   src={`${BASE_IMAGE_URL}/w185${imgPath}`}
@@ -505,10 +597,10 @@ export default function NavBar() {
                               )}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm text-white truncate">
+                              <p className="text-[13px] font-medium text-white truncate">
                                 {label}
                               </p>
-                              <p className="text-xs text-neutral-400">
+                              <p className="text-[12px] text-neutral-500">
                                 {typeLabel}
                               </p>
                             </div>
@@ -521,7 +613,7 @@ export default function NavBar() {
                           setDropdownOpen(false);
                           setSearchQuery("");
                         }}
-                        className="flex items-center justify-center px-3 py-2 border-t border-white/10 text-xs text-highlight-400 hover:text-highlight-300 hover:bg-white/5 transition-colors"
+                        className="flex items-center justify-center px-3 py-2 border-t border-neutral-800 text-[12px] text-primary-400 hover:text-primary-300 hover:bg-white/5 transition-colors"
                       >
                         See all results →
                       </Link>
@@ -531,17 +623,174 @@ export default function NavBar() {
               )}
             </div>
 
+            {/* Bell dropdown */}
+            {user && (
+              <div ref={notifRef} className="relative hidden lg:block">
+                <button
+                  onClick={() => setNotifOpen(o => !o)}
+                  className="relative flex items-center justify-center w-9 h-9 rounded-xl border border-neutral-700/70 bg-transparent text-neutral-400 hover:text-neutral-100 hover:border-neutral-600 transition-colors"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={1.8}
+                    className="w-[17px] h-[17px]"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"
+                    />
+                  </svg>
+                  {hasNotifications && (
+                    <span className="absolute top-[7px] right-[8px] w-[6px] h-[6px] rounded-full bg-primary-400" />
+                  )}
+                </button>
+
+                {notifOpen && (
+                  <div className="absolute right-0 top-full mt-1.5 w-80 bg-neutral-900 border border-neutral-700/70 rounded-xl shadow-2xl shadow-black/50 z-50 overflow-hidden">
+                    <div className="px-3 py-2.5 border-b border-neutral-800 flex items-center justify-between">
+                      <span className="text-[12px] font-semibold text-neutral-400 uppercase tracking-wider">Notifications</span>
+                      {totalNotifs > 0 && (
+                        <span className="text-[11px] text-neutral-500">{totalNotifs} new</span>
+                      )}
+                    </div>
+
+                    {totalNotifs === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-8 px-4 gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.4} className="w-8 h-8 text-neutral-700">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+                        </svg>
+                        <p className="text-[13px] text-neutral-500">You're all caught up</p>
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-neutral-800/60">
+                        {notifRequests.map(req => (
+                          <div key={req.friendship_id} className="flex items-start gap-3 px-3 py-2.5 hover:bg-white/4 transition-colors group">
+                            <div className="w-8 h-8 rounded-full bg-primary-800/50 border border-primary-700/40 flex items-center justify-center shrink-0 mt-0.5">
+                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 text-primary-400">
+                                <path d="M6.25 6.375a4.125 4.125 0 118.25 0 4.125 4.125 0 01-8.25 0zM3.25 19.125a7.125 7.125 0 0114.25 0v.003l-.001.119a.75.75 0 01-.363.63 13.067 13.067 0 01-6.761 1.873c-2.472 0-4.786-.684-6.76-1.873a.75.75 0 01-.364-.63l-.001-.122zM19.75 7.5a.75.75 0 00-1.5 0v2.25H16a.75.75 0 000 1.5h2.25v2.25a.75.75 0 001.5 0v-2.25H22a.75.75 0 000-1.5h-2.25V7.5z" />
+                              </svg>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[13px] text-neutral-200 leading-snug">
+                                <span className="font-semibold">{req.from_user.username}</span>
+                                <span className="text-neutral-400"> sent you a friend request</span>
+                              </p>
+                              {req.message && (
+                                <p className="text-[12px] text-neutral-500 truncate mt-0.5">"{req.message}"</p>
+                              )}
+                              <p className="text-[11px] text-neutral-600 mt-0.5">{timeAgo(req.created_at)}</p>
+                              <div className="flex items-center gap-1.5 mt-1.5">
+                                <button
+                                  onClick={() => respondToRequest.mutate({ friendshipId: req.friendship_id, accept: true })}
+                                  disabled={respondToRequest.isPending}
+                                  className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[11.5px] font-medium bg-primary-500/20 text-primary-400 border border-primary-500/30 hover:bg-primary-500/30 transition-colors disabled:opacity-50"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3"><path fillRule="evenodd" d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z" clipRule="evenodd" /></svg>
+                                  Accept
+                                </button>
+                                <button
+                                  onClick={() => respondToRequest.mutate({ friendshipId: req.friendship_id, accept: false })}
+                                  disabled={respondToRequest.isPending}
+                                  className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[11.5px] font-medium bg-neutral-800 text-neutral-400 border border-neutral-700 hover:bg-neutral-700 hover:text-neutral-200 transition-colors disabled:opacity-50"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3"><path d="M5.28 4.22a.75.75 0 0 0-1.06 1.06L6.94 8l-2.72 2.72a.75.75 0 1 0 1.06 1.06L8 9.06l2.72 2.72a.75.75 0 1 0 1.06-1.06L9.06 8l2.72-2.72a.75.75 0 0 0-1.06-1.06L8 6.94 5.28 4.22Z" /></svg>
+                                  Decline
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+
+                        {notifRecs.map(rec => (
+                          <div key={rec.id} className="flex items-start gap-3 px-3 py-2.5 hover:bg-white/4 transition-colors group">
+                            <Link
+                              to={rec.content_type === "movie" ? `/movie/${rec.content_id}` : `/tv/${rec.content_id}`}
+                              onClick={() => setNotifOpen(false)}
+                              className="w-8 h-12 rounded-md overflow-hidden bg-neutral-800 shrink-0 block"
+                            >
+                              {rec.content_poster_path ? (
+                                <img
+                                  src={`${BASE_IMAGE_URL}/w92${rec.content_poster_path}`}
+                                  alt={rec.content_title ?? ""}
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center text-neutral-600">
+                                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+                                    <path d="M19.5 6h-15v10.5h15V6z" /><path fillRule="evenodd" d="M3 3.75A.75.75 0 013.75 3h16.5a.75.75 0 01.75.75v16.5a.75.75 0 01-.75.75H3.75a.75.75 0 01-.75-.75V3.75zm1.5.75v15h15v-15h-15z" clipRule="evenodd" />
+                                  </svg>
+                                </div>
+                              )}
+                            </Link>
+                            <div className="flex-1 min-w-0 pt-0.5">
+                              <Link
+                                to={rec.content_type === "movie" ? `/movie/${rec.content_id}` : `/tv/${rec.content_id}`}
+                                onClick={() => setNotifOpen(false)}
+                                className="block"
+                              >
+                                <p className="text-[13px] text-neutral-200 leading-snug">
+                                  <span className="font-semibold">{rec.sender_username ?? "Someone"}</span>
+                                  <span className="text-neutral-400"> recommended </span>
+                                  <span className="font-medium text-neutral-200">{rec.content_title}</span>
+                                </p>
+                                {rec.message && (
+                                  <p className="text-[12px] text-neutral-500 truncate mt-0.5">"{rec.message}"</p>
+                                )}
+                                <p className="text-[11px] text-neutral-600 mt-0.5">{timeAgo(rec.created_at)}</p>
+                              </Link>
+                            </div>
+                            <button
+                              onClick={() => markRecRead.mutate(rec.id)}
+                              disabled={markRecRead.isPending}
+                              title="Mark as read"
+                              className="opacity-0 group-hover:opacity-100 shrink-0 w-6 h-6 flex items-center justify-center rounded-md text-neutral-500 hover:text-neutral-200 hover:bg-white/8 transition-all disabled:opacity-30"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                                <path fillRule="evenodd" d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z" clipRule="evenodd" />
+                              </svg>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="border-t border-neutral-800 px-3 py-2 flex items-center gap-2">
+                      <Link
+                        to="/activity"
+                        onClick={() => setNotifOpen(false)}
+                        className="flex-1 text-center text-[12.5px] font-medium text-neutral-400 hover:text-neutral-200 hover:bg-white/5 rounded-lg py-1.5 transition-colors"
+                      >
+                        Activity
+                      </Link>
+                      <div className="w-px h-4 bg-neutral-800" />
+                      <Link
+                        to="/friends"
+                        onClick={() => setNotifOpen(false)}
+                        className="flex-1 text-center text-[12.5px] font-medium text-neutral-400 hover:text-neutral-200 hover:bg-white/5 rounded-lg py-1.5 transition-colors"
+                      >
+                        Friends
+                      </Link>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Profile dropdown */}
             {user && (
-              <Menu as="div" className="relative ml-3">
-                <MenuButton className="relative flex rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500">
+              <Menu as="div" className="relative">
+                <MenuButton className="relative flex rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-500">
                   <span className="absolute -inset-1.5" />
                   <span className="sr-only">Open user menu</span>
                   <div className="relative">
                     {getAvatarColor(avatarKey) ? (
                       <div
                         style={{ backgroundColor: getAvatarColor(avatarKey) }}
-                        className="size-8 rounded-full flex items-center justify-center outline -outline-offset-1 outline-white/10"
+                        className="size-8 rounded-full flex items-center justify-center ring-1 ring-white/10"
                       >
                         <svg
                           width="18"
@@ -556,11 +805,11 @@ export default function NavBar() {
                       <img
                         src={user.photoURL ?? "/avatar-placeholder.png"}
                         alt={user.displayName ?? "User Avatar"}
-                        className="size-8 rounded-full bg-neutral-800 outline -outline-offset-1 outline-white/10"
+                        className="size-8 rounded-full bg-neutral-800 ring-1 ring-white/10"
                       />
                     )}
                     {pendingRequests > 0 && (
-                      <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-error-500 text-[9px] font-bold text-white ring-2 ring-primary-800">
+                      <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-error-500 text-[9px] font-bold text-white ring-2 ring-neutral-950">
                         {pendingRequests > 9 ? "9+" : pendingRequests}
                       </span>
                     )}
@@ -569,12 +818,12 @@ export default function NavBar() {
                 <MenuItems
                   modal={false}
                   transition
-                  className="absolute right-0 z-20 mt-2 w-48 origin-top-right rounded-md bg-neutral-800 py-1 outline -outline-offset-1 outline-white/10 transition data-closed:scale-95 data-closed:transform data-closed:opacity-0 data-enter:duration-100 data-enter:ease-out data-leave:duration-75 data-leave:ease-in"
+                  className="absolute right-0 z-20 mt-2 w-48 origin-top-right rounded-xl bg-neutral-900 border border-neutral-700/70 py-1 shadow-2xl shadow-black/40 transition data-closed:scale-95 data-closed:transform data-closed:opacity-0 data-enter:duration-100 data-enter:ease-out data-leave:duration-75 data-leave:ease-in"
                 >
                   <MenuItem>
                     <a
                       href="/profile"
-                      className="flex items-center justify-between px-4 py-2 text-sm text-neutral-300 data-focus:bg-white/5 data-focus:outline-hidden"
+                      className="flex items-center justify-between px-3 py-2 text-[13px] font-medium text-neutral-300 data-focus:bg-white/5 data-focus:outline-hidden hover:bg-white/5 transition-colors"
                     >
                       Your profile
                       {pendingRequests > 0 && <Badge count={pendingRequests} />}
@@ -583,7 +832,7 @@ export default function NavBar() {
                   <MenuItem>
                     <a
                       href="/settings"
-                      className="block px-4 py-2 text-sm text-neutral-300 data-focus:bg-white/5 data-focus:outline-hidden"
+                      className="block px-3 py-2 text-[13px] font-medium text-neutral-300 data-focus:bg-white/5 data-focus:outline-hidden hover:bg-white/5 transition-colors"
                     >
                       Settings
                     </a>
@@ -591,7 +840,7 @@ export default function NavBar() {
                   <MenuItem>
                     <a
                       href="/billing"
-                      className="flex items-center justify-between px-4 py-2 text-sm text-neutral-300 data-focus:bg-white/5 data-focus:outline-hidden"
+                      className="flex items-center justify-between px-3 py-2 text-[13px] font-medium text-neutral-300 data-focus:bg-white/5 data-focus:outline-hidden hover:bg-white/5 transition-colors"
                     >
                       Subscription
                       {userMe?.subscription_tier === "premium" && (
@@ -605,7 +854,7 @@ export default function NavBar() {
                     <MenuItem>
                       <a
                         href="/admin"
-                        className="flex items-center gap-2 px-4 py-2 text-sm text-red-400 data-focus:bg-white/5 data-focus:outline-hidden"
+                        className="flex items-center gap-2 px-3 py-2 text-[13px] font-medium text-red-400 data-focus:bg-white/5 data-focus:outline-hidden hover:bg-white/5 transition-colors"
                       >
                         Admin
                         <span className="text-[9px] font-bold uppercase tracking-wider bg-red-500/15 text-red-400 border border-red-500/30 rounded-full px-1.5 py-0.5">
@@ -614,13 +863,14 @@ export default function NavBar() {
                       </a>
                     </MenuItem>
                   )}
+                  <div className="my-1 border-t border-neutral-800" />
                   <MenuItem>
                     <button
                       onClick={async () => {
                         await signOut(auth);
                         navigate("/");
                       }}
-                      className="w-full text-left px-4 py-2 text-sm text-neutral-300 hover:bg-white/5 focus:outline-none"
+                      className="w-full text-left px-3 py-2 text-[13px] font-medium text-neutral-400 hover:bg-white/5 hover:text-neutral-200 transition-colors focus:outline-none"
                     >
                       Sign out
                     </button>
@@ -632,7 +882,7 @@ export default function NavBar() {
             {!user && (
               <Link
                 to="/signIn"
-                className="text-neutral-300 hover:bg-white/5 hover:text-white rounded-md px-3 py-2 text-sm font-medium"
+                className="text-neutral-400 hover:text-white rounded-lg px-3 py-1.5 text-[13.5px] font-medium tracking-[-0.01em] hover:bg-neutral-900 transition-colors"
               >
                 Sign In
               </Link>
@@ -642,14 +892,14 @@ export default function NavBar() {
       </div>
 
       {/* Mobile panel */}
-      <DisclosurePanel className="lg:hidden">
+      <DisclosurePanel className="lg:hidden border-t border-neutral-800/70">
         <CloseButton
           ref={mobileCloseRef}
           className="sr-only"
           aria-hidden="true"
           tabIndex={-1}
         />
-        <div className="space-y-1 px-2 pt-2 pb-3">
+        <div className="space-y-1 px-3 pt-2 pb-3">
           {/* Search */}
           <form
             className="relative mb-2"
@@ -663,7 +913,7 @@ export default function NavBar() {
               navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
             }}
           >
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 viewBox="0 0 24 24"
@@ -680,13 +930,13 @@ export default function NavBar() {
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Escape" && setDropdownOpen(false)}
               placeholder="Search..."
-              className="pl-9 pr-8 w-full py-2 rounded-md bg-primary-700 border border-primary-800/50 text-white text-[16px] placeholder-neutral-300 focus:outline-none focus:ring-2 focus:ring-neutral-950/50 transition"
+              className="pl-9 pr-8 w-full py-2 rounded-xl bg-neutral-900 border border-neutral-700/70 text-white text-[16px] placeholder-neutral-500 focus:outline-none focus:border-neutral-600 transition-colors"
             />
             {searchQuery && (
               <button
                 type="button"
                 onClick={() => setSearchQuery("")}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white"
                 aria-label="Clear search"
               >
                 <XMarkIcon className="w-4 h-4" />
@@ -700,9 +950,9 @@ export default function NavBar() {
             href="/calendar"
             className={classNames(
               location.pathname === "/calendar"
-                ? "bg-neutral-950/50 text-white"
-                : "text-neutral-300 hover:bg-white/5 hover:text-white",
-              "block rounded-md px-3 py-2 text-base font-medium",
+                ? "bg-neutral-800 text-white"
+                : "text-neutral-400 hover:bg-neutral-900 hover:text-white",
+              "block rounded-lg px-3 py-2 text-[14px] font-medium transition-colors",
             )}
           >
             Calendar
@@ -711,11 +961,11 @@ export default function NavBar() {
           {/* Discover accordion */}
           <button
             onClick={() => setMobileDiscoverOpen((o) => !o)}
-            className="flex w-full items-center justify-between rounded-md px-3 py-2 text-base font-medium text-neutral-300 hover:bg-white/5 hover:text-white"
+            className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-[14px] font-medium text-neutral-400 hover:bg-neutral-900 hover:text-white transition-colors"
           >
             Discover
             <svg
-              className={`w-4 h-4 opacity-60 transition-transform duration-200 ${mobileDiscoverOpen ? "rotate-180" : ""}`}
+              className={`w-4 h-4 opacity-50 transition-transform duration-200 ${mobileDiscoverOpen ? "rotate-180" : ""}`}
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -729,7 +979,7 @@ export default function NavBar() {
             </svg>
           </button>
           {mobileDiscoverOpen && (
-            <div className="ml-3 border-l border-white/10 pl-3 flex flex-col gap-0.5">
+            <div className="ml-3 border-l border-neutral-800 pl-3 flex flex-col gap-0.5">
               {discoverLinks.map((item) => (
                 <DisclosureButton
                   key={item.name}
@@ -737,9 +987,9 @@ export default function NavBar() {
                   to={item.href}
                   className={classNames(
                     location.pathname === item.href
-                      ? "bg-neutral-950/50 text-white"
-                      : "text-neutral-300 hover:bg-white/5 hover:text-white",
-                    "block rounded-md px-3 py-2 text-sm font-medium",
+                      ? "bg-neutral-800 text-white"
+                      : "text-neutral-400 hover:bg-neutral-900 hover:text-white",
+                    "block rounded-lg px-3 py-2 text-[13px] font-medium transition-colors",
                   )}
                 >
                   {item.name}
@@ -753,7 +1003,7 @@ export default function NavBar() {
             <>
               <button
                 onClick={() => setMobileLibraryOpen((o) => !o)}
-                className="flex w-full items-center justify-between rounded-md px-3 py-2 text-base font-medium text-neutral-300 hover:bg-white/5 hover:text-white"
+                className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-[14px] font-medium text-neutral-400 hover:bg-neutral-900 hover:text-white transition-colors"
               >
                 <span className="flex items-center gap-1">
                   My Library
@@ -771,7 +1021,7 @@ export default function NavBar() {
                   )}
                 </span>
                 <svg
-                  className={`w-4 h-4 opacity-60 transition-transform duration-200 ${mobileLibraryOpen ? "rotate-180" : ""}`}
+                  className={`w-4 h-4 opacity-50 transition-transform duration-200 ${mobileLibraryOpen ? "rotate-180" : ""}`}
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -785,7 +1035,7 @@ export default function NavBar() {
                 </svg>
               </button>
               {mobileLibraryOpen && (
-                <div className="ml-3 border-l border-white/10 pl-3 flex flex-col gap-0.5">
+                <div className="ml-3 border-l border-neutral-800 pl-3 flex flex-col gap-0.5">
                   {libraryLinks.map((item) => {
                     const badge = libraryBadges[item.href] ?? 0;
                     return (
@@ -795,9 +1045,9 @@ export default function NavBar() {
                         to={item.href}
                         className={classNames(
                           location.pathname === item.href
-                            ? "bg-neutral-950/50 text-white"
-                            : "text-neutral-300 hover:bg-white/5 hover:text-white",
-                          "flex items-center justify-between rounded-md px-3 py-2 text-sm font-medium",
+                            ? "bg-neutral-800 text-white"
+                            : "text-neutral-400 hover:bg-neutral-900 hover:text-white",
+                          "flex items-center justify-between rounded-lg px-3 py-2 text-[13px] font-medium transition-colors",
                         )}
                       >
                         {item.name}

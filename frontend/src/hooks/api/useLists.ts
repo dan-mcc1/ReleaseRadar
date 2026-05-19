@@ -114,8 +114,13 @@ export function useRemoveFromList() {
       });
     },
     onMutate: async ({ list, contentType, contentId }) => {
-      if (!user || list !== "watchlist") return;
-      const key = queryKeys.watchlist(user.uid);
+      if (!user) return;
+      const keyMap = {
+        watchlist: queryKeys.watchlist(user.uid),
+        watched: queryKeys.watched(user.uid),
+        "currently-watching": queryKeys.currentlyWatching(user.uid),
+      };
+      const key = keyMap[list];
       await queryClient.cancelQueries({ queryKey: key });
       const previous = queryClient.getQueryData<ListData>(key);
       if (previous) {
@@ -128,20 +133,14 @@ export function useRemoveFromList() {
             : previous.shows,
         });
       }
-      return { previous };
+      return { previous, key };
     },
-    onError: (_err, { list }, context) => {
-      if (!user || list !== "watchlist" || !context?.previous) return;
-      queryClient.setQueryData(queryKeys.watchlist(user.uid), context.previous);
+    onError: (_err, _vars, context) => {
+      if (!user || !context?.previous || !context?.key) return;
+      queryClient.setQueryData(context.key, context.previous);
     },
-    onSuccess: (_, { list }) => {
+    onSuccess: () => {
       if (!user) return;
-      const keyMap = {
-        watchlist: queryKeys.watchlist(user.uid),
-        watched: queryKeys.watched(user.uid),
-        "currently-watching": queryKeys.currentlyWatching(user.uid),
-      };
-      queryClient.invalidateQueries({ queryKey: keyMap[list] });
       queryClient.invalidateQueries({
         queryKey: queryKeys.profileSummary(user.uid),
       });

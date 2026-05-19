@@ -53,11 +53,11 @@ function VideoModal({ video, onClose }: { video: MediaVideo; onClose: () => void
   );
 }
 
-function VideoThumbnail({ video, onClick }: { video: MediaVideo; onClick: () => void }) {
+function VideoThumbnail({ video, onClick, className = "flex-shrink-0 w-52" }: { video: MediaVideo; onClick: () => void; className?: string }) {
   return (
     <button
       onClick={onClick}
-      className="group flex-shrink-0 w-52 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded-xl"
+      className={`group text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded-xl ${className}`}
     >
       <div className="relative aspect-video rounded-xl overflow-hidden bg-neutral-800">
         <img
@@ -86,9 +86,10 @@ function VideoThumbnail({ video, onClick }: { video: MediaVideo; onClick: () => 
 
 interface Props {
   videos: MediaVideo[] | undefined;
+  hideTitle?: boolean;
 }
 
-export default function VideoGallery({ videos }: Props) {
+export default function VideoGallery({ videos, hideTitle = false }: Props) {
   const [active, setActive] = useState<MediaVideo | null>(null);
   const [expanded, setExpanded] = useState(false);
 
@@ -107,9 +108,11 @@ export default function VideoGallery({ videos }: Props) {
 
   return (
     <div>
-      <h2 className="text-neutral-400 text-xs uppercase tracking-wider font-semibold mb-3">
-        Videos
-      </h2>
+      {!hideTitle && (
+        <h2 className="text-neutral-400 text-xs uppercase tracking-wider font-semibold mb-3">
+          Videos
+        </h2>
+      )}
 
       {/* Main scrolling bar */}
       <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-neutral-700">
@@ -141,7 +144,7 @@ export default function VideoGallery({ videos }: Props) {
       {/* Expanded overflow grid */}
       {expanded && overflowVideos.length > 0 && (
         <div className="mt-4">
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+          <div className="flex flex-wrap gap-3">
             {overflowVideos.map((v) => (
               <VideoThumbnail key={v.id} video={v} onClick={() => setActive(v)} />
             ))}

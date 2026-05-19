@@ -41,6 +41,7 @@ from app.routers import (
     export_router,
     streaming,
     watch_status,
+    feedback,
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -226,6 +227,7 @@ async def lifespan(app: FastAPI):
     import app.models.movie_video  # noqa: F401
     import app.models.show_video  # noqa: F401
     import app.models.user_streaming_service  # noqa: F401
+    import app.models.feedback  # noqa: F401
 
     Base.metadata.create_all(engine)
     task = asyncio.create_task(_activity_cleanup_loop())
@@ -312,5 +314,6 @@ app.include_router(moderation.router, prefix="/moderation", tags=["moderation"])
 app.include_router(export_router.router, prefix="/export", tags=["export"])
 app.include_router(streaming.router, prefix="/streaming", tags=["streaming"])
 app.include_router(watch_status.router, prefix="/watch-status", tags=["watch-status"])
+app.include_router(feedback.router, tags=["feedback"])
 if settings.ENVIRONMENT != "production":
     app.include_router(dev.router, prefix="/dev", tags=["dev"])

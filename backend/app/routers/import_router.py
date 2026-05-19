@@ -8,10 +8,14 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.services.tmdb_movies import search_movies, fetch_movie_from_tmdb
-from app.services.watchlist_service import ensure_movie_in_db, add_to_watchlist
+from app.services.tmdb_tv import fetch_show_from_tmdb
+from app.services.tmdb_search import get_tv_search_results
+from app.services.watchlist_service import ensure_movie_in_db, ensure_show_in_db, add_to_watchlist
+from app.services.episode_service import maybe_sync_show_episodes
 from app.models.watched import Watched
 from app.models.watchlist import Watchlist
 from app.models.movie import Movie
+from app.models.show import Show
 from datetime import datetime, timezone
 
 router = APIRouter()
@@ -23,8 +27,8 @@ _CONCURRENCY = 10  # max concurrent TMDB requests
 _WATCHED_CSVS = ["watched.csv", "diary.csv", "ratings.csv", "reviews.csv"]
 _WATCHLIST_CSVS = ["watchlist.csv"]
 
-# The append string used by ensure_movie_in_db — must match for lru_cache hits
 _MOVIE_APPEND = "watch/providers,release_dates,images"
+_SHOW_APPEND = "watch/providers,images,content_ratings"
 
 
 def _parse_letterboxd_rating(raw: str) -> float | None:
@@ -49,16 +53,37 @@ def _parse_date(raw: str) -> datetime | None:
     return None
 
 
-def _find_tmdb_id(name: str, year: int | None) -> int | None:
-    results = search_movies(query=name) or []
-    if not results:
-        return None
+def _find_tmdb_result(name: str, year: int | None) -> tuple[int, str] | None:
+    """
+    Search TMDB for a title across movies and TV shows.
+    Returns (tmdb_id, media_type) where media_type is 'movie' or 'tv', or None.
+    Prefers year-exact matches; falls back to highest-popularity result.
+    """
+    movie_results = search_movies(query=name) or []
+    tv_results = get_tv_search_results(query=name) or []
+
     if year:
-        for r in results:
-            release = (r.get("release_date") or "")[:4]
-            if release == str(year):
-                return r["id"]
-    return results[0]["id"]
+        year_str = str(year)
+        for r in movie_results:
+            if (r.get("release_date") or "")[:4] == year_str:
+                return r["id"], "movie"
+        for r in tv_results:
+            if (r.get("first_air_date") or "")[:4] == year_str:
+                return r["id"], "tv"
+
+    # No year or no year match — pick highest popularity across both
+    best_movie = movie_results[0] if movie_results else None
+    best_tv = tv_results[0] if tv_results else None
+
+    if best_movie and best_tv:
+        if best_movie.get("popularity", 0) >= best_tv.get("popularity", 0):
+            return best_movie["id"], "movie"
+        return best_tv["id"], "tv"
+    if best_movie:
+        return best_movie["id"], "movie"
+    if best_tv:
+        return best_tv["id"], "tv"
+    return None
 
 
 def _extract_csvs_from_zip(raw_bytes: bytes) -> dict[str, str]:
@@ -105,7 +130,7 @@ async def import_letterboxd(
     uid: str = Depends(get_current_user),
 ):
     """
-    Accept a Letterboxd export (zip or individual CSV) and import movies.
+    Accept a Letterboxd export (zip or individual CSV) and import movies and TV shows.
     Watched/diary/ratings/reviews → watched history; watchlist → watchlist.
     """
     filename = (file.filename or "").lower()
@@ -140,44 +165,68 @@ async def import_letterboxd(
     # ── Phase 1: resolve all TMDB IDs concurrently ──────────────────────────
     sem = asyncio.Semaphore(_CONCURRENCY)
 
-    async def resolve_id(name: str, year: int | None) -> int | Exception | None:
+    async def resolve_result(name: str, year: int | None) -> tuple[int, str] | Exception | None:
         async with sem:
             try:
-                return await asyncio.to_thread(_find_tmdb_id, name, year)
+                return await asyncio.to_thread(_find_tmdb_result, name, year)
             except Exception as e:
                 return e
 
-    resolved = await asyncio.gather(*[resolve_id(r["name"], r["year"]) for r in named_rows])
+    resolved = await asyncio.gather(*[resolve_result(r["name"], r["year"]) for r in named_rows])
 
     for row, result in zip(named_rows, resolved):
         if isinstance(result, Exception):
             row["tmdb_id"] = None
+            row["media_type"] = None
             row["tmdb_error"] = str(result)[:80]
+        elif result is None:
+            row["tmdb_id"] = None
+            row["media_type"] = None
+            row["tmdb_error"] = None
         else:
-            row["tmdb_id"] = result
+            row["tmdb_id"] = result[0]
+            row["media_type"] = result[1]
             row["tmdb_error"] = None
 
-    # ── Phase 2: pre-fetch movie details for IDs not already in DB ──────────
-    found_ids = list({r["tmdb_id"] for r in named_rows if r["tmdb_id"]})
-    if found_ids:
-        existing_in_db = {
-            mid for (mid,) in db.query(Movie.id).filter(Movie.id.in_(found_ids)).all()
-        }
-        missing_ids = [mid for mid in found_ids if mid not in existing_in_db]
+    # ── Phase 2: pre-fetch details for items not already in DB ──────────────
+    movie_ids = list({r["tmdb_id"] for r in named_rows if r["tmdb_id"] and r["media_type"] == "movie"})
+    tv_ids = list({r["tmdb_id"] for r in named_rows if r["tmdb_id"] and r["media_type"] == "tv"})
 
-        async def prefetch(tmdb_id: int) -> None:
-            async with sem:
-                try:
-                    await asyncio.to_thread(fetch_movie_from_tmdb, tmdb_id, _MOVIE_APPEND)
-                except Exception:
-                    pass  # errors surface during DB phase
+    existing_movies = (
+        {mid for (mid,) in db.query(Movie.id).filter(Movie.id.in_(movie_ids)).all()}
+        if movie_ids else set()
+    )
+    existing_shows = (
+        {sid for (sid,) in db.query(Show.id).filter(Show.id.in_(tv_ids)).all()}
+        if tv_ids else set()
+    )
 
-        await asyncio.gather(*[prefetch(mid) for mid in missing_ids])
+    missing_movies = [mid for mid in movie_ids if mid not in existing_movies]
+    missing_shows = [sid for sid in tv_ids if sid not in existing_shows]
+
+    async def prefetch_movie(tmdb_id: int) -> None:
+        async with sem:
+            try:
+                await asyncio.to_thread(fetch_movie_from_tmdb, tmdb_id, _MOVIE_APPEND)
+            except Exception:
+                pass
+
+    async def prefetch_show(tmdb_id: int) -> None:
+        async with sem:
+            try:
+                await asyncio.to_thread(fetch_show_from_tmdb, tmdb_id, _SHOW_APPEND)
+            except Exception:
+                pass
+
+    await asyncio.gather(
+        *[prefetch_movie(mid) for mid in missing_movies],
+        *[prefetch_show(sid) for sid in missing_shows],
+    )
 
     # ── Phase 3: sequential DB writes (all TMDB calls are now cache hits) ───
     results: list[dict] = []
     imported = skipped = failed = watchlisted = 0
-    seen_tmdb_ids: set[int] = set()
+    seen_pairs: set[tuple[int, str]] = set()  # (tmdb_id, media_type)
 
     for row in unnamed_rows:
         skipped += 1
@@ -187,6 +236,7 @@ async def import_letterboxd(
         row_num = row["row_num"]
         name = row["name"]
         tmdb_id = row["tmdb_id"]
+        media_type = row["media_type"]
 
         if row["tmdb_error"]:
             failed += 1
@@ -198,25 +248,34 @@ async def import_letterboxd(
             results.append({"row": row_num, "title": name, "status": "failed", "reason": "not found on TMDB"})
             continue
 
-        if tmdb_id in seen_tmdb_ids:
+        pair = (tmdb_id, media_type)
+        if pair in seen_pairs:
             skipped += 1
-            results.append({"row": row_num, "title": name, "tmdb_id": tmdb_id, "status": "skipped", "reason": "duplicate in import"})
+            results.append({"row": row_num, "title": name, "tmdb_id": tmdb_id, "media_type": media_type, "status": "skipped", "reason": "duplicate in import"})
             continue
-        seen_tmdb_ids.add(tmdb_id)
+        seen_pairs.add(pair)
 
         if row["kind"] == "watched":
             existing = db.query(Watched).filter_by(
-                user_id=uid, content_type="movie", content_id=tmdb_id
+                user_id=uid, content_type=media_type, content_id=tmdb_id
             ).first()
             if existing:
                 skipped += 1
-                results.append({"row": row_num, "title": name, "tmdb_id": tmdb_id, "status": "skipped", "reason": "already in watched"})
+                results.append({"row": row_num, "title": name, "tmdb_id": tmdb_id, "media_type": media_type, "status": "skipped", "reason": "already in watched"})
                 continue
 
             try:
-                already_tracked = db.query(Movie).filter_by(id=tmdb_id).first() is not None
-                movie = ensure_movie_in_db(db, tmdb_id, already_tracked)
+                if media_type == "movie":
+                    already_tracked = db.query(Movie).filter_by(id=tmdb_id).first() is not None
+                    media = ensure_movie_in_db(db, tmdb_id, already_tracked)
+                    title = media.title
+                else:
+                    already_tracked = db.query(Show).filter_by(id=tmdb_id).first() is not None
+                    media = ensure_show_in_db(db, tmdb_id, already_tracked)
+                    maybe_sync_show_episodes(db, tmdb_id)
+                    title = media.name
             except Exception as e:
+                db.rollback()
                 failed += 1
                 results.append({"row": row_num, "title": name, "status": "failed", "reason": f"DB error: {str(e)[:80]}"})
                 continue
@@ -225,8 +284,8 @@ async def import_letterboxd(
                 watched_at = row["watched_at"]
                 entry = Watched(
                     user_id=uid,
-                    content_type="movie",
-                    content_id=movie.id,
+                    content_type=media_type,
+                    content_id=media.id,
                     watched_at=watched_at,
                     rating=row["rating"],
                 )
@@ -235,8 +294,9 @@ async def import_letterboxd(
                 imported += 1
                 results.append({
                     "row": row_num,
-                    "title": movie.title,
-                    "tmdb_id": movie.id,
+                    "title": title,
+                    "tmdb_id": media.id,
+                    "media_type": media_type,
                     "status": "imported",
                     "rating": row["rating"],
                     "watched_at": watched_at.strftime("%Y-%m-%d") if watched_at else None,
@@ -248,37 +308,46 @@ async def import_letterboxd(
 
         else:  # watchlist
             existing_watched = db.query(Watched).filter_by(
-                user_id=uid, content_type="movie", content_id=tmdb_id
+                user_id=uid, content_type=media_type, content_id=tmdb_id
             ).first()
             if existing_watched:
                 skipped += 1
-                results.append({"row": row_num, "title": name, "tmdb_id": tmdb_id, "status": "skipped", "reason": "already in watched"})
+                results.append({"row": row_num, "title": name, "tmdb_id": tmdb_id, "media_type": media_type, "status": "skipped", "reason": "already in watched"})
                 continue
 
             existing_wl = db.query(Watchlist).filter_by(
-                user_id=uid, content_type="movie", content_id=tmdb_id
+                user_id=uid, content_type=media_type, content_id=tmdb_id
             ).first()
             if existing_wl:
                 skipped += 1
-                results.append({"row": row_num, "title": name, "tmdb_id": tmdb_id, "status": "skipped", "reason": "already in watchlist"})
+                results.append({"row": row_num, "title": name, "tmdb_id": tmdb_id, "media_type": media_type, "status": "skipped", "reason": "already in watchlist"})
                 continue
 
             try:
-                already_tracked = db.query(Movie).filter_by(id=tmdb_id).first() is not None
-                movie = ensure_movie_in_db(db, tmdb_id, already_tracked)
+                if media_type == "movie":
+                    already_tracked = db.query(Movie).filter_by(id=tmdb_id).first() is not None
+                    media = ensure_movie_in_db(db, tmdb_id, already_tracked)
+                    title = media.title
+                else:
+                    already_tracked = db.query(Show).filter_by(id=tmdb_id).first() is not None
+                    media = ensure_show_in_db(db, tmdb_id, already_tracked)
+                    maybe_sync_show_episodes(db, tmdb_id)
+                    title = media.name
             except Exception as e:
+                db.rollback()
                 failed += 1
                 results.append({"row": row_num, "title": name, "status": "failed", "reason": f"DB error: {str(e)[:80]}"})
                 continue
 
             try:
-                add_to_watchlist(db, uid, "movie", movie.id)
+                add_to_watchlist(db, uid, media_type, media.id)
                 db.commit()
                 watchlisted += 1
                 results.append({
                     "row": row_num,
-                    "title": movie.title,
-                    "tmdb_id": movie.id,
+                    "title": title,
+                    "tmdb_id": media.id,
+                    "media_type": media_type,
                     "status": "watchlisted",
                 })
             except Exception as e:

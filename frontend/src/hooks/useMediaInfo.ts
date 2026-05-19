@@ -30,7 +30,7 @@ export function useMediaInfo<T extends { id: number; external_ids?: { imdb_id?: 
 
   // Main data fetch
   const mediaQuery = useQuery({
-    queryKey: queryKeys.mediaDetail(contentType, id ?? ""),
+    queryKey: queryKeys.mediaDetailFull(contentType, id ?? ""),
     queryFn: async () => {
       const rawData = await queryFetch<any>(fetchUrl);
       if (rawData["watch/providers"]?.["results"]?.["US"]) {

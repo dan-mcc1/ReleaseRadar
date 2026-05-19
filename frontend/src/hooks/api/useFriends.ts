@@ -128,6 +128,16 @@ export function useRemoveFriend() {
   });
 }
 
+export function useFriendSuggestions() {
+  const user = useAuthUser();
+  return useQuery({
+    queryKey: queryKeys.friendSuggestions(user?.uid ?? ""),
+    queryFn: () => queryFetch("/friends/suggestions"),
+    enabled: !!user,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 export function useFriendSearch(query: string) {
   const user = useAuthUser();
   return useQuery({

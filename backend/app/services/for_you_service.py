@@ -5,11 +5,12 @@ from collections import defaultdict
 from sqlalchemy import union_all, select
 from sqlalchemy.orm import Session
 
+from app.models.currently_watching import CurrentlyWatching
 from app.models.watched import Watched
 from app.models.watchlist import Watchlist
 from app.services.tmdb_client import get
 
-_SOURCE_LIMIT = 25  # most recent watched + watchlist items to seed from
+_SOURCE_LIMIT = 50  # most recent watched + watchlist items to seed from
 _MAX_WORKERS = 10
 _RETURN_LIMIT = 40  # max results returned
 _CACHE_TTL = 6 * 3600  # TMDB rec results are user-agnostic and stable
@@ -85,7 +86,10 @@ def _get_excluded(db: Session, uid: str) -> set[tuple[str, int]]:
     watchlist_q = select(Watchlist.content_type, Watchlist.content_id).where(
         Watchlist.user_id == uid
     )
-    rows = db.execute(union_all(watched_q, watchlist_q)).all()
+    currently_q = select(CurrentlyWatching.content_type, CurrentlyWatching.content_id).where(
+        CurrentlyWatching.user_id == uid
+    )
+    rows = db.execute(union_all(watched_q, watchlist_q, currently_q)).all()
     return {(r[0], r[1]) for r in rows}
 
 
