@@ -112,7 +112,7 @@ function TopResultHero({
       </p>
       <div
         className="relative rounded-2xl overflow-hidden"
-        style={{ height: 240, background: "#111" }}
+        style={{ minHeight: 200, background: "#111" }}
       >
         {item.backdrop_path && (
           <img
@@ -128,13 +128,13 @@ function TopResultHero({
               "linear-gradient(90deg, rgba(0,0,0,0.80) 0%, rgba(0,0,0,0.45) 55%, rgba(0,0,0,0.15) 100%)",
           }}
         />
-        <div className="absolute inset-0 flex items-center gap-6 px-7">
+        <div className="relative flex items-center gap-4 sm:gap-6 px-5 sm:px-7 py-6">
           {item.poster_path && (
             <Link to={href} className="flex-shrink-0">
               <img
                 src={`${BASE_IMAGE_URL}/w342${item.poster_path}`}
                 alt={title}
-                className="h-48 rounded-lg shadow-2xl object-cover"
+                className="h-32 sm:h-48 rounded-lg shadow-2xl object-cover"
                 style={{ aspectRatio: "2/3", width: "auto" }}
               />
             </Link>
@@ -146,8 +146,7 @@ function TopResultHero({
                 .join(" · ")}
             </p>
             <h2
-              className="font-sans font-light italic tracking-tight leading-none mb-3 line-clamp-2"
-              style={{ fontSize: 40 }}
+              className="font-sans font-light italic tracking-tight leading-none mb-3 line-clamp-2 text-[24px] sm:text-[40px]"
             >
               {title}
             </h2>

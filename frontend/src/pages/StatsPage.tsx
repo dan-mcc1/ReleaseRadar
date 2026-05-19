@@ -21,30 +21,24 @@ function fmtHours(mins: number): string {
 const PLATFORM_HUES = [160, 200, 285, 250, 30, 300, 180, 50];
 
 function StatBlock({
-  eyebrow,
   title,
   sub,
   children,
 }: {
-  eyebrow: string;
   title: string;
   sub: string;
   children: React.ReactNode;
 }) {
   return (
     <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6">
-      <div className="flex items-baseline gap-3 mb-5">
-        <span className="font-mono text-[10px] text-neutral-500 tracking-[0.14em] uppercase shrink-0">
-          {eyebrow}
-        </span>
+      <div className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-3 mb-5">
         <h3
           className="m-0 font-normal tracking-tight text-[22px] leading-none text-white"
           style={{ fontFamily: "'IBM Plex Sans', sans-serif", fontStyle: "italic" }}
         >
           {title}
         </h3>
-        <span className="flex-1" />
-        <span className="text-xs text-neutral-500 shrink-0">{sub}</span>
+        <span className="text-xs text-neutral-500 sm:ml-auto shrink-0">{sub}</span>
       </div>
       {children}
     </div>
@@ -67,9 +61,8 @@ function WrappedCard({
 
   return (
     <div
-      className="relative overflow-hidden rounded-3xl select-none"
+      className="relative overflow-hidden rounded-3xl select-none w-full max-w-[360px]"
       style={{
-        width: 360,
         background: "linear-gradient(135deg, #0a0a0a 0%, #111827 50%, #0a0a0a 100%)",
         border: "1px solid rgba(255,255,255,0.08)",
       }}
@@ -274,13 +267,13 @@ export default function StatsPage() {
   return (
     <div className="w-full pb-12">
       {/* ── Page header ── */}
-      <div className="px-8 pt-8 pb-4">
+      <div className="px-4 sm:px-8 pt-8 pb-4">
         <p className="font-mono text-[10.5px] tracking-[0.14em] text-neutral-500 uppercase mb-2">
           Your year on Release Radar{username ? ` · @${username}` : ""}
         </p>
-        <div className="flex items-end gap-6 flex-wrap">
+        <div className="flex items-end gap-4 flex-wrap">
           <h1
-            className="text-[44px] leading-none tracking-tight text-white m-0"
+            className="text-[28px] sm:text-[44px] leading-none tracking-tight text-white m-0"
             style={{ fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 300 }}
           >
             <em className="text-primary-400 not-italic font-light">{yearLabel}</em>
@@ -325,7 +318,7 @@ export default function StatsPage() {
 
       {/* ── Wrapped card (toggle) ── */}
       {showWrapped && (
-        <div className="px-8 pb-4">
+        <div className="px-4 sm:px-8 pb-4">
           <div className="flex flex-col items-center gap-3">
             <p className="text-xs text-neutral-500">
               Screenshot this card to share your{" "}
@@ -339,10 +332,7 @@ export default function StatsPage() {
       )}
 
       {/* ── Hero: total + streaks ── */}
-      <div
-        className="px-8 pb-6"
-        style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 20 }}
-      >
+      <div className="px-4 sm:px-8 pb-6 grid grid-cols-1 md:grid-cols-[1.4fr_1fr] gap-5">
         {/* Total watch time */}
         <div className="relative overflow-hidden bg-neutral-900 border border-neutral-800 rounded-2xl p-8">
           <div
@@ -363,7 +353,7 @@ export default function StatsPage() {
                   fontFamily: "'IBM Plex Sans', sans-serif",
                   fontStyle: "italic",
                   fontWeight: 300,
-                  fontSize: 120,
+                  fontSize: "clamp(52px, 14vw, 120px)",
                   letterSpacing: "-0.04em",
                   lineHeight: 0.9,
                 }}
@@ -376,7 +366,7 @@ export default function StatsPage() {
                   fontFamily: "'IBM Plex Sans', sans-serif",
                   fontStyle: "italic",
                   fontWeight: 300,
-                  fontSize: 44,
+                  fontSize: "clamp(22px, 5vw, 44px)",
                   letterSpacing: "-0.02em",
                 }}
               >
@@ -399,7 +389,7 @@ export default function StatsPage() {
         </div>
 
         {/* Streak cards */}
-        <div style={{ display: "grid", gridTemplateRows: "1fr 1fr", gap: 14 }}>
+        <div className="grid grid-rows-2 gap-3.5">
           {/* Current streak */}
           <div
             className="rounded-2xl p-5 flex flex-col justify-between text-white relative overflow-hidden"
@@ -417,7 +407,7 @@ export default function StatsPage() {
                   fontFamily: "'IBM Plex Sans', sans-serif",
                   fontStyle: "italic",
                   fontWeight: 300,
-                  fontSize: 64,
+                  fontSize: "clamp(36px, 8vw, 64px)",
                   lineHeight: 1,
                   letterSpacing: "-0.03em",
                 }}
@@ -447,7 +437,7 @@ export default function StatsPage() {
                   fontFamily: "'IBM Plex Sans', sans-serif",
                   fontStyle: "italic",
                   fontWeight: 300,
-                  fontSize: 56,
+                  fontSize: "clamp(32px, 7vw, 56px)",
                   lineHeight: 1,
                   letterSpacing: "-0.03em",
                 }}
@@ -466,10 +456,7 @@ export default function StatsPage() {
       </div>
 
       {/* ── KPI row ── */}
-      <div
-        className="px-8 pb-6"
-        style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}
-      >
+      <div className="px-4 sm:px-8 pb-6 grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
           {
             label: "Movies",
@@ -525,12 +512,9 @@ export default function StatsPage() {
 
       {/* ── Genres + Platforms ── */}
       {(stats.top_genres.length > 0 || stats.top_platforms.length > 0) && (
-        <div
-          className="px-8 pb-6"
-          style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}
-        >
+        <div className="px-4 sm:px-8 pb-6 grid grid-cols-1 md:grid-cols-2 gap-5">
           {stats.top_genres.length > 0 && (
-            <StatBlock eyebrow="01" title="Top genres" sub="What you actually watched">
+            <StatBlock title="Top genres" sub="What you actually watched">
               <div className="space-y-4">
                 {stats.top_genres.map((g, i) => {
                   const max = stats.top_genres[0].minutes;
@@ -568,7 +552,7 @@ export default function StatsPage() {
           )}
 
           {stats.top_platforms.length > 0 && (
-            <StatBlock eyebrow="02" title="Top platforms" sub="Where you watched">
+            <StatBlock title="Top platforms" sub="Where you watched">
               <div className="space-y-4">
                 {stats.top_platforms.map((p, i) => {
                   const max = stats.top_platforms[0].minutes;
@@ -624,24 +608,17 @@ export default function StatsPage() {
       )}
 
       {/* ── TV vs Movies + Wrapped mini card ── */}
-      <div
-        className="px-8 pb-4"
-        style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 20 }}
-      >
+      <div className="px-4 sm:px-8 pb-4 grid grid-cols-1 md:grid-cols-[1.4fr_1fr] gap-5">
         {/* TV vs Movies */}
         <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6">
-          <div className="flex items-baseline gap-3 mb-4">
-            <span className="font-mono text-[10px] text-neutral-500 tracking-[0.14em] uppercase">
-              03
-            </span>
+          <div className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-3 mb-4">
             <h3
               className="m-0 font-normal tracking-tight text-[22px] leading-none text-white"
               style={{ fontFamily: "'IBM Plex Sans', sans-serif", fontStyle: "italic" }}
             >
               TV vs Movies
             </h3>
-            <span className="flex-1" />
-            <span className="font-mono text-[11px] text-neutral-500">
+            <span className="font-mono text-[11px] text-neutral-500 sm:ml-auto shrink-0">
               {tvPct}% TV · {100 - tvPct}% Movies
             </span>
           </div>
@@ -728,7 +705,7 @@ export default function StatsPage() {
                   fontFamily: "'IBM Plex Sans', sans-serif",
                   fontStyle: "italic",
                   fontWeight: 300,
-                  fontSize: 40,
+                  fontSize: "clamp(24px, 6vw, 40px)",
                   letterSpacing: "-0.02em",
                 }}
               >

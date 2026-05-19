@@ -79,12 +79,12 @@ function PosterGrid({
 }) {
   const gridClass =
     cols === 8
-      ? "grid grid-cols-8 gap-2"
+      ? "grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2"
       : cols === 6
-        ? "grid grid-cols-6 gap-3"
+        ? "grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3"
         : cols === 4
-          ? "grid grid-cols-4 gap-3"
-          : "grid grid-cols-5 gap-3";
+          ? "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3"
+          : "grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3";
 
   return (
     <div className={gridClass}>
@@ -228,7 +228,7 @@ export default function ProfilePage() {
         </svg>
 
         <div
-          className="relative grid items-end gap-8 px-6 sm:px-10 pt-10 pb-8"
+          className="relative flex flex-col gap-5 sm:grid sm:items-end sm:gap-8 px-6 sm:px-10 pt-10 pb-8"
           style={{ gridTemplateColumns: "116px 1fr auto" }}
         >
           {/* Avatar */}
@@ -272,7 +272,7 @@ export default function ProfilePage() {
                 : "—"}
             </div>
             <div className="flex items-baseline gap-4 flex-wrap">
-              <h1 className="m-0 font-normal text-[50px] tracking-[-0.025em] leading-none text-neutral-100">
+              <h1 className="m-0 font-normal text-[32px] sm:text-[50px] tracking-[-0.025em] leading-none text-neutral-100">
                 {user.displayName ?? "User"}
               </h1>
               {typedDbUser?.username && (
@@ -305,7 +305,7 @@ export default function ProfilePage() {
           </div>
 
           {/* Actions */}
-          <div className="flex flex-col gap-2 items-end shrink-0">
+          <div className="flex flex-col gap-2 items-start sm:items-end shrink-0">
             <div className="flex gap-2">
               {typedDbUser?.username && (
                 <button
@@ -346,21 +346,19 @@ export default function ProfilePage() {
 
         {/* Stat strip */}
         <div
-          className="relative grid border-t border-neutral-800"
-          style={{ gridTemplateColumns: `repeat(${statStrip.length}, 1fr)`, background: "#0d0d0d" }}
+          className="relative grid grid-cols-3 sm:grid-cols-5 border-t border-neutral-800"
+          style={{ background: "#0d0d0d" }}
         >
           {statStrip.map((s, i) => (
             <div
               key={s.label}
-              className="flex flex-col gap-1 px-6 py-5"
+              className="flex flex-col gap-1 px-4 sm:px-6 py-4 sm:py-5 border-neutral-800"
               style={{ borderLeft: i === 0 ? "none" : "1px solid #262626" }}
             >
               <div className="font-mono text-[10px] text-neutral-500 tracking-[0.12em] uppercase">
                 {s.label}
               </div>
-              <div
-                className="text-[30px] leading-none tracking-tight text-neutral-100 italic font-normal"
-              >
+              <div className="text-[22px] sm:text-[30px] leading-none tracking-tight text-neutral-100 italic font-normal">
                 {s.value}
               </div>
             </div>

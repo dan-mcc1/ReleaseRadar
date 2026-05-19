@@ -280,8 +280,8 @@ export default function Watched() {
               watched
             </em>
           </h1>
-          <div className="flex-1" />
-          <div className="flex items-center gap-2">
+          <div className="flex-1 hidden sm:block" />
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
             <button
               onClick={() => setShowFilters((v) => !v)}
               className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors ${
@@ -313,7 +313,7 @@ export default function Watched() {
             <select
               value={sort}
               onChange={(e) => setSort(e.target.value as SortType)}
-              className="text-sm bg-neutral-800 border border-neutral-700 text-neutral-300 rounded-lg px-3 py-1.5 focus:outline-none focus:border-neutral-500"
+              className="text-sm bg-neutral-800 border border-neutral-700 text-neutral-300 rounded-lg px-3 py-1.5 focus:outline-none focus:border-neutral-500 max-w-[160px] sm:max-w-none"
             >
               <option value="watched_desc">Recently Watched</option>
               <option value="watched_asc">Oldest Watched</option>

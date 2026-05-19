@@ -149,7 +149,7 @@ export default function ShelfDetailPage() {
       )}
 
       {/* Calendar tab */}
-      {activeTab === "calendar" && <ShelfCalendarView shelfId={shelfId} />}
+      {activeTab === "calendar" && <ShelfCalendarView shelfId={shelfId} shelfName={shelf?.name} />}
     </div>
   );
 }

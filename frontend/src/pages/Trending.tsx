@@ -4,6 +4,7 @@ import type { Movie, Show } from "../types/calendar";
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useTrendingMulti, useUpcoming, useAiringToday, useNowPlaying, usePopularMulti, useTopRatedMulti } from "../hooks/api/useSearch";
 import { BASE_IMAGE_URL } from "../constants";
+import WatchButton from "../components/WatchButton";
 
 type AnyItem = Movie | Show;
 type TypedItem = AnyItem & { _type: "movie" | "tv" };
@@ -175,8 +176,8 @@ function PosterCard({
   const genre = item.genres?.[0]?.name ?? "";
   const rating = item.vote_average ? item.vote_average.toFixed(1) : null;
   return (
-    <div className="w-[180px] flex-shrink-0 cursor-pointer group" onClick={onClick}>
-      <div className="aspect-[2/3] rounded-xl overflow-hidden bg-neutral-800">
+    <div className="w-[180px] flex-shrink-0 group flex flex-col gap-2">
+      <div className="aspect-[2/3] rounded-xl overflow-hidden bg-neutral-800 cursor-pointer" onClick={onClick}>
         {item.poster_path ? (
           <img
             src={`${BASE_IMAGE_URL}/w342${item.poster_path}`}
@@ -189,14 +190,23 @@ function PosterCard({
           </div>
         )}
       </div>
-      <div className="mt-2 text-[13.5px] font-semibold text-neutral-100 tracking-tight leading-tight truncate">
+      <div
+        className="text-[13.5px] font-semibold text-neutral-100 tracking-tight leading-tight truncate cursor-pointer hover:text-primary-300 transition-colors"
+        onClick={onClick}
+      >
         {title}
       </div>
-      <div className="text-[11.5px] text-neutral-500 mt-0.5">
+      <div className="text-[11.5px] text-neutral-500">
         {releaseDate
           ? [releaseDate, rating ? `★ ${rating}` : null].filter(Boolean).join(" · ")
           : [genre, rating ? `★ ${rating}` : null].filter(Boolean).join(" · ")}
       </div>
+      <WatchButton
+        contentType={item._type}
+        contentId={item.id}
+        compact
+        skipNotifyPrompt={false}
+      />
     </div>
   );
 }

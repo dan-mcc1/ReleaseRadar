@@ -4,6 +4,7 @@ import { useGenres, useGenreResults } from "../hooks/api/useSearch";
 import { BASE_IMAGE_URL } from "../constants";
 import { parseLocalDate } from "../utils/date";
 import { Movie, Show } from "../types/calendar";
+import WatchButton from "../components/WatchButton";
 
 type ActiveTab = "movie" | "tv";
 
@@ -24,8 +25,8 @@ function PosterCard({ item, type }: { item: Movie | Show; type: ActiveTab }) {
   const href = type === "movie" ? `/movie/${item.id}` : `/tv/${item.id}`;
 
   return (
-    <Link to={href} className="group flex flex-col gap-2">
-      <div className="relative aspect-[2/3] rounded-lg overflow-hidden bg-neutral-800 border border-neutral-700/50 group-hover:border-neutral-600 transition-colors">
+    <div className="group flex flex-col gap-2">
+      <Link to={href} className="block relative aspect-[2/3] rounded-lg overflow-hidden bg-neutral-800 border border-neutral-700/50 group-hover:border-neutral-600 transition-colors">
         {item.poster_path ? (
           <img
             src={`${BASE_IMAGE_URL}/w342${item.poster_path}`}
@@ -50,11 +51,11 @@ function PosterCard({ item, type }: { item: Movie | Show; type: ActiveTab }) {
           </div>
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-      </div>
+      </Link>
       <div>
-        <div className="text-sm font-semibold text-neutral-100 line-clamp-1 group-hover:text-primary-300 transition-colors leading-tight">
+        <Link to={href} className="block text-sm font-semibold text-neutral-100 line-clamp-1 hover:text-primary-300 transition-colors leading-tight">
           {title}
-        </div>
+        </Link>
         <div className="flex items-center gap-1.5 mt-1">
           {year && (
             <span className="text-xs text-neutral-500">{year}</span>
@@ -72,7 +73,13 @@ function PosterCard({ item, type }: { item: Movie | Show; type: ActiveTab }) {
           )}
         </div>
       </div>
-    </Link>
+      <WatchButton
+        contentType={type === "tv" ? "tv" : "movie"}
+        contentId={item.id}
+        compact
+        skipNotifyPrompt={false}
+      />
+    </div>
   );
 }
 
@@ -188,13 +195,13 @@ export default function BrowseGenres() {
       {selectedGenre && !loading && rawItems.length > 0 && (
         <div className="px-6 sm:px-10 pb-6">
           <div
-            className="relative h-32 rounded-2xl overflow-hidden"
+            className="relative h-28 sm:h-32 rounded-2xl overflow-hidden"
             style={{
               background: `linear-gradient(110deg, hsl(${hue}, 45%, 22%) 0%, hsl(${hue}, 30%, 13%) 60%, hsl(${hue}, 18%, 8%) 100%)`,
             }}
           >
-            {/* Decorative posters */}
-            <div className="absolute right-8 top-1/2 -translate-y-1/2 flex gap-2.5">
+            {/* Decorative posters — hidden below sm */}
+            <div className="max-sm:hidden flex absolute right-8 top-1/2 -translate-y-1/2 gap-2.5">
               {rawItems.slice(0, 3).map((item, i) => {
                 const poster = item.poster_path;
                 return poster ? (
@@ -216,17 +223,17 @@ export default function BrowseGenres() {
             </div>
 
             {/* Text */}
-            <div className="absolute left-7 top-0 bottom-0 flex flex-col justify-center text-white">
-              <div className="text-[10px] font-mono tracking-[0.15em] opacity-55 uppercase mb-2">
+            <div className="absolute left-5 sm:left-7 top-0 bottom-0 flex flex-col justify-center text-white sm:pr-[220px]">
+              <div className="text-[10px] font-mono tracking-[0.15em] opacity-55 uppercase mb-1.5 sm:mb-2">
                 Now browsing
               </div>
               <h2
-                className="text-[2.4rem] font-light leading-none tracking-tight"
+                className="text-[1.75rem] sm:text-[2.4rem] font-light leading-none tracking-tight truncate"
                 style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
               >
                 {selectedGenre.name}
               </h2>
-              <div className="text-xs opacity-65 mt-2">
+              <div className="text-xs opacity-65 mt-1.5 sm:mt-2">
                 Page {page} of {totalPages} · sorted by popularity
               </div>
             </div>

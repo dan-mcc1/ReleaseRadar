@@ -17,6 +17,7 @@ interface Props {
   selectedDateItems: CalendarItem[];
   onResetToToday: () => void;
   onSyncCalendar: () => void;
+  showExtras?: boolean;
 }
 
 function getEpisodeTag(episodeType: string | null | undefined) {
@@ -301,6 +302,7 @@ export default function CalendarSideRail({
   selectedDateItems,
   onResetToToday,
   onSyncCalendar,
+  showExtras = true,
 }: Props) {
   const today = new Date();
   const isToday = selectedDate.toDateString() === today.toDateString();
@@ -354,10 +356,10 @@ export default function CalendarSideRail({
       </div>
 
       {/* Friends' Activity */}
-      <FriendsActivityBox />
+      {showExtras && <FriendsActivityBox />}
 
       {/* Sync CTA */}
-      <div
+      {showExtras && <div
         className="rounded-2xl p-5 border border-neutral-800"
         style={{
           background:
@@ -382,7 +384,7 @@ export default function CalendarSideRail({
         >
           Connect →
         </button>
-      </div>
+      </div>}
     </div>
   );
 }

@@ -470,7 +470,7 @@ const SignIn: React.FC = () => {
 
   return (
     <div
-      className="flex-1 grid"
+      className="flex-1 flex flex-col lg:grid"
       style={{
         gridTemplateColumns: "1.15fr 1fr",
         minHeight: "100vh",

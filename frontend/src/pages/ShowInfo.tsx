@@ -208,13 +208,13 @@ export default function ShowInfo() {
 
       <div className="px-6 sm:px-10 mt-5">
         {/* Tabs */}
-        <div className="mt-6 border-b border-neutral-700">
-          <nav className="flex gap-0">
+        <div className="mt-6 border-b border-neutral-700 overflow-x-auto scrollbar-none">
+          <nav className="flex gap-0 min-w-max">
             {TABS.map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px ${
+                className={`px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap ${
                   activeTab === tab
                     ? "border-primary-500 text-white"
                     : "border-transparent text-neutral-400 hover:text-neutral-200"

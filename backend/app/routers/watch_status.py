@@ -1,9 +1,14 @@
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.services.watchlist_service import add_to_watchlist, remove_from_watchlist, assert_can_track
-from app.services.watched_service import add_to_watched, remove_from_watched
+from app.services.watched_service import (
+    add_to_watched,
+    remove_from_watched,
+    mark_existing_episodes_watched,
+    sync_watched_episodes_bg,
+)
 from app.services.currently_watching_service import (
     add_to_currently_watching,
     remove_from_currently_watching,
@@ -16,6 +21,7 @@ _VALID = {"none", "Want To Watch", "Currently Watching", "Watched"}
 
 @router.post("/set")
 def set_watch_status(
+    background_tasks: BackgroundTasks,
     content_type: str = Body(...),
     content_id: int = Body(...),
     target: str = Body(...),
@@ -40,6 +46,9 @@ def set_watch_status(
         add_to_currently_watching(db, uid, content_type, content_id)
     elif target == "Watched":
         add_to_watched(db, uid, content_type, content_id)
+        if content_type == "tv":
+            mark_existing_episodes_watched(db, uid, content_id)
+            background_tasks.add_task(sync_watched_episodes_bg, uid, content_id)
 
     # Remove from old list after the add so tracking_count never hits zero mid-swap.
     if current == "Want To Watch":

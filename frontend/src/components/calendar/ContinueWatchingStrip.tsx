@@ -44,9 +44,9 @@ function ShowItem({ show, next }: { show: Show; next: NextEpisode | undefined })
   }
 
   return (
-    <div className="flex items-center gap-2.5 flex-shrink-0 group">
-      <Link to={episodeUrl} className="flex items-center gap-2.5">
-        <div className="w-[44px] h-[66px] rounded-md overflow-hidden flex-shrink-0 bg-neutral-800">
+    <div className="flex items-center gap-2 sm:gap-2.5 flex-shrink-0 group">
+      <Link to={episodeUrl} className="flex items-center gap-2 sm:gap-2.5">
+        <div className="w-9 h-[54px] sm:w-[44px] sm:h-[66px] rounded-md overflow-hidden flex-shrink-0 bg-neutral-800">
           {show.poster_path && (
             <img
               src={`${BASE_IMAGE_URL}/w185${show.poster_path}`}
@@ -55,8 +55,8 @@ function ShowItem({ show, next }: { show: Show; next: NextEpisode | undefined })
             />
           )}
         </div>
-        <div style={{ minWidth: 110, maxWidth: 140 }}>
-          <p className="text-[12.5px] font-semibold text-neutral-100 truncate leading-tight group-hover:text-primary-400 transition-colors">
+        <div className="min-w-[80px] max-w-[110px] sm:min-w-[110px] sm:max-w-[140px]">
+          <p className="text-[11px] sm:text-[12.5px] font-semibold text-neutral-100 truncate leading-tight group-hover:text-primary-400 transition-colors">
             {show.name}
           </p>
           <p className="font-mono text-[10px] text-neutral-500 mt-0.5">
@@ -74,7 +74,7 @@ function ShowItem({ show, next }: { show: Show; next: NextEpisode | undefined })
           onClick={handleMark}
           disabled={marking}
           title="Mark as watched"
-          className={`w-7 h-7 rounded-full border flex items-center justify-center flex-shrink-0 transition-colors ${
+          className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full border flex items-center justify-center flex-shrink-0 transition-colors ${
             marking
               ? "opacity-50 cursor-not-allowed border-neutral-700"
               : "border-neutral-700 text-neutral-500 hover:border-primary-500 hover:text-primary-400 cursor-pointer"
@@ -123,9 +123,9 @@ function MovieItem({ movie }: { movie: Movie }) {
   }
 
   return (
-    <div className="flex items-center gap-2.5 flex-shrink-0 group">
-      <Link to={`/movie/${movie.id}`} className="flex items-center gap-2.5">
-        <div className="w-[44px] h-[66px] rounded-md overflow-hidden flex-shrink-0 bg-neutral-800">
+    <div className="flex items-center gap-2 sm:gap-2.5 flex-shrink-0 group">
+      <Link to={`/movie/${movie.id}`} className="flex items-center gap-2 sm:gap-2.5">
+        <div className="w-9 h-[54px] sm:w-[44px] sm:h-[66px] rounded-md overflow-hidden flex-shrink-0 bg-neutral-800">
           {movie.poster_path && (
             <img
               src={`${BASE_IMAGE_URL}/w185${movie.poster_path}`}
@@ -134,8 +134,8 @@ function MovieItem({ movie }: { movie: Movie }) {
             />
           )}
         </div>
-        <div style={{ minWidth: 110, maxWidth: 140 }}>
-          <p className="text-[12.5px] font-semibold text-neutral-100 truncate leading-tight group-hover:text-primary-400 transition-colors">
+        <div className="min-w-[80px] max-w-[110px] sm:min-w-[110px] sm:max-w-[140px]">
+          <p className="text-[11px] sm:text-[12.5px] font-semibold text-neutral-100 truncate leading-tight group-hover:text-primary-400 transition-colors">
             {movie.title}
           </p>
           <p className="font-mono text-[10px] text-neutral-500 mt-0.5">Movie</p>
@@ -146,7 +146,7 @@ function MovieItem({ movie }: { movie: Movie }) {
         onClick={handleMark}
         disabled={marking}
         title="Mark as watched"
-        className={`w-7 h-7 rounded-full border flex items-center justify-center flex-shrink-0 transition-colors ${
+        className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full border flex items-center justify-center flex-shrink-0 transition-colors ${
           marking
             ? "opacity-50 cursor-not-allowed border-neutral-700"
             : "border-neutral-700 text-neutral-500 hover:border-primary-500 hover:text-primary-400 cursor-pointer"
@@ -205,14 +205,14 @@ export default function ContinueWatchingStrip() {
   return (
     <div className="flex items-center bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden">
       {/* Label */}
-      <div className="flex-shrink-0 px-4 py-3 border-r border-neutral-800 self-stretch flex items-center">
-        <p className="font-mono text-[10.5px] tracking-[0.1em] uppercase text-neutral-500 leading-tight">
+      <div className="flex-shrink-0 px-3 sm:px-4 py-2 sm:py-3 border-r border-neutral-800 self-stretch flex items-center">
+        <p className="font-mono text-[9px] sm:text-[10.5px] tracking-[0.1em] uppercase text-neutral-500 leading-tight">
           Continue<br />watching
         </p>
       </div>
 
       {/* Items */}
-      <div className="flex items-center gap-5 flex-1 px-4 py-3 overflow-x-auto [scrollbar-width:thin] [scrollbar-color:theme(colors.neutral.700)_transparent] [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-neutral-700 [&::-webkit-scrollbar-thumb]:rounded-full">
+      <div className="flex items-center gap-4 sm:gap-5 flex-1 px-3 sm:px-4 py-2 sm:py-3 overflow-x-auto [scrollbar-width:thin] [scrollbar-color:theme(colors.neutral.700)_transparent] [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-neutral-700 [&::-webkit-scrollbar-thumb]:rounded-full">
         {allEntries.map((entry) =>
           entry.kind === "show" ? (
             <ShowItem key={`tv-${entry.show.id}`} show={entry.show} next={nextEpisodes[entry.show.id]} />

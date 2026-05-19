@@ -110,7 +110,7 @@ export default function BoxOffice() {
             <button
               key={y}
               onClick={() => setYear(y)}
-              className={`px-3.5 py-1.5 text-sm font-mono font-medium rounded-lg transition-colors ${
+              className={`px-2 py-1 sm:px-3.5 sm:py-1.5 text-xs sm:text-sm font-mono font-medium rounded-lg transition-colors ${
                 y === year
                   ? "bg-neutral-700 text-white"
                   : "text-neutral-400 hover:text-neutral-200"
@@ -121,7 +121,7 @@ export default function BoxOffice() {
           ))}
           {/* Overflow year — show selected year if outside window */}
           {showMoreYears && (
-            <button className="px-3.5 py-1.5 text-sm font-mono font-medium rounded-lg bg-neutral-700 text-white">
+            <button className="px-2 py-1 sm:px-3.5 sm:py-1.5 text-xs sm:text-sm font-mono font-medium rounded-lg bg-neutral-700 text-white">
               {year}
             </button>
           )}
@@ -221,10 +221,10 @@ export default function BoxOffice() {
                   : "",
               },
             ].map((k) => (
-              <div key={k.label} className="bg-neutral-800/60 border border-white/8 rounded-xl px-4 py-3.5">
+              <div key={k.label} className="bg-neutral-800/60 border border-white/8 rounded-xl px-3 py-2.5 sm:px-4 sm:py-3.5">
                 <div className="font-mono text-[9.5px] tracking-widest text-neutral-500 uppercase">{k.label}</div>
                 <div
-                  className={`text-3xl font-light tracking-tight leading-tight mt-1 ${k.highlight ? "text-primary-400" : "text-white"}`}
+                  className={`text-xl sm:text-3xl font-light tracking-tight leading-tight mt-1 ${k.highlight ? "text-primary-400" : "text-white"}`}
                   style={{ fontFamily: "'Georgia', serif" }}
                 >
                   {k.value}
@@ -242,7 +242,7 @@ export default function BoxOffice() {
             {/* Leaderboard table */}
             <div className="bg-neutral-800/60 border border-white/8 rounded-2xl overflow-hidden">
               {/* Table header */}
-              <div className="grid grid-cols-[44px_52px_1fr_110px_96px_120px] gap-0 items-center px-5 py-3 border-b border-white/8 font-mono text-[9.5px] text-neutral-500 tracking-widest uppercase">
+              <div className="grid grid-cols-[36px_52px_1fr_100px] sm:grid-cols-[44px_64px_1fr_110px_96px_120px] gap-0 items-center px-4 sm:px-5 py-3 border-b border-white/8 font-mono text-[9.5px] text-neutral-500 tracking-widest uppercase">
                 <span>#</span>
                 <span></span>
                 <span>Movie</span>
@@ -264,11 +264,18 @@ export default function BoxOffice() {
                 const rankSize =
                   movie.rank <= 3 ? "text-3xl" : "text-2xl";
 
+                const revenueClass =
+                  movie.rank === 1
+                    ? "font-mono text-base font-bold text-primary-400 text-right"
+                    : movie.rank <= 3
+                      ? "font-mono text-sm font-semibold text-white text-right"
+                      : "font-mono text-sm text-neutral-300 text-right";
+
                 return (
                   <Link
                     key={movie.id}
                     to={`/movie/${movie.id}`}
-                    className="grid grid-cols-[44px_52px_1fr_110px_96px_120px] gap-0 items-center px-5 py-3 hover:bg-white/[0.03] transition-colors border-b border-white/5 last:border-0"
+                    className="grid grid-cols-[36px_52px_1fr_100px] sm:grid-cols-[44px_64px_1fr_110px_96px_120px] gap-0 items-center px-4 sm:px-5 py-3 hover:bg-white/[0.03] transition-colors border-b border-white/5 last:border-0"
                   >
                     <span
                       className={`font-light tracking-tight leading-none ${rankColor} ${rankSize}`}
@@ -277,7 +284,7 @@ export default function BoxOffice() {
                       {movie.rank}
                     </span>
 
-                    <div className="w-9 h-14 rounded overflow-hidden bg-neutral-700 flex-shrink-0">
+                    <div className="w-10 h-[60px] sm:w-12 sm:h-[72px] rounded overflow-hidden bg-neutral-700 flex-shrink-0">
                       {movie.poster_path ? (
                         <img
                           src={`${BASE_IMAGE_URL}/w92${movie.poster_path}`}
@@ -289,7 +296,7 @@ export default function BoxOffice() {
                       )}
                     </div>
 
-                    <div className="min-w-0 px-3">
+                    <div className="min-w-0 px-2 sm:px-3">
                       <p className="text-sm font-semibold text-white line-clamp-1 leading-snug tracking-tight">
                         {movie.title}
                       </p>
@@ -304,7 +311,7 @@ export default function BoxOffice() {
                       )}
                     </div>
 
-                    <span className="font-mono text-sm text-white text-right font-semibold">
+                    <span className={revenueClass}>
                       {formatMoney(movie.revenue)}
                     </span>
 
@@ -352,7 +359,7 @@ function HeroCard({ movie, year, mode, month }: { movie: BoxOfficeMovie; year: n
   return (
     <div className="bg-neutral-800/60 border border-white/8 rounded-2xl overflow-hidden flex flex-col">
       {/* Backdrop */}
-      <div className="relative aspect-[4/3] overflow-hidden bg-neutral-900">
+      <div className="relative aspect-video overflow-hidden bg-neutral-900">
         {movie.backdrop_path ? (
           <img
             src={`${BASE_IMAGE_URL}/w780${movie.backdrop_path}`}

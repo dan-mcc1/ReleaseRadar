@@ -506,8 +506,8 @@ export default function CalendarView() {
           )}
         </div>
 
-        {/* Side rail (desktop only) */}
-        <div className="hidden lg:block">
+        {/* Side rail */}
+        <div>
           <CalendarSideRail
             todayItems={applyFilters(
               getItemsForDate(allItems, today),

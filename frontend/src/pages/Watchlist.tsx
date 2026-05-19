@@ -11,11 +11,12 @@ import {
 } from "@dnd-kit/core";
 import {
   SortableContext,
-  verticalListSortingStrategy,
+  rectSortingStrategy,
   arrayMove,
+  useSortable,
 } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { BASE_IMAGE_URL } from "../constants";
-import WatchlistOrderRow from "../components/WatchlistOrderRow";
 import ListFilterPanel, {
   DEFAULT_FILTERS,
   type ListFilters,
@@ -284,6 +285,167 @@ function WatchlistCard({
   );
 }
 
+function SortableWatchlistCard({
+  item,
+  bingePlans,
+  rank,
+  dndId,
+  isFirst,
+  isLast,
+  isDragDisabled = false,
+  onNavigate,
+  onRemove,
+  onMoveUp,
+  onMoveDown,
+  onMoveToTop,
+}: {
+  item: CombinedItem;
+  bingePlans?: Record<string, ShowProgress>;
+  rank: number;
+  dndId: string;
+  isFirst: boolean;
+  isLast: boolean;
+  isDragDisabled?: boolean;
+  onNavigate: () => void;
+  onRemove: () => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  onMoveToTop: () => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: dndId, disabled: isDragDisabled });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+  };
+
+  const progress = getProgress(item, bingePlans);
+  const statusText = getStatusText(item, bingePlans);
+  const isCaughtUp =
+    item._contentType === "tv" &&
+    bingePlans?.[String(item.id)]?.remaining_episodes === 0;
+  const title = getTitle(item);
+
+  return (
+    <div ref={setNodeRef} style={style} className="flex flex-col gap-2 group/card">
+      <div className="relative">
+        <div
+          className="aspect-[2/3] rounded-xl overflow-hidden bg-neutral-800 transition-opacity duration-200 group-hover/card:opacity-85"
+          style={{ cursor: isDragDisabled ? "pointer" : isDragging ? "grabbing" : "grab" }}
+          onClick={onNavigate}
+          {...(!isDragDisabled ? { ...attributes, ...listeners } : {})}
+        >
+          {item.poster_path ? (
+            <img
+              src={`${BASE_IMAGE_URL}/w342${item.poster_path}`}
+              alt={title}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center p-3 text-center">
+              <span className="text-neutral-600 text-xs leading-tight">{title}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Progress bar */}
+        {progress > 0 && !isCaughtUp && (
+          <div className="absolute left-2 right-2 bottom-2 h-[3px] bg-black/50 rounded-full overflow-hidden pointer-events-none">
+            <div
+              className="h-full bg-primary-500 rounded-full"
+              style={{ width: `${Math.min(progress * 100, 100)}%` }}
+            />
+          </div>
+        )}
+
+        {/* Caught-up badge */}
+        {isCaughtUp && (
+          <div className="absolute top-2 right-2 w-6 h-6 rounded-full bg-primary-500 text-neutral-950 flex items-center justify-center shadow-lg pointer-events-none">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+        )}
+
+        {/* Rank badge */}
+        {!isCaughtUp && (
+          <div className="absolute top-2 right-2 min-w-[1.5rem] h-5 px-1.5 rounded-full bg-black/60 text-neutral-300 flex items-center justify-center text-[10px] font-bold leading-none pointer-events-none">
+            #{rank}
+          </div>
+        )}
+
+        {/* Remove button */}
+        <button
+          onClick={(e) => { e.stopPropagation(); onRemove(); }}
+          onPointerDown={(e) => e.stopPropagation()}
+          title="Remove from watchlist"
+          className="absolute top-2 left-2 w-6 h-6 rounded-full bg-black/70 text-neutral-400 flex items-center justify-center opacity-0 group-hover/card:opacity-100 transition-opacity hover:text-white hover:bg-black/90"
+        >
+          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <div>
+        <p className="text-[13.5px] font-semibold text-neutral-100 leading-tight tracking-tight truncate">
+          {title}
+        </p>
+        {statusText && (
+          <p className="text-[11.5px] text-neutral-500 mt-1 flex items-center gap-1.5">
+            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isCaughtUp ? "bg-neutral-500" : "bg-primary-500"}`} />
+            {statusText}
+          </p>
+        )}
+        {/* Reorder controls */}
+        <div
+          className="flex items-center gap-1 mt-1.5 opacity-0 group-hover/card:opacity-100 transition-opacity"
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={(e) => { e.stopPropagation(); onMoveToTop(); }}
+            disabled={isFirst}
+            title="Move to first"
+            className="w-5 h-5 rounded bg-neutral-700 text-neutral-400 flex items-center justify-center hover:text-neutral-200 hover:bg-neutral-600 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+          >
+            <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M11 19l-7-7 7-7M19 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onMoveUp(); }}
+            disabled={isFirst}
+            title="Move left"
+            className="w-5 h-5 rounded bg-neutral-700 text-neutral-400 flex items-center justify-center hover:text-neutral-200 hover:bg-neutral-600 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+          >
+            <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onMoveDown(); }}
+            disabled={isLast}
+            title="Move right"
+            className="w-5 h-5 rounded bg-neutral-700 text-neutral-400 flex items-center justify-center hover:text-neutral-200 hover:bg-neutral-600 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+          >
+            <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Watchlist() {
   usePageTitle("Watchlist");
   const navigate = useNavigate();
@@ -444,9 +606,9 @@ export default function Watchlist() {
     [combinedItems],
   );
 
-  // Grid items for non-my-order views
+  // Grid items for non-my-order views, and for up_next regardless of sort
   const gridItems: CombinedItem[] = useMemo(() => {
-    if (isMyOrder) return [];
+    if (isMyOrder && activeTab !== "up_next") return [];
     switch (activeTab) {
       case "up_next":
         return upNextShows.map((s) => ({
@@ -515,7 +677,9 @@ export default function Watchlist() {
   const hasResults = isMyOrder
     ? activeTab === "all"
       ? combinedItems.length > 0
-      : myOrderFilteredItems.length > 0
+      : activeTab === "up_next"
+        ? gridItems.length > 0
+        : myOrderFilteredItems.length > 0
     : gridItems.length > 0;
 
   return (
@@ -535,8 +699,8 @@ export default function Watchlist() {
               watchlist
             </em>
           </h1>
-          <div className="flex-1" />
-          <div className="flex items-center gap-2">
+          <div className="flex-1 hidden sm:block" />
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
             <button
               onClick={() => setShowFilters((v) => !v)}
               className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors ${
@@ -568,7 +732,7 @@ export default function Watchlist() {
             <select
               value={sort}
               onChange={(e) => setSort(e.target.value as SortType)}
-              className="text-sm bg-neutral-800 border border-neutral-700 text-neutral-300 rounded-lg px-3 py-1.5 focus:outline-none focus:border-neutral-500"
+              className="text-sm bg-neutral-800 border border-neutral-700 text-neutral-300 rounded-lg px-3 py-1.5 focus:outline-none focus:border-neutral-500 max-w-[160px] sm:max-w-none"
             >
               <option value="my_order">My Order</option>
               <option value="added_desc">Recently Added</option>
@@ -742,12 +906,12 @@ export default function Watchlist() {
         </div>
       )}
 
-      {/* ── My Order: All tab — DnD list ── */}
+      {/* ── My Order: All tab — DnD grid ── */}
       {!loading &&
         isMyOrder &&
         activeTab === "all" &&
         combinedItems.length > 0 && (
-          <div className="mt-6">
+          <div className="mt-8">
             <DndContext
               sensors={sensors}
               collisionDetection={closestCenter}
@@ -755,29 +919,28 @@ export default function Watchlist() {
             >
               <SortableContext
                 items={combinedItems.map((i) => `${i._contentType}-${i.id}`)}
-                strategy={verticalListSortingStrategy}
+                strategy={rectSortingStrategy}
               >
-                <div className="flex flex-col gap-2">
+                <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-4 gap-y-6">
                   {combinedItems.map((item, idx) => (
-                    <WatchlistOrderRow
+                    <SortableWatchlistCard
                       key={`${item._contentType}-${item.id}`}
                       dndId={`${item._contentType}-${item.id}`}
+                      item={item}
+                      bingePlans={bingePlans}
                       rank={idx + 1}
-                      title={getTitle(item)}
-                      posterPath={item.poster_path}
-                      year={getYear(item)}
-                      contentType={item._contentType}
-                      voteAverage={item.vote_average}
-                      userRating={item.user_rating}
-                      genres={item.genres}
-                      certification={item.certification}
-                      bingePlan={
-                        item._contentType === "tv"
-                          ? (bingePlans?.[String(item.id)] ?? null)
-                          : null
-                      }
                       isFirst={idx === 0}
                       isLast={idx === combinedItems.length - 1}
+                      onNavigate={() =>
+                        navigate(`/${item._contentType === "movie" ? "movie" : "tv"}/${item.id}`)
+                      }
+                      onRemove={() =>
+                        removeFromList.mutate({
+                          list: "watchlist",
+                          contentType: item._contentType,
+                          contentId: item.id,
+                        })
+                      }
                       onMoveUp={() => {
                         const before = combinedItems[idx - 2] ?? null;
                         const after = combinedItems[idx - 1];
@@ -807,18 +970,6 @@ export default function Watchlist() {
                           combinedItems[0].watchlist_id,
                         );
                       }}
-                      onDelete={() =>
-                        removeFromList.mutate({
-                          list: "watchlist",
-                          contentType: item._contentType,
-                          contentId: item.id,
-                        })
-                      }
-                      onClick={() =>
-                        navigate(
-                          `/${item._contentType === "movie" ? "movie" : "tv"}/${item.id}`,
-                        )
-                      }
                     />
                   ))}
                 </div>
@@ -827,38 +978,37 @@ export default function Watchlist() {
           </div>
         )}
 
-      {/* ── My Order: Movies or Shows tab — arrows only ── */}
+      {/* ── My Order: Movies or Shows tab — grid with arrows ── */}
       {!loading &&
         isMyOrder &&
         activeTab !== "all" &&
         activeTab !== "up_next" &&
         myOrderFilteredItems.length > 0 && (
-          <div className="flex flex-col gap-2 mt-6">
+          <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-4 gap-y-6 mt-8">
             {myOrderFilteredItems.map((item) => {
               const allIdx = combinedItems.findIndex(
                 (c) => c._contentType === item._contentType && c.id === item.id,
               );
               return (
-                <WatchlistOrderRow
+                <SortableWatchlistCard
                   key={`${item._contentType}-${item.id}`}
                   dndId={`${item._contentType}-${item.id}`}
+                  item={item}
+                  bingePlans={bingePlans}
                   rank={allIdx + 1}
-                  title={getTitle(item)}
-                  posterPath={item.poster_path}
-                  year={getYear(item)}
-                  contentType={item._contentType}
-                  voteAverage={item.vote_average}
-                  userRating={item.user_rating}
-                  genres={item.genres}
-                  certification={item.certification}
-                  bingePlan={
-                    item._contentType === "tv"
-                      ? (bingePlans?.[String(item.id)] ?? null)
-                      : null
-                  }
                   isFirst={allIdx === 0}
                   isLast={allIdx === combinedItems.length - 1}
                   isDragDisabled
+                  onNavigate={() =>
+                    navigate(`/${item._contentType === "movie" ? "movie" : "tv"}/${item.id}`)
+                  }
+                  onRemove={() =>
+                    removeFromList.mutate({
+                      list: "watchlist",
+                      contentType: item._contentType,
+                      contentId: item.id,
+                    })
+                  }
                   onMoveUp={() => {
                     const before = combinedItems[allIdx - 2] ?? null;
                     const after = combinedItems[allIdx - 1];
@@ -890,18 +1040,6 @@ export default function Watchlist() {
                       combinedItems[0]?.watchlist_id ?? null,
                     );
                   }}
-                  onDelete={() =>
-                    removeFromList.mutate({
-                      list: "watchlist",
-                      contentType: item._contentType,
-                      contentId: item.id,
-                    })
-                  }
-                  onClick={() =>
-                    navigate(
-                      `/${item._contentType === "movie" ? "movie" : "tv"}/${item.id}`,
-                    )
-                  }
                 />
               );
             })}

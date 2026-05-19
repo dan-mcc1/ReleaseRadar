@@ -96,7 +96,7 @@ function HeroCard({ item, contentType, onAdd, onAddWatched }: HeroCardProps) {
             "linear-gradient(90deg, rgba(0,0,0,0.80) 0%, rgba(0,0,0,0.40) 50%, rgba(0,0,0,0.05) 100%)",
         }}
       />
-      <div className="absolute inset-y-0 left-0 flex flex-col justify-center px-10 max-w-2xl">
+      <div className="absolute inset-y-0 left-0 right-0 sm:right-auto flex flex-col justify-center px-5 sm:px-10 max-w-2xl">
         <div
           className="text-primary-400 mb-3 font-semibold tracking-widest uppercase"
           style={{ fontFamily: "var(--font-mono)", fontSize: 10.5 }}
@@ -105,7 +105,7 @@ function HeroCard({ item, contentType, onAdd, onAddWatched }: HeroCardProps) {
         </div>
         <h2
           className="text-white leading-none tracking-tight"
-          style={{ fontFamily: "var(--font-serif)", fontSize: 52, fontWeight: 600 }}
+          style={{ fontFamily: "var(--font-serif)", fontSize: "clamp(28px, 5vw, 52px)", fontWeight: 600 }}
         >
           {title}
         </h2>
@@ -120,7 +120,7 @@ function HeroCard({ item, contentType, onAdd, onAddWatched }: HeroCardProps) {
           {rating && <span className="text-neutral-300">★ {rating}</span>}
           {year && <span className="text-neutral-400">{year}</span>}
         </div>
-        <div className="flex items-center gap-2.5 mt-5" onClick={(e) => e.stopPropagation()}>
+        <div className="flex flex-wrap items-center gap-2 mt-5" onClick={(e) => e.stopPropagation()}>
           <button
             onClick={onAdd}
             className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold bg-primary-500 hover:bg-primary-400 text-white transition-colors"
@@ -197,7 +197,7 @@ function GridCard({ item, contentType, onAdd, onAddWatched }: GridCardProps) {
         </div>
       </div>
 
-      <div className="flex gap-1.5 mt-0.5">
+      <div className="flex flex-col sm:flex-row gap-1.5 mt-0.5">
         <button
           onClick={onAdd}
           className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-xs font-semibold bg-primary-500/15 hover:bg-primary-500/25 text-primary-400 transition-colors"
@@ -289,8 +289,8 @@ export default function ForYou() {
         </div>
         <div className="flex items-end gap-5 flex-wrap">
           <h1
-            className="text-neutral-100 leading-none tracking-tight"
-            style={{ fontFamily: "var(--font-serif)", fontSize: 40, fontWeight: 600 }}
+            className="text-[28px] sm:text-[40px] text-neutral-100 leading-none tracking-tight"
+            style={{ fontFamily: "var(--font-serif)", fontWeight: 600 }}
           >
             Watch{" "}
             <em style={{ fontStyle: "italic", color: "var(--color-primary-400)" }}>
