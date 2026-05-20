@@ -4,7 +4,9 @@ import type { Movie, Show } from "../types/calendar";
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useTrendingMulti, useUpcoming, useAiringToday, useNowPlaying, usePopularMulti, useTopRatedMulti } from "../hooks/api/useSearch";
 import { BASE_IMAGE_URL } from "../constants";
-import WatchButton from "../components/WatchButton";
+import MiniWatchButton from "../components/MiniWatchButton";
+import { useBulkWatchStatus } from "../hooks/api/useWatchStatus";
+import type { WatchStatus } from "../components/WatchButton";
 
 type AnyItem = Movie | Show;
 type TypedItem = AnyItem & { _type: "movie" | "tv" };
@@ -167,11 +169,14 @@ function PosterCard({
   item,
   onClick,
   releaseDate,
+  initialStatus,
 }: {
   item: TypedItem;
   onClick: () => void;
   releaseDate?: string;
-}) {
+  initialStatus?: WatchStatus;
+})
+ {
   const title = getTitle(item);
   const genre = item.genres?.[0]?.name ?? "";
   const rating = item.vote_average ? item.vote_average.toFixed(1) : null;
@@ -190,23 +195,22 @@ function PosterCard({
           </div>
         )}
       </div>
-      <div
-        className="text-[13.5px] font-semibold text-neutral-100 tracking-tight leading-tight truncate cursor-pointer hover:text-primary-300 transition-colors"
-        onClick={onClick}
-      >
-        {title}
+      <div className="flex items-center gap-2">
+        <div className="flex-1 min-w-0">
+          <div
+            className="text-[13.5px] font-semibold text-neutral-100 tracking-tight leading-tight truncate cursor-pointer hover:text-primary-300 transition-colors"
+            onClick={onClick}
+          >
+            {title}
+          </div>
+          <div className="text-[11.5px] text-neutral-500 mt-0.5 truncate">
+            {releaseDate
+              ? [releaseDate, rating ? `★ ${rating}` : null].filter(Boolean).join(" · ")
+              : [genre, rating ? `★ ${rating}` : null].filter(Boolean).join(" · ")}
+          </div>
+        </div>
+        <MiniWatchButton contentType={item._type} contentId={item.id} initialStatus={initialStatus} bulkManaged />
       </div>
-      <div className="text-[11.5px] text-neutral-500">
-        {releaseDate
-          ? [releaseDate, rating ? `★ ${rating}` : null].filter(Boolean).join(" · ")
-          : [genre, rating ? `★ ${rating}` : null].filter(Boolean).join(" · ")}
-      </div>
-      <WatchButton
-        contentType={item._type}
-        contentId={item.id}
-        compact
-        skipNotifyPrompt={false}
-      />
     </div>
   );
 }
@@ -309,6 +313,16 @@ export default function Trending() {
   const filteredTopRated =
     topRatedFilter === "all" ? topRatedItems : topRatedItems.filter((i) => i._type === topRatedFilter);
 
+  const allUniqueItems = Object.values(
+    [...trendingItems, ...upcomingItems, ...airingTodayItems, ...nowPlayingItems, ...popularItems, ...topRatedItems]
+      .reduce<Record<string, TypedItem>>((acc, item) => {
+        acc[`${item._type}:${item.id}`] = item;
+        return acc;
+      }, {})
+  );
+  const bulkStatusItems = allUniqueItems.map((i) => ({ content_type: i._type, content_id: i.id }));
+  const { data: bulkStatuses } = useBulkWatchStatus(bulkStatusItems);
+
   return (
     <div className="w-full px-6 sm:px-10 pt-8 pb-16" data-tour="trending-header">
       {/* Hero */}
@@ -377,6 +391,7 @@ title="Trending this week"
                 key={`${item._type}-${item.id}`}
                 item={item}
                 onClick={() => navigate(`/${item._type}/${item.id}`)}
+                initialStatus={bulkStatuses?.[`${item._type}:${item.id}`]?.status}
               />
             ))}
       </ScrollRow>
@@ -403,6 +418,7 @@ title="Coming soon"
                 item={item}
                 releaseDate={getFormattedDate(item)}
                 onClick={() => navigate(`/${item._type}/${item.id}`)}
+                initialStatus={bulkStatuses?.[`${item._type}:${item.id}`]?.status}
               />
             ))}
       </ScrollRow>
@@ -426,6 +442,7 @@ title="Airing today"
                 key={`${item._type}-${item.id}`}
                 item={item}
                 onClick={() => navigate(`/${item._type}/${item.id}`)}
+                initialStatus={bulkStatuses?.[`${item._type}:${item.id}`]?.status}
               />
             ))}
       </ScrollRow>
@@ -449,6 +466,7 @@ title="In theaters now"
                 key={`${item._type}-${item.id}`}
                 item={item}
                 onClick={() => navigate(`/${item._type}/${item.id}`)}
+                initialStatus={bulkStatuses?.[`${item._type}:${item.id}`]?.status}
               />
             ))}
       </ScrollRow>
@@ -474,6 +492,7 @@ title="Popular right now"
                 key={`${item._type}-${item.id}`}
                 item={item}
                 onClick={() => navigate(`/${item._type}/${item.id}`)}
+                initialStatus={bulkStatuses?.[`${item._type}:${item.id}`]?.status}
               />
             ))}
       </ScrollRow>
@@ -499,6 +518,7 @@ title="Top rated"
                 key={`${item._type}-${item.id}`}
                 item={item}
                 onClick={() => navigate(`/${item._type}/${item.id}`)}
+                initialStatus={bulkStatuses?.[`${item._type}:${item.id}`]?.status}
               />
             ))}
       </ScrollRow>

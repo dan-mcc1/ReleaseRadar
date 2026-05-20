@@ -4,7 +4,9 @@ import { useGenres, useGenreResults } from "../hooks/api/useSearch";
 import { BASE_IMAGE_URL } from "../constants";
 import { parseLocalDate } from "../utils/date";
 import { Movie, Show } from "../types/calendar";
-import WatchButton from "../components/WatchButton";
+import MiniWatchButton from "../components/MiniWatchButton";
+import { useBulkWatchStatus } from "../hooks/api/useWatchStatus";
+import type { WatchStatus } from "../components/WatchButton";
 
 type ActiveTab = "movie" | "tv";
 
@@ -15,7 +17,7 @@ const HUE_BY_GENRE: Record<number, number> = {
   37: 24, 10770: 160,
 };
 
-function PosterCard({ item, type }: { item: Movie | Show; type: ActiveTab }) {
+function PosterCard({ item, type, initialStatus }: { item: Movie | Show; type: ActiveTab; initialStatus?: WatchStatus }) {
   const title = type === "tv" ? (item as Show).name : (item as Movie).title;
   const date =
     type === "tv"
@@ -52,33 +54,30 @@ function PosterCard({ item, type }: { item: Movie | Show; type: ActiveTab }) {
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
       </Link>
-      <div>
-        <Link to={href} className="block text-sm font-semibold text-neutral-100 line-clamp-1 hover:text-primary-300 transition-colors leading-tight">
-          {title}
-        </Link>
-        <div className="flex items-center gap-1.5 mt-1">
-          {year && (
-            <span className="text-xs text-neutral-500">{year}</span>
-          )}
-          {item.vote_average != null && item.vote_average > 0 && (
-            <>
-              <span className="text-neutral-700 text-xs">·</span>
-              <span className="flex items-center gap-0.5 text-xs text-warning-400 font-medium">
-                <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
-                </svg>
-                {item.vote_average.toFixed(1)}
-              </span>
-            </>
-          )}
+      <div className="flex items-center gap-2">
+        <div className="flex-1 min-w-0">
+          <Link to={href} className="block text-sm font-semibold text-neutral-100 line-clamp-1 hover:text-primary-300 transition-colors leading-tight">
+            {title}
+          </Link>
+          <div className="flex items-center gap-1.5 mt-1">
+            {year && (
+              <span className="text-xs text-neutral-500">{year}</span>
+            )}
+            {item.vote_average != null && item.vote_average > 0 && (
+              <>
+                <span className="text-neutral-700 text-xs">·</span>
+                <span className="flex items-center gap-0.5 text-xs text-warning-400 font-medium">
+                  <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
+                  </svg>
+                  {item.vote_average.toFixed(1)}
+                </span>
+              </>
+            )}
+          </div>
         </div>
+        <MiniWatchButton contentType={type === "tv" ? "tv" : "movie"} contentId={item.id} initialStatus={initialStatus} bulkManaged />
       </div>
-      <WatchButton
-        contentType={type === "tv" ? "tv" : "movie"}
-        contentId={item.id}
-        compact
-        skipNotifyPrompt={false}
-      />
     </div>
   );
 }
@@ -108,6 +107,12 @@ export default function BrowseGenres() {
     ...(genreData?.movies ?? []),
     ...(genreData?.shows ?? []),
   ];
+
+  const bulkItems = rawItems.map((item) => ({
+    content_type: activeTab === "tv" ? "tv" : "movie",
+    content_id: item.id,
+  }));
+  const { data: bulkStatuses } = useBulkWatchStatus(bulkItems);
 
   const genrePills = genres[activeTab];
   const selectedGenre = genrePills.find((g) => g.id === selectedGenreId);
@@ -282,6 +287,7 @@ export default function BrowseGenres() {
               key={item.id}
               item={item as Movie | Show}
               type={activeTab}
+              initialStatus={bulkStatuses?.[`${activeTab === "tv" ? "tv" : "movie"}:${item.id}`]?.status}
             />
           ))}
         </div>
