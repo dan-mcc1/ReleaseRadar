@@ -311,7 +311,7 @@ export default function CalendarSideRail({
   return (
     <div className="flex flex-col gap-4 sticky top-4">
       {/* Day releases panel */}
-      <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
+      <div data-tour="calendar-episode-list" className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <p

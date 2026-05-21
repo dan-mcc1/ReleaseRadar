@@ -42,6 +42,8 @@ export const queryKeys = {
   friendRequestsOutgoing: (uid: string) => ["friends", "outgoing", uid] as const,
   followers: (uid: string) => ["friends", "followers", uid] as const,
   friendSuggestions: (uid: string) => ["friends", "suggestions", uid] as const,
+  friendsContentActivity: (uid: string, type: string, id: number) =>
+    ["friends", "content", uid, type, id] as const,
   friendProfile: (username: string) => ["friends", "profile", username] as const,
 
   // User
@@ -89,6 +91,8 @@ export const queryKeys = {
   // Box office
   boxOffice: (mode: string, year: number, month: number) =>
     ["boxOffice", mode, year, month] as const,
+  boxOfficeAllTime: (page: number) =>
+    ["boxOffice", "all-time", page] as const,
 
   // Shelves
   shelves: (uid: string) => ["shelves", uid] as const,

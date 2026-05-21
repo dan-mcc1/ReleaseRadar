@@ -194,6 +194,20 @@ def friends_activity(
     return get_friends_activity(db, uid)
 
 
+@router.get("/content/{content_type}/{content_id}")
+def friends_content_activity(
+    content_type: str,
+    content_id: int,
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    """Return accepted friends' watch statuses and ratings for a specific content item."""
+    if content_type not in ("movie", "tv"):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=422, detail="content_type must be 'movie' or 'tv'")
+    return friends_service.get_friends_content_activity(db, uid, content_type, content_id)
+
+
 @router.get("/feed")
 def activity_feed(
     db: Session = Depends(get_db),

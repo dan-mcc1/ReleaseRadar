@@ -60,6 +60,51 @@ export function useUpdateWatchStatus() {
       });
       return targetStatus;
     },
+    onMutate: async ({ contentType, contentId, targetStatus }) => {
+      if (!user) return;
+
+      const statusKey = queryKeys.watchStatus(user.uid, contentType, contentId);
+      await queryClient.cancelQueries({ queryKey: statusKey });
+
+      const previousStatus = queryClient.getQueryData<StatusResult>(statusKey);
+
+      // Optimistically update the per-item status cache.
+      queryClient.setQueryData<StatusResult>(statusKey, (prev) => ({
+        status: targetStatus,
+        rating: prev?.rating ?? null,
+      }));
+
+      // Optimistically patch any bulk status caches that include this item.
+      const bulkItemKey = `${contentType}:${contentId}`;
+      const bulkSnapshots: Array<[readonly unknown[], Record<string, StatusResult>]> = [];
+      queryClient
+        .getQueriesData<Record<string, StatusResult>>({
+          queryKey: ["watchStatus", "bulk", user.uid],
+        })
+        .forEach(([key, data]) => {
+          if (data && bulkItemKey in data) {
+            bulkSnapshots.push([key, data]);
+            queryClient.setQueryData<Record<string, StatusResult>>(key, {
+              ...data,
+              [bulkItemKey]: { status: targetStatus, rating: data[bulkItemKey].rating },
+            });
+          }
+        });
+
+      return { previousStatus, bulkSnapshots };
+    },
+    onError: (_err, { contentType, contentId }, ctx) => {
+      if (!user || !ctx) return;
+      if (ctx.previousStatus !== undefined) {
+        queryClient.setQueryData(
+          queryKeys.watchStatus(user.uid, contentType, contentId),
+          ctx.previousStatus,
+        );
+      }
+      for (const [key, data] of ctx.bulkSnapshots ?? []) {
+        queryClient.setQueryData(key, data);
+      }
+    },
     onSuccess: (targetStatus, { contentType, contentId, currentStatus }) => {
       if (!user) return;
 
@@ -111,27 +156,6 @@ export function useUpdateWatchStatus() {
           });
         }
       }
-
-      // Update the per-item watchStatus cache immediately.
-      queryClient.setQueryData<StatusResult>(
-        queryKeys.watchStatus(user.uid, contentType, contentId),
-        (prev) => ({ status: targetStatus, rating: prev?.rating ?? null }),
-      );
-
-      // Patch any bulk watchStatus caches that include this item.
-      const bulkItemKey = `${contentType}:${contentId}`;
-      queryClient
-        .getQueriesData<Record<string, StatusResult>>({
-          queryKey: ["watchStatus", "bulk", user.uid],
-        })
-        .forEach(([key, data]) => {
-          if (data && bulkItemKey in data) {
-            queryClient.setQueryData<Record<string, StatusResult>>(key, {
-              ...data,
-              [bulkItemKey]: { status: targetStatus, rating: data[bulkItemKey].rating },
-            });
-          }
-        });
 
       // Confirm watchStatus with the server.
       queryClient.invalidateQueries({

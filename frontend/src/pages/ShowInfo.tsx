@@ -23,6 +23,7 @@ import BingePlanWidget from "../components/BingePlanWidget";
 import RewatchSection from "../components/RewatchSection";
 import EpisodeRatingChart from "../components/EpisodeRatingChart";
 import { BASE_IMAGE_URL } from "../constants";
+import FriendsActivityWidget from "../components/FriendsActivityWidget";
 
 type FullShowData = Show & {
   vote_average?: number;
@@ -249,6 +250,54 @@ export default function ShowInfo() {
                   </div>
                 )}
 
+                {/* Key facts + Ratings */}
+                <div className="flex flex-wrap gap-4">
+                  <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5 shrink-0">
+                    <div className="font-mono text-[10px] tracking-[0.15em] text-neutral-500 uppercase mb-4">Key facts</div>
+                    <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2.5 text-sm">
+                      {show.created_by && show.created_by.length > 0 && (
+                        <>
+                          <span className="text-neutral-500">Creator</span>
+                          <span className="font-medium">{show.created_by.map((c) => c.name).join(", ")}</span>
+                        </>
+                      )}
+                      <span className="text-neutral-500">Status</span>
+                      <span className={`font-medium ${isOngoing ? "text-primary-400" : ""}`}>
+                        {isOngoing ? "● " : ""}{show.status}
+                      </span>
+                      <span className="text-neutral-500">Seasons</span>
+                      <span className="font-medium">{show.number_of_seasons}</span>
+                      <span className="text-neutral-500">Episodes</span>
+                      <span className="font-medium">{show.number_of_episodes}</span>
+                      {show.first_air_date && (
+                        <>
+                          <span className="text-neutral-500">Premiered</span>
+                          <span className="font-medium">
+                            {formatLocalDate(show.first_air_date, { year: "numeric", month: "short", day: "numeric" })}
+                          </span>
+                        </>
+                      )}
+                      {!isOngoing && show.last_air_date && (
+                        <>
+                          <span className="text-neutral-500">Ended</span>
+                          <span className="font-medium">
+                            {formatLocalDate(show.last_air_date, { year: "numeric", month: "short", day: "numeric" })}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5 min-w-[300px]">
+                    <div className="font-mono text-[10px] tracking-[0.15em] text-neutral-500 uppercase mb-4">Ratings</div>
+                    <RatingsRow
+                      voteAverage={show.vote_average}
+                      externalScores={externalScores}
+                      aggRating={aggRating}
+                      hideTitle
+                    />
+                  </div>
+                </div>
+
                 {user &&
                   initialStatus !== "none" &&
                   initialStatus !== "Watched" && (
@@ -289,54 +338,7 @@ export default function ShowInfo() {
 
               {/* Right rail */}
               <div className="flex flex-col gap-4 min-w-0">
-                {/* Key facts */}
-                <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
-                  <div className="font-mono text-[10px] tracking-[0.15em] text-neutral-500 uppercase mb-4">Key facts</div>
-                  <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2.5 text-sm">
-                    {show.created_by && show.created_by.length > 0 && (
-                      <>
-                        <span className="text-neutral-500">Creator</span>
-                        <span className="font-medium">{show.created_by.map((c) => c.name).join(", ")}</span>
-                      </>
-                    )}
-                    <span className="text-neutral-500">Status</span>
-                    <span className={`font-medium ${isOngoing ? "text-primary-400" : ""}`}>
-                      {isOngoing ? "● " : ""}{show.status}
-                    </span>
-                    <span className="text-neutral-500">Seasons</span>
-                    <span className="font-medium">{show.number_of_seasons}</span>
-                    <span className="text-neutral-500">Episodes</span>
-                    <span className="font-medium">{show.number_of_episodes}</span>
-                    {show.first_air_date && (
-                      <>
-                        <span className="text-neutral-500">Premiered</span>
-                        <span className="font-medium">
-                          {formatLocalDate(show.first_air_date, { year: "numeric", month: "short", day: "numeric" })}
-                        </span>
-                      </>
-                    )}
-                    {!isOngoing && show.last_air_date && (
-                      <>
-                        <span className="text-neutral-500">Ended</span>
-                        <span className="font-medium">
-                          {formatLocalDate(show.last_air_date, { year: "numeric", month: "short", day: "numeric" })}
-                        </span>
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                {/* Ratings */}
-                <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
-                  <div className="font-mono text-[10px] tracking-[0.15em] text-neutral-500 uppercase mb-4">Ratings</div>
-                  <RatingsRow
-                    voteAverage={show.vote_average}
-                    externalScores={externalScores}
-                    aggRating={aggRating}
-                    hideTitle
-                  />
-                </div>
-
+                {user && <FriendsActivityWidget contentType="tv" contentId={show.id} />}
                 {/* You might also like */}
                 {(show.recommendations?.results?.length ?? 0) > 0 && (
                   <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">

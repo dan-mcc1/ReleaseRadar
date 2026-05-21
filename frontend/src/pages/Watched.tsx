@@ -411,7 +411,7 @@ export default function Watched() {
 
       {/* Loading skeleton */}
       {isLoading && (
-        <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 mt-8">
+        <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 gap-3 mt-8">
           {Array.from({ length: 12 }).map((_, i) => (
             <div key={i} className="flex flex-col gap-2 animate-pulse">
               <div className="aspect-[2/3] rounded-xl bg-neutral-800" />
@@ -479,7 +479,7 @@ export default function Watched() {
 
       {/* Poster grid */}
       {!isLoading && hasResults && (
-        <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-4 gap-y-6 mt-8">
+        <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 gap-x-3 gap-y-5 mt-8">
           {gridItems.map((item) => (
             <WatchedCard
               key={`${item._contentType}-${item.id}`}

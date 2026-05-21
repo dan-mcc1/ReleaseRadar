@@ -111,6 +111,78 @@ def _build_leaderboard(year: int, month: int, limit: int) -> list[dict]:
     return ranked
 
 
+_all_time_cache: dict[tuple, tuple[list, float]] = {}
+_TTL_ALL_TIME = 24 * 3600
+
+
+def _build_all_time_leaderboard(page: int, limit: int) -> list[dict]:
+    cache_key = (page, limit)
+    cached = _all_time_cache.get(cache_key)
+    if cached:
+        result, ts = cached
+        if time.time() - ts < _TTL_ALL_TIME:
+            return result
+
+    try:
+        data = get(
+            "/discover/movie",
+            {
+                "sort_by": "revenue.desc",
+                "vote_count.gte": 200,
+                "page": page,
+            },
+        )
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"TMDB error: {e}")
+
+    discover_results: list[dict] = data.get("results", [])
+    if not discover_results:
+        return []
+
+    ids = [r["id"] for r in discover_results[:limit]]
+
+    fetched: dict[int, dict] = {}
+    with ThreadPoolExecutor(max_workers=min(len(ids), 20)) as executor:
+        futures = {executor.submit(_fetch_detail, mid): mid for mid in ids}
+        for future in futures:
+            mid = futures[future]
+            result = future.result()
+            if result:
+                fetched[mid] = result
+
+    ranked = []
+    rank_offset = (page - 1) * limit
+    rank = rank_offset + 1
+    for mid in ids:
+        m = fetched.get(mid)
+        if not m:
+            continue
+
+        revenue = m.get("revenue") or 0
+        if revenue <= 0:
+            continue
+
+        ranked.append(
+            {
+                "rank": rank,
+                "id": mid,
+                "title": m.get("title"),
+                "poster_path": m.get("poster_path"),
+                "backdrop_path": m.get("backdrop_path"),
+                "release_date": m.get("release_date"),
+                "revenue": revenue,
+                "budget": m.get("budget") or 0,
+                "vote_average": m.get("vote_average") or 0,
+                "runtime": m.get("runtime") or 0,
+                "genres": m.get("genres") or [],
+            }
+        )
+        rank += 1
+
+    _all_time_cache[cache_key] = (ranked, time.time())
+    return ranked
+
+
 @router.get("/yearly")
 def box_office_yearly(
     year: int = Query(..., ge=1900, le=2100),
@@ -126,3 +198,11 @@ def box_office_monthly(
     limit: int = Query(20, ge=1, le=50),
 ):
     return _build_leaderboard(year, month, limit)
+
+
+@router.get("/all-time")
+def box_office_all_time(
+    page: int = Query(1, ge=1, le=20),
+    limit: int = Query(20, ge=1, le=20),
+):
+    return _build_all_time_leaderboard(page, limit)

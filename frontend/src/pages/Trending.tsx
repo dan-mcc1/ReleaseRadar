@@ -5,6 +5,7 @@ import { usePageTitle } from "../hooks/usePageTitle";
 import { useTrendingMulti, useUpcoming, useAiringToday, useNowPlaying, usePopularMulti, useTopRatedMulti } from "../hooks/api/useSearch";
 import { BASE_IMAGE_URL } from "../constants";
 import MiniWatchButton from "../components/MiniWatchButton";
+import MiniWatchedButton from "../components/MiniWatchedButton";
 import { useBulkWatchStatus } from "../hooks/api/useWatchStatus";
 import type { WatchStatus } from "../components/WatchButton";
 
@@ -209,7 +210,12 @@ function PosterCard({
               : [genre, rating ? `★ ${rating}` : null].filter(Boolean).join(" · ")}
           </div>
         </div>
-        <MiniWatchButton contentType={item._type} contentId={item.id} initialStatus={initialStatus} bulkManaged />
+        <div className="flex items-center gap-1">
+          {initialStatus !== "Watched" && (
+            <MiniWatchButton contentType={item._type} contentId={item.id} initialStatus={initialStatus} bulkManaged />
+          )}
+          <MiniWatchedButton contentType={item._type} contentId={item.id} initialStatus={initialStatus} bulkManaged />
+        </div>
       </div>
     </div>
   );
@@ -324,12 +330,12 @@ export default function Trending() {
   const { data: bulkStatuses } = useBulkWatchStatus(bulkStatusItems);
 
   return (
-    <div className="w-full px-6 sm:px-10 pt-8 pb-16" data-tour="trending-header">
+    <div className="w-full px-6 sm:px-10 pt-8 pb-16">
       {/* Hero */}
       {multiLoading ? (
         <div className="rounded-2xl bg-neutral-800 animate-pulse" style={{ height: 420 }} />
       ) : hero ? (
-        <div className="relative rounded-2xl overflow-hidden" style={{ height: 420 }}>
+        <div data-tour="trending-header" className="relative rounded-2xl overflow-hidden" style={{ height: 420 }}>
           {heroBackdrop ? (
             <img src={heroBackdrop} alt={heroTitle} className="w-full h-full object-cover" />
           ) : (

@@ -16,6 +16,14 @@ export interface BoxOfficeMovie {
   genres: { id: number; name: string }[];
 }
 
+export function useAllTimeBoxOffice(page: number) {
+  return useQuery({
+    queryKey: queryKeys.boxOfficeAllTime(page),
+    queryFn: () =>
+      queryFetch<BoxOfficeMovie[]>(`/box-office/all-time?page=${page}&limit=20`),
+  });
+}
+
 export function useBoxOffice(
   mode: "yearly" | "monthly",
   year: number,

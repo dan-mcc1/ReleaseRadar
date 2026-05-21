@@ -5,6 +5,7 @@ import { BASE_IMAGE_URL } from "../constants";
 import { parseLocalDate } from "../utils/date";
 import { Movie, Show } from "../types/calendar";
 import MiniWatchButton from "../components/MiniWatchButton";
+import MiniWatchedButton from "../components/MiniWatchedButton";
 import { useBulkWatchStatus } from "../hooks/api/useWatchStatus";
 import type { WatchStatus } from "../components/WatchButton";
 
@@ -76,7 +77,12 @@ function PosterCard({ item, type, initialStatus }: { item: Movie | Show; type: A
             )}
           </div>
         </div>
-        <MiniWatchButton contentType={type === "tv" ? "tv" : "movie"} contentId={item.id} initialStatus={initialStatus} bulkManaged />
+        <div className="flex items-center gap-1">
+          {initialStatus !== "Watched" && (
+            <MiniWatchButton contentType={type === "tv" ? "tv" : "movie"} contentId={item.id} initialStatus={initialStatus} bulkManaged />
+          )}
+          <MiniWatchedButton contentType={type === "tv" ? "tv" : "movie"} contentId={item.id} initialStatus={initialStatus} bulkManaged />
+        </div>
       </div>
     </div>
   );

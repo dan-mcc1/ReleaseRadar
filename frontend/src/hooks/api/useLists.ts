@@ -81,7 +81,22 @@ export function useToggleFavorite() {
       });
       return !favorited;
     },
-    onSuccess: (_newState, { contentType, contentId }) => {
+    onMutate: async ({ contentType, contentId, favorited }) => {
+      if (!user) return;
+      const key = queryKeys.favoriteStatus(user.uid, contentType, contentId);
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<{ favorited: boolean }>(key);
+      queryClient.setQueryData<{ favorited: boolean }>(key, { favorited: !favorited });
+      return { previous };
+    },
+    onError: (_err, { contentType, contentId }, ctx) => {
+      if (!user || ctx?.previous === undefined) return;
+      queryClient.setQueryData(
+        queryKeys.favoriteStatus(user.uid, contentType, contentId),
+        ctx.previous,
+      );
+    },
+    onSettled: (_newState, _err, { contentType, contentId }) => {
       if (!user) return;
       queryClient.invalidateQueries({
         queryKey: queryKeys.favoriteStatus(user.uid, contentType, contentId),

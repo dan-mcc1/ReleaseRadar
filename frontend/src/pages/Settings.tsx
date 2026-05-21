@@ -782,7 +782,7 @@ export default function Settings() {
             subtitle="Control what you hear about — and when."
           >
             {/* Email master toggle */}
-            <div className="flex items-center justify-between py-3.5 border-b border-neutral-700/40">
+            <div data-tour="notifications-toggle" className="flex items-center justify-between py-3.5 border-b border-neutral-700/40">
               <div>
                 <p className="text-[14px] font-semibold text-white">
                   Email notifications
@@ -1198,7 +1198,7 @@ export default function Settings() {
             title="Streaming services"
             subtitle="Your subscriptions, used to filter and optimize your watchlist."
           >
-            <div className="space-y-6" data-tour="streaming-settings">
+            <div className="space-y-6">
               {/* My services */}
               {myServices && myServices.length > 0 && (
                 <div>
@@ -1243,7 +1243,7 @@ export default function Settings() {
               )}
 
               {/* Add services */}
-              <div>
+              <div data-tour="streaming-settings">
                 <p className="text-[12px] text-neutral-400 font-medium uppercase tracking-wider mb-3">
                   Add services
                 </p>

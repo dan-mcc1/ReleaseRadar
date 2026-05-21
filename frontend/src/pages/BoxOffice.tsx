@@ -1,7 +1,7 @@
 import { Link, useSearchParams } from "react-router-dom";
 import { BASE_IMAGE_URL } from "../constants";
 import { usePageTitle } from "../hooks/usePageTitle";
-import { useBoxOffice, BoxOfficeMovie } from "../hooks/api/useBoxOffice";
+import { useBoxOffice, useAllTimeBoxOffice, BoxOfficeMovie } from "../hooks/api/useBoxOffice";
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -37,16 +37,28 @@ const currentYear = new Date().getFullYear();
 export default function BoxOffice() {
   usePageTitle("Box Office");
   const [searchParams, setSearchParams] = useSearchParams();
-  const mode = (searchParams.get("mode") as "yearly" | "monthly") ?? "yearly";
+  const mode = (searchParams.get("mode") as "yearly" | "monthly" | "all-time") ?? "yearly";
   const year = Number(searchParams.get("year") ?? currentYear);
   const month = Number(searchParams.get("month") ?? new Date().getMonth() + 1);
+  const allTimePage = Number(searchParams.get("page") ?? 1);
 
-  const { data: movies = [], isPending: loading, error } = useBoxOffice(mode, year, month, 10);
+  const periodicQuery = useBoxOffice(
+    mode === "all-time" ? "yearly" : mode,
+    year,
+    month,
+    10,
+  );
+  const allTimeQuery = useAllTimeBoxOffice(allTimePage);
+
+  const { data: movies = [], isPending: loading, error } =
+    mode === "all-time" ? allTimeQuery : periodicQuery;
 
   const subtitle =
     mode === "yearly"
       ? `Top-grossing movies released in ${year}`
-      : `Top-grossing movies released in ${MONTH_NAMES[month - 1]} ${year}`;
+      : mode === "monthly"
+      ? `Top-grossing movies released in ${MONTH_NAMES[month - 1]} ${year}`
+      : "Highest-grossing movies of all time";
 
   const yearWindow = [currentYear, currentYear - 1, currentYear - 2, currentYear - 3, currentYear - 4];
   const showMoreYears = !yearWindow.includes(year);
@@ -54,11 +66,14 @@ export default function BoxOffice() {
   const hero = movies[0] ?? null;
   const kpis = calcKpis(movies);
 
-  function setMode(m: "yearly" | "monthly") {
-    setSearchParams(m === "monthly"
-      ? { mode: m, year: String(year), month: String(month) }
-      : { mode: m, year: String(year) }
-    );
+  function setMode(m: "yearly" | "monthly" | "all-time") {
+    if (m === "all-time") {
+      setSearchParams({ mode: m });
+    } else if (m === "monthly") {
+      setSearchParams({ mode: m, year: String(year), month: String(month) });
+    } else {
+      setSearchParams({ mode: m, year: String(year) });
+    }
   }
   function setYear(y: number) {
     setSearchParams(mode === "monthly"
@@ -68,6 +83,9 @@ export default function BoxOffice() {
   }
   function setMonth(m: number) {
     setSearchParams({ mode, year: String(year), month: String(m) });
+  }
+  function setAllTimePage(p: number) {
+    setSearchParams({ mode: "all-time", page: String(p) });
   }
 
   return (
@@ -86,8 +104,8 @@ export default function BoxOffice() {
       <div className="flex flex-wrap items-center gap-2 mt-6 mb-7">
         {/* Mode toggle */}
         <div className="flex bg-neutral-800/80 border border-white/10 rounded-xl p-1 gap-0.5">
-          {(["Yearly", "Monthly"] as const).map((l) => {
-            const v = l.toLowerCase() as "yearly" | "monthly";
+          {(["Yearly", "Monthly", "All Time"] as const).map((l) => {
+            const v = l.toLowerCase().replace(" ", "-") as "yearly" | "monthly" | "all-time";
             return (
               <button
                 key={v}
@@ -104,41 +122,42 @@ export default function BoxOffice() {
           })}
         </div>
 
-        {/* Year pill selector */}
-        <div className="flex items-center bg-neutral-800/80 border border-white/10 rounded-xl p-1 gap-0.5">
-          {yearWindow.map((y) => (
-            <button
-              key={y}
-              onClick={() => setYear(y)}
-              className={`px-2 py-1 sm:px-3.5 sm:py-1.5 text-xs sm:text-sm font-mono font-medium rounded-lg transition-colors ${
-                y === year
-                  ? "bg-neutral-700 text-white"
-                  : "text-neutral-400 hover:text-neutral-200"
-              }`}
+        {/* Year pill selector — hidden in all-time mode */}
+        {mode !== "all-time" && (
+          <div className="flex items-center bg-neutral-800/80 border border-white/10 rounded-xl p-1 gap-0.5">
+            {yearWindow.map((y) => (
+              <button
+                key={y}
+                onClick={() => setYear(y)}
+                className={`px-2 py-1 sm:px-3.5 sm:py-1.5 text-xs sm:text-sm font-mono font-medium rounded-lg transition-colors ${
+                  y === year
+                    ? "bg-neutral-700 text-white"
+                    : "text-neutral-400 hover:text-neutral-200"
+                }`}
+              >
+                {y}
+              </button>
+            ))}
+            {showMoreYears && (
+              <button className="px-2 py-1 sm:px-3.5 sm:py-1.5 text-xs sm:text-sm font-mono font-medium rounded-lg bg-neutral-700 text-white">
+                {year}
+              </button>
+            )}
+            <select
+              value={yearWindow.includes(year) ? "" : year}
+              onChange={(e) => e.target.value && setYear(Number(e.target.value))}
+              className="appearance-none bg-neutral-800 text-neutral-200 text-xs pl-1 pr-2 cursor-pointer focus:outline-none"
+              aria-label="More years"
             >
-              {y}
-            </button>
-          ))}
-          {/* Overflow year — show selected year if outside window */}
-          {showMoreYears && (
-            <button className="px-2 py-1 sm:px-3.5 sm:py-1.5 text-xs sm:text-sm font-mono font-medium rounded-lg bg-neutral-700 text-white">
-              {year}
-            </button>
-          )}
-          <select
-            value={yearWindow.includes(year) ? "" : year}
-            onChange={(e) => e.target.value && setYear(Number(e.target.value))}
-            className="appearance-none bg-neutral-800 text-neutral-200 text-xs pl-1 pr-2 cursor-pointer focus:outline-none"
-            aria-label="More years"
-          >
-            <option value="">…</option>
-            {Array.from({ length: currentYear - 1979 }, (_, i) => currentYear - i)
-              .filter((y) => !yearWindow.includes(y))
-              .map((y) => (
-                <option key={y} value={y}>{y}</option>
-              ))}
-          </select>
-        </div>
+              <option value="">…</option>
+              {Array.from({ length: currentYear - 1979 }, (_, i) => currentYear - i)
+                .filter((y) => !yearWindow.includes(y))
+                .map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+            </select>
+          </div>
+        )}
 
         {/* Month selector */}
         {mode === "monthly" && (
@@ -237,7 +256,7 @@ export default function BoxOffice() {
           {/* Hero + leaderboard */}
           <div className="grid grid-cols-1 xl:grid-cols-[380px_1fr] gap-5">
             {/* #1 hero card */}
-            {hero && <HeroCard movie={hero} year={year} mode={mode} month={month} />}
+            {hero && <HeroCard movie={hero} year={year} mode={mode} month={month} page={allTimePage} />}
 
             {/* Leaderboard table */}
             <div className="bg-neutral-800/60 border border-white/8 rounded-2xl overflow-hidden">
@@ -338,6 +357,29 @@ export default function BoxOffice() {
               })}
             </div>
           </div>
+
+          {/* Pagination — all-time only */}
+          {mode === "all-time" && (
+            <div className="flex items-center justify-center gap-2 mt-6">
+              <button
+                onClick={() => setAllTimePage(allTimePage - 1)}
+                disabled={allTimePage <= 1}
+                className="px-4 py-2 text-sm font-medium rounded-lg bg-neutral-800/80 border border-white/10 text-neutral-300 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                ← Prev
+              </button>
+              <span className="font-mono text-xs text-neutral-500 px-2">
+                Page {allTimePage} · #{(allTimePage - 1) * 20 + 1}–{allTimePage * 20}
+              </span>
+              <button
+                onClick={() => setAllTimePage(allTimePage + 1)}
+                disabled={allTimePage >= 20}
+                className="px-4 py-2 text-sm font-medium rounded-lg bg-neutral-800/80 border border-white/10 text-neutral-300 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                Next →
+              </button>
+            </div>
+          )}
         </>
       )}
 
@@ -348,7 +390,7 @@ export default function BoxOffice() {
   );
 }
 
-function HeroCard({ movie, year, mode, month }: { movie: BoxOfficeMovie; year: number; mode: "yearly" | "monthly"; month: number }) {
+function HeroCard({ movie, year, mode, month, page }: { movie: BoxOfficeMovie; year: number; mode: "yearly" | "monthly" | "all-time"; month: number; page: number }) {
   const profit = movie.revenue - movie.budget;
   const ratio = movie.budget > 0 ? movie.revenue / movie.budget : 0;
   const genreLabel = movie.genres?.slice(0, 2).map((g) => g.name).join(" · ") ?? "";
@@ -379,7 +421,7 @@ function HeroCard({ movie, year, mode, month }: { movie: BoxOfficeMovie; year: n
 
         {/* Badge */}
         <div className="absolute top-3.5 left-3.5 font-mono text-[9.5px] tracking-widest bg-black/50 backdrop-blur-sm text-white px-2.5 py-1 rounded uppercase">
-          ◉ #1 of {mode === "monthly" ? `${MONTH_NAMES[month - 1]} ${year}` : year}
+          ◉ #{movie.rank} of {mode === "all-time" ? "All Time" : mode === "monthly" ? `${MONTH_NAMES[month - 1]} ${year}` : year}
         </div>
 
         {/* Title overlay */}

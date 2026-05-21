@@ -21,6 +21,7 @@ import TrailerButton from "../components/media/TrailerButton";
 import VideoGallery from "../components/media/VideoGallery";
 import ContentRatingBadge from "../components/media/ContentRatingBadge";
 import { BASE_IMAGE_URL } from "../constants";
+import FriendsActivityWidget from "../components/FriendsActivityWidget";
 
 type FullMovieData = Movie & {
   vote_average?: number;
@@ -266,6 +267,60 @@ export default function MovieInfo() {
                   </div>
                 )}
 
+                {/* Key facts + Ratings */}
+                <div className="flex flex-wrap gap-4">
+                  <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5 shrink-0">
+                    <div className="font-mono text-[10px] tracking-[0.15em] text-neutral-500 uppercase mb-4">Key facts</div>
+                    <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2.5 text-sm">
+                      <span className="text-neutral-500">Status</span>
+                      <span className="font-medium">{movie.status}</span>
+                      {movie.release_date && (
+                        <>
+                          <span className="text-neutral-500">Released</span>
+                          <span className="font-medium">
+                            {formatLocalDate(movie.release_date, { year: "numeric", month: "short", day: "numeric" })}
+                          </span>
+                        </>
+                      )}
+                      {movie.runtime > 0 && (
+                        <>
+                          <span className="text-neutral-500">Runtime</span>
+                          <span className="font-medium">{formatRuntime(movie.runtime)}</span>
+                        </>
+                      )}
+                      {movie.budget > 0 && (
+                        <>
+                          <span className="text-neutral-500">Budget</span>
+                          <span className="font-medium">
+                            {movie.budget >= 1_000_000_000
+                              ? `$${(movie.budget / 1_000_000_000).toFixed(2)}B`
+                              : `$${(movie.budget / 1_000_000).toFixed(0)}M`}
+                          </span>
+                        </>
+                      )}
+                      {movie.revenue > 0 && (
+                        <>
+                          <span className="text-neutral-500">Revenue</span>
+                          <span className="font-medium">
+                            {movie.revenue >= 1_000_000_000
+                              ? `$${(movie.revenue / 1_000_000_000).toFixed(2)}B`
+                              : `$${(movie.revenue / 1_000_000).toFixed(0)}M`}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5 min-w-[300px]">
+                    <div className="font-mono text-[10px] tracking-[0.15em] text-neutral-500 uppercase mb-4">Ratings</div>
+                    <RatingsRow
+                      voteAverage={movie.vote_average}
+                      externalScores={externalScores}
+                      aggRating={aggRating}
+                      hideTitle
+                    />
+                  </div>
+                </div>
+
                 {/* Collection */}
                 {movie.belongs_to_collection && (
                   <div>
@@ -318,60 +373,7 @@ export default function MovieInfo() {
 
               {/* Right rail */}
               <div className="flex flex-col gap-4 min-w-0">
-                {/* Key facts */}
-                <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
-                  <div className="font-mono text-[10px] tracking-[0.15em] text-neutral-500 uppercase mb-4">Key facts</div>
-                  <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2.5 text-sm">
-                    <span className="text-neutral-500">Status</span>
-                    <span className="font-medium">{movie.status}</span>
-                    {movie.release_date && (
-                      <>
-                        <span className="text-neutral-500">Released</span>
-                        <span className="font-medium">
-                          {formatLocalDate(movie.release_date, { year: "numeric", month: "short", day: "numeric" })}
-                        </span>
-                      </>
-                    )}
-                    {movie.runtime > 0 && (
-                      <>
-                        <span className="text-neutral-500">Runtime</span>
-                        <span className="font-medium">{formatRuntime(movie.runtime)}</span>
-                      </>
-                    )}
-                    {movie.budget > 0 && (
-                      <>
-                        <span className="text-neutral-500">Budget</span>
-                        <span className="font-medium">
-                          {movie.budget >= 1_000_000_000
-                            ? `$${(movie.budget / 1_000_000_000).toFixed(2)}B`
-                            : `$${(movie.budget / 1_000_000).toFixed(0)}M`}
-                        </span>
-                      </>
-                    )}
-                    {movie.revenue > 0 && (
-                      <>
-                        <span className="text-neutral-500">Revenue</span>
-                        <span className="font-medium">
-                          {movie.revenue >= 1_000_000_000
-                            ? `$${(movie.revenue / 1_000_000_000).toFixed(2)}B`
-                            : `$${(movie.revenue / 1_000_000).toFixed(0)}M`}
-                        </span>
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                {/* Ratings */}
-                <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
-                  <div className="font-mono text-[10px] tracking-[0.15em] text-neutral-500 uppercase mb-4">Ratings</div>
-                  <RatingsRow
-                    voteAverage={movie.vote_average}
-                    externalScores={externalScores}
-                    aggRating={aggRating}
-                    hideTitle
-                  />
-                </div>
-
+                {user && <FriendsActivityWidget contentType="movie" contentId={movie.id} />}
                 {/* You might also like */}
                 {(movie.recommendations?.results ?? []).length > 0 && (
                   <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">

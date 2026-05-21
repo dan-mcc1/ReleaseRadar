@@ -7,6 +7,9 @@ from fastapi import HTTPException
 from app.models.friendship import Friendship
 from app.models.user import User
 from app.models.block import Block
+from app.models.watched import Watched
+from app.models.watchlist import Watchlist
+from app.models.currently_watching import CurrentlyWatching
 
 # Configurable limits
 MAX_PENDING_OUTGOING = 25
@@ -530,3 +533,74 @@ def get_followers(db: Session, user_id: str) -> list[dict]:
         {"friendship_id": r.id, "follower": {"id": r.user_id, "username": r.username}}
         for r in rows
     ]
+
+
+def get_friends_content_activity(
+    db: Session, user_id: str, content_type: str, content_id: int
+) -> list[dict]:
+    """Return accepted friends' watch statuses and ratings for a specific content item."""
+    # Get accepted friend IDs
+    req_side = (
+        db.query(Friendship.addressee_id.label("friend_id"))
+        .filter(Friendship.requester_id == user_id, Friendship.status == "accepted")
+    )
+    addr_side = (
+        db.query(Friendship.requester_id.label("friend_id"))
+        .filter(Friendship.addressee_id == user_id, Friendship.status == "accepted")
+    )
+    friend_id_rows = req_side.union_all(addr_side).all()
+    friend_ids = [r.friend_id for r in friend_id_rows]
+    if not friend_ids:
+        return []
+
+    results: list[dict] = []
+
+    # Watched
+    watched_rows = (
+        db.query(User.username, Watched.rating)
+        .join(Watched, User.id == Watched.user_id)
+        .filter(
+            Watched.user_id.in_(friend_ids),
+            Watched.content_type == content_type,
+            Watched.content_id == content_id,
+        )
+        .all()
+    )
+    for username, rating in watched_rows:
+        results.append({"username": username, "status": "Watched", "rating": rating})
+
+    watched_usernames = {r["username"] for r in results}
+
+    # Currently Watching
+    cw_rows = (
+        db.query(User.username)
+        .join(CurrentlyWatching, User.id == CurrentlyWatching.user_id)
+        .filter(
+            CurrentlyWatching.user_id.in_(friend_ids),
+            CurrentlyWatching.content_type == content_type,
+            CurrentlyWatching.content_id == content_id,
+            User.username.notin_(watched_usernames),
+        )
+        .all()
+    )
+    for (username,) in cw_rows:
+        results.append({"username": username, "status": "Currently Watching", "rating": None})
+
+    cw_usernames = {r["username"] for r in results if r["status"] == "Currently Watching"}
+
+    # Watchlist
+    wl_rows = (
+        db.query(User.username)
+        .join(Watchlist, User.id == Watchlist.user_id)
+        .filter(
+            Watchlist.user_id.in_(friend_ids),
+            Watchlist.content_type == content_type,
+            Watchlist.content_id == content_id,
+            User.username.notin_(watched_usernames | cw_usernames),
+        )
+        .all()
+    )
+    for (username,) in wl_rows:
+        results.append({"username": username, "status": "Want To Watch", "rating": None})
+
+    return results

@@ -203,7 +203,7 @@ export default function ContinueWatchingStrip() {
   );
 
   return (
-    <div className="flex items-center bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden">
+    <div data-tour="continue-watching" className="flex items-center bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden">
       {/* Label */}
       <div className="flex-shrink-0 px-3 sm:px-4 py-2 sm:py-3 border-r border-neutral-800 self-stretch flex items-center">
         <p className="font-mono text-[9px] sm:text-[10.5px] tracking-[0.1em] uppercase text-neutral-500 leading-tight">

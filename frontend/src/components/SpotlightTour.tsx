@@ -30,16 +30,16 @@ const TOUR_GROUPS: TourGroup[] = [
           "Let's take a quick tour of all the features. Click Next to continue, or close to explore on your own.",
       },
       {
-        element: "[data-tour='currently-watching']",
-        title: "📺 Currently Watching",
+        element: "[data-tour='continue-watching']",
+        title: "📺 Continue Watching",
         description:
-          "Shows you're actively watching appear here. Pick up right where you left off.",
+          "Shows and movies you're actively watching appear here. Pick up right where you left off.",
       },
       {
-        element: "[data-tour='calendar-view']",
-        title: "📅 Episode Calendar",
+        element: "[data-tour='calendar-episode-list']",
+        title: "📅 What's on Today",
         description:
-          "See every upcoming episode for shows you're tracking. Switch between week and month view.",
+          "This panel shows today's episodes and any date you click on the calendar. You can also sync your schedule to Google Calendar or Apple Calendar.",
       },
     ],
   },
@@ -55,13 +55,24 @@ const TOUR_GROUPS: TourGroup[] = [
     ],
   },
   {
+    path: "/shelves",
+    steps: [
+      {
+        element: "[data-tour='shelves-header']",
+        title: "🗂️ Shelves",
+        description:
+          "Organize your movies and shows into custom shelves — like themed collections, personal rankings, or gift lists. Create as many as you want.",
+      },
+    ],
+  },
+  {
     path: "/trending",
     steps: [
       {
         element: "[data-tour='trending-header']",
         title: "🔥 Discover Content",
         description:
-          "Browse trending titles, check what's upcoming, or let For You surface personalized recommendations.",
+          "Scroll down to browse trending titles, what's coming soon, airing today, and more. For You surfaces personalized picks based on your taste.",
       },
     ],
   },
@@ -92,7 +103,7 @@ const TOUR_GROUPS: TourGroup[] = [
     hash: "#notifications",
     steps: [
       {
-        element: "#notifications",
+        element: "[data-tour='notifications-toggle']",
         title: "🔔 Notifications",
         description:
           "Turn on email notifications to get a daily digest, season premiere alerts, trailer drops, and streaming availability updates. You can also customize what time you receive your daily digest.",
@@ -139,10 +150,12 @@ export default function SpotlightTour() {
   const navigate = useNavigate();
   const location = useLocation();
   const navigatingRef = useRef(false);
+  const endingRef = useRef(false);
   const driverRef = useRef<ReturnType<typeof driver> | null>(null);
   const [lbDismissing, setLbDismissing] = useState(false);
 
   async function endTour() {
+    endingRef.current = true;
     sessionStorage.removeItem(SESSION_KEY);
     navigate("/calendar");
     await apiFetch("/user/complete-onboarding", { method: "POST" });
@@ -183,6 +196,7 @@ export default function SpotlightTour() {
 
   useEffect(() => {
     if (!authUser || isLoading || !dbUser) return;
+    if (endingRef.current) return;
     if (dbUser.onboarding_completed) {
       sessionStorage.removeItem(SESSION_KEY);
       return;

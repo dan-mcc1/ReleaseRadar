@@ -34,6 +34,17 @@ export function useMyProviderIds(): Set<number> {
 
 
 const SERVICES_KEY = ["streaming", "services"];
+const OPTIMIZER_KEY = ["streaming", "optimizer"];
+
+let optimizerRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleOptimizerRefresh(qc: ReturnType<typeof useQueryClient>) {
+  if (optimizerRefreshTimer !== null) return;
+  optimizerRefreshTimer = setTimeout(() => {
+    optimizerRefreshTimer = null;
+    qc.invalidateQueries({ queryKey: OPTIMIZER_KEY });
+  }, 500);
+}
 
 export function useAddStreamingService() {
   const qc = useQueryClient();
@@ -57,7 +68,10 @@ export function useAddStreamingService() {
         qc.setQueryData(SERVICES_KEY, ctx.previous);
       }
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: SERVICES_KEY }),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: SERVICES_KEY });
+      scheduleOptimizerRefresh(qc);
+    },
   });
 }
 
@@ -124,6 +138,9 @@ export function useRemoveStreamingService() {
         qc.setQueryData(SERVICES_KEY, ctx.previous);
       }
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: SERVICES_KEY }),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: SERVICES_KEY });
+      scheduleOptimizerRefresh(qc);
+    },
   });
 }

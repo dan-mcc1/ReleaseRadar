@@ -138,6 +138,18 @@ export function useFriendSuggestions() {
   });
 }
 
+export function useFriendsContentActivity(contentType: "movie" | "tv", contentId: number) {
+  const user = useAuthUser();
+  return useQuery({
+    queryKey: queryKeys.friendsContentActivity(user?.uid ?? "", contentType, contentId),
+    queryFn: () => queryFetch<{ username: string; status: string; rating: number | null }[]>(
+      `/friends/content/${contentType}/${contentId}`
+    ),
+    enabled: !!user && !!contentId,
+    staleTime: 60_000,
+  });
+}
+
 export function useFriendSearch(query: string) {
   const user = useAuthUser();
   return useQuery({
