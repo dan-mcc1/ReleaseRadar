@@ -30,6 +30,8 @@ from app.dependencies.auth import get_current_user
 from app.dependencies.subscription import feature_gate
 from app.core.limiter import limiter
 from app.services.episode_service import sync_show_episodes_background
+from app.services.media_upsert import populate_show_bg, populate_movie_bg
+from app.services.streaming_notification_service import ensure_providers_populated_bg
 from app.services.binge_planner_service import (
     get_binge_plan,
     get_binge_plans_bulk,
@@ -56,7 +58,11 @@ def add_item(
 
     result = add_to_watchlist(db, uid, content_type, content_id, notify=notify)
     if content_type == "tv":
+        background_tasks.add_task(populate_show_bg, content_id)
         background_tasks.add_task(sync_show_episodes_background, content_id)
+    else:
+        background_tasks.add_task(populate_movie_bg, content_id)
+    background_tasks.add_task(ensure_providers_populated_bg, content_id, content_type)
     return result
 
 

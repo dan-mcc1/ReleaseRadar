@@ -12,7 +12,7 @@ from app.services.media_serializers import (
     _show_query_options_list,
     _movie_query_options_list,
 )
-from app.services.media_upsert import ensure_movie_in_db, ensure_show_in_db, decrement_tracking_count
+from app.services.media_upsert import ensure_movie_stub_in_db, ensure_show_stub_in_db, decrement_tracking_count
 from app.services.episode_service import sync_show_episodes
 from app.services.activity_service import log_activity
 from app.models.activity import Activity
@@ -68,11 +68,11 @@ def add_to_watched(
     db.add(entry)
 
     if content_type == "movie":
-        media = ensure_movie_in_db(db, content_id, already_tracked)
-        log_activity(db, user_id, "watched", content_type, content_id, media.title, media.poster_path)
+        media = ensure_movie_stub_in_db(db, content_id, already_tracked)
+        log_activity(db, user_id, "watched", content_type, content_id, media.title or None, media.poster_path)
     elif content_type == "tv":
-        media = ensure_show_in_db(db, content_id, already_tracked)
-        log_activity(db, user_id, "watched", content_type, content_id, media.name, media.poster_path)
+        media = ensure_show_stub_in_db(db, content_id, already_tracked)
+        log_activity(db, user_id, "watched", content_type, content_id, media.name or None, media.poster_path)
     else:
         log_activity(db, user_id, "watched", content_type, content_id, None, None)
 

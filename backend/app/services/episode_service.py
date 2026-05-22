@@ -510,10 +510,27 @@ def refresh_episodes_for_show(db: Session, show_id: int):
         db.commit()
 
 
+def _refresh_one_show(show_id: int, show_name: str) -> None:
+    """Worker executed in a thread pool: refresh metadata + episodes for one show."""
+    from app.db.session import SessionLocal
+    db = SessionLocal()
+    try:
+        show = db.query(Show).filter_by(id=show_id).first()
+        if not show:
+            return
+        _refresh_show_metadata(db, show)
+        refresh_episodes_for_show(db, show_id)
+    except Exception:
+        logger.exception("Failed to refresh show %s (%s)", show_id, show_name)
+    finally:
+        db.close()
+
+
 def refresh_episodes_for_active_shows(db: Session):
     """
     Refresh episode data for all tracked shows (watchlist, currently watching,
     and watched) that are still in production. Intended to run nightly.
+    Runs up to 8 shows in parallel, each with its own DB session.
     """
     tracked_ids = (
         {
@@ -543,13 +560,9 @@ def refresh_episodes_for_active_shows(db: Session):
     )
 
     logger.info("Refreshing %d in-production shows...", len(shows))
-    for show in shows:
-        try:
-            # Re-fetch show metadata first so new seasons are discovered
-            _refresh_show_metadata(db, show)
-            refresh_episodes_for_show(db, show.id)
-        except Exception:
-            logger.exception("Failed to refresh show %s (%s)", show.id, show.name)
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        for show in shows:
+            pool.submit(_refresh_one_show, show.id, show.name)
     logger.info("Episode refresh done")
 
 

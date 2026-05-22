@@ -13,6 +13,8 @@ from app.services.currently_watching_service import (
     add_to_currently_watching,
     remove_from_currently_watching,
 )
+from app.services.media_upsert import populate_show_bg, populate_movie_bg
+from app.services.streaming_notification_service import ensure_providers_populated_bg
 
 router = APIRouter()
 
@@ -42,13 +44,26 @@ def set_watch_status(
     # Add to target first so tracking_count logic correctly sees old-list membership.
     if target == "Want To Watch":
         add_to_watchlist(db, uid, content_type, content_id, notify)
+        if content_type == "tv":
+            background_tasks.add_task(populate_show_bg, content_id)
+        else:
+            background_tasks.add_task(populate_movie_bg, content_id)
+        background_tasks.add_task(ensure_providers_populated_bg, content_id, content_type)
     elif target == "Currently Watching":
         add_to_currently_watching(db, uid, content_type, content_id)
+        if content_type == "tv":
+            background_tasks.add_task(populate_show_bg, content_id)
+        else:
+            background_tasks.add_task(populate_movie_bg, content_id)
+        background_tasks.add_task(ensure_providers_populated_bg, content_id, content_type)
     elif target == "Watched":
         add_to_watched(db, uid, content_type, content_id)
         if content_type == "tv":
+            background_tasks.add_task(populate_show_bg, content_id)
             mark_existing_episodes_watched(db, uid, content_id)
             background_tasks.add_task(sync_watched_episodes_bg, uid, content_id)
+        else:
+            background_tasks.add_task(populate_movie_bg, content_id)
 
     # Remove from old list after the add so tracking_count never hits zero mid-swap.
     if current == "Want To Watch":

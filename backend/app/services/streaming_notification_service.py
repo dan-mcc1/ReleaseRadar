@@ -11,6 +11,7 @@ from app.models.watchlist import Watchlist
 from app.services.email_service import send_streaming_alert_email
 from app.services.tmdb_movies import fetch_movie_from_tmdb
 from app.services.tmdb_tv import fetch_show_from_tmdb
+from app.db.session import SessionLocal
 
 
 def _fetch_fresh_us_providers(content_id: int, content_type: str) -> dict:
@@ -119,6 +120,19 @@ def ensure_providers_populated(db: Session, content_id: int, content_type: str) 
         # No commit — caller owns the transaction
     except Exception:
         pass
+
+
+def ensure_providers_populated_bg(content_id: int, content_type: str) -> None:
+    """Background-safe wrapper: opens its own session and commits."""
+    db = SessionLocal()
+    try:
+        ensure_providers_populated(db, content_id, content_type)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        print(f"[ensure_providers_populated_bg] Error for {content_type} {content_id}: {e}")
+    finally:
+        db.close()
 
 
 def refresh_streaming_providers(db: Session) -> None:

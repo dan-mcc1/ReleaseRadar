@@ -13,6 +13,7 @@ from app.services.watched_service import (
 from app.dependencies.auth import get_current_user
 from app.core.limiter import limiter
 from app.services.stats_service import invalidate_stats_cache
+from app.services.media_upsert import populate_show_bg, populate_movie_bg
 
 router = APIRouter()
 
@@ -33,8 +34,11 @@ def add_item(
         )
     result = add_to_watched(db, uid, content_type, content_id)
     if content_type == "tv":
+        background_tasks.add_task(populate_show_bg, content_id)
         mark_existing_episodes_watched(db, uid, content_id)
         background_tasks.add_task(sync_watched_episodes_bg, uid, content_id)
+    else:
+        background_tasks.add_task(populate_movie_bg, content_id)
     invalidate_stats_cache(uid)
     return result
 

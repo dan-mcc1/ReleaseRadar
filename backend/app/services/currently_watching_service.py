@@ -9,8 +9,7 @@ from app.models.watched import Watched
 from app.models.episode import Episode
 from app.models.episode_watched import EpisodeWatched
 from app.services.watchlist_service import _is_tracked_on_any
-from app.services.media_upsert import ensure_movie_in_db, ensure_show_in_db, decrement_tracking_count
-from app.services.streaming_notification_service import ensure_providers_populated
+from app.services.media_upsert import ensure_movie_stub_in_db, ensure_show_stub_in_db, decrement_tracking_count
 
 
 def _is_on_other_list(
@@ -101,11 +100,9 @@ def add_to_currently_watching(
     db.add(entry)
 
     if content_type == "movie":
-        ensure_movie_in_db(db, content_id, already_tracked)
+        ensure_movie_stub_in_db(db, content_id, already_tracked)
     elif content_type == "tv":
-        ensure_show_in_db(db, content_id, already_tracked)
-
-    ensure_providers_populated(db, content_id, content_type)
+        ensure_show_stub_in_db(db, content_id, already_tracked)
 
     db.commit()
     db.refresh(entry)
