@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useMyBlocks, useUnblockUser } from "../hooks/api/useModeration";
 import { isPremiumFeature } from "../config/features";
-import { signOut } from "firebase/auth";
+import { signOut, GoogleAuthProvider, FacebookAuthProvider, OAuthProvider, linkWithPopup, unlink } from "firebase/auth";
 import { auth } from "../firebase";
 import { useAuthUser } from "../hooks/useAuthUser";
 import { useNavigate, Link, useLocation } from "react-router-dom";
@@ -81,6 +81,7 @@ const SECTION_IDS = [
   "calendar",
   "privacy",
   "subscription",
+  "linked-accounts",
   "account",
 ] as const;
 type SectionId = (typeof SECTION_IDS)[number];
@@ -499,6 +500,50 @@ export default function Settings() {
     navigate("/");
   };
 
+  const LINK_PROVIDERS = [
+    { id: "google.com", label: "Google", provider: () => new GoogleAuthProvider() },
+    { id: "facebook.com", label: "Facebook", provider: () => new FacebookAuthProvider() },
+    { id: "microsoft.com", label: "Microsoft", provider: () => new OAuthProvider("microsoft.com") },
+  ];
+
+  const linkedProviderIds = new Set(user?.providerData.map((p) => p.providerId) ?? []);
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const [linkLoading, setLinkLoading] = useState<string | null>(null);
+
+  async function handleLinkProvider(providerId: string, makeProvider: () => GoogleAuthProvider | FacebookAuthProvider | OAuthProvider) {
+    if (!user) return;
+    setLinkError(null);
+    setLinkLoading(providerId);
+    try {
+      await linkWithPopup(user, makeProvider());
+    } catch (err: unknown) {
+      const e = err as { code?: string; message?: string };
+      if (e.code !== "auth/popup-closed-by-user" && e.code !== "auth/cancelled-popup-request") {
+        setLinkError(e.message ?? "Failed to link account.");
+      }
+    } finally {
+      setLinkLoading(null);
+    }
+  }
+
+  async function handleUnlinkProvider(providerId: string) {
+    if (!user) return;
+    if (linkedProviderIds.size <= 1) {
+      setLinkError("You must keep at least one sign-in method.");
+      return;
+    }
+    setLinkError(null);
+    setLinkLoading(providerId);
+    try {
+      await unlink(user, providerId);
+    } catch (err: unknown) {
+      const e = err as { message?: string };
+      setLinkError(e.message ?? "Failed to unlink account.");
+    } finally {
+      setLinkLoading(null);
+    }
+  }
+
   async function handleExport() {
     setExporting(true);
     try {
@@ -544,6 +589,7 @@ export default function Settings() {
     { id: "calendar", label: "Calendar sync" },
     { id: "privacy", label: "Privacy" },
     { id: "subscription", label: "Subscription" },
+    { id: "linked-accounts", label: "Linked accounts" },
     { id: "account", label: "Account" },
   ];
 
@@ -1639,6 +1685,44 @@ export default function Settings() {
                 />
               </svg>
             </Link> */}
+          </SectionCard>
+
+          {/* ── Linked accounts ── */}
+          <SectionCard
+            id="linked-accounts"
+            title="Linked accounts"
+            subtitle="Sign in with any of these providers using the same account."
+          >
+            {linkError && (
+              <div className="bg-error-900/40 text-error-300 border border-error-700/30 p-3 rounded-xl mb-4 text-sm">
+                {linkError}
+              </div>
+            )}
+            <div className="space-y-2">
+              {LINK_PROVIDERS.map(({ id, label, provider }) => {
+                const linked = linkedProviderIds.has(id);
+                const loading = linkLoading === id;
+                return (
+                  <div key={id} className="flex items-center justify-between py-3 px-4 rounded-xl border border-neutral-700/40 bg-neutral-900/50">
+                    <div className="flex items-center gap-3">
+                      <span className={`w-2 h-2 rounded-full ${linked ? "bg-success-400" : "bg-neutral-600"}`} />
+                      <span className="text-sm text-neutral-200">{label}</span>
+                    </div>
+                    <button
+                      onClick={() => linked ? handleUnlinkProvider(id) : handleLinkProvider(id, provider)}
+                      disabled={loading}
+                      className={`text-xs font-medium px-3 py-1.5 rounded-lg transition-colors disabled:opacity-40 ${
+                        linked
+                          ? "bg-neutral-700 text-neutral-300 hover:bg-neutral-600"
+                          : "bg-primary-600/20 text-primary-400 border border-primary-600/30 hover:bg-primary-600/30"
+                      }`}
+                    >
+                      {loading ? "…" : linked ? "Unlink" : "Link"}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
           </SectionCard>
 
           {/* ── Account ── */}

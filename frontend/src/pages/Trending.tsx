@@ -8,6 +8,7 @@ import MiniWatchButton from "../components/MiniWatchButton";
 import MiniWatchedButton from "../components/MiniWatchedButton";
 import { useBulkWatchStatus } from "../hooks/api/useWatchStatus";
 import type { WatchStatus } from "../components/WatchButton";
+import { useAuthUser } from "../hooks/useAuthUser";
 
 type AnyItem = Movie | Show;
 type TypedItem = AnyItem & { _type: "movie" | "tv" };
@@ -178,6 +179,7 @@ function PosterCard({
   initialStatus?: WatchStatus;
 })
  {
+  const user = useAuthUser();
   const title = getTitle(item);
   const genre = item.genres?.[0]?.name ?? "";
   const rating = item.vote_average ? item.vote_average.toFixed(1) : null;
@@ -210,12 +212,14 @@ function PosterCard({
               : [genre, rating ? `★ ${rating}` : null].filter(Boolean).join(" · ")}
           </div>
         </div>
-        <div className="flex items-center gap-1">
-          {initialStatus !== "Watched" && (
-            <MiniWatchButton contentType={item._type} contentId={item.id} initialStatus={initialStatus} bulkManaged />
-          )}
-          <MiniWatchedButton contentType={item._type} contentId={item.id} initialStatus={initialStatus} bulkManaged />
-        </div>
+        {user && (
+          <div className="flex items-center gap-1">
+            {initialStatus !== "Watched" && (
+              <MiniWatchButton contentType={item._type} contentId={item.id} initialStatus={initialStatus} bulkManaged />
+            )}
+            <MiniWatchedButton contentType={item._type} contentId={item.id} initialStatus={initialStatus} bulkManaged />
+          </div>
+        )}
       </div>
     </div>
   );

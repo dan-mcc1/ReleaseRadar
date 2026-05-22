@@ -8,6 +8,7 @@ import MiniWatchButton from "../components/MiniWatchButton";
 import MiniWatchedButton from "../components/MiniWatchedButton";
 import { useBulkWatchStatus } from "../hooks/api/useWatchStatus";
 import type { WatchStatus } from "../components/WatchButton";
+import { useAuthUser } from "../hooks/useAuthUser";
 
 type ActiveTab = "movie" | "tv";
 
@@ -42,6 +43,7 @@ function PosterCard({
   type: ActiveTab;
   initialStatus?: WatchStatus;
 }) {
+  const user = useAuthUser();
   const title = type === "tv" ? (item as Show).name : (item as Movie).title;
   const date =
     type === "tv"
@@ -108,22 +110,24 @@ function PosterCard({
             )}
           </div>
         </div>
-        <div className="flex items-center gap-1">
-          {initialStatus !== "Watched" && (
-            <MiniWatchButton
+        {user && (
+          <div className="flex items-center gap-1">
+            {initialStatus !== "Watched" && (
+              <MiniWatchButton
+                contentType={type === "tv" ? "tv" : "movie"}
+                contentId={item.id}
+                initialStatus={initialStatus}
+                bulkManaged
+              />
+            )}
+            <MiniWatchedButton
               contentType={type === "tv" ? "tv" : "movie"}
               contentId={item.id}
               initialStatus={initialStatus}
               bulkManaged
             />
-          )}
-          <MiniWatchedButton
-            contentType={type === "tv" ? "tv" : "movie"}
-            contentId={item.id}
-            initialStatus={initialStatus}
-            bulkManaged
-          />
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

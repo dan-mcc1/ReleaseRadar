@@ -7,6 +7,9 @@ import {
   signInWithPopup,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
+  fetchSignInMethodsForEmail,
+  linkWithCredential,
+  AuthCredential,
 } from "firebase/auth";
 import { auth } from "../firebase";
 import { useNavigate } from "react-router-dom";
@@ -339,6 +342,29 @@ const SignIn: React.FC = () => {
     }
   }
 
+  // When a new OAuth provider shares an email with an existing account, Firebase
+  // blocks sign-in. We recover by signing in with the original provider and
+  // linking the new credential onto that account automatically.
+  const handleAccountLinking = async (error: unknown, pendingCredential: AuthCredential | null): Promise<boolean> => {
+    const e = error as { code?: string; customData?: { email?: string } };
+    if (e.code !== "auth/account-exists-with-different-credential" || !e.customData?.email || !pendingCredential) {
+      return false;
+    }
+    try {
+      const email = e.customData.email;
+      const methods = await fetchSignInMethodsForEmail(auth, email);
+      if (methods.includes("google.com")) {
+        const googleResult = await signInWithPopup(auth, new GoogleAuthProvider());
+        await linkWithCredential(googleResult.user, pendingCredential);
+        await handleOAuthResult(googleResult.user);
+        return true;
+      }
+    } catch {
+      // fall through to show error
+    }
+    return false;
+  };
+
   const handleGoogleSignIn = async () => {
     const provider = new GoogleAuthProvider();
     try {
@@ -346,11 +372,12 @@ const SignIn: React.FC = () => {
       await handleOAuthResult(result.user);
     } catch (error: unknown) {
       console.error("Google sign-in error:", error);
+      const pendingCredential = GoogleAuthProvider.credentialFromError(error as Parameters<typeof GoogleAuthProvider.credentialFromError>[0]);
+      if (await handleAccountLinking(error, pendingCredential)) return;
       const e = error as { code?: string; message?: string };
-      let msg = e.message ?? "Sign-in failed.";
       if (e.code === "auth/account-exists-with-different-credential")
-        msg = "Account already exists using a different provider";
-      setErrorMessage(msg);
+        setErrorMessage("This email is linked to a different sign-in method. Sign in with your original method, then link additional accounts in Settings.");
+      else setErrorMessage(e.message ?? "Sign-in failed.");
     }
   };
 
@@ -361,11 +388,12 @@ const SignIn: React.FC = () => {
       await handleOAuthResult(result.user);
     } catch (error: unknown) {
       console.error("Microsoft sign-in error:", error);
+      const pendingCredential = OAuthProvider.credentialFromError(error as Parameters<typeof OAuthProvider.credentialFromError>[0]);
+      if (await handleAccountLinking(error, pendingCredential)) return;
       const e = error as { code?: string; message?: string };
-      let msg = e.message ?? "Sign-in failed.";
       if (e.code === "auth/account-exists-with-different-credential")
-        msg = "Account already exists using a different provider";
-      setErrorMessage(msg);
+        setErrorMessage("This email is linked to a different sign-in method. Sign in with your original method, then link additional accounts in Settings.");
+      else setErrorMessage(e.message ?? "Sign-in failed.");
     }
   };
 
@@ -376,11 +404,12 @@ const SignIn: React.FC = () => {
       await handleOAuthResult(result.user);
     } catch (error: unknown) {
       console.error("Facebook sign-in error:", error);
+      const pendingCredential = FacebookAuthProvider.credentialFromError(error as Parameters<typeof FacebookAuthProvider.credentialFromError>[0]);
+      if (await handleAccountLinking(error, pendingCredential)) return;
       const e = error as { code?: string; message?: string };
-      let msg = e.message ?? "Sign-in failed.";
       if (e.code === "auth/account-exists-with-different-credential")
-        msg = "Account already exists using a different provider";
-      setErrorMessage(msg);
+        setErrorMessage("This email is linked to a different sign-in method. Sign in with your original method, then link additional accounts in Settings.");
+      else setErrorMessage(e.message ?? "Sign-in failed.");
     }
   };
 
