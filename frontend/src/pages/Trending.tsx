@@ -121,9 +121,21 @@ function ScrollRow({
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
       >
+        {/* Mobile-only edge fades — persistent hint that the row scrolls */}
+        <div
+          className={`sm:hidden absolute left-0 inset-y-0 mb-2 z-10 w-8 bg-gradient-to-r from-neutral-950 to-transparent pointer-events-none transition-opacity duration-200 ${
+            canLeft ? "opacity-100" : "opacity-0"
+          }`}
+        />
+        <div
+          className={`sm:hidden absolute right-0 inset-y-0 mb-2 z-10 w-10 bg-gradient-to-l from-neutral-950 to-transparent pointer-events-none transition-opacity duration-200 ${
+            canRight ? "opacity-100" : "opacity-0"
+          }`}
+        />
+
         {/* Left arrow */}
         <div
-          className={`absolute left-0 inset-y-0 mb-2 z-10 flex items-center pl-1 bg-gradient-to-r from-neutral-950/90 to-transparent transition-opacity duration-200 ${
+          className={`hidden sm:flex absolute left-0 inset-y-0 mb-2 z-10 items-center pl-1 bg-gradient-to-r from-neutral-950/90 to-transparent transition-opacity duration-200 ${
             hovered && canLeft ? "opacity-100" : "opacity-0 pointer-events-none"
           }`}
         >
@@ -139,7 +151,7 @@ function ScrollRow({
 
         {/* Right arrow */}
         <div
-          className={`absolute right-0 inset-y-0 mb-2 z-10 flex items-center pr-1 bg-gradient-to-l from-neutral-950/90 to-transparent transition-opacity duration-200 ${
+          className={`hidden sm:flex absolute right-0 inset-y-0 mb-2 z-10 items-center pr-1 bg-gradient-to-l from-neutral-950/90 to-transparent transition-opacity duration-200 ${
             hovered && canRight ? "opacity-100" : "opacity-0 pointer-events-none"
           }`}
         >

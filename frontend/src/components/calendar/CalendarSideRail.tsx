@@ -24,15 +24,34 @@ interface Props {
 function getEpisodeTag(episodeType: string | null | undefined) {
   switch (episodeType) {
     case "show_premiere":
-      return { label: "Series Premiere", classes: "bg-highlight-600/80 text-highlight-100 border border-highlight-400/50" };
+      return {
+        label: "Series Premiere",
+        classes:
+          "bg-highlight-600/80 text-highlight-100 border border-highlight-400/50",
+      };
     case "season_premiere":
-      return { label: "Season Premiere", classes: "bg-primary-600/80 text-primary-100 border border-primary-400/50" };
+      return {
+        label: "Season Premiere",
+        classes:
+          "bg-primary-600/80 text-primary-100 border border-primary-400/50",
+      };
     case "season_finale":
-      return { label: "Season Finale", classes: "bg-warning-600/80 text-warning-100 border border-warning-400/50" };
+      return {
+        label: "Season Finale",
+        classes:
+          "bg-warning-600/80 text-warning-100 border border-warning-400/50",
+      };
     case "series_finale":
-      return { label: "Series Finale", classes: "bg-error-700/80 text-error-100 border border-error-500/50" };
+      return {
+        label: "Series Finale",
+        classes: "bg-error-700/80 text-error-100 border border-error-500/50",
+      };
     case "mid_season":
-      return { label: "Mid-Season Finale", classes: "bg-warning-600/80 text-warning-100 border border-warning-400/50" };
+      return {
+        label: "Mid-Season Finale",
+        classes:
+          "bg-warning-600/80 text-warning-100 border border-warning-400/50",
+      };
     default:
       return null;
   }
@@ -53,9 +72,10 @@ function SideRailItem({ item }: { item: CalendarItem }) {
   const tvItem = isTv
     ? (item as Episode & { type: "tv"; showData: Show })
     : null;
-  const contentPath = isTv && tvItem
-    ? `/tv/${item.showData.id}/episode/${tvItem.season_number}/${tvItem.episode_number}`
-    : `/movie/${item.showData.id}`;
+  const contentPath =
+    isTv && tvItem
+      ? `/tv/${item.showData.id}/episode/${tvItem.season_number}/${tvItem.episode_number}`
+      : `/movie/${item.showData.id}`;
 
   const showTitle = item.type === "tv" ? item.showData.name : item.title;
   const episodeName = tvItem?.name ?? null;
@@ -86,7 +106,9 @@ function SideRailItem({ item }: { item: CalendarItem }) {
           {
             onSuccess: () => {
               if (user)
-                queryClient.invalidateQueries({ queryKey: calendarQueryKey(user.uid) });
+                queryClient.invalidateQueries({
+                  queryKey: calendarQueryKey(user.uid),
+                });
             },
           },
         );
@@ -94,10 +116,15 @@ function SideRailItem({ item }: { item: CalendarItem }) {
         await apiFetch(`/watched/${wasWatched ? "remove" : "add"}`, {
           method: wasWatched ? "DELETE" : "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content_type: "movie", content_id: item.showData.id }),
+          body: JSON.stringify({
+            content_type: "movie",
+            content_id: item.showData.id,
+          }),
         });
         if (user)
-          queryClient.invalidateQueries({ queryKey: calendarQueryKey(user.uid) });
+          queryClient.invalidateQueries({
+            queryKey: calendarQueryKey(user.uid),
+          });
       }
     } catch {
       setLocalWatched(wasWatched);
@@ -110,7 +137,10 @@ function SideRailItem({ item }: { item: CalendarItem }) {
   // (thumbnail is w-[20%] aspect-[2/3], so height = 20% * 3/2 = 30% of container width)
   return (
     <div className="relative overflow-hidden" style={{ paddingBottom: "30%" }}>
-      <Link to={contentPath} className="absolute inset-0 flex gap-3 overflow-hidden group hover:opacity-90 transition-opacity">
+      <Link
+        to={contentPath}
+        className="absolute inset-0 flex gap-3 overflow-hidden group hover:opacity-90 transition-opacity"
+      >
         {/* Thumbnail */}
         <div className="relative w-[20%] aspect-[2/3] rounded-lg overflow-hidden flex-shrink-0 bg-neutral-800">
           {backdrop && (
@@ -133,7 +163,7 @@ function SideRailItem({ item }: { item: CalendarItem }) {
         </div>
 
         {/* Info */}
-        <div className="flex-1 min-w-0 overflow-hidden relative">
+        <div className="flex-1 min-w-0 overflow-hidden relative pr-8 sm:pr-0">
           <p className="text-base font-semibold text-neutral-100 leading-tight truncate">
             {showTitle}
           </p>
@@ -154,7 +184,9 @@ function SideRailItem({ item }: { item: CalendarItem }) {
               </span>
             )}
             {episodeTag && (
-              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${episodeTag.classes}`}>
+              <span
+                className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${episodeTag.classes}`}
+              >
                 {episodeTag.label}
               </span>
             )}
@@ -168,33 +200,32 @@ function SideRailItem({ item }: { item: CalendarItem }) {
             <div className="absolute bottom-0 left-0 right-0 h-5 bg-gradient-to-t from-neutral-900 to-transparent pointer-events-none" />
           )}
         </div>
-
       </Link>
 
       {/* Watched checkmark — outside <Link> to avoid invalid button-in-anchor nesting */}
       <button
-          onClick={handleToggleWatched}
-          disabled={marking}
-          title={localWatched ? "Mark as unwatched" : "Mark as watched"}
-          className={`absolute top-1 right-1 z-10 w-6 h-6 rounded-full border flex items-center justify-center transition-colors ${
-            localWatched
-              ? "bg-primary-500 border-primary-500 text-neutral-950 hover:bg-transparent hover:border-neutral-700 hover:text-neutral-600"
-              : "border-neutral-700 text-neutral-600 hover:border-primary-500 hover:text-primary-400"
-          } ${marking ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+        onClick={handleToggleWatched}
+        disabled={marking}
+        title={localWatched ? "Mark as unwatched" : "Mark as watched"}
+        className={`absolute top-1 right-1 z-10 w-6 h-6 rounded-full border flex items-center justify-center transition-colors ${
+          localWatched
+            ? "bg-primary-500 border-primary-500 text-neutral-950 hover:bg-transparent hover:border-neutral-700 hover:text-neutral-600"
+            : "border-neutral-700 text-neutral-600 hover:border-primary-500 hover:text-primary-400"
+        } ${marking ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+      >
+        <svg
+          className="w-3.5 h-3.5"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2.5}
         >
-          <svg
-            className="w-3.5 h-3.5"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2.5}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M5 13l4 4L19 7"
-            />
-          </svg>
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M5 13l4 4L19 7"
+          />
+        </svg>
       </button>
     </div>
   );
@@ -320,7 +351,10 @@ export default function CalendarSideRail({
   return (
     <div className="flex flex-col gap-4 sticky top-4">
       {/* Day releases panel */}
-      <div data-tour="calendar-episode-list" className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
+      <div
+        data-tour="calendar-episode-list"
+        className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5"
+      >
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <p
@@ -340,8 +374,18 @@ export default function CalendarSideRail({
               onClick={onResetToToday}
               className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-neutral-800 border border-neutral-700 hover:border-primary-500/50 hover:bg-neutral-700 text-neutral-300 hover:text-white text-xs font-medium transition-colors"
             >
-              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              <svg
+                className="w-3 h-3"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2.5}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                />
               </svg>
               Today
             </button>
@@ -368,32 +412,34 @@ export default function CalendarSideRail({
       {showExtras && <FriendsActivityBox />}
 
       {/* Sync CTA */}
-      {showExtras && <div
-        className="rounded-2xl p-5 border border-neutral-800"
-        style={{
-          background:
-            "linear-gradient(180deg, rgb(5 150 105 / 0.08), transparent)",
-        }}
-      >
-        <h3
-          className="text-xl leading-tight tracking-tight mb-2"
-          style={{ fontFamily: "var(--font-serif)" }}
+      {showExtras && (
+        <div
+          className="rounded-2xl p-5 border border-neutral-800"
+          style={{
+            background:
+              "linear-gradient(180deg, rgb(5 150 105 / 0.08), transparent)",
+          }}
         >
-          Sync with your{" "}
-          <em className="text-primary-400" style={{ fontStyle: "italic" }}>
-            calendar
-          </em>
-        </h3>
-        <p className="text-xs text-neutral-400 leading-relaxed mb-4">
-          Drop releases straight into Google, iCal, or Outlook.
-        </p>
-        <button
-          onClick={onSyncCalendar}
-          className="px-4 py-2 text-xs font-semibold rounded-lg bg-primary-500/15 text-primary-400 border border-primary-500/25 hover:bg-primary-500/25 transition-colors"
-        >
-          Connect →
-        </button>
-      </div>}
+          <h3
+            className="text-xl leading-tight tracking-tight mb-2"
+            style={{ fontFamily: "var(--font-serif)" }}
+          >
+            Sync with your{" "}
+            <em className="text-primary-400" style={{ fontStyle: "italic" }}>
+              calendar
+            </em>
+          </h3>
+          <p className="text-xs text-neutral-400 leading-relaxed mb-4">
+            Drop releases straight into Google, iCal, or Outlook.
+          </p>
+          <button
+            onClick={onSyncCalendar}
+            className="px-4 py-2 text-xs font-semibold rounded-lg bg-primary-500/15 text-primary-400 border border-primary-500/25 hover:bg-primary-500/25 transition-colors"
+          >
+            Connect →
+          </button>
+        </div>
+      )}
     </div>
   );
 }
