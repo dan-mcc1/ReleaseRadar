@@ -109,8 +109,8 @@ def reorder_item(
 def watchlist_tv_calendar(
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
-    from_date: str = Query(None),
-    to_date: str = Query(None),
+    from_date: str = Query(...),
+    to_date: str = Query(...),
 ):
     return get_tv_calendar(db, uid, from_date=from_date, to_date=to_date)
 

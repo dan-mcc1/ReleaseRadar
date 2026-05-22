@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "./queryKeys";
-import { queryFetch } from "./queryFetch";
+import { queryFetch, checkedFetch } from "./queryFetch";
 import { apiFetch } from "../../utils/apiFetch";
 import { useAuthUser } from "../useAuthUser";
 import type { Movie, Show } from "../../types/calendar";
@@ -74,7 +74,7 @@ export function useToggleFavorite() {
     }) => {
       const method = favorited ? "DELETE" : "POST";
       const endpoint = favorited ? "/favorites/remove" : "/favorites/add";
-      await apiFetch(endpoint, {
+      await checkedFetch(endpoint, {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content_type: contentType, content_id: contentId }),
@@ -122,7 +122,7 @@ export function useRemoveFromList() {
       contentType: string;
       contentId: number;
     }) => {
-      await apiFetch(`/${list}/remove`, {
+      await checkedFetch(`/${list}/remove`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content_type: contentType, content_id: contentId }),

@@ -8,11 +8,9 @@ from app.models.watchlist import Watchlist
 from app.models.watched import Watched
 from app.models.episode import Episode
 from app.models.episode_watched import EpisodeWatched
-from app.services.watchlist_service import (
-    _is_tracked_on_any,
-    ensure_movie_in_db,
-    ensure_show_in_db,
-)
+from app.services.watchlist_service import _is_tracked_on_any
+from app.services.media_upsert import ensure_movie_in_db, ensure_show_in_db, decrement_tracking_count
+from app.services.streaming_notification_service import ensure_providers_populated
 
 
 def _is_on_other_list(
@@ -107,6 +105,8 @@ def add_to_currently_watching(
     elif content_type == "tv":
         ensure_show_in_db(db, content_id, already_tracked)
 
+    ensure_providers_populated(db, content_id, content_type)
+
     db.commit()
     db.refresh(entry)
 
@@ -114,7 +114,7 @@ def add_to_currently_watching(
 
 
 def remove_from_currently_watching(
-    db: Session, user_id: str, content_type: str, content_id: int
+    db: Session, user_id: str, content_type: str, content_id: int, commit: bool = True
 ):
     entry = (
         db.query(CurrentlyWatching)
@@ -128,18 +128,10 @@ def remove_from_currently_watching(
     still_tracked = _is_on_other_list(db, user_id, content_type, content_id)
 
     if not still_tracked:
-        if content_type == "movie":
-            movie = db.query(Movie).filter_by(id=content_id).first()
-            if movie:
-                movie.tracking_count = max(0, movie.tracking_count - 1)
-                movie.updated_at = datetime.now(timezone.utc)
-        elif content_type == "tv":
-            show = db.query(Show).filter_by(id=content_id).first()
-            if show:
-                show.tracking_count = max(0, show.tracking_count - 1)
-                show.updated_at = datetime.now(timezone.utc)
+        decrement_tracking_count(db, content_type, content_id)
 
-    db.commit()
+    if commit:
+        db.commit()
     return {"message": "Removed from currently watching"}
 
 

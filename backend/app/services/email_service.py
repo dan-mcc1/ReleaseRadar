@@ -1,6 +1,6 @@
 import hmac
 import hashlib
-from datetime import datetime
+from datetime import datetime, timezone
 import resend
 from collections import defaultdict
 from app.config import settings
@@ -348,7 +348,7 @@ def send_new_season_available_email(
     if not shows:
         return
 
-    today = datetime.utcnow().date()
+    today = datetime.now(timezone.utc).date()
 
     def _premiere_line(s: dict) -> str:
         season_number = s.get("season_number")

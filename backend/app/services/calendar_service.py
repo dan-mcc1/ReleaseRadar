@@ -10,10 +10,7 @@ from app.models.currently_watching import CurrentlyWatching
 from app.models.watched import Watched
 from app.models.show import Show
 from app.models.movie import Movie
-from app.services.watchlist_service import (
-    serialize_show_calendar,
-    serialize_movie_calendar,
-)
+from app.services.media_serializers import serialize_show_calendar, serialize_movie_calendar
 
 
 def get_calendar(

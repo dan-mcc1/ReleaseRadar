@@ -63,7 +63,7 @@ export default function CalendarDayCell({
             const title =
               "episode_number" in item
                 ? `${item.showData.name} - ${item.name}`
-                : (item as any).title;
+                : item.title;
             return (
               <div
                 key={idx}

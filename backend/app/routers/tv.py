@@ -9,7 +9,7 @@ from app.models.show import Show
 from app.models.episode import Episode
 from app.db.session import get_db
 from app.services.provider_utils import normalize_tmdb_watch_providers
-from app.services.watchlist_service import serialize_show, _show_query_options
+from app.services.media_serializers import serialize_show, _show_query_options
 
 router = APIRouter()
 

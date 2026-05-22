@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "./queryKeys";
-import { queryFetch } from "./queryFetch";
+import { queryFetch, checkedFetch } from "./queryFetch";
 import { apiFetch } from "../../utils/apiFetch";
 import { useAuthUser } from "../useAuthUser";
 
@@ -83,7 +83,7 @@ export function useToggleEpisode() {
       const endpoint = watched
         ? "/watched-episode/remove"
         : "/watched-episode/add";
-      await apiFetch(
+      await checkedFetch(
         `${endpoint}?show_id=${showId}&season_number=${seasonNumber}&episode_number=${episodeNumber}`,
         { method },
       );
@@ -163,7 +163,7 @@ export function useToggleSeason() {
       const endpoint = allWatched
         ? "/watched-episode/season/remove"
         : "/watched-episode/season/add";
-      await apiFetch(
+      await checkedFetch(
         `${endpoint}?show_id=${showId}&season_number=${seasonNumber}`,
         { method },
       );

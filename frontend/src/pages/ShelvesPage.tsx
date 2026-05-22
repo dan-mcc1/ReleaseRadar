@@ -11,6 +11,7 @@ import { usePageTitle } from "../hooks/usePageTitle";
 import { useUserMe } from "../hooks/api/useUser";
 import ProUpgradeModal from "../components/ProUpgradeModal";
 import { BASE_IMAGE_URL } from "../constants";
+import { useToast } from "../components/Toast";
 
 const SHELF_COLORS = [
   "#10b981",
@@ -244,6 +245,7 @@ function ShelfCard({
 export default function ShelvesPage() {
   usePageTitle("Shelves");
   const navigate = useNavigate();
+  const toast = useToast();
   const { data: shelves = [], isLoading } = useShelves();
   const { data: userMe } = useUserMe();
   const createShelf = useCreateShelf();
@@ -279,7 +281,7 @@ export default function ShelvesPage() {
       setNewName("");
       setShowCreate(false);
     } catch {
-      alert("Failed to create shelf");
+      toast.error("Failed to create shelf");
     }
   }
 
@@ -293,7 +295,7 @@ export default function ShelvesPage() {
       await updateShelf.mutateAsync({ shelfId: shelf.id, name });
       setEditingId(null);
     } catch {
-      alert("Failed to rename shelf");
+      toast.error("Failed to rename shelf");
     }
   }
 
@@ -302,7 +304,7 @@ export default function ShelvesPage() {
       await deleteShelf.mutateAsync(shelfId);
       setConfirmDeleteId(null);
     } catch {
-      alert("Failed to delete shelf");
+      toast.error("Failed to delete shelf");
     }
   }
 

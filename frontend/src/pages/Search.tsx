@@ -3,7 +3,7 @@ import { useSearchParams, Link } from "react-router-dom";
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useSearch } from "../hooks/api/useSearch";
 import { BASE_IMAGE_URL } from "../constants";
-import WatchButton from "../components/WatchButton";
+import WatchButton, { type WatchStatus } from "../components/WatchButton";
 import { useBulkWatchStatus } from "../hooks/api/useWatchStatus";
 import type { Movie, Show, Person, CollectionResult } from "../types/calendar";
 import { parseLocalDate } from "../utils/date";
@@ -176,7 +176,7 @@ function TopResultHero({
               <WatchButton
                 contentType={type}
                 contentId={item.id}
-                initialStatus={statusEntry?.status as any}
+                initialStatus={statusEntry?.status as WatchStatus}
                 initialRating={statusEntry?.rating ?? undefined}
                 compact
                 skipNotifyPrompt={skipNotifyPrompt}

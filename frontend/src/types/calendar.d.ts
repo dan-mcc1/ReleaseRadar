@@ -36,6 +36,8 @@ export type Show = {
   sort_key?: number;
   watchlist_id?: number;
   flatrate_provider_ids?: number[];
+  added_at?: string | null;
+  watched_at?: string | null;
 }
 
 export type Season = {
@@ -98,6 +100,8 @@ export type Movie = {
   sort_key?: number;
   watchlist_id?: number;
   flatrate_provider_ids?: number[];
+  added_at?: string | null;
+  watched_at?: string | null;
 }
 
 export type Genre = {

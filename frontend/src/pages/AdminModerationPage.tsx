@@ -621,8 +621,9 @@ function AppealsSection() {
   const { data, isLoading, refetch } = useAdminAppeals(status);
   const approveMut = useApproveAppeal();
   const rejectMut = useRejectAppeal();
-  const appeals: Appeal[] = (data as any)?.appeals ?? [];
-  const total: number = (data as any)?.total ?? 0;
+  const pagedAppeals = data as { appeals: Appeal[]; total: number } | undefined;
+  const appeals: Appeal[] = pagedAppeals?.appeals ?? [];
+  const total: number = pagedAppeals?.total ?? 0;
   const busy = approveMut.isPending || rejectMut.isPending;
 
   return (
@@ -746,8 +747,9 @@ function ReportsSection() {
   const [status, setStatus] = useState<ReportStatus>("pending");
   const [typeFilter, setTypeFilter] = useState<"all" | "review" | "user">("all");
   const { data, isLoading, refetch } = useAdminReports(status);
-  const reports: Report[] = (data as any)?.reports ?? [];
-  const total: number = (data as any)?.total ?? 0;
+  const pagedReports = data as { reports: Report[]; total: number } | undefined;
+  const reports: Report[] = pagedReports?.reports ?? [];
+  const total: number = pagedReports?.total ?? 0;
   const filtered = typeFilter === "all" ? reports : reports.filter((r) => r.reported_type === typeFilter);
 
   return (

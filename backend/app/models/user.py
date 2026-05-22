@@ -1,5 +1,5 @@
 # src/models/user.py
-from sqlalchemy import Column, String, DateTime, Boolean, Text, Integer
+from sqlalchemy import Column, String, DateTime, Date, Boolean, Text, Integer
 from sqlalchemy.sql import func
 from app.db.base import Base
 
@@ -39,3 +39,5 @@ class User(Base):
     ban_reason = Column(Text, nullable=True)
     is_silenced = Column(Boolean, default=False, server_default="false", nullable=False)
     silenced_until = Column(DateTime(timezone=True), nullable=True)
+    ical_token_version = Column(Integer, default=1, server_default="1", nullable=False)
+    last_digest_sent_at = Column(Date, nullable=True)

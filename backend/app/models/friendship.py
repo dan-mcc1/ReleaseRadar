@@ -1,5 +1,6 @@
 # app/models/friendship.py
 from sqlalchemy import (
+    CheckConstraint,
     Column,
     Integer,
     String,
@@ -22,7 +23,6 @@ class Friendship(Base):
     addressee_id = Column(
         String, ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    # status: 'pending' | 'accepted' | 'declined' | 'following'
     status = Column(String, nullable=False, default="pending")
     message = Column(String(200), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -31,6 +31,10 @@ class Friendship(Base):
     )
 
     __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'accepted', 'declined', 'following', 'withdrawn')",
+            name="ck_friendship_status",
+        ),
         UniqueConstraint("requester_id", "addressee_id", name="uq_friendship_pair"),
         Index("ix_friendship_requester_status", "requester_id", "status"),
         Index("ix_friendship_addressee_status", "addressee_id", "status"),

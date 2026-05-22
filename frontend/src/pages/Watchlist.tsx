@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { memo, useState, useCallback, useMemo } from "react";
 import type { Show, Movie } from "../types/calendar";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -81,7 +81,7 @@ function getTimeRemaining(
   return (item as Movie).runtime ?? 0;
 }
 
-function applySort<T extends Movie | (Show & { added_at?: string | null })>(
+function applySort<T extends Movie | Show>(
   items: T[],
   sort: SortType,
   bingePlans?: Record<string, ShowProgress>,
@@ -90,11 +90,11 @@ function applySort<T extends Movie | (Show & { added_at?: string | null })>(
   switch (sort) {
     case "added_desc":
       return sorted.sort((a, b) =>
-        ((b as any).added_at ?? "").localeCompare((a as any).added_at ?? ""),
+        ((b.added_at ?? "")).localeCompare((a.added_at ?? "")),
       );
     case "added_asc":
       return sorted.sort((a, b) =>
-        ((a as any).added_at ?? "").localeCompare((b as any).added_at ?? ""),
+        ((a.added_at ?? "")).localeCompare((b.added_at ?? "")),
       );
     case "title_asc":
       return sorted.sort((a, b) => getTitle(a).localeCompare(getTitle(b)));
@@ -177,7 +177,7 @@ function getStatusText(
   return `${p.remaining_episodes} ep${p.remaining_episodes === 1 ? "" : "s"} left`;
 }
 
-function WatchlistCard({
+const WatchlistCard = memo(function WatchlistCard({
   item,
   bingePlans,
   onNavigate,
@@ -185,8 +185,8 @@ function WatchlistCard({
 }: {
   item: CombinedItem;
   bingePlans?: Record<string, ShowProgress>;
-  onNavigate: () => void;
-  onRemove: () => void;
+  onNavigate: (type: "movie" | "tv", id: number) => void;
+  onRemove: (type: "movie" | "tv", id: number) => void;
 }) {
   const progress = getProgress(item, bingePlans);
   const statusText = getStatusText(item, bingePlans);
@@ -197,7 +197,7 @@ function WatchlistCard({
 
   return (
     <div className="flex flex-col gap-2 group/card">
-      <div className="relative cursor-pointer" onClick={onNavigate}>
+      <div className="relative cursor-pointer" onClick={() => onNavigate(item._contentType, item.id)}>
         <div className="aspect-[2/3] rounded-xl overflow-hidden bg-neutral-800">
           {item.poster_path ? (
             <img
@@ -247,7 +247,7 @@ function WatchlistCard({
         <button
           onClick={(e) => {
             e.stopPropagation();
-            onRemove();
+            onRemove(item._contentType, item.id);
           }}
           title="Remove from watchlist"
           className="absolute top-2 left-2 w-6 h-6 rounded-full bg-black/70 text-neutral-400 flex items-center justify-center opacity-0 group-hover/card:opacity-100 transition-opacity hover:text-white hover:bg-black/90"
@@ -283,9 +283,9 @@ function WatchlistCard({
       </div>
     </div>
   );
-}
+});
 
-function SortableWatchlistCard({
+const SortableWatchlistCard = memo(function SortableWatchlistCard({
   item,
   bingePlans,
   rank,
@@ -306,8 +306,8 @@ function SortableWatchlistCard({
   isFirst: boolean;
   isLast: boolean;
   isDragDisabled?: boolean;
-  onNavigate: () => void;
-  onRemove: () => void;
+  onNavigate: (type: "movie" | "tv", id: number) => void;
+  onRemove: (type: "movie" | "tv", id: number) => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
   onMoveToTop: () => void;
@@ -340,7 +340,7 @@ function SortableWatchlistCard({
         <div
           className="aspect-[2/3] rounded-xl overflow-hidden bg-neutral-800 transition-opacity duration-200 group-hover/card:opacity-85"
           style={{ cursor: isDragDisabled ? "pointer" : isDragging ? "grabbing" : "grab" }}
-          onClick={onNavigate}
+          onClick={() => onNavigate(item._contentType, item.id)}
           {...(!isDragDisabled ? { ...attributes, ...listeners } : {})}
         >
           {item.poster_path ? (
@@ -384,7 +384,7 @@ function SortableWatchlistCard({
 
         {/* Remove button */}
         <button
-          onClick={(e) => { e.stopPropagation(); onRemove(); }}
+          onClick={(e) => { e.stopPropagation(); onRemove(item._contentType, item.id); }}
           onPointerDown={(e) => e.stopPropagation()}
           title="Remove from watchlist"
           className="absolute top-2 left-2 w-6 h-6 rounded-full bg-black/70 text-neutral-400 flex items-center justify-center opacity-0 group-hover/card:opacity-100 transition-opacity hover:text-white hover:bg-black/90"
@@ -444,7 +444,7 @@ function SortableWatchlistCard({
       </div>
     </div>
   );
-}
+});
 
 export default function Watchlist() {
   usePageTitle("Watchlist");
@@ -489,17 +489,27 @@ export default function Watchlist() {
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
   );
 
-  async function onRemove(type: "tv" | "movie", content_id: number) {
-    try {
-      await removeFromList.mutateAsync({
-        list: "watchlist",
-        contentType: type,
-        contentId: content_id,
-      });
-    } catch (err) {
-      console.error(err);
-    }
-  }
+  const onRemove = useCallback(
+    async (type: "tv" | "movie", content_id: number) => {
+      try {
+        await removeFromList.mutateAsync({
+          list: "watchlist",
+          contentType: type,
+          contentId: content_id,
+        });
+      } catch (err) {
+        console.error(err);
+      }
+    },
+    [removeFromList],
+  );
+
+  const onNavigate = useCallback(
+    (type: "movie" | "tv", id: number) => {
+      navigate(`/${type === "movie" ? "movie" : "tv"}/${id}`);
+    },
+    [navigate],
+  );
 
   const fireReorder = useCallback(
     (
@@ -546,23 +556,32 @@ export default function Watchlist() {
   const isMyOrder = sort === "my_order";
   const q = query.toLowerCase();
 
-  const filteredMovies = applySort(
-    applyFilters(
-      results.movies.filter((m) => m.title.toLowerCase().includes(q)),
-      filters,
-      myProviderIds,
-    ),
-    sort,
-    bingePlans,
+  const filteredMovies = useMemo(
+    () =>
+      applySort(
+        applyFilters(
+          results.movies.filter((m) => m.title.toLowerCase().includes(q)),
+          filters,
+          myProviderIds,
+        ),
+        sort,
+        bingePlans,
+      ),
+    [results.movies, q, filters, myProviderIds, sort, bingePlans],
   );
-  const filteredShows = applySort(
-    applyFilters(
-      results.shows.filter((s) => s.name.toLowerCase().includes(q)),
-      filters,
-      myProviderIds,
-    ),
-    sort,
-    bingePlans,
+
+  const filteredShows = useMemo(
+    () =>
+      applySort(
+        applyFilters(
+          results.shows.filter((s) => s.name.toLowerCase().includes(q)),
+          filters,
+          myProviderIds,
+        ),
+        sort,
+        bingePlans,
+      ),
+    [results.shows, q, filters, myProviderIds, sort, bingePlans],
   );
 
   const upNextShows = useMemo(
@@ -614,8 +633,8 @@ export default function Watchlist() {
         return upNextShows.map((s) => ({
           ...s,
           _contentType: "tv" as const,
-          sort_key: (s as any).sort_key ?? 0,
-          watchlist_id: (s as any).watchlist_id!,
+          sort_key: s.sort_key ?? 0,
+          watchlist_id: s.watchlist_id!,
         }));
       case "movies":
         return filteredMovies.map((m) => ({
@@ -628,8 +647,8 @@ export default function Watchlist() {
         return filteredShows.map((s) => ({
           ...s,
           _contentType: "tv" as const,
-          sort_key: (s as any).sort_key ?? 0,
-          watchlist_id: (s as any).watchlist_id!,
+          sort_key: s.sort_key ?? 0,
+          watchlist_id: s.watchlist_id!,
         }));
       case "all":
       default:
@@ -643,8 +662,8 @@ export default function Watchlist() {
           ...filteredShows.map((s) => ({
             ...s,
             _contentType: "tv" as const,
-            sort_key: (s as any).sort_key ?? 0,
-            watchlist_id: (s as any).watchlist_id!,
+            sort_key: s.sort_key ?? 0,
+            watchlist_id: s.watchlist_id!,
           })),
         ];
     }
@@ -931,16 +950,8 @@ export default function Watchlist() {
                       rank={idx + 1}
                       isFirst={idx === 0}
                       isLast={idx === combinedItems.length - 1}
-                      onNavigate={() =>
-                        navigate(`/${item._contentType === "movie" ? "movie" : "tv"}/${item.id}`)
-                      }
-                      onRemove={() =>
-                        removeFromList.mutate({
-                          list: "watchlist",
-                          contentType: item._contentType,
-                          contentId: item.id,
-                        })
-                      }
+                      onNavigate={onNavigate}
+                      onRemove={onRemove}
                       onMoveUp={() => {
                         const before = combinedItems[idx - 2] ?? null;
                         const after = combinedItems[idx - 1];
@@ -999,16 +1010,8 @@ export default function Watchlist() {
                   isFirst={allIdx === 0}
                   isLast={allIdx === combinedItems.length - 1}
                   isDragDisabled
-                  onNavigate={() =>
-                    navigate(`/${item._contentType === "movie" ? "movie" : "tv"}/${item.id}`)
-                  }
-                  onRemove={() =>
-                    removeFromList.mutate({
-                      list: "watchlist",
-                      contentType: item._contentType,
-                      contentId: item.id,
-                    })
-                  }
+                  onNavigate={onNavigate}
+                  onRemove={onRemove}
                   onMoveUp={() => {
                     const before = combinedItems[allIdx - 2] ?? null;
                     const after = combinedItems[allIdx - 1];
@@ -1056,18 +1059,8 @@ export default function Watchlist() {
                 key={`${item._contentType}-${item.id}`}
                 item={item}
                 bingePlans={bingePlans}
-                onNavigate={() =>
-                  navigate(
-                    `/${item._contentType === "movie" ? "movie" : "tv"}/${item.id}`,
-                  )
-                }
-                onRemove={() =>
-                  removeFromList.mutate({
-                    list: "watchlist",
-                    contentType: item._contentType,
-                    contentId: item.id,
-                  })
-                }
+                onNavigate={onNavigate}
+                onRemove={onRemove}
               />
             ))}
           </div>

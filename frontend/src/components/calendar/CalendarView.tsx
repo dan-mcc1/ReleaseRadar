@@ -87,12 +87,8 @@ export default function CalendarView() {
   const cwIds = useMemo((): CurrentlyWatchingIds | undefined => {
     if (!currentlyWatchingFilter || !cwData) return undefined;
     return {
-      showIds: new Set(
-        (cwData as any).shows?.map((s: any) => s.id as number) ?? [],
-      ),
-      movieIds: new Set(
-        (cwData as any).movies?.map((m: any) => m.id as number) ?? [],
-      ),
+      showIds: new Set(cwData?.shows?.map((s) => s.id) ?? []),
+      movieIds: new Set(cwData?.movies?.map((m) => m.id) ?? []),
     };
   }, [currentlyWatchingFilter, cwData]);
 

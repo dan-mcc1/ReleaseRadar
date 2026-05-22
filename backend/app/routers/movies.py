@@ -6,6 +6,7 @@ from app.models.movie import Movie
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.services.provider_utils import normalize_tmdb_watch_providers
+from app.services.media_serializers import serialize_movie, _movie_query_options
 
 router = APIRouter()
 
@@ -16,10 +17,10 @@ def get_movie_info(
     append: str | None = Query(None, description="Comma-separated TMDB append fields"),
     db: Session = Depends(get_db),
 ):
-    # 1. Check DB first
-    movie = db.query(Movie).filter(Movie.id == id).first()
+    # 1. Check DB first — load all relationships so serialize_movie works
+    movie = db.query(Movie).options(*_movie_query_options()).filter(Movie.id == id).first()
     if movie:
-        return movie
+        return serialize_movie(movie)
 
     # 2. Fetch from TMDb if not in DB
     movie_data = fetch_movie_from_tmdb(id, append)

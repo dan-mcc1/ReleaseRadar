@@ -1,7 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "./queryKeys";
-import { queryFetch } from "./queryFetch";
-import { apiFetch } from "../../utils/apiFetch";
+import { queryFetch, checkedFetch } from "./queryFetch";
 import { useAuthUser } from "../useAuthUser";
 import { isAccountRestricted } from "../../utils/accountState";
 
@@ -50,7 +49,7 @@ export function useSubmitAppeal() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ message, requestUnsilence }: { message: string; requestUnsilence: boolean }) =>
-      apiFetch("/user/appeal", {
+      checkedFetch("/user/appeal", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message, request_unsilence: requestUnsilence }),
@@ -74,7 +73,7 @@ export function useAcknowledgeWarning() {
   const user = useAuthUser();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: () => apiFetch("/user/acknowledge-warning", { method: "POST" }),
+    mutationFn: () => checkedFetch("/user/acknowledge-warning", { method: "POST" }),
     onSuccess: () => {
       if (user) queryClient.invalidateQueries({ queryKey: queryKeys.userMe(user.uid) });
     },
@@ -208,7 +207,7 @@ export function useUpdateUsername() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (newUsername: string) =>
-      apiFetch("/user/update-username", {
+      checkedFetch("/user/update-username", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ new_username: newUsername }),
@@ -224,7 +223,7 @@ export function useUpdateBio() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (bio: string | null) =>
-      apiFetch("/user/update-bio", {
+      checkedFetch("/user/update-bio", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ bio }),
@@ -240,7 +239,7 @@ export function useUpdateAvatar() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (avatarKey: string | null) =>
-      apiFetch("/user/update-avatar", {
+      checkedFetch("/user/update-avatar", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ avatar_key: avatarKey }),
@@ -255,7 +254,7 @@ export function useUpdateAvatar() {
 
 export function useDeleteAccount() {
   return useMutation({
-    mutationFn: () => apiFetch("/user/account", { method: "DELETE" }),
+    mutationFn: () => checkedFetch("/user/account", { method: "DELETE" }),
   });
 }
 
@@ -263,7 +262,7 @@ export function useCancelSubscription() {
   const user = useAuthUser();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: () => apiFetch("/user/subscription/cancel", { method: "POST" }),
+    mutationFn: () => checkedFetch("/user/subscription/cancel", { method: "POST" }),
     onSuccess: () => {
       if (user) queryClient.invalidateQueries({ queryKey: queryKeys.userMe(user.uid) });
     },

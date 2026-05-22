@@ -1,9 +1,11 @@
 # app/services/episode_watched_service.py
 from sqlalchemy.orm import Session
 from sqlalchemy import select, exists, union_all, literal
-from datetime import datetime
+from datetime import datetime, timezone
 from app.models.episode_watched import EpisodeWatched
 from app.models.episode import Episode
+from app.models.season import Season
+from app.models.show import Show
 from app.models.watchlist import Watchlist
 from app.models.currently_watching import CurrentlyWatching
 from app.services.episode_service import (
@@ -11,9 +13,11 @@ from app.services.episode_service import (
     sync_season_episodes,
     ensure_show_in_db,
 )
+from app.db.session import SessionLocal
 from app.services.watched_service import add_to_watched
 from app.services.watchlist_service import remove_from_watchlist
 from app.services.currently_watching_service import remove_from_currently_watching
+from app.services.activity_service import log_activity
 
 
 def add_episode_watched(
@@ -46,6 +50,7 @@ def add_episode_watched(
 
     # Ensure the show and episode rows exist (satisfies FK constraints)
     ensure_show_in_db(db, show_id)
+    show = db.query(Show).filter_by(id=show_id).first()
     episode = get_or_create_episode(db, show_id, season_number, episode_number)
 
     entry = EpisodeWatched(
@@ -54,12 +59,25 @@ def add_episode_watched(
         episode_id=episode.id if episode else None,
         season_number=season_number,
         episode_number=episode_number,
-        watched_at=datetime.utcnow(),
+        watched_at=datetime.now(timezone.utc),
         rating=rating,
     )
     db.add(entry)
     db.commit()
     db.refresh(entry)
+
+    log_activity(
+        db,
+        user_id,
+        "episode_watched",
+        "tv",
+        show_id,
+        show.name if show else None,
+        show.poster_path if show else None,
+        season_number=season_number,
+        episode_number=episode_number,
+    )
+    maybe_auto_complete_show(db, user_id, show_id)
 
     return entry
 
@@ -137,7 +155,7 @@ def add_season_watched(db: Session, user_id: str, show_id: int, season_number: i
                     episode_id=ep.id,
                     season_number=season_number,
                     episode_number=ep.episode_number,
-                    watched_at=datetime.utcnow(),
+                    watched_at=datetime.now(timezone.utc),
                 )
             )
     db.commit()
@@ -166,9 +184,6 @@ def get_next_unwatched_episode(db: Session, user_id: str, show_id: int) -> dict:
     Returns {"finished": True} if all known episodes are watched.
     Syncs the next un-synced season from TMDb if needed.
     """
-    from app.models.show import Show
-    from app.services.episode_service import sync_season_episodes
-
     watched_set = {
         (w.season_number, w.episode_number)
         for w in db.query(EpisodeWatched)
@@ -327,9 +342,6 @@ def maybe_auto_complete_show(db: Session, user_id: str, show_id: int) -> bool:
     episode count. This prevents the show from bouncing between Watched and
     Watchlist for every week's episode on a currently-airing season.
     """
-    from app.models.show import Show
-    from app.models.season import Season
-
     # Single UNION ALL EXISTS instead of two separate .first() queries
     tracked_subq = union_all(
         select(literal(1))
@@ -427,13 +439,25 @@ def maybe_auto_complete_show(db: Session, user_id: str, show_id: int) -> bool:
         if not is_season_complete:
             return False
 
-    # Add to Watched first so the subsequent removes see it still tracked
-    # and leave tracking_count unchanged
-    add_to_watched(db, user_id, "tv", show_id)
-
-    # Both remove functions handle "not found" gracefully — call unconditionally
-    remove_from_watchlist(db, user_id, "tv", show_id)
-    remove_from_currently_watching(db, user_id, "tv", show_id)
+    # All three writes share one transaction so a crash can't leave the show in two lists.
+    # add_to_watched flushes via log_activity, making the Watched row visible to the
+    # still_tracked checks inside the two remove calls before the single commit below.
+    add_to_watched(db, user_id, "tv", show_id, commit=False)
+    remove_from_watchlist(db, user_id, "tv", show_id, commit=False)
+    remove_from_currently_watching(db, user_id, "tv", show_id, commit=False)
+    db.commit()
 
     print(f"[auto-complete] Show {show_id} auto-moved to Watched for user {user_id}")
     return True
+
+
+def maybe_auto_complete_show_bg(user_id: str, show_id: int) -> None:
+    """Background-task wrapper that opens its own session (the request session is closed by the time this runs)."""
+    db = SessionLocal()
+    try:
+        maybe_auto_complete_show(db, user_id, show_id)
+    except Exception as e:
+        db.rollback()
+        print(f"[maybe_auto_complete_show_bg] Error for show {show_id}: {e}")
+    finally:
+        db.close()

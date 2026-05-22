@@ -6,6 +6,7 @@ import { apiFetch } from "../../utils/apiFetch";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuthUser } from "../../hooks/useAuthUser";
 import { calendarQueryKey } from "../../hooks/useCalendarData";
+import { useToggleEpisode } from "../../hooks/api/useEpisodes";
 import { formatAirTimeToLocal } from "../../utils/calendarUtils";
 import { useFriendsActivity } from "../../hooks/api/useActivity";
 import type { CalendarItem } from "../../utils/calendarUtils";
@@ -40,12 +41,13 @@ function getEpisodeTag(episodeType: string | null | undefined) {
 function SideRailItem({ item }: { item: CalendarItem }) {
   const user = useAuthUser();
   const queryClient = useQueryClient();
+  const toggleEpisode = useToggleEpisode();
   const [marking, setMarking] = useState(false);
   const [localWatched, setLocalWatched] = useState(item.is_watched);
 
   useEffect(() => {
-    setLocalWatched(item.is_watched);
-  }, [item.is_watched]);
+    if (!marking) setLocalWatched(item.is_watched);
+  }, [item.is_watched, marking]);
 
   const isTv = item.type === "tv";
   const tvItem = isTv
@@ -55,9 +57,9 @@ function SideRailItem({ item }: { item: CalendarItem }) {
     ? `/tv/${item.showData.id}/episode/${tvItem.season_number}/${tvItem.episode_number}`
     : `/movie/${item.showData.id}`;
 
-  const showTitle = isTv ? item.showData.name : (item as any).title;
+  const showTitle = item.type === "tv" ? item.showData.name : item.title;
   const episodeName = tvItem?.name ?? null;
-  const overview = tvItem?.overview ?? (item.showData as any).overview ?? null;
+  const overview = tvItem?.overview ?? item.showData.overview ?? null;
   const backdrop = item.showData.backdrop_path;
   const logo = item.showData.logo_path;
   const seasonNum = tvItem?.season_number;
@@ -67,20 +69,26 @@ function SideRailItem({ item }: { item: CalendarItem }) {
     : null;
   const episodeTag = tvItem ? getEpisodeTag(tvItem.episode_type) : null;
 
-  async function handleToggleWatched(e: React.MouseEvent) {
-    e.preventDefault();
-    e.stopPropagation();
+  async function handleToggleWatched() {
     if (marking) return;
     const wasWatched = localWatched;
     setLocalWatched(!wasWatched);
     setMarking(true);
     try {
       if (isTv && tvItem) {
-        await apiFetch(
-          wasWatched
-            ? `/watched-episode/remove?show_id=${tvItem.showData.id}&season_number=${tvItem.season_number}&episode_number=${tvItem.episode_number}`
-            : `/watched-episode/add?show_id=${tvItem.showData.id}&season_number=${tvItem.season_number}&episode_number=${tvItem.episode_number}`,
-          { method: wasWatched ? "DELETE" : "POST" },
+        await toggleEpisode.mutateAsync(
+          {
+            showId: tvItem.showData.id,
+            seasonNumber: tvItem.season_number,
+            episodeNumber: tvItem.episode_number,
+            watched: wasWatched,
+          },
+          {
+            onSuccess: () => {
+              if (user)
+                queryClient.invalidateQueries({ queryKey: calendarQueryKey(user.uid) });
+            },
+          },
         );
       } else {
         await apiFetch(`/watched/${wasWatched ? "remove" : "add"}`, {
@@ -88,9 +96,9 @@ function SideRailItem({ item }: { item: CalendarItem }) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ content_type: "movie", content_id: item.showData.id }),
         });
+        if (user)
+          queryClient.invalidateQueries({ queryKey: calendarQueryKey(user.uid) });
       }
-      if (user)
-        queryClient.invalidateQueries({ queryKey: calendarQueryKey(user.uid) });
     } catch {
       setLocalWatched(wasWatched);
     } finally {
@@ -161,32 +169,33 @@ function SideRailItem({ item }: { item: CalendarItem }) {
           )}
         </div>
 
-        {/* Watched checkmark */}
-        <button
-            onClick={handleToggleWatched}
-            disabled={marking}
-            title={localWatched ? "Mark as unwatched" : "Mark as watched"}
-            className={`flex-shrink-0 self-start mt-0.5 w-6 h-6 rounded-full border flex items-center justify-center transition-colors ${
-              localWatched
-                ? "bg-primary-500 border-primary-500 text-neutral-950 hover:bg-transparent hover:border-neutral-700 hover:text-neutral-600"
-                : "border-neutral-700 text-neutral-600 hover:border-primary-500 hover:text-primary-400"
-            } ${marking ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
-          >
-            <svg
-              className="w-3.5 h-3.5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2.5}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M5 13l4 4L19 7"
-              />
-            </svg>
-        </button>
       </Link>
+
+      {/* Watched checkmark — outside <Link> to avoid invalid button-in-anchor nesting */}
+      <button
+          onClick={handleToggleWatched}
+          disabled={marking}
+          title={localWatched ? "Mark as unwatched" : "Mark as watched"}
+          className={`absolute top-1 right-1 z-10 w-6 h-6 rounded-full border flex items-center justify-center transition-colors ${
+            localWatched
+              ? "bg-primary-500 border-primary-500 text-neutral-950 hover:bg-transparent hover:border-neutral-700 hover:text-neutral-600"
+              : "border-neutral-700 text-neutral-600 hover:border-primary-500 hover:text-primary-400"
+          } ${marking ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+        >
+          <svg
+            className="w-3.5 h-3.5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2.5}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M5 13l4 4L19 7"
+            />
+          </svg>
+      </button>
     </div>
   );
 }

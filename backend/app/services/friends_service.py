@@ -14,6 +14,7 @@ from app.models.currently_watching import CurrentlyWatching
 # Configurable limits
 MAX_PENDING_OUTGOING = 25
 DECLINED_COOLDOWN_DAYS = 30
+REQUEST_TARGET_COOLDOWN_MINUTES = 60
 
 
 def _utcnow():
@@ -113,6 +114,25 @@ def send_friend_request(db: Session, requester_id: str, addressee_username: str,
                 raise HTTPException(
                     status_code=429,
                     detail=f"This request was declined. You may try again in {days_left} day(s).",
+                )
+            # Cooldown passed — reuse the row, reset it
+            existing.requester_id = requester_id
+            existing.addressee_id = addressee.id
+            existing.status = "following" if is_public else "pending"
+            existing.message = message if not is_public else None
+            existing.updated_at = _utcnow()
+            db.commit()
+            db.refresh(existing)
+            return existing
+        if existing.status == "withdrawn":
+            cooldown_end = existing.updated_at.replace(tzinfo=timezone.utc) + timedelta(
+                minutes=REQUEST_TARGET_COOLDOWN_MINUTES
+            )
+            if _utcnow() < cooldown_end:
+                minutes_left = max(1, int((cooldown_end - _utcnow()).total_seconds() // 60))
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"You recently cancelled a request to this user. Try again in {minutes_left} minute(s).",
                 )
             # Cooldown passed — reuse the row, reset it
             existing.requester_id = requester_id
@@ -364,7 +384,8 @@ def cancel_friend_request(db: Session, requester_id: str, friendship_id: int):
     if not friendship:
         raise HTTPException(status_code=404, detail="Pending request not found.")
 
-    db.delete(friendship)
+    friendship.status = "withdrawn"
+    friendship.updated_at = _utcnow()
     db.commit()
 
 
@@ -563,6 +584,7 @@ def get_friends_content_activity(
             Watched.user_id.in_(friend_ids),
             Watched.content_type == content_type,
             Watched.content_id == content_id,
+            User.profile_visibility != "private",
         )
         .all()
     )
@@ -579,6 +601,7 @@ def get_friends_content_activity(
             CurrentlyWatching.user_id.in_(friend_ids),
             CurrentlyWatching.content_type == content_type,
             CurrentlyWatching.content_id == content_id,
+            User.profile_visibility != "private",
             User.username.notin_(watched_usernames),
         )
         .all()
@@ -596,6 +619,7 @@ def get_friends_content_activity(
             Watchlist.user_id.in_(friend_ids),
             Watchlist.content_type == content_type,
             Watchlist.content_id == content_id,
+            User.profile_visibility != "private",
             User.username.notin_(watched_usernames | cw_usernames),
         )
         .all()

@@ -1,7 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "./queryKeys";
-import { queryFetch } from "./queryFetch";
-import { apiFetch } from "../../utils/apiFetch";
+import { queryFetch, checkedFetch } from "./queryFetch";
 import { useAuthUser } from "../useAuthUser";
 
 export function useFriends() {
@@ -78,7 +77,7 @@ export function useRespondToFriendRequest() {
       friendshipId: number;
       accept: boolean;
     }) =>
-      apiFetch("/friends/respond", {
+      checkedFetch("/friends/respond", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ friendship_id: friendshipId, accept }),
@@ -104,7 +103,7 @@ export function useCancelFriendRequest() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (friendshipId: number) =>
-      apiFetch(`/friends/cancel/${friendshipId}`, { method: "DELETE" }),
+      checkedFetch(`/friends/cancel/${friendshipId}`, { method: "DELETE" }),
     onSuccess: () => {
       if (!user) return;
       queryClient.invalidateQueries({ queryKey: queryKeys.friends(user.uid) });
@@ -120,7 +119,7 @@ export function useRemoveFriend() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (friendId: string) =>
-      apiFetch(`/friends/remove/${friendId}`, { method: "DELETE" }),
+      checkedFetch(`/friends/remove/${friendId}`, { method: "DELETE" }),
     onSuccess: () => {
       if (!user) return;
       queryClient.invalidateQueries({ queryKey: queryKeys.friends(user.uid) });

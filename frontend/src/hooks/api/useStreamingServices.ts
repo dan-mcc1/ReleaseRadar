@@ -1,6 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { queryFetch } from "./queryFetch";
-import { apiFetch } from "../../utils/apiFetch";
+import { queryFetch, checkedFetch } from "./queryFetch";
 import { useAuthUser } from "../useAuthUser";
 
 export interface StreamingProvider {
@@ -50,7 +49,7 @@ export function useAddStreamingService() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (providerId: number) =>
-      apiFetch(`/streaming/services/${providerId}`, { method: "POST" }),
+      checkedFetch(`/streaming/services/${providerId}`, { method: "POST" }),
     onMutate: async (providerId) => {
       await qc.cancelQueries({ queryKey: SERVICES_KEY });
       const previous = qc.getQueryData<StreamingProvider[]>(SERVICES_KEY);
@@ -124,7 +123,7 @@ export function useRemoveStreamingService() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (providerId: number) =>
-      apiFetch(`/streaming/services/${providerId}`, { method: "DELETE" }),
+      checkedFetch(`/streaming/services/${providerId}`, { method: "DELETE" }),
     onMutate: async (providerId) => {
       await qc.cancelQueries({ queryKey: SERVICES_KEY });
       const previous = qc.getQueryData<StreamingProvider[]>(SERVICES_KEY);

@@ -200,10 +200,11 @@ const SignIn: React.FC = () => {
     try {
       await sendPasswordResetEmail(auth, email.trim());
       setResetSent(true);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const e = err as { code?: string };
       if (
-        err.code === "auth/user-not-found" ||
-        err.code === "auth/invalid-email"
+        e.code === "auth/user-not-found" ||
+        e.code === "auth/invalid-email"
       ) {
         setResetSent(true);
       } else {
@@ -265,13 +266,14 @@ const SignIn: React.FC = () => {
       const res = await createUserWithEmailAndPassword(auth, email, password);
       await registerUserInBackend(res.user, username);
       navigate("/calendar");
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error registering:", err);
-      let msg = err.message ?? "Registration failed.";
-      if (err.code === "auth/invalid-email") msg = "Invalid email address.";
-      else if (err.code === "auth/weak-password")
+      const e = err as { code?: string; message?: string };
+      let msg = e.message ?? "Registration failed.";
+      if (e.code === "auth/invalid-email") msg = "Invalid email address.";
+      else if (e.code === "auth/weak-password")
         msg = "Password should be at least 6 characters.";
-      else if (err.code === "auth/email-already-in-use")
+      else if (e.code === "auth/email-already-in-use")
         msg = "Email is already in use.";
       setErrorMessage(msg);
     } finally {
@@ -342,10 +344,11 @@ const SignIn: React.FC = () => {
     try {
       const result = await signInWithPopup(auth, provider);
       await handleOAuthResult(result.user);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Google sign-in error:", error);
-      let msg = error.message ?? "Sign-in failed.";
-      if (error.code === "auth/account-exists-with-different-credential")
+      const e = error as { code?: string; message?: string };
+      let msg = e.message ?? "Sign-in failed.";
+      if (e.code === "auth/account-exists-with-different-credential")
         msg = "Account already exists using a different provider";
       setErrorMessage(msg);
     }
@@ -356,10 +359,11 @@ const SignIn: React.FC = () => {
     try {
       const result = await signInWithPopup(auth, provider);
       await handleOAuthResult(result.user);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Microsoft sign-in error:", error);
-      let msg = error.message ?? "Sign-in failed.";
-      if (error.code === "auth/account-exists-with-different-credential")
+      const e = error as { code?: string; message?: string };
+      let msg = e.message ?? "Sign-in failed.";
+      if (e.code === "auth/account-exists-with-different-credential")
         msg = "Account already exists using a different provider";
       setErrorMessage(msg);
     }
@@ -370,10 +374,11 @@ const SignIn: React.FC = () => {
     try {
       const result = await signInWithPopup(auth, provider);
       await handleOAuthResult(result.user);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Facebook sign-in error:", error);
-      let msg = error.message ?? "Sign-in failed.";
-      if (error.code === "auth/account-exists-with-different-credential")
+      const e = error as { code?: string; message?: string };
+      let msg = e.message ?? "Sign-in failed.";
+      if (e.code === "auth/account-exists-with-different-credential")
         msg = "Account already exists using a different provider";
       setErrorMessage(msg);
     }

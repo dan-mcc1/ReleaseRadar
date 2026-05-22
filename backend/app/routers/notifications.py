@@ -1,9 +1,10 @@
 import hmac
 import hashlib
+import logging
 from datetime import date, datetime, timedelta, timezone as dt_timezone
 from collections import defaultdict
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.db.session import get_db
@@ -23,8 +24,11 @@ from app.services.email_service import (
     format_air_time,
 )
 from app.config import settings
+from app.core.limiter import limiter
 
 router = APIRouter()
+
+logger = logging.getLogger(__name__)
 
 VALID_FREQUENCIES = {"daily", "weekly", "monthly"}
 VALID_VISIBILITIES = {"public", "friends_only", "private"}
@@ -152,10 +156,12 @@ def _build_items_for_window(db: Session, user_id: str, days: int) -> list:
 
     movies = (
         db.query(Movie)
-        .join(Watchlist, Watchlist.content_id == Movie.id)
+        .join(
+            Watchlist,
+            (Watchlist.content_id == Movie.id) & (Watchlist.content_type == "movie"),
+        )
         .filter(
             Watchlist.user_id == user_id,
-            Watchlist.content_type == "movie",
             Watchlist.notify == True,  # noqa: E712
             Movie.release_date >= today,
             Movie.release_date < end,
@@ -350,8 +356,8 @@ def send_season_premiere_alerts_to_all(db: Session, now_utc: datetime | None = N
                 send_season_premiere_email(
                     user.email, user.username or "", alerts, uid=user.id
                 )
-        except Exception as e:
-            print(f"[season alert] Failed for {user.email}: {e}")
+        except Exception:
+            logger.exception("Season alert failed for user %s", user.id)
 
 
 def send_daily_digest_to_all(db: Session, now_utc: datetime | None = None):
@@ -373,8 +379,11 @@ def send_daily_digest_to_all(db: Session, now_utc: datetime | None = None):
             preferred_hour = user.digest_hour if user.digest_hour is not None else 9
             if local_now.hour != preferred_hour:
                 continue
+            local_date = local_now.date()
+            if user.last_digest_sent_at == local_date:
+                continue
             freq = user.notification_frequency or "daily"
-            if not _should_send_today(freq, local_now.date()):
+            if not _should_send_today(freq, local_date):
                 continue
             window = _frequency_window(freq)
             items = _build_items_for_window(db, user.id, window)
@@ -382,12 +391,17 @@ def send_daily_digest_to_all(db: Session, now_utc: datetime | None = None):
                 send_notification_email(
                     user.email, user.username or "", items, uid=user.id, frequency=freq
                 )
-        except Exception as e:
-            print(f"[digest] Failed for {user.email}: {e}")
+            user.last_digest_sent_at = local_date
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.exception("Daily digest failed for user %s", user.id)
 
 
 @router.post("/send-digest")
+@limiter.limit("3/hour")
 def send_digest(
+    request: Request,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),

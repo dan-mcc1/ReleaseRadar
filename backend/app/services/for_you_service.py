@@ -1,7 +1,8 @@
-import time
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import defaultdict
 
+from cachetools import TTLCache
 from sqlalchemy import union_all, select
 from sqlalchemy.orm import Session
 
@@ -13,20 +14,19 @@ from app.services.tmdb_client import get
 _SOURCE_LIMIT = 50  # most recent watched + watchlist items to seed from
 _MAX_WORKERS = 10
 _RETURN_LIMIT = 40  # max results returned
-_CACHE_TTL = 6 * 3600  # TMDB rec results are user-agnostic and stable
+_CACHE_TTL = 6 * 3600  # seconds
 
-# In-memory cache: (content_type, content_id) → (results, monotonic_timestamp)
-_rec_cache: dict[tuple[str, int], tuple[list, float]] = {}
+# Per-item TMDb recommendation cache — needs a lock; workers call _fetch_tmdb_recommendations
+_rec_cache: TTLCache = TTLCache(maxsize=500, ttl=_CACHE_TTL)
+_rec_cache_lock = threading.RLock()
 
 
 def _fetch_tmdb_recommendations(content_type: str, content_id: int) -> list[dict]:
-    """Fetch TMDB recommendations for a single movie or TV show, with TTL cache."""
     key = (content_type, content_id)
-    cached = _rec_cache.get(key)
-    if cached:
-        results, ts = cached
-        if time.monotonic() - ts < _CACHE_TTL:
-            return results
+    with _rec_cache_lock:
+        cached = _rec_cache.get(key)
+    if cached is not None:
+        return cached
 
     try:
         path = f"/{'movie' if content_type == 'movie' else 'tv'}/{content_id}/recommendations"
@@ -34,7 +34,8 @@ def _fetch_tmdb_recommendations(content_type: str, content_id: int) -> list[dict
         results = data.get("results", [])
         for r in results:
             r.setdefault("media_type", content_type)
-        _rec_cache[key] = (results, time.monotonic())
+        with _rec_cache_lock:
+            _rec_cache[key] = results
         return results
     except Exception:
         return []
@@ -80,12 +81,8 @@ def _get_seeds_top_rated(db: Session, uid: str) -> list[tuple[str, int]]:
 
 def _get_excluded(db: Session, uid: str) -> set[tuple[str, int]]:
     """All (content_type, content_id) the user already has — column-only, single union query."""
-    watched_q = select(Watched.content_type, Watched.content_id).where(
-        Watched.user_id == uid
-    )
-    watchlist_q = select(Watchlist.content_type, Watchlist.content_id).where(
-        Watchlist.user_id == uid
-    )
+    watched_q = select(Watched.content_type, Watched.content_id).where(Watched.user_id == uid)
+    watchlist_q = select(Watchlist.content_type, Watchlist.content_id).where(Watchlist.user_id == uid)
     currently_q = select(CurrentlyWatching.content_type, CurrentlyWatching.content_id).where(
         CurrentlyWatching.user_id == uid
     )
@@ -125,7 +122,6 @@ def get_for_you_recommendations(db: Session, uid: str, mode: str = "recent") -> 
         for future in as_completed(futures):
             recs = future.result()
             for item in recs:
-                # TMDB TV results use "name", movies use "title"
                 ct = "movie" if "title" in item else "tv"
                 cid = item.get("id")
                 if not cid:
@@ -136,9 +132,7 @@ def get_for_you_recommendations(db: Session, uid: str, mode: str = "recent") -> 
                 frequency[key] += 1
                 if key not in score_map:
                     score_map[key] = {"score": 0, "item": item, "content_type": ct}
-                score_map[key]["score"] = frequency[key] * 10 + item.get(
-                    "popularity", 0
-                )
+                score_map[key]["score"] = frequency[key] * 10 + item.get("popularity", 0)
 
     # ── Step 4: sort and split ─────────────────────────────────────────────
     ranked = sorted(score_map.values(), key=lambda x: x["score"], reverse=True)

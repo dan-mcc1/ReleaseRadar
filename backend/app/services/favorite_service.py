@@ -3,7 +3,7 @@ from sqlalchemy import and_, literal
 from app.models.favorite import Favorite
 from app.models.movie import Movie
 from app.models.show import Show
-from app.services.watchlist_service import (
+from app.services.media_serializers import (
     serialize_movie_list,
     serialize_show_list,
     _movie_query_options_list,

@@ -5,7 +5,7 @@ from fastapi import Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from cachetools import TTLCache
-from app.core.firebase import verify_token
+from app.core.firebase import verify_token, verify_token_strict
 from app.db.session import get_db
 
 bearer_scheme = HTTPBearer()
@@ -26,13 +26,13 @@ def _is_email_banned(email: str, db: Session) -> bool:
     return email in banned_set
 
 
-def get_current_user(
+def get_token_claims(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     db: Session = Depends(get_db),
-):
+) -> dict:
+    """Verify the Firebase token and run ban/suspension checks. Returns the full decoded token."""
     try:
         decoded_token = verify_token(credentials.credentials)
-        uid = decoded_token["uid"]
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
@@ -42,6 +42,7 @@ def get_current_user(
     if token_email and _is_email_banned(token_email, db):
         raise HTTPException(status_code=403, detail={"code": "account_banned", "message": "Your account has been permanently banned."})
 
+    uid = decoded_token["uid"]
     user = db.get(User, uid)
     if user:
         now = datetime.now(timezone.utc)
@@ -59,6 +60,60 @@ def get_current_user(
                     status_code=403,
                     detail={"code": "account_suspended", "message": f"Your account has been suspended until {until}."},
                 )
+
+    return decoded_token
+
+
+def get_current_user(claims: dict = Depends(get_token_claims)) -> str:
+    return claims["uid"]
+
+
+def get_token_claims_strict(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Like get_token_claims but calls Firebase with check_revoked=True."""
+    try:
+        decoded_token = verify_token_strict(credentials.credentials)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    token_email = decoded_token.get("email", "")
+    if token_email and _is_email_banned(token_email, db):
+        raise HTTPException(status_code=403, detail={"code": "account_banned", "message": "Your account has been permanently banned."})
+
+    from app.models.user import User
+    uid = decoded_token["uid"]
+    user = db.get(User, uid)
+    if user and user.is_banned:
+        raise HTTPException(status_code=403, detail={"code": "account_banned", "message": "Your account has been banned."})
+
+    return decoded_token
+
+
+def get_current_user_strict(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    db: Session = Depends(get_db),
+) -> str:
+    """Like get_current_user but calls Firebase with check_revoked=True.
+
+    Use on destructive or credential-changing endpoints (account deletion,
+    email update) so revoked tokens are rejected immediately.
+    """
+    try:
+        decoded_token = verify_token_strict(credentials.credentials)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    uid = decoded_token["uid"]
+    token_email = decoded_token.get("email", "")
+    if token_email and _is_email_banned(token_email, db):
+        raise HTTPException(status_code=403, detail={"code": "account_banned", "message": "Your account has been permanently banned."})
+
+    from app.models.user import User
+    user = db.get(User, uid)
+    if user and user.is_banned:
+        raise HTTPException(status_code=403, detail={"code": "account_banned", "message": "Your account has been banned."})
 
     return uid
 

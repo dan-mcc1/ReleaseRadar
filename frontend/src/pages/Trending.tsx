@@ -222,14 +222,71 @@ function PosterCard({
 }
 
 
+const SKELETON_CARDS = Array.from({ length: 8 });
+
+function SkeletonCards() {
+  return (
+    <>
+      {SKELETON_CARDS.map((_, i) => (
+        <div key={i} className="w-[180px] flex-shrink-0 animate-pulse">
+          <div className="aspect-[2/3] rounded-xl bg-neutral-800" />
+          <div className="h-3 bg-neutral-800 rounded mt-2 w-3/4" />
+          <div className="h-2.5 bg-neutral-800 rounded mt-1.5 w-1/2" />
+        </div>
+      ))}
+    </>
+  );
+}
+
+// Owns its own filter state so changing a filter only re-renders this row
+function FilteredScrollRow({
+  title,
+  subtitle,
+  items,
+  loading,
+  bulkStatuses,
+  showReleaseDates = false,
+  navigate,
+}: {
+  title: string;
+  subtitle?: string;
+  items: TypedItem[];
+  loading: boolean;
+  bulkStatuses?: Record<string, { status: WatchStatus }>;
+  showReleaseDates?: boolean;
+  navigate: (path: string) => void;
+}) {
+  const [filter, setFilter] = useState<ContentFilter>("all");
+  const filtered = filter === "all" ? items : items.filter((i) => i._type === filter);
+
+  return (
+    <ScrollRow
+      title={title}
+      subtitle={subtitle}
+      loading={loading}
+      filter={filter}
+      onFilterChange={setFilter}
+    >
+      {loading ? (
+        <SkeletonCards />
+      ) : (
+        filtered.map((item) => (
+          <PosterCard
+            key={`${item._type}-${item.id}`}
+            item={item}
+            onClick={() => navigate(`/${item._type}/${item.id}`)}
+            releaseDate={showReleaseDates ? getFormattedDate(item) : undefined}
+            initialStatus={bulkStatuses?.[`${item._type}:${item.id}`]?.status}
+          />
+        ))
+      )}
+    </ScrollRow>
+  );
+}
+
 export default function Trending() {
   usePageTitle("Discover");
   const navigate = useNavigate();
-  const [trendingFilter, setTrendingFilter] = useState<ContentFilter>("all");
-  const [upcomingFilter, setUpcomingFilter] = useState<ContentFilter>("all");
-  const [popularFilter, setPopularFilter] = useState<ContentFilter>("all");
-  const [topRatedFilter, setTopRatedFilter] = useState<ContentFilter>("all");
-
   const { data: multiData, isPending: multiLoading } = useTrendingMulti();
   const { data: airingTodayData, isPending: airingTodayLoading } = useAiringToday();
   const { data: nowPlayingData, isPending: nowPlayingLoading } = useNowPlaying();
@@ -275,10 +332,6 @@ export default function Trending() {
     return da.localeCompare(db);
   });
 
-  const filteredTrending =
-    trendingFilter === "all" ? trendingItems : trendingItems.filter((i) => i._type === trendingFilter);
-  const filteredUpcoming =
-    upcomingFilter === "all" ? upcomingItems : upcomingItems.filter((i) => i._type === upcomingFilter);
 
   const hero: AnyItem | null = trendingMovies[0] ?? trendingShows[0] ?? null;
   const heroType: "movie" | "tv" = trendingMovies[0] ? "movie" : "tv";
@@ -314,10 +367,6 @@ export default function Trending() {
     if (topRatedShows[i]) topRatedItems.push({ ...topRatedShows[i], _type: "tv" });
   }
 
-  const filteredPopular =
-    popularFilter === "all" ? popularItems : popularItems.filter((i) => i._type === popularFilter);
-  const filteredTopRated =
-    topRatedFilter === "all" ? topRatedItems : topRatedItems.filter((i) => i._type === topRatedFilter);
 
   const allUniqueItems = Object.values(
     [...trendingItems, ...upcomingItems, ...airingTodayItems, ...nowPlayingItems, ...popularItems, ...topRatedItems]
@@ -376,158 +425,64 @@ export default function Trending() {
         </div>
       ) : null}
 
-      {/* Trending row */}
-      <ScrollRow
-title="Trending this week"
+      <FilteredScrollRow
+        title="Trending this week"
         subtitle="What people are talking about"
+        items={trendingItems}
         loading={multiLoading}
-        filter={trendingFilter}
-        onFilterChange={setTrendingFilter}
-      >
-        {multiLoading
-          ? Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="w-[180px] flex-shrink-0 animate-pulse">
-                <div className="aspect-[2/3] rounded-xl bg-neutral-800" />
-                <div className="h-3 bg-neutral-800 rounded mt-2 w-3/4" />
-                <div className="h-2.5 bg-neutral-800 rounded mt-1.5 w-1/2" />
-              </div>
-            ))
-          : filteredTrending.map((item) => (
-              <PosterCard
-                key={`${item._type}-${item.id}`}
-                item={item}
-                onClick={() => navigate(`/${item._type}/${item.id}`)}
-                initialStatus={bulkStatuses?.[`${item._type}:${item.id}`]?.status}
-              />
-            ))}
-      </ScrollRow>
+        bulkStatuses={bulkStatuses}
+        navigate={navigate}
+      />
 
-      {/* Upcoming row */}
-      <ScrollRow
-title="Coming soon"
+      <FilteredScrollRow
+        title="Coming soon"
         subtitle={formatDateRange()}
+        items={upcomingItems}
         loading={upcomingLoading}
-        filter={upcomingFilter}
-        onFilterChange={setUpcomingFilter}
-      >
-        {upcomingLoading
-          ? Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="w-[180px] flex-shrink-0 animate-pulse">
-                <div className="aspect-[2/3] rounded-xl bg-neutral-800" />
-                <div className="h-3 bg-neutral-800 rounded mt-2 w-3/4" />
-                <div className="h-2.5 bg-neutral-800 rounded mt-1.5 w-1/2" />
-              </div>
-            ))
-          : filteredUpcoming.map((item) => (
-              <PosterCard
-                key={`${item._type}-${item.id}`}
-                item={item}
-                releaseDate={getFormattedDate(item)}
-                onClick={() => navigate(`/${item._type}/${item.id}`)}
-                initialStatus={bulkStatuses?.[`${item._type}:${item.id}`]?.status}
-              />
-            ))}
+        bulkStatuses={bulkStatuses}
+        showReleaseDates
+        navigate={navigate}
+      />
+
+      <ScrollRow title="Airing today" subtitle="New episodes on TV right now" loading={airingTodayLoading}>
+        {airingTodayLoading ? <SkeletonCards /> : airingTodayItems.map((item) => (
+          <PosterCard
+            key={`${item._type}-${item.id}`}
+            item={item}
+            onClick={() => navigate(`/${item._type}/${item.id}`)}
+            initialStatus={bulkStatuses?.[`${item._type}:${item.id}`]?.status}
+          />
+        ))}
       </ScrollRow>
 
-      {/* Airing Today row */}
-      <ScrollRow
-title="Airing today"
-        subtitle="New episodes on TV right now"
-        loading={airingTodayLoading}
-      >
-        {airingTodayLoading
-          ? Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="w-[180px] flex-shrink-0 animate-pulse">
-                <div className="aspect-[2/3] rounded-xl bg-neutral-800" />
-                <div className="h-3 bg-neutral-800 rounded mt-2 w-3/4" />
-                <div className="h-2.5 bg-neutral-800 rounded mt-1.5 w-1/2" />
-              </div>
-            ))
-          : airingTodayItems.map((item) => (
-              <PosterCard
-                key={`${item._type}-${item.id}`}
-                item={item}
-                onClick={() => navigate(`/${item._type}/${item.id}`)}
-                initialStatus={bulkStatuses?.[`${item._type}:${item.id}`]?.status}
-              />
-            ))}
+      <ScrollRow title="In theaters now" subtitle="Currently showing on the big screen" loading={nowPlayingLoading}>
+        {nowPlayingLoading ? <SkeletonCards /> : nowPlayingItems.map((item) => (
+          <PosterCard
+            key={`${item._type}-${item.id}`}
+            item={item}
+            onClick={() => navigate(`/${item._type}/${item.id}`)}
+            initialStatus={bulkStatuses?.[`${item._type}:${item.id}`]?.status}
+          />
+        ))}
       </ScrollRow>
 
-      {/* Now Playing row */}
-      <ScrollRow
-title="In theaters now"
-        subtitle="Currently showing on the big screen"
-        loading={nowPlayingLoading}
-      >
-        {nowPlayingLoading
-          ? Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="w-[180px] flex-shrink-0 animate-pulse">
-                <div className="aspect-[2/3] rounded-xl bg-neutral-800" />
-                <div className="h-3 bg-neutral-800 rounded mt-2 w-3/4" />
-                <div className="h-2.5 bg-neutral-800 rounded mt-1.5 w-1/2" />
-              </div>
-            ))
-          : nowPlayingItems.map((item) => (
-              <PosterCard
-                key={`${item._type}-${item.id}`}
-                item={item}
-                onClick={() => navigate(`/${item._type}/${item.id}`)}
-                initialStatus={bulkStatuses?.[`${item._type}:${item.id}`]?.status}
-              />
-            ))}
-      </ScrollRow>
-
-      {/* Popular row */}
-      <ScrollRow
-title="Popular right now"
+      <FilteredScrollRow
+        title="Popular right now"
         subtitle="What people are watching"
+        items={popularItems}
         loading={popularLoading}
-        filter={popularFilter}
-        onFilterChange={setPopularFilter}
-      >
-        {popularLoading
-          ? Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="w-[180px] flex-shrink-0 animate-pulse">
-                <div className="aspect-[2/3] rounded-xl bg-neutral-800" />
-                <div className="h-3 bg-neutral-800 rounded mt-2 w-3/4" />
-                <div className="h-2.5 bg-neutral-800 rounded mt-1.5 w-1/2" />
-              </div>
-            ))
-          : filteredPopular.map((item) => (
-              <PosterCard
-                key={`${item._type}-${item.id}`}
-                item={item}
-                onClick={() => navigate(`/${item._type}/${item.id}`)}
-                initialStatus={bulkStatuses?.[`${item._type}:${item.id}`]?.status}
-              />
-            ))}
-      </ScrollRow>
+        bulkStatuses={bulkStatuses}
+        navigate={navigate}
+      />
 
-      {/* Top Rated row */}
-      <ScrollRow
-title="Top rated"
+      <FilteredScrollRow
+        title="Top rated"
         subtitle="The highest-rated of all time"
+        items={topRatedItems}
         loading={topRatedLoading}
-        filter={topRatedFilter}
-        onFilterChange={setTopRatedFilter}
-      >
-        {topRatedLoading
-          ? Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="w-[180px] flex-shrink-0 animate-pulse">
-                <div className="aspect-[2/3] rounded-xl bg-neutral-800" />
-                <div className="h-3 bg-neutral-800 rounded mt-2 w-3/4" />
-                <div className="h-2.5 bg-neutral-800 rounded mt-1.5 w-1/2" />
-              </div>
-            ))
-          : filteredTopRated.map((item) => (
-              <PosterCard
-                key={`${item._type}-${item.id}`}
-                item={item}
-                onClick={() => navigate(`/${item._type}/${item.id}`)}
-                initialStatus={bulkStatuses?.[`${item._type}:${item.id}`]?.status}
-              />
-            ))}
-      </ScrollRow>
+        bulkStatuses={bulkStatuses}
+        navigate={navigate}
+      />
     </div>
   );
 }

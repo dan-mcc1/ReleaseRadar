@@ -10,7 +10,8 @@ from app.dependencies.auth import get_current_user
 from app.services.tmdb_movies import search_movies, fetch_movie_from_tmdb
 from app.services.tmdb_tv import fetch_show_from_tmdb
 from app.services.tmdb_search import get_tv_search_results
-from app.services.watchlist_service import ensure_movie_in_db, ensure_show_in_db, add_to_watchlist
+from app.services.media_upsert import ensure_movie_in_db, ensure_show_in_db
+from app.services.watchlist_service import add_to_watchlist
 from app.services.episode_service import maybe_sync_show_episodes
 from app.models.watched import Watched
 from app.models.watchlist import Watchlist
@@ -86,15 +87,26 @@ def _find_tmdb_result(name: str, year: int | None) -> tuple[int, str] | None:
     return None
 
 
+_MAX_CSV_BYTES = 50 * 1024 * 1024  # 50 MB per file
+_MAX_TOTAL_BYTES = 100 * 1024 * 1024  # 100 MB across all files
+
+
 def _extract_csvs_from_zip(raw_bytes: bytes) -> dict[str, str]:
     try:
         with zipfile.ZipFile(io.BytesIO(raw_bytes)) as zf:
             out: dict[str, str] = {}
-            for zip_path in zf.namelist():
-                basename = zip_path.split("/")[-1].lower()
-                if basename.endswith(".csv"):
-                    data = zf.read(zip_path)
-                    out[basename] = data.decode("utf-8-sig", errors="replace")
+            total = 0
+            for info in zf.infolist():
+                basename = info.filename.split("/")[-1].lower()
+                if not basename.endswith(".csv"):
+                    continue
+                if info.file_size > _MAX_CSV_BYTES:
+                    raise HTTPException(status_code=422, detail=f"CSV file '{basename}' exceeds 50 MB limit.")
+                total += info.file_size
+                if total > _MAX_TOTAL_BYTES:
+                    raise HTTPException(status_code=422, detail="Total uncompressed CSV size exceeds 100 MB limit.")
+                data = zf.read(info.filename)
+                out[basename] = data.decode("utf-8-sig", errors="replace")
             return out
     except zipfile.BadZipFile:
         raise HTTPException(status_code=422, detail="Invalid zip file.")

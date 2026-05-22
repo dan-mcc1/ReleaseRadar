@@ -52,7 +52,7 @@ def suggest_friends(
 
 
 @router.post("/request")
-@limiter.limit("20/minute")
+@limiter.limit("5/minute")
 def send_request(
     request: Request,
     addressee_username: str = Body(...),

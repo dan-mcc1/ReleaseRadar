@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.dependencies.auth import get_current_user
+from app.dependencies.subscription import require_admin
 from app.models.episode import Episode
 from app.models.episode_watched import EpisodeWatched
 from app.models.show import Show
@@ -23,7 +23,7 @@ router = APIRouter()
 def test_new_season(
     show_id: int,
     db: Session = Depends(get_db),
-    uid: str = Depends(get_current_user),
+    uid: str = Depends(require_admin),
 ):
     """
     Simulate a new season being added for a show you have in Watched.
@@ -151,7 +151,7 @@ def test_new_season(
 @router.post("/trigger-episode-refresh")
 def trigger_episode_refresh(
     db: Session = Depends(get_db),
-    uid: str = Depends(get_current_user),
+    uid: str = Depends(require_admin),
 ):
     """
     Manually run the nightly episode refresh + reactivation check right now.
@@ -170,7 +170,7 @@ def trigger_episode_refresh(
 @router.post("/trigger-streaming-refresh")
 def trigger_streaming_refresh(
     db: Session = Depends(get_db),
-    uid: str = Depends(get_current_user),
+    uid: str = Depends(require_admin),
 ):
     """
     Manually run the streaming provider refresh right now against live TMDb data.
@@ -285,7 +285,7 @@ def trigger_streaming_refresh(
 @router.post("/test-streaming-email")
 def test_streaming_email(
     db: Session = Depends(get_db),
-    uid: str = Depends(get_current_user),
+    uid: str = Depends(require_admin),
 ):
     """
     Send a test streaming alert email to the current user with fake data.
@@ -333,7 +333,7 @@ def test_streaming_email(
 @router.post("/test-trailer-email")
 def test_trailer_email(
     db: Session = Depends(get_db),
-    uid: str = Depends(get_current_user),
+    uid: str = Depends(require_admin),
 ):
     """
     Send a test trailer alert email to the current user with fake data.

@@ -100,6 +100,27 @@ def _diff_and_update_providers(
     return added_names, removed_names
 
 
+def ensure_providers_populated(db: Session, content_id: int, content_type: str) -> None:
+    """
+    Fast path for newly-tracked content: if no provider rows exist yet, fetch
+    and insert them immediately rather than waiting for the nightly refresh.
+    Failures are swallowed — the nightly job is the reliable fallback.
+    """
+    link_model = ShowProvider if content_type == "tv" else MovieProvider
+    id_kwarg = {"show_id": content_id} if content_type == "tv" else {"movie_id": content_id}
+
+    already_stored = db.query(link_model).filter_by(**id_kwarg).first() is not None
+    if already_stored:
+        return
+
+    try:
+        fresh = _fetch_fresh_us_providers(content_id, content_type)
+        _diff_and_update_providers(db, content_id, content_type, fresh)
+        # No commit — caller owns the transaction
+    except Exception:
+        pass
+
+
 def refresh_streaming_providers(db: Session) -> None:
     """
     Nightly task: refresh TMDb watch providers for all tracked content,

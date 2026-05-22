@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 def delete_old_activity(db: Session, days: int = 7) -> int:
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     deleted = db.query(Activity).filter(Activity.created_at < cutoff).delete()
     db.commit()
     return deleted
@@ -184,8 +184,8 @@ def lift_expired_moderation(db: Session) -> None:
 
     cleared = (
         db.query(User)
-        .filter(User.is_silenced == False, User.silenced_until != None, User.silenced_until <= now)  # noqa: E712
-        .update({"silenced_until": None}, synchronize_session=False)
+        .filter(User.is_silenced == True, User.silenced_until != None, User.silenced_until <= now)  # noqa: E712
+        .update({"is_silenced": False, "silenced_until": None}, synchronize_session=False)
     )
 
     db.commit()

@@ -1,14 +1,19 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "./queryKeys";
-import { queryFetch } from "./queryFetch";
-import { apiFetch } from "../../utils/apiFetch";
+import { queryFetch, checkedFetch } from "./queryFetch";
 import { useAuthUser } from "../useAuthUser";
+
+export interface BlockEntry {
+  user_id: string;
+  username: string | null;
+  blocked_at: string;
+}
 
 export function useMyBlocks() {
   const user = useAuthUser();
-  return useQuery({
+  return useQuery<BlockEntry[]>({
     queryKey: queryKeys.myBlocks(user?.uid ?? ""),
-    queryFn: () => queryFetch("/moderation/blocks"),
+    queryFn: () => queryFetch<BlockEntry[]>("/moderation/blocks"),
     enabled: !!user,
   });
 }
@@ -18,7 +23,7 @@ export function useBlockUser() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (userId: string) =>
-      apiFetch(`/moderation/block/${userId}`, { method: "POST" }),
+      checkedFetch(`/moderation/block/${userId}`, { method: "POST" }),
     onSuccess: () => {
       if (!user) return;
       queryClient.invalidateQueries({ queryKey: queryKeys.myBlocks(user.uid) });
@@ -31,7 +36,7 @@ export function useUnblockUser() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (userId: string) =>
-      apiFetch(`/moderation/block/${userId}`, { method: "DELETE" }),
+      checkedFetch(`/moderation/block/${userId}`, { method: "DELETE" }),
     onSuccess: () => {
       if (!user) return;
       queryClient.invalidateQueries({ queryKey: queryKeys.myBlocks(user.uid) });
@@ -57,7 +62,7 @@ export interface SubmitReportPayload {
 export function useSubmitReport() {
   return useMutation({
     mutationFn: (payload: SubmitReportPayload) =>
-      apiFetch("/moderation/report", {
+      checkedFetch("/moderation/report", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -88,7 +93,7 @@ export function useAcceptReport() {
       adminNotes?: string;
       suspendDays?: number;
     }) =>
-      apiFetch(`/admin/reports/${reportId}/accept`, {
+      checkedFetch(`/admin/reports/${reportId}/accept`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -113,7 +118,7 @@ export function useRejectReport() {
       reportId: number;
       adminNotes?: string;
     }) =>
-      apiFetch(`/admin/reports/${reportId}/reject`, {
+      checkedFetch(`/admin/reports/${reportId}/reject`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ admin_notes: adminNotes ?? null }),
@@ -128,7 +133,7 @@ export function useUnsuspendUser() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (userId: string) =>
-      apiFetch(`/admin/users/${userId}/unsuspend`, { method: "POST" }),
+      checkedFetch(`/admin/users/${userId}/unsuspend`, { method: "POST" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
     },
@@ -139,7 +144,7 @@ export function useAdminSuspendUser() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ userId, days, reason }: { userId: string; days: number; reason?: string }) =>
-      apiFetch(`/admin/users/${userId}/suspend`, {
+      checkedFetch(`/admin/users/${userId}/suspend`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ days, reason: reason ?? null }),
@@ -154,7 +159,7 @@ export function useAdminDeleteUser() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (userId: string) =>
-      apiFetch(`/admin/users/${userId}`, { method: "DELETE" }),
+      checkedFetch(`/admin/users/${userId}`, { method: "DELETE" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
     },
@@ -172,7 +177,7 @@ export function useApproveAppeal() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ appealId, adminNotes, liftSilence }: { appealId: number; adminNotes?: string; liftSilence?: boolean }) =>
-      apiFetch(`/admin/appeals/${appealId}/approve`, {
+      checkedFetch(`/admin/appeals/${appealId}/approve`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ admin_notes: adminNotes ?? null, lift_silence: liftSilence ?? false }),
@@ -187,7 +192,7 @@ export function useRejectAppeal() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ appealId, adminNotes }: { appealId: number; adminNotes?: string }) =>
-      apiFetch(`/admin/appeals/${appealId}/reject`, {
+      checkedFetch(`/admin/appeals/${appealId}/reject`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ admin_notes: adminNotes ?? null }),
@@ -210,7 +215,7 @@ export function usePromoteUser() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ userId, tier }: { userId: string; tier: string }) =>
-      apiFetch(`/admin/users/${userId}/tier`, {
+      checkedFetch(`/admin/users/${userId}/tier`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tier }),
@@ -225,7 +230,7 @@ export function useAdminBanUser() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ userId, reason }: { userId: string; reason?: string }) =>
-      apiFetch(`/admin/users/${userId}/ban`, {
+      checkedFetch(`/admin/users/${userId}/ban`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reason: reason ?? null }),
@@ -240,7 +245,7 @@ export function useAdminUnbanUser() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (userId: string) =>
-      apiFetch(`/admin/users/${userId}/unban`, { method: "POST" }),
+      checkedFetch(`/admin/users/${userId}/unban`, { method: "POST" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
     },
@@ -251,7 +256,7 @@ export function useAdminUnsilenceUser() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (userId: string) =>
-      apiFetch(`/admin/users/${userId}/unsilence`, { method: "POST" }),
+      checkedFetch(`/admin/users/${userId}/unsilence`, { method: "POST" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
     },
@@ -272,7 +277,7 @@ export function useAdminRemoveBannedEmail() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (entryId: number) =>
-      apiFetch(`/admin/banned-emails/${entryId}`, { method: "DELETE" }),
+      checkedFetch(`/admin/banned-emails/${entryId}`, { method: "DELETE" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin", "banned-emails"] });
     },

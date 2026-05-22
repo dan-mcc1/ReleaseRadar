@@ -1,5 +1,5 @@
 # app/routers/episode_watched.py
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Body
+from fastapi import APIRouter, Depends, HTTPException, Request, Body
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.services.watched_episode_service import (
@@ -11,11 +11,11 @@ from app.services.watched_episode_service import (
     get_next_unwatched_episodes_bulk,
     add_season_watched,
     remove_season_watched,
-    maybe_auto_complete_show,
 )
 from app.dependencies.auth import get_current_user
 from app.core.limiter import limiter
 from app.models.episode_watched import EpisodeWatched
+from app.services.stats_service import invalidate_stats_cache
 
 router = APIRouter()
 
@@ -25,7 +25,6 @@ router = APIRouter()
 @limiter.limit("60/minute")
 def add_episode(
     request: Request,
-    background_tasks: BackgroundTasks,
     show_id: int,
     season_number: int,
     episode_number: int,
@@ -33,7 +32,7 @@ def add_episode(
     uid: str = Depends(get_current_user),
 ):
     result = add_episode_watched(db, uid, show_id, season_number, episode_number)
-    background_tasks.add_task(maybe_auto_complete_show, db, uid, show_id)
+    invalidate_stats_cache(uid)
     return result
 
 
@@ -46,7 +45,9 @@ def remove_episode(
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
-    return remove_episode_watched(db, uid, show_id, season_number, episode_number)
+    result = remove_episode_watched(db, uid, show_id, season_number, episode_number)
+    invalidate_stats_cache(uid)
+    return result
 
 
 # Get all watched episodes for the current user

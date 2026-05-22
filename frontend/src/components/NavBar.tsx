@@ -19,6 +19,7 @@ import { apiFetch } from "../utils/apiFetch";
 import { useNavCounts, useNavAvatar } from "../hooks/api/useNavCounts";
 import { queryKeys } from "../hooks/api/queryKeys";
 import { useUserMe } from "../hooks/api/useUser";
+import { useSearch } from "../hooks/api/useSearch";
 import { useRecommendationsInbox, useMarkRecRead } from "../hooks/api/useRecommendations";
 import { useFriendRequestsIncoming, useRespondToFriendRequest } from "../hooks/api/useFriends";
 
@@ -102,46 +103,39 @@ function NavDropdown({
     <Menu as="div" className="relative">
       <MenuButton
         className={classNames(
-          isActive
-            ? "bg-neutral-800 text-white"
-            : "text-neutral-400 hover:text-neutral-100 hover:bg-neutral-900",
-          "inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-[13.5px] font-medium tracking-[-0.01em] transition-colors",
+          isActive ? "bg-neutral-800 text-white" : "text-neutral-400 hover:text-neutral-100 hover:bg-neutral-900",
+          "flex items-center gap-1 rounded-lg px-3 py-1.5 text-[13.5px] font-medium tracking-[-0.01em] transition-colors focus:outline-none",
         )}
       >
         {label}
         {totalBadge > 0 && <Badge count={totalBadge} />}
         <svg
-          className="w-3 h-3 opacity-50"
+          className="ml-0.5 w-3.5 h-3.5 opacity-50"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
           strokeWidth={2.5}
         >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            d="M19 9l-7 7-7-7"
-          />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
         </svg>
       </MenuButton>
       <MenuItems
         modal={false}
-        className="absolute left-0 z-20 mt-1.5 w-44 origin-top-left rounded-xl bg-neutral-900 border border-neutral-700/70 py-1 shadow-2xl shadow-black/40 transition data-closed:scale-95 data-closed:opacity-0 data-enter:duration-100 data-enter:ease-out data-leave:duration-75 data-leave:ease-in"
+        transition
+        className="absolute left-0 z-20 mt-1 w-48 origin-top-left rounded-xl bg-neutral-900 border border-neutral-700/70 py-1 shadow-2xl shadow-black/40 transition data-closed:scale-95 data-closed:transform data-closed:opacity-0 data-enter:duration-100 data-enter:ease-out data-leave:duration-75 data-leave:ease-in"
       >
-        {links.map((link) => {
-          const badge = badges?.[link.href] ?? 0;
+        {links.map((item) => {
+          const badge = badges?.[item.href] ?? 0;
           return (
-            <MenuItem key={link.name}>
+            <MenuItem key={item.name}>
               <Link
-                to={link.href}
+                to={item.href}
                 className={classNames(
-                  currentPath === link.href
-                    ? "text-white bg-white/8"
-                    : "text-neutral-400",
-                  "flex items-center justify-between px-3 py-2 text-[13px] font-medium hover:bg-white/5 hover:text-white data-focus:bg-white/5 data-focus:outline-hidden transition-colors",
+                  item.href === currentPath ? "bg-white/5" : "",
+                  "flex items-center justify-between px-3 py-2 text-[13px] font-medium text-neutral-300 data-focus:bg-white/5 data-focus:outline-hidden hover:bg-white/5 transition-colors",
                 )}
               >
-                {link.name}
+                {item.name}
                 {badge > 0 && <Badge count={badge} />}
               </Link>
             </MenuItem>
@@ -152,57 +146,38 @@ function NavDropdown({
   );
 }
 
-export default function NavBar() {
-  const location = useLocation();
+// Desktop search — owns all search state so typing doesn't re-render the rest of the nav
+function SearchBar() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const [user, setUser] = useState(auth.currentUser);
-  const [mobileDiscoverOpen, setMobileDiscoverOpen] = useState(false);
-  const [mobileLibraryOpen, setMobileLibraryOpen] = useState(false);
-  const mobileCloseRef = useRef<HTMLButtonElement>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [dropdownResults, setDropdownResults] = useState<SearchResult[]>([]);
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [dropdownLoading, setDropdownLoading] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
-  const [notifOpen, setNotifOpen] = useState(false);
-  const notifRef = useRef<HTMLDivElement>(null);
-  const esRef = useRef<EventSource | null>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const dropdownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const dropdownAbortRef = useRef<AbortController | null>(null);
-
-  const { data: navCounts } = useNavCounts();
-  const { data: avatarKey } = useNavAvatar();
-  const { data: userMe } = useUserMe();
-  const pendingRequests = navCounts?.pendingRequests ?? 0;
-  const unreadRecs = navCounts?.unreadRecs ?? 0;
-  const showUpgradeCta = user && userMe?.subscription_tier === "free";
   const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/.test(navigator.platform);
-  const hasNotifications = pendingRequests > 0 || unreadRecs > 0;
 
-  const { data: recsRaw } = useRecommendationsInbox();
-  const { data: requestsRaw } = useFriendRequestsIncoming();
-  const notifRecs = ((recsRaw ?? []) as RecommendationItem[]).filter(r => !r.is_read).slice(0, 4);
-  const notifRequests = ((requestsRaw ?? []) as FriendRequest[]).slice(0, 4);
-  const totalNotifs = notifRecs.length + notifRequests.length;
+  const { data: searchData, isPending: searchPending } = useSearch(debouncedQuery);
 
-  const markRecRead = useMarkRecRead();
-  const respondToRequest = useRespondToFriendRequest();
-
-  function cancelPendingDropdown() {
-    if (dropdownTimerRef.current) clearTimeout(dropdownTimerRef.current);
-    if (dropdownAbortRef.current) dropdownAbortRef.current.abort();
-    dropdownTimerRef.current = null;
-    dropdownAbortRef.current = null;
-  }
+  const dropdownResults: SearchResult[] = (() => {
+    if (!searchData) return [];
+    const shows = (searchData.shows ?? []).slice(0, 3).map((r) => ({ ...r, media_type: "tv" as const }));
+    const movies = (searchData.movies ?? []).slice(0, 2).map((r) => ({ ...r, media_type: "movie" as const }));
+    const people = (searchData.people ?? []).slice(0, 1).map((r) => ({ ...r, media_type: "person" as const }));
+    const combined: SearchResult[] = [];
+    const maxLen = Math.max(shows.length, movies.length, people.length);
+    for (let i = 0; i < maxLen; i++) {
+      if (shows[i]) combined.push(shows[i]);
+      if (movies[i]) combined.push(movies[i]);
+      if (people[i]) combined.push(people[i]);
+    }
+    return combined.slice(0, 6);
+  })();
+  const dropdownLoading = searchPending && debouncedQuery.length > 0;
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && searchQuery.trim() !== "") {
-      cancelPendingDropdown();
       setDropdownOpen(false);
-      setDropdownLoading(false);
       navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
     }
     if (e.key === "Escape") {
@@ -210,7 +185,6 @@ export default function NavBar() {
     }
   };
 
-  // ⌘K / Ctrl+K focuses search
   useEffect(() => {
     function handleGlobalKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
@@ -222,69 +196,165 @@ export default function NavBar() {
     return () => document.removeEventListener("keydown", handleGlobalKey);
   }, []);
 
-  // Debounced search for dropdown
   useEffect(() => {
     const q = searchQuery.trim();
     if (!q) {
-      setDropdownResults([]);
+      setDebouncedQuery("");
       setDropdownOpen(false);
       return;
     }
-    const abort = new AbortController();
-    dropdownAbortRef.current = abort;
-    const timer = setTimeout(async () => {
-      setDropdownLoading(true);
-      try {
-        const res = await apiFetch(`/search?query=${encodeURIComponent(q)}`, {
-          signal: abort.signal,
-        });
-        if (res.ok) {
-          const data: {
-            movies: SearchResult[];
-            shows: SearchResult[];
-            people: SearchResult[];
-          } = await res.json();
-          const shows = (data.shows ?? [])
-            .slice(0, 3)
-            .map((r) => ({ ...r, media_type: "tv" as const }));
-          const movies = (data.movies ?? [])
-            .slice(0, 2)
-            .map((r) => ({ ...r, media_type: "movie" as const }));
-          const people = (data.people ?? [])
-            .slice(0, 1)
-            .map((r) => ({ ...r, media_type: "person" as const }));
-          const combined: SearchResult[] = [];
-          const maxLen = Math.max(shows.length, movies.length, people.length);
-          for (let i = 0; i < maxLen; i++) {
-            if (shows[i]) combined.push(shows[i]);
-            if (movies[i]) combined.push(movies[i]);
-            if (people[i]) combined.push(people[i]);
-          }
-          setDropdownResults(combined.slice(0, 6));
-          setDropdownOpen(true);
-        }
-      } catch {
-        // ignore (includes AbortError)
-      } finally {
-        setDropdownLoading(false);
-      }
+    const timer = setTimeout(() => {
+      setDebouncedQuery(q);
+      setDropdownOpen(true);
     }, 300);
-    dropdownTimerRef.current = timer;
-    return () => {
-      clearTimeout(timer);
-      abort.abort();
-    };
+    return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Close dropdowns on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (
-        searchContainerRef.current &&
-        !searchContainerRef.current.contains(e.target as Node)
-      ) {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
         setDropdownOpen(false);
       }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  return (
+    <div ref={searchContainerRef} className="relative hidden lg:block">
+      <div
+        className={classNames(
+          "flex items-center gap-2 h-9 px-3 rounded-xl border transition-colors cursor-text w-72",
+          searchFocused
+            ? "bg-neutral-900 border-neutral-600"
+            : "bg-neutral-900 border-neutral-700/70",
+        )}
+        onClick={() => searchInputRef.current?.focus()}
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="currentColor"
+          className="w-[15px] h-[15px] text-neutral-500 shrink-0"
+        >
+          <path d="M10 2a8 8 0 105.293 14.293l4.707 4.707 1.414-1.414-4.707-4.707A8 8 0 0010 2zm0 2a6 6 0 110 12 6 6 0 010-12z" />
+        </svg>
+        <input
+          ref={searchInputRef}
+          type="text"
+          value={searchQuery}
+          onKeyDown={handleKeyDown}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          onFocus={() => {
+            setSearchFocused(true);
+            if (dropdownResults.length > 0) setDropdownOpen(true);
+          }}
+          onBlur={() => setSearchFocused(false)}
+          placeholder="Search shows, movies, people"
+          className="flex-1 bg-transparent text-white text-[13px] placeholder-neutral-500 focus:outline-none min-w-0"
+        />
+        {searchQuery ? (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setSearchQuery(""); }}
+            className="text-neutral-500 hover:text-neutral-300 transition-colors shrink-0"
+          >
+            <XMarkIcon className="w-3.5 h-3.5" />
+          </button>
+        ) : (
+          <span className="font-mono text-[11px] px-1.5 py-0.5 border border-neutral-700 rounded text-neutral-600 shrink-0 select-none">
+            {isMac ? "⌘K" : "Ctrl K"}
+          </span>
+        )}
+      </div>
+
+      {dropdownOpen && (
+        <div className="absolute top-full mt-1.5 right-0 w-80 bg-neutral-900 border border-neutral-700/70 rounded-xl shadow-2xl shadow-black/50 z-50 overflow-hidden">
+          {dropdownLoading && dropdownResults.length === 0 ? (
+            <div className="px-4 py-3 text-[13px] text-neutral-500">Searching…</div>
+          ) : dropdownResults.length === 0 ? (
+            <div className="px-4 py-3 text-[13px] text-neutral-500">No results found.</div>
+          ) : (
+            <>
+              {dropdownResults.map((result) => {
+                const label = result.title ?? result.name ?? "";
+                const href =
+                  result.media_type === "movie"
+                    ? `/movie/${result.id}`
+                    : result.media_type === "tv"
+                      ? `/tv/${result.id}`
+                      : `/person/${result.id}`;
+                const imgPath =
+                  result.media_type === "person" ? result.profile_path : result.poster_path;
+                const typeLabel =
+                  result.media_type === "movie"
+                    ? "Movie"
+                    : result.media_type === "tv"
+                      ? "TV Show"
+                      : "Person";
+                return (
+                  <Link
+                    key={`${result.media_type}-${result.id}`}
+                    to={href}
+                    onClick={() => { setDropdownOpen(false); setSearchQuery(""); }}
+                    className="flex items-center gap-3 px-3 py-2 hover:bg-white/5 transition-colors"
+                  >
+                    <div className="flex-shrink-0 w-8 h-12 rounded-lg overflow-hidden bg-neutral-800">
+                      {imgPath ? (
+                        <img
+                          src={`${BASE_IMAGE_URL}/w185${imgPath}`}
+                          alt={label}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-neutral-500 text-[9px] text-center leading-tight px-0.5">
+                          {label}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-medium text-white truncate">{label}</p>
+                      <p className="text-[12px] text-neutral-500">{typeLabel}</p>
+                    </div>
+                  </Link>
+                );
+              })}
+              <Link
+                to={`/search?q=${encodeURIComponent(searchQuery.trim())}&type=all`}
+                onClick={() => { setDropdownOpen(false); setSearchQuery(""); }}
+                className="flex items-center justify-center px-3 py-2 border-t border-neutral-800 text-[12px] text-primary-400 hover:text-primary-300 hover:bg-white/5 transition-colors"
+              >
+                See all results →
+              </Link>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Notifications bell — owns open state + notification data so it doesn't spill into the nav
+function NotificationsPanel() {
+  const [notifOpen, setNotifOpen] = useState(false);
+  const notifRef = useRef<HTMLDivElement>(null);
+
+  const { data: navCounts } = useNavCounts();
+  const pendingRequests = navCounts?.pendingRequests ?? 0;
+  const unreadRecs = navCounts?.unreadRecs ?? 0;
+  const hasNotifications = pendingRequests > 0 || unreadRecs > 0;
+
+  const { data: recsRaw } = useRecommendationsInbox();
+  const { data: requestsRaw } = useFriendRequestsIncoming();
+  const notifRecs = ((recsRaw ?? []) as RecommendationItem[]).filter(r => !r.is_read).slice(0, 4);
+  const notifRequests = ((requestsRaw ?? []) as FriendRequest[]).slice(0, 4);
+  const totalNotifs = notifRecs.length + notifRequests.length;
+
+  const markRecRead = useMarkRecRead();
+  const respondToRequest = useRespondToFriendRequest();
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
       if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
         setNotifOpen(false);
       }
@@ -292,6 +362,198 @@ export default function NavBar() {
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
+
+  return (
+    <div ref={notifRef} className="relative hidden lg:block">
+      <button
+        onClick={() => setNotifOpen(o => !o)}
+        className="relative flex items-center justify-center w-9 h-9 rounded-xl border border-neutral-700/70 bg-transparent text-neutral-400 hover:text-neutral-100 hover:border-neutral-600 transition-colors"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={1.8}
+          className="w-[17px] h-[17px]"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"
+          />
+        </svg>
+        {hasNotifications && (
+          <span className="absolute top-[7px] right-[8px] w-[6px] h-[6px] rounded-full bg-primary-400" />
+        )}
+      </button>
+
+      {notifOpen && (
+        <div className="absolute right-0 top-full mt-1.5 w-80 bg-neutral-900 border border-neutral-700/70 rounded-xl shadow-2xl shadow-black/50 z-50 overflow-hidden">
+          <div className="px-3 py-2.5 border-b border-neutral-800 flex items-center justify-between">
+            <span className="text-[12px] font-semibold text-neutral-400 uppercase tracking-wider">Notifications</span>
+            {totalNotifs > 0 && (
+              <span className="text-[11px] text-neutral-500">{totalNotifs} new</span>
+            )}
+          </div>
+
+          {totalNotifs === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 px-4 gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.4} className="w-8 h-8 text-neutral-700">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+              </svg>
+              <p className="text-[13px] text-neutral-500">You're all caught up</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-neutral-800/60">
+              {notifRequests.map(req => (
+                <div key={req.friendship_id} className="flex items-start gap-3 px-3 py-2.5 hover:bg-white/4 transition-colors group">
+                  <div className="w-8 h-8 rounded-full bg-primary-800/50 border border-primary-700/40 flex items-center justify-center shrink-0 mt-0.5">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 text-primary-400">
+                      <path d="M6.25 6.375a4.125 4.125 0 118.25 0 4.125 4.125 0 01-8.25 0zM3.25 19.125a7.125 7.125 0 0114.25 0v.003l-.001.119a.75.75 0 01-.363.63 13.067 13.067 0 01-6.761 1.873c-2.472 0-4.786-.684-6.76-1.873a.75.75 0 01-.364-.63l-.001-.122zM19.75 7.5a.75.75 0 00-1.5 0v2.25H16a.75.75 0 000 1.5h2.25v2.25a.75.75 0 001.5 0v-2.25H22a.75.75 0 000-1.5h-2.25V7.5z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] text-neutral-200 leading-snug">
+                      <span className="font-semibold">{req.from_user.username}</span>
+                      <span className="text-neutral-400"> sent you a friend request</span>
+                    </p>
+                    {req.message && (
+                      <p className="text-[12px] text-neutral-500 truncate mt-0.5">"{req.message}"</p>
+                    )}
+                    <p className="text-[11px] text-neutral-600 mt-0.5">{timeAgo(req.created_at)}</p>
+                    <div className="flex items-center gap-1.5 mt-1.5">
+                      <button
+                        onClick={() => respondToRequest.mutate({ friendshipId: req.friendship_id, accept: true })}
+                        disabled={respondToRequest.isPending}
+                        className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[11.5px] font-medium bg-primary-500/20 text-primary-400 border border-primary-500/30 hover:bg-primary-500/30 transition-colors disabled:opacity-50"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3"><path fillRule="evenodd" d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z" clipRule="evenodd" /></svg>
+                        Accept
+                      </button>
+                      <button
+                        onClick={() => respondToRequest.mutate({ friendshipId: req.friendship_id, accept: false })}
+                        disabled={respondToRequest.isPending}
+                        className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[11.5px] font-medium bg-neutral-800 text-neutral-400 border border-neutral-700 hover:bg-neutral-700 hover:text-neutral-200 transition-colors disabled:opacity-50"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3"><path d="M5.28 4.22a.75.75 0 0 0-1.06 1.06L6.94 8l-2.72 2.72a.75.75 0 1 0 1.06 1.06L8 9.06l2.72 2.72a.75.75 0 1 0 1.06-1.06L9.06 8l2.72-2.72a.75.75 0 0 0-1.06-1.06L8 6.94 5.28 4.22Z" /></svg>
+                        Decline
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {notifRecs.map(rec => (
+                <div key={rec.id} className="flex items-start gap-3 px-3 py-2.5 hover:bg-white/4 transition-colors group">
+                  <Link
+                    to={rec.content_type === "movie" ? `/movie/${rec.content_id}` : `/tv/${rec.content_id}`}
+                    onClick={() => setNotifOpen(false)}
+                    className="w-8 h-12 rounded-md overflow-hidden bg-neutral-800 shrink-0 block"
+                  >
+                    {rec.content_poster_path ? (
+                      <img
+                        src={`${BASE_IMAGE_URL}/w92${rec.content_poster_path}`}
+                        alt={rec.content_title ?? ""}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-neutral-600">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+                          <path d="M19.5 6h-15v10.5h15V6z" /><path fillRule="evenodd" d="M3 3.75A.75.75 0 013.75 3h16.5a.75.75 0 01.75.75v16.5a.75.75 0 01-.75.75H3.75a.75.75 0 01-.75-.75V3.75zm1.5.75v15h15v-15h-15z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                    )}
+                  </Link>
+                  <div className="flex-1 min-w-0 pt-0.5">
+                    <Link
+                      to={rec.content_type === "movie" ? `/movie/${rec.content_id}` : `/tv/${rec.content_id}`}
+                      onClick={() => setNotifOpen(false)}
+                      className="block"
+                    >
+                      <p className="text-[13px] text-neutral-200 leading-snug">
+                        <span className="font-semibold">{rec.sender_username ?? "Someone"}</span>
+                        <span className="text-neutral-400"> recommended </span>
+                        <span className="font-medium text-neutral-200">{rec.content_title}</span>
+                      </p>
+                      {rec.message && (
+                        <p className="text-[12px] text-neutral-500 truncate mt-0.5">"{rec.message}"</p>
+                      )}
+                      <p className="text-[11px] text-neutral-600 mt-0.5">{timeAgo(rec.created_at)}</p>
+                    </Link>
+                  </div>
+                  <button
+                    onClick={() => markRecRead.mutate(rec.id)}
+                    disabled={markRecRead.isPending}
+                    title="Mark as read"
+                    className="opacity-0 group-hover:opacity-100 shrink-0 w-6 h-6 flex items-center justify-center rounded-md text-neutral-500 hover:text-neutral-200 hover:bg-white/8 transition-all disabled:opacity-30"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                      <path fillRule="evenodd" d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="border-t border-neutral-800 px-3 py-2 flex items-center gap-2">
+            <Link
+              to="/activity"
+              onClick={() => setNotifOpen(false)}
+              className="flex-1 text-center text-[12.5px] font-medium text-neutral-400 hover:text-neutral-200 hover:bg-white/5 rounded-lg py-1.5 transition-colors"
+            >
+              Activity
+            </Link>
+            <div className="w-px h-4 bg-neutral-800" />
+            <Link
+              to="/friends"
+              onClick={() => setNotifOpen(false)}
+              className="flex-1 text-center text-[12.5px] font-medium text-neutral-400 hover:text-neutral-200 hover:bg-white/5 rounded-lg py-1.5 transition-colors"
+            >
+              Friends
+            </Link>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function NavBar() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [user, setUser] = useState(auth.currentUser);
+  const [mobileDiscoverOpen, setMobileDiscoverOpen] = useState(false);
+  const [mobileLibraryOpen, setMobileLibraryOpen] = useState(false);
+  const [mobileSearchQuery, setMobileSearchQuery] = useState("");
+  const mobileCloseRef = useRef<HTMLButtonElement>(null);
+  const esRef = useRef<EventSource | null>(null);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const connectedUidRef = useRef<string | null>(null);
+
+  const { data: navCounts } = useNavCounts();
+  const { data: avatarKey } = useNavAvatar();
+  const { data: userMe } = useUserMe();
+  const pendingRequests = navCounts?.pendingRequests ?? 0;
+  const unreadRecs = navCounts?.unreadRecs ?? 0;
+  const showUpgradeCta = user && userMe?.subscription_tier === "free";
+
+  const libraryBadges: Record<string, number> = {
+    "/activity": unreadRecs,
+    "/friends": pendingRequests,
+  };
+
+  const libraryLinks = [
+    { name: "Watchlist", href: "/watchlist" },
+    { name: "Watched", href: "/watched" },
+    { name: "Shelves", href: "/shelves" },
+    { name: "Stats", href: "/stats" },
+    { name: "For You", href: "/for-you" },
+    { name: "Activity", href: "/activity" },
+    { name: "Friends", href: "/friends" },
+  ];
 
   const connectSSE = useCallback(
     async (uid: string) => {
@@ -343,7 +605,8 @@ export default function NavBar() {
 
         queryClient.invalidateQueries({ queryKey: queryKeys.navCounts(uid) });
 
-        setTimeout(() => {
+        reconnectTimerRef.current = setTimeout(() => {
+          reconnectTimerRef.current = null;
           connectSSE(uid);
         }, 2000);
       };
@@ -353,44 +616,40 @@ export default function NavBar() {
 
   useEffect(() => {
     const unsubscribe = onIdTokenChanged(auth, async (currentUser) => {
-      esRef.current?.close();
-      esRef.current = null;
-
       if (!currentUser) {
+        esRef.current?.close();
+        esRef.current = null;
+        connectedUidRef.current = null;
         setUser(null);
         return;
       }
 
       setUser(currentUser);
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.navCounts(currentUser.uid),
-      });
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.navAvatar(currentUser.uid),
-      });
-      connectSSE(currentUser.uid);
+
+      if (currentUser.uid !== connectedUidRef.current) {
+        esRef.current?.close();
+        esRef.current = null;
+        connectedUidRef.current = currentUser.uid;
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.navCounts(currentUser.uid),
+        });
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.navAvatar(currentUser.uid),
+        });
+        connectSSE(currentUser.uid);
+      }
     });
 
     return () => {
       unsubscribe();
+      if (reconnectTimerRef.current !== null) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
       esRef.current?.close();
+      connectedUidRef.current = null;
     };
   }, [connectSSE, queryClient]);
-
-  const libraryBadges: Record<string, number> = {
-    "/activity": unreadRecs,
-    "/friends": pendingRequests,
-  };
-
-  const libraryLinks = [
-    { name: "Watchlist", href: "/watchlist" },
-    { name: "Watched", href: "/watched" },
-    { name: "Shelves", href: "/shelves" },
-    { name: "Stats", href: "/stats" },
-    { name: "For You", href: "/for-you" },
-    { name: "Activity", href: "/activity" },
-    { name: "Friends", href: "/friends" },
-  ];
 
   return (
     <Disclosure
@@ -495,290 +754,11 @@ export default function NavBar() {
               </Link>
             )}
 
-            {/* Search bar */}
-            <div ref={searchContainerRef} className="relative hidden lg:block">
-              <div
-                className={classNames(
-                  "flex items-center gap-2 h-9 px-3 rounded-xl border transition-colors cursor-text w-72",
-                  searchFocused
-                    ? "bg-neutral-900 border-neutral-600"
-                    : "bg-neutral-900 border-neutral-700/70",
-                )}
-                onClick={() => searchInputRef.current?.focus()}
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                  className="w-[15px] h-[15px] text-neutral-500 shrink-0"
-                >
-                  <path d="M10 2a8 8 0 105.293 14.293l4.707 4.707 1.414-1.414-4.707-4.707A8 8 0 0010 2zm0 2a6 6 0 110 12 6 6 0 010-12z" />
-                </svg>
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  value={searchQuery}
-                  onKeyDown={handleKeyDown}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onFocus={() => {
-                    setSearchFocused(true);
-                    if (dropdownResults.length > 0) setDropdownOpen(true);
-                  }}
-                  onBlur={() => setSearchFocused(false)}
-                  placeholder="Search shows, movies, people"
-                  className="flex-1 bg-transparent text-white text-[13px] placeholder-neutral-500 focus:outline-none min-w-0"
-                />
-                {searchQuery ? (
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); setSearchQuery(""); }}
-                    className="text-neutral-500 hover:text-neutral-300 transition-colors shrink-0"
-                  >
-                    <XMarkIcon className="w-3.5 h-3.5" />
-                  </button>
-                ) : (
-                  <span className="font-mono text-[11px] px-1.5 py-0.5 border border-neutral-700 rounded text-neutral-600 shrink-0 select-none">
-                    {isMac ? "⌘K" : "Ctrl K"}
-                  </span>
-                )}
-              </div>
+            {/* Desktop search — isolated component, typing doesn't re-render nav */}
+            <SearchBar />
 
-              {dropdownOpen && (
-                <div className="absolute top-full mt-1.5 right-0 w-80 bg-neutral-900 border border-neutral-700/70 rounded-xl shadow-2xl shadow-black/50 z-50 overflow-hidden">
-                  {dropdownLoading && dropdownResults.length === 0 ? (
-                    <div className="px-4 py-3 text-[13px] text-neutral-500">
-                      Searching…
-                    </div>
-                  ) : dropdownResults.length === 0 ? (
-                    <div className="px-4 py-3 text-[13px] text-neutral-500">
-                      No results found.
-                    </div>
-                  ) : (
-                    <>
-                      {dropdownResults.map((result) => {
-                        const label = result.title ?? result.name ?? "";
-                        const href =
-                          result.media_type === "movie"
-                            ? `/movie/${result.id}`
-                            : result.media_type === "tv"
-                              ? `/tv/${result.id}`
-                              : `/person/${result.id}`;
-                        const imgPath =
-                          result.media_type === "person"
-                            ? result.profile_path
-                            : result.poster_path;
-                        const typeLabel =
-                          result.media_type === "movie"
-                            ? "Movie"
-                            : result.media_type === "tv"
-                              ? "TV Show"
-                              : "Person";
-                        return (
-                          <Link
-                            key={`${result.media_type}-${result.id}`}
-                            to={href}
-                            onClick={() => {
-                              setDropdownOpen(false);
-                              setSearchQuery("");
-                            }}
-                            className="flex items-center gap-3 px-3 py-2 hover:bg-white/5 transition-colors"
-                          >
-                            <div className="flex-shrink-0 w-8 h-12 rounded-lg overflow-hidden bg-neutral-800">
-                              {imgPath ? (
-                                <img
-                                  src={`${BASE_IMAGE_URL}/w185${imgPath}`}
-                                  alt={label}
-                                  className="w-full h-full object-cover"
-                                />
-                              ) : (
-                                <div className="w-full h-full flex items-center justify-center text-neutral-500 text-[9px] text-center leading-tight px-0.5">
-                                  {label}
-                                </div>
-                              )}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-[13px] font-medium text-white truncate">
-                                {label}
-                              </p>
-                              <p className="text-[12px] text-neutral-500">
-                                {typeLabel}
-                              </p>
-                            </div>
-                          </Link>
-                        );
-                      })}
-                      <Link
-                        to={`/search?q=${encodeURIComponent(searchQuery.trim())}&type=all`}
-                        onClick={() => {
-                          setDropdownOpen(false);
-                          setSearchQuery("");
-                        }}
-                        className="flex items-center justify-center px-3 py-2 border-t border-neutral-800 text-[12px] text-primary-400 hover:text-primary-300 hover:bg-white/5 transition-colors"
-                      >
-                        See all results →
-                      </Link>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Bell dropdown */}
-            {user && (
-              <div ref={notifRef} className="relative hidden lg:block">
-                <button
-                  onClick={() => setNotifOpen(o => !o)}
-                  className="relative flex items-center justify-center w-9 h-9 rounded-xl border border-neutral-700/70 bg-transparent text-neutral-400 hover:text-neutral-100 hover:border-neutral-600 transition-colors"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={1.8}
-                    className="w-[17px] h-[17px]"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"
-                    />
-                  </svg>
-                  {hasNotifications && (
-                    <span className="absolute top-[7px] right-[8px] w-[6px] h-[6px] rounded-full bg-primary-400" />
-                  )}
-                </button>
-
-                {notifOpen && (
-                  <div className="absolute right-0 top-full mt-1.5 w-80 bg-neutral-900 border border-neutral-700/70 rounded-xl shadow-2xl shadow-black/50 z-50 overflow-hidden">
-                    <div className="px-3 py-2.5 border-b border-neutral-800 flex items-center justify-between">
-                      <span className="text-[12px] font-semibold text-neutral-400 uppercase tracking-wider">Notifications</span>
-                      {totalNotifs > 0 && (
-                        <span className="text-[11px] text-neutral-500">{totalNotifs} new</span>
-                      )}
-                    </div>
-
-                    {totalNotifs === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-8 px-4 gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.4} className="w-8 h-8 text-neutral-700">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
-                        </svg>
-                        <p className="text-[13px] text-neutral-500">You're all caught up</p>
-                      </div>
-                    ) : (
-                      <div className="divide-y divide-neutral-800/60">
-                        {notifRequests.map(req => (
-                          <div key={req.friendship_id} className="flex items-start gap-3 px-3 py-2.5 hover:bg-white/4 transition-colors group">
-                            <div className="w-8 h-8 rounded-full bg-primary-800/50 border border-primary-700/40 flex items-center justify-center shrink-0 mt-0.5">
-                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 text-primary-400">
-                                <path d="M6.25 6.375a4.125 4.125 0 118.25 0 4.125 4.125 0 01-8.25 0zM3.25 19.125a7.125 7.125 0 0114.25 0v.003l-.001.119a.75.75 0 01-.363.63 13.067 13.067 0 01-6.761 1.873c-2.472 0-4.786-.684-6.76-1.873a.75.75 0 01-.364-.63l-.001-.122zM19.75 7.5a.75.75 0 00-1.5 0v2.25H16a.75.75 0 000 1.5h2.25v2.25a.75.75 0 001.5 0v-2.25H22a.75.75 0 000-1.5h-2.25V7.5z" />
-                              </svg>
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-[13px] text-neutral-200 leading-snug">
-                                <span className="font-semibold">{req.from_user.username}</span>
-                                <span className="text-neutral-400"> sent you a friend request</span>
-                              </p>
-                              {req.message && (
-                                <p className="text-[12px] text-neutral-500 truncate mt-0.5">"{req.message}"</p>
-                              )}
-                              <p className="text-[11px] text-neutral-600 mt-0.5">{timeAgo(req.created_at)}</p>
-                              <div className="flex items-center gap-1.5 mt-1.5">
-                                <button
-                                  onClick={() => respondToRequest.mutate({ friendshipId: req.friendship_id, accept: true })}
-                                  disabled={respondToRequest.isPending}
-                                  className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[11.5px] font-medium bg-primary-500/20 text-primary-400 border border-primary-500/30 hover:bg-primary-500/30 transition-colors disabled:opacity-50"
-                                >
-                                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3"><path fillRule="evenodd" d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z" clipRule="evenodd" /></svg>
-                                  Accept
-                                </button>
-                                <button
-                                  onClick={() => respondToRequest.mutate({ friendshipId: req.friendship_id, accept: false })}
-                                  disabled={respondToRequest.isPending}
-                                  className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[11.5px] font-medium bg-neutral-800 text-neutral-400 border border-neutral-700 hover:bg-neutral-700 hover:text-neutral-200 transition-colors disabled:opacity-50"
-                                >
-                                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3"><path d="M5.28 4.22a.75.75 0 0 0-1.06 1.06L6.94 8l-2.72 2.72a.75.75 0 1 0 1.06 1.06L8 9.06l2.72 2.72a.75.75 0 1 0 1.06-1.06L9.06 8l2.72-2.72a.75.75 0 0 0-1.06-1.06L8 6.94 5.28 4.22Z" /></svg>
-                                  Decline
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-
-                        {notifRecs.map(rec => (
-                          <div key={rec.id} className="flex items-start gap-3 px-3 py-2.5 hover:bg-white/4 transition-colors group">
-                            <Link
-                              to={rec.content_type === "movie" ? `/movie/${rec.content_id}` : `/tv/${rec.content_id}`}
-                              onClick={() => setNotifOpen(false)}
-                              className="w-8 h-12 rounded-md overflow-hidden bg-neutral-800 shrink-0 block"
-                            >
-                              {rec.content_poster_path ? (
-                                <img
-                                  src={`${BASE_IMAGE_URL}/w92${rec.content_poster_path}`}
-                                  alt={rec.content_title ?? ""}
-                                  className="w-full h-full object-cover"
-                                />
-                              ) : (
-                                <div className="w-full h-full flex items-center justify-center text-neutral-600">
-                                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
-                                    <path d="M19.5 6h-15v10.5h15V6z" /><path fillRule="evenodd" d="M3 3.75A.75.75 0 013.75 3h16.5a.75.75 0 01.75.75v16.5a.75.75 0 01-.75.75H3.75a.75.75 0 01-.75-.75V3.75zm1.5.75v15h15v-15h-15z" clipRule="evenodd" />
-                                  </svg>
-                                </div>
-                              )}
-                            </Link>
-                            <div className="flex-1 min-w-0 pt-0.5">
-                              <Link
-                                to={rec.content_type === "movie" ? `/movie/${rec.content_id}` : `/tv/${rec.content_id}`}
-                                onClick={() => setNotifOpen(false)}
-                                className="block"
-                              >
-                                <p className="text-[13px] text-neutral-200 leading-snug">
-                                  <span className="font-semibold">{rec.sender_username ?? "Someone"}</span>
-                                  <span className="text-neutral-400"> recommended </span>
-                                  <span className="font-medium text-neutral-200">{rec.content_title}</span>
-                                </p>
-                                {rec.message && (
-                                  <p className="text-[12px] text-neutral-500 truncate mt-0.5">"{rec.message}"</p>
-                                )}
-                                <p className="text-[11px] text-neutral-600 mt-0.5">{timeAgo(rec.created_at)}</p>
-                              </Link>
-                            </div>
-                            <button
-                              onClick={() => markRecRead.mutate(rec.id)}
-                              disabled={markRecRead.isPending}
-                              title="Mark as read"
-                              className="opacity-0 group-hover:opacity-100 shrink-0 w-6 h-6 flex items-center justify-center rounded-md text-neutral-500 hover:text-neutral-200 hover:bg-white/8 transition-all disabled:opacity-30"
-                            >
-                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
-                                <path fillRule="evenodd" d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z" clipRule="evenodd" />
-                              </svg>
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    <div className="border-t border-neutral-800 px-3 py-2 flex items-center gap-2">
-                      <Link
-                        to="/activity"
-                        onClick={() => setNotifOpen(false)}
-                        className="flex-1 text-center text-[12.5px] font-medium text-neutral-400 hover:text-neutral-200 hover:bg-white/5 rounded-lg py-1.5 transition-colors"
-                      >
-                        Activity
-                      </Link>
-                      <div className="w-px h-4 bg-neutral-800" />
-                      <Link
-                        to="/friends"
-                        onClick={() => setNotifOpen(false)}
-                        className="flex-1 text-center text-[12.5px] font-medium text-neutral-400 hover:text-neutral-200 hover:bg-white/5 rounded-lg py-1.5 transition-colors"
-                      >
-                        Friends
-                      </Link>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+            {/* Notifications bell — isolated component */}
+            {user && <NotificationsPanel />}
 
             {/* Profile dropdown */}
             {user && (
@@ -905,12 +885,10 @@ export default function NavBar() {
             className="relative mb-2"
             onSubmit={(e) => {
               e.preventDefault();
-              if (!searchQuery.trim()) return;
-              cancelPendingDropdown();
-              setDropdownOpen(false);
-              setDropdownLoading(false);
+              if (!mobileSearchQuery.trim()) return;
               mobileCloseRef.current?.click();
-              navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
+              navigate(`/search?q=${encodeURIComponent(mobileSearchQuery.trim())}`);
+              setMobileSearchQuery("");
             }}
           >
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500">
@@ -926,16 +904,15 @@ export default function NavBar() {
             <input
               type="text"
               enterKeyHint="search"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={(e) => e.key === "Escape" && setDropdownOpen(false)}
+              value={mobileSearchQuery}
+              onChange={(e) => setMobileSearchQuery(e.target.value)}
               placeholder="Search..."
               className="pl-9 pr-8 w-full py-2 rounded-xl bg-neutral-900 border border-neutral-700/70 text-white text-[16px] placeholder-neutral-500 focus:outline-none focus:border-neutral-600 transition-colors"
             />
-            {searchQuery && (
+            {mobileSearchQuery && (
               <button
                 type="button"
-                onClick={() => setSearchQuery("")}
+                onClick={() => setMobileSearchQuery("")}
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white"
                 aria-label="Clear search"
               >

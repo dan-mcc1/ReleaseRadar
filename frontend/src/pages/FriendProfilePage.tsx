@@ -153,7 +153,7 @@ export default function FriendProfilePage() {
   const { data, isLoading, isError, error } = useFriendProfile(username);
   const profile = data && !("isSelf" in data) && !("blocked_by_viewer" in data) ? (data as PublicProfile) : null;
   const isSelf = !!(data && "isSelf" in data && data.isSelf);
-  const blockedByViewer = !!(data && "blocked_by_viewer" in data && (data as any).blocked_by_viewer);
+  const blockedByViewer = !!(data && "blocked_by_viewer" in data && (data as { blocked_by_viewer: boolean }).blocked_by_viewer);
 
   usePageTitle(profile ? `@${profile.username}` : undefined);
 
@@ -301,7 +301,7 @@ export default function FriendProfilePage() {
   if (isSelf) return <Navigate to="/profile" replace />;
 
   if (blockedByViewer) {
-    const blockedUsername = (data as any).username as string;
+    const blockedUsername = (data as { username: string }).username;
     return (
       <div className="w-full max-w-2xl mx-auto px-4 py-16 text-center">
         <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-10 space-y-3">

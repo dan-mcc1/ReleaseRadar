@@ -10,9 +10,8 @@ from app.models.episode import Episode
 from app.models.episode_watched import EpisodeWatched
 from app.models.watched import Watched
 from app.db.session import SessionLocal, _is_sqlite
-from app.services.watchlist_service import (
-    ensure_show_in_db,
-    ensure_movie_in_db,
+from app.services.media_upsert import ensure_show_in_db, ensure_movie_in_db
+from app.services.media_serializers import (
     serialize_show_list,
     serialize_movie_list,
     serialize_movie,

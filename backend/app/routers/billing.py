@@ -2,11 +2,13 @@ import stripe
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, Body
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from app.config import settings
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.models.user import User
 from app.models.subscription import Subscription
+from app.models.processed_stripe_event import ProcessedStripeEvent
 
 router = APIRouter()
 
@@ -19,7 +21,8 @@ _INTERVAL_TO_PRICE = {
 
 
 def _get_or_create_stripe_customer(user: User, db: Session) -> str:
-    sub = db.query(Subscription).filter_by(user_id=user.id).first()
+    # with_for_update serializes concurrent calls when a subscription row already exists
+    sub = db.query(Subscription).filter_by(user_id=user.id).with_for_update().first()
     if sub and sub.stripe_customer_id:
         return sub.stripe_customer_id
 
@@ -28,11 +31,20 @@ def _get_or_create_stripe_customer(user: User, db: Session) -> str:
         metadata={"firebase_uid": user.id},
     )
 
-    if not sub:
-        sub = Subscription(user_id=user.id, tier="free", source="stripe")
-        db.add(sub)
-    sub.stripe_customer_id = customer.id
-    db.commit()
+    try:
+        if not sub:
+            sub = Subscription(user_id=user.id, source="stripe")
+            db.add(sub)
+        sub.stripe_customer_id = customer.id
+        db.commit()
+    except IntegrityError:
+        # Concurrent request inserted the row first; use their customer_id
+        db.rollback()
+        sub = db.query(Subscription).filter_by(user_id=user.id).first()
+        if sub and sub.stripe_customer_id:
+            return sub.stripe_customer_id
+        raise
+
     return customer.id
 
 
@@ -49,7 +61,6 @@ def _sync_stripe_subscription(sub: Subscription, stripe_sub: dict, db: Session):
     sub.cancel_at_period_end = stripe_sub["cancel_at_period_end"]
 
     if stripe_sub["status"] in ("active", "trialing"):
-        sub.tier = "premium"
         user = db.query(User).filter_by(id=sub.user_id).first()
         if user and user.subscription_tier != "admin":
             user.subscription_tier = "premium"
@@ -122,7 +133,7 @@ def billing_status(
         }
 
     return {
-        "tier": sub.tier,
+        "tier": user.subscription_tier if user else "free",
         "status": sub.status,
         "source": sub.source,
         "current_period_end": (
@@ -166,6 +177,14 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
     except stripe.error.SignatureVerificationError:
         raise HTTPException(status_code=400, detail="Invalid signature")
 
+    # Idempotency: skip replayed events
+    try:
+        db.add(ProcessedStripeEvent(event_id=event["id"]))
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        return {"received": True}
+
     event_type = event["type"]
     data = event["data"]["object"]
 
@@ -178,6 +197,7 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
     elif event_type == "invoice.payment_failed":
         _handle_payment_failed(data, db)
 
+    db.commit()
     return {"received": True}
 
 
@@ -193,7 +213,6 @@ def _handle_checkout_completed(session: dict, db: Session):
 
     stripe_sub = stripe.Subscription.retrieve(subscription_id)
     _sync_stripe_subscription(sub, stripe_sub, db)
-    db.commit()
 
 
 def _handle_subscription_updated(stripe_sub: dict, db: Session):
@@ -207,12 +226,9 @@ def _handle_subscription_updated(stripe_sub: dict, db: Session):
 
     # On hard failure states, downgrade
     if stripe_sub["status"] in ("canceled", "unpaid"):
-        sub.tier = "free"
         user = db.query(User).filter_by(id=sub.user_id).first()
         if user and user.subscription_tier != "admin":
             user.subscription_tier = "free"
-
-    db.commit()
 
 
 def _handle_subscription_deleted(stripe_sub: dict, db: Session):
@@ -222,15 +238,12 @@ def _handle_subscription_deleted(stripe_sub: dict, db: Session):
     if not sub:
         return
 
-    sub.tier = "free"
     sub.status = "canceled"
     sub.cancel_at_period_end = False
 
     user = db.query(User).filter_by(id=sub.user_id).first()
     if user and user.subscription_tier != "admin":
         user.subscription_tier = "free"
-
-    db.commit()
 
 
 def _handle_payment_failed(invoice: dict, db: Session):
@@ -242,4 +255,3 @@ def _handle_payment_failed(invoice: dict, db: Session):
     ).first()
     if sub:
         sub.status = "past_due"
-        db.commit()

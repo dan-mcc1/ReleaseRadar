@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from fastapi import APIRouter, Depends, HTTPException, Body, Query, Request
 from app.core.limiter import limiter
 from app.db.session import SessionLocal
-from pydantic import EmailStr
+from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_
 from app.db.session import get_db
@@ -26,7 +26,7 @@ from app.services.favorite_service import get_favorites, get_favorites_preview
 from app.services.stats_service import get_user_stats
 from app.services.watch_time_service import get_watch_time_stats
 from datetime import datetime, timezone
-from app.dependencies.auth import get_current_user, get_uid_only
+from app.dependencies.auth import get_current_user, get_current_user_strict, get_token_claims, get_token_claims_strict, get_uid_only
 from app.models.appeal import Appeal
 from app.models.shelf_item import ShelfItem
 from app.models.shelf import Shelf
@@ -52,6 +52,10 @@ router = APIRouter()
 USERNAME_RE = re.compile(r"^[a-zA-Z0-9_]{3,30}$")
 
 
+class UpdateEmailBody(BaseModel):
+    new_email: EmailStr
+
+
 def _validate_username(username: str):
     if not USERNAME_RE.match(username):
         raise HTTPException(
@@ -61,18 +65,15 @@ def _validate_username(username: str):
 
 
 @router.post("/create")
-@limiter.limit("10/minute")
+@limiter.limit("60/minute")
 def create_user_route(
     request: Request,
     db: Session = Depends(get_db),
-    uid: str = Depends(get_current_user),
-    email: str | None = Body(None),
-    username: str | None = Body(None),
+    claims: dict = Depends(get_token_claims),
+    username: str | None = Body(None, embed=True),
 ):
-    if email:
-        from app.models.banned_email import BannedEmail
-        if db.query(BannedEmail).filter(BannedEmail.email == email).first():
-            raise HTTPException(status_code=403, detail="This account is not permitted to register.")
+    uid = claims["uid"]
+    email = claims.get("email")  # always use the Firebase-verified email
     if username is not None:
         _validate_username(username)
         if not is_username_available(db, username):
@@ -185,10 +186,21 @@ def submit_appeal(
 
 @router.put("/update-email")
 def update_email_route(
-    new_email: EmailStr = Query(...),
+    body: UpdateEmailBody,
     db: Session = Depends(get_db),
-    uid: str = Depends(get_current_user),
+    claims: dict = Depends(get_token_claims_strict),
 ):
+    uid = claims["uid"]
+    new_email = body.new_email
+    token_email = claims.get("email", "")
+    if not claims.get("email_verified"):
+        raise HTTPException(
+            status_code=403, detail="Email address is not verified in Firebase."
+        )
+    if token_email.lower() != str(new_email).lower():
+        raise HTTPException(
+            status_code=403, detail="Email does not match the verified Firebase email."
+        )
     user = update_user_email(db, uid, new_email)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -274,7 +286,11 @@ def check_email_banned(
 ):
     """Public endpoint — returns whether an email is on the ban list."""
     from app.models.banned_email import BannedEmail
-    banned = db.query(BannedEmail).filter(BannedEmail.email == email.lower().strip()).first() is not None
+
+    banned = (
+        db.query(BannedEmail).filter(BannedEmail.email == email.lower().strip()).first()
+        is not None
+    )
     return {"banned": banned}
 
 
@@ -326,9 +342,15 @@ def get_profile_summary(
             s.close()
 
     with ThreadPoolExecutor(max_workers=4) as executor:
-        f_watchlist = executor.submit(_with_session, lambda s: get_profile_watchlist_preview(s, uid))
-        f_watched = executor.submit(_with_session, lambda s: get_profile_watched_preview(s, uid))
-        f_favorites = executor.submit(_with_session, lambda s: get_favorites_preview(s, uid))
+        f_watchlist = executor.submit(
+            _with_session, lambda s: get_profile_watchlist_preview(s, uid)
+        )
+        f_watched = executor.submit(
+            _with_session, lambda s: get_profile_watched_preview(s, uid)
+        )
+        f_favorites = executor.submit(
+            _with_session, lambda s: get_favorites_preview(s, uid)
+        )
         f_friends = executor.submit(_with_session, lambda s: get_friends(s, uid))
         # social runs on the existing db session while the 4 threads are executing
         social = get_social_preview(db, uid)
@@ -517,7 +539,7 @@ def cancel_subscription(
 @router.delete("/account")
 def delete_account(
     db: Session = Depends(get_db),
-    uid: str = Depends(get_current_user),
+    uid: str = Depends(get_current_user_strict),
 ):
     """
     Delete the current user's account and all associated data.

@@ -21,6 +21,7 @@ import {
 import {
   useNotificationPrefs,
   useUpdateNotificationPrefs,
+  type NotificationPrefs,
 } from "../hooks/api/useNotifications";
 import {
   useWatchlistNotifyPrefs,
@@ -349,11 +350,7 @@ export default function Settings() {
 
   const { data: blocksData } = useMyBlocks();
   const unblockMutation = useUnblockUser();
-  const blocks: {
-    user_id: string;
-    username: string | null;
-    blocked_at: string;
-  }[] = (blocksData as any) ?? [];
+  const blocks = blocksData ?? [];
 
   const filteredWatchlistItems = useMemo(() => {
     if (!Array.isArray(watchlistNotifyItems)) return [];
@@ -429,9 +426,9 @@ export default function Settings() {
     setTimeout(() => { manualSection.current = null; }, 1000);
   }
 
-  function patchPreferences(patch: Record<string, unknown>) {
+  function patchPreferences(patch: Partial<NotificationPrefs>) {
     if (prefSaving) return;
-    updatePrefsMutation.mutate(patch as any);
+    updatePrefsMutation.mutate(patch);
   }
 
   async function saveUsername() {
@@ -448,8 +445,9 @@ export default function Settings() {
       await updateUsernameMutation.mutateAsync(newUsername);
       setEditingUsername(false);
       setNewUsername("");
-    } catch (err: any) {
-      setUsernameError(err?.detail ?? "Could not save username.");
+    } catch (err: unknown) {
+      const e = err as { detail?: string };
+      setUsernameError(e?.detail ?? "Could not save username.");
     }
   }
 
@@ -479,13 +477,14 @@ export default function Settings() {
       await deleteAccountMutation.mutateAsync();
       await signOut(auth);
       navigate("/signIn");
-    } catch (err: any) {
-      if (err.code === "auth/requires-recent-login") {
+    } catch (err: unknown) {
+      const e = err as { code?: string; message?: string };
+      if (e.code === "auth/requires-recent-login") {
         setError(
           "Please sign out and sign back in before deleting your account."
         );
       } else {
-        setError(err.message);
+        setError(e.message ?? "An error occurred.");
       }
     }
   };

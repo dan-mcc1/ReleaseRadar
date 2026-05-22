@@ -30,3 +30,14 @@ def verify_token(token: str):
         _token_cache[token] = decoded
 
     return decoded
+
+
+def verify_token_strict(token: str):
+    """Always calls Firebase with check_revoked=True — never uses the cache.
+
+    Use for destructive or credential-changing operations so that a revoked
+    token (password reset, account deletion) is rejected immediately rather
+    than being served from the 1-hour TTL cache.
+    """
+    decoded = auth.verify_id_token(token, check_revoked=True)
+    return decoded

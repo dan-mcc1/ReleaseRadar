@@ -16,6 +16,7 @@ import Footer from "./components/Footer";
 import SpotlightTour from "./components/SpotlightTour";
 import WarningModal from "./components/WarningModal";
 import SuspensionBanModal from "./components/SuspensionBanModal";
+import { ToastProvider } from "./components/Toast";
 
 const Search = lazy(() => import("./pages/Search"));
 const Settings = lazy(() => import("./pages/Settings"));
@@ -70,9 +71,9 @@ function BanGate({ children }: { children: ReactNode }) {
   const { data: status, isLoading } = useAccountStatus();
   const isRestricted = !!(status?.is_banned || status?.is_suspended) || banDetected;
 
-  // Set synchronously during render so apiFetch blocks requests before any
-  // child component mounts and fires queries.
-  setAccountRestricted(isRestricted);
+  useEffect(() => {
+    setAccountRestricted(isRestricted);
+  }, [isRestricted]);
 
   // Clear the detected flag once the server confirms the restriction is lifted,
   // which also stops the 5-minute polling and unblocks apiFetch.
@@ -105,6 +106,7 @@ function AppShell({ children }: { children: ReactNode }) {
 
 function App() {
   return (
+    <ToastProvider>
     <BrowserRouter>
       <div className="flex flex-col min-h-screen bg-neutral-950 text-neutral-100">
         <ScrollToTop />
@@ -221,6 +223,7 @@ function App() {
         </AppShell>
       </div>
     </BrowserRouter>
+    </ToastProvider>
   );
 }
 

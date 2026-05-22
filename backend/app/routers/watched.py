@@ -12,6 +12,7 @@ from app.services.watched_service import (
 )
 from app.dependencies.auth import get_current_user
 from app.core.limiter import limiter
+from app.services.stats_service import invalidate_stats_cache
 
 router = APIRouter()
 
@@ -34,6 +35,7 @@ def add_item(
     if content_type == "tv":
         mark_existing_episodes_watched(db, uid, content_id)
         background_tasks.add_task(sync_watched_episodes_bg, uid, content_id)
+    invalidate_stats_cache(uid)
     return result
 
 
@@ -45,9 +47,12 @@ def rate_item(
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
+    if rating is not None and (not (0.5 <= rating <= 5.0) or rating != rating):
+        raise HTTPException(status_code=422, detail="Rating must be between 0.5 and 5.0")
     result = update_watched_rating(db, uid, content_type, content_id, rating)
     if result is None:
         raise HTTPException(status_code=404, detail="Item not in watched list")
+    invalidate_stats_cache(uid)
     return result
 
 
@@ -62,7 +67,9 @@ def remove_item(
         raise HTTPException(
             status_code=400, detail="content_type must be 'movie' or 'tv'"
         )
-    return remove_from_watched(db, uid, content_type, content_id)
+    result = remove_from_watched(db, uid, content_type, content_id)
+    invalidate_stats_cache(uid)
+    return result
 
 
 @router.get("")

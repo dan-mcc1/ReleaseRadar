@@ -38,6 +38,9 @@ export default function MediaCard({ item, type, onRemove }: MediaCardProps) {
             <img
               src={`${BASE_IMAGE_URL}/w780${item.backdrop_path}`}
               alt=""
+              width={780}
+              height={439}
+              loading="lazy"
               className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
             />
           ) : (
@@ -86,16 +89,9 @@ export default function MediaCard({ item, type, onRemove }: MediaCardProps) {
 
         {/* Info bar */}
         <div className="px-3 py-3 flex flex-col gap-1 flex-1">
-          {!item.logo_path && (
-            <div className="font-semibold text-neutral-100 line-clamp-1 group-hover:text-primary-300 transition-colors">
-              {title}
-            </div>
-          )}
-          {item.logo_path && (
-            <div className="font-semibold text-neutral-100 line-clamp-1 group-hover:text-primary-300 transition-colors">
-              {title}
-            </div>
-          )}
+          <div className="font-semibold text-neutral-100 line-clamp-1 group-hover:text-primary-300 transition-colors">
+            {title}
+          </div>
           <div className="flex items-center gap-2 flex-wrap">
             {item.certification && (
               <ContentRatingBadge rating={item.certification} />

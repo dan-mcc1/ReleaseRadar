@@ -15,7 +15,7 @@ class Review(Base):
     __tablename__ = "review"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(String, ForeignKey("user.id"), index=True)
+    user_id = Column(String, ForeignKey("user.id", ondelete="CASCADE"), index=True)
     content_type = Column(String)
     content_id = Column(Integer)
     review_text = Column(Text)

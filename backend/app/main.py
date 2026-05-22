@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import time
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timedelta, timezone as dt_timezone
 from zoneinfo import ZoneInfo
 from fastapi import FastAPI, Header, HTTPException, Request
@@ -62,26 +62,37 @@ from app.services.episode_service import (
 )
 from app.services.streaming_notification_service import refresh_streaming_providers
 from app.services.trailer_notification_service import refresh_trailers
+from app.services.stripe_reconciliation_service import reconcile_stripe_subscriptions
 
 logger = logging.getLogger(__name__)
+
+
+@contextmanager
+def _db_session():
+    db = SessionLocal()
+    try:
+        yield db
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
 
 
 async def _activity_cleanup_loop():
     """Delete activity and old recommendations, runs every hour."""
     while True:
         try:
-            db = SessionLocal()
-            deleted_activity = delete_old_activity(db)
-            if deleted_activity:
-                logger.info("activity cleanup: removed %d old activity entries", deleted_activity)
-            deleted_recs = delete_old_recommendations(db)
-            if deleted_recs:
-                logger.info("activity cleanup: removed %d expired recommendations", deleted_recs)
-            lift_expired_moderation(db)
+            with _db_session() as db:
+                deleted_activity = delete_old_activity(db)
+                if deleted_activity:
+                    logger.info("activity cleanup: removed %d old activity entries", deleted_activity)
+                deleted_recs = delete_old_recommendations(db)
+                if deleted_recs:
+                    logger.info("activity cleanup: removed %d expired recommendations", deleted_recs)
+                lift_expired_moderation(db)
         except Exception as e:
             logger.error("activity cleanup error: %s", e)
-        finally:
-            db.close()
         await asyncio.sleep(3600)  # 1 hour
 
 
@@ -119,13 +130,10 @@ async def _daily_digest_loop():
 
             now_utc = datetime.now(dt_timezone.utc)
             logger.info("daily digest: hourly sweep firing at %s UTC", now_utc.strftime("%H:%M"))
-            db = SessionLocal()
-            try:
-                send_daily_digest_to_all(db, now_utc=now_utc)
-                send_season_premiere_alerts_to_all(db, now_utc=now_utc)
-                logger.info("daily digest: hourly sweep done")
-            finally:
-                db.close()
+            with _db_session() as db:
+                await asyncio.to_thread(send_daily_digest_to_all, db, now_utc=now_utc)
+                await asyncio.to_thread(send_season_premiere_alerts_to_all, db, now_utc=now_utc)
+            logger.info("daily digest: hourly sweep done")
 
         except Exception as e:
             logger.error("daily digest loop error: %s", e)
@@ -143,15 +151,13 @@ async def _episode_update_loop():
         await asyncio.sleep((next_run - now).total_seconds())
         logger.info("vote update: starting daily vote_average refresh")
         try:
-            db = SessionLocal()
-            refresh_episodes_for_active_shows(db)
-            check_and_reactivate_watched_shows(db)
-            await asyncio.to_thread(update_all_vote_averages, db)
-            prune_stale_cache(db)
+            with _db_session() as db:
+                refresh_episodes_for_active_shows(db)
+                check_and_reactivate_watched_shows(db)
+                await asyncio.to_thread(update_all_vote_averages, db)
+                prune_stale_cache(db)
         except Exception as e:
             logger.error("vote update error: %s", e)
-        finally:
-            db.close()
 
 
 async def _trailer_refresh_loop():
@@ -165,14 +171,30 @@ async def _trailer_refresh_loop():
                 next_run += timedelta(days=1)
             await asyncio.sleep((next_run - now).total_seconds())
             logger.info("trailers: starting trailer refresh")
-            db = SessionLocal()
-            try:
+            with _db_session() as db:
                 await asyncio.to_thread(refresh_trailers, db)
-                logger.info("trailers: done")
-            finally:
-                db.close()
+            logger.info("trailers: done")
         except Exception as e:
             logger.error("trailers loop error: %s", e)
+            await asyncio.sleep(60)
+
+
+async def _stripe_reconciliation_loop():
+    """Reconcile local subscription state against Stripe once a day at 4am Eastern."""
+    eastern = ZoneInfo("America/New_York")
+    while True:
+        try:
+            now = datetime.now(eastern)
+            next_run = now.replace(hour=4, minute=0, second=0, microsecond=0)
+            if now >= next_run:
+                next_run += timedelta(days=1)
+            await asyncio.sleep((next_run - now).total_seconds())
+            logger.info("stripe reconcile: starting")
+            with _db_session() as db:
+                await asyncio.to_thread(reconcile_stripe_subscriptions, db)
+            logger.info("stripe reconcile: done")
+        except Exception as e:
+            logger.error("stripe reconcile loop error: %s", e)
             await asyncio.sleep(60)
 
 
@@ -187,12 +209,9 @@ async def _streaming_refresh_loop():
                 next_run += timedelta(days=1)
             await asyncio.sleep((next_run - now).total_seconds())
             logger.info("streaming: starting provider refresh")
-            db = SessionLocal()
-            try:
+            with _db_session() as db:
                 await asyncio.to_thread(refresh_streaming_providers, db)
-                logger.info("streaming: done")
-            finally:
-                db.close()
+            logger.info("streaming: done")
         except Exception as e:
             logger.error("streaming loop error: %s", e)
             await asyncio.sleep(60)
@@ -200,34 +219,7 @@ async def _streaming_refresh_loop():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Import all models so SQLAlchemy Base.metadata is populated before create_all
-    import app.models.user  # noqa: F401
-    import app.models.watched  # noqa: F401
-    import app.models.watchlist  # noqa: F401
-    import app.models.episode_watched  # noqa: F401
-    import app.models.currently_watching  # noqa: F401
-    import app.models.friendship  # noqa: F401
-    import app.models.favorite  # noqa: F401
-    import app.models.recommendation  # noqa: F401
-    import app.models.show  # noqa: F401
-    import app.models.movie  # noqa: F401
-    import app.models.episode  # noqa: F401
-    import app.models.activity  # noqa: F401
-    import app.models.review  # noqa: F401
-    import app.models.review_like  # noqa: F401
-    import app.models.shelf  # noqa: F401
-    import app.models.shelf_item  # noqa: F401
-    import app.models.subscription  # noqa: F401
-    import app.models.rewatch  # noqa: F401
-    import app.models.block  # noqa: F401
-    import app.models.report  # noqa: F401
-    import app.models.appeal  # noqa: F401
-    import app.models.banned_email  # noqa: F401
-    import app.models.finish_by_goal  # noqa: F401
-    import app.models.movie_video  # noqa: F401
-    import app.models.show_video  # noqa: F401
-    import app.models.user_streaming_service  # noqa: F401
-    import app.models.feedback  # noqa: F401
+    import app.models  # noqa: F401 — registers all models with Base.metadata
 
     Base.metadata.create_all(engine)
     task = asyncio.create_task(_activity_cleanup_loop())
@@ -235,12 +227,12 @@ async def lifespan(app: FastAPI):
     vote_task = asyncio.create_task(_episode_update_loop())
     streaming_task = asyncio.create_task(_streaming_refresh_loop())
     trailer_task = asyncio.create_task(_trailer_refresh_loop())
+    reconcile_task = asyncio.create_task(_stripe_reconciliation_loop())
     yield
-    task.cancel()
-    digest_task.cancel()
-    vote_task.cancel()
-    streaming_task.cancel()
-    trailer_task.cancel()
+    tasks = [task, digest_task, vote_task, streaming_task, trailer_task, reconcile_task]
+    for t in tasks:
+        t.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
 
 
 app = FastAPI(title="ReleaseRadar API", lifespan=lifespan, redirect_slashes=True)

@@ -1,10 +1,9 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiFetch } from "../../utils/apiFetch";
 import { queryKeys } from "./queryKeys";
+import { checkedFetch } from "./queryFetch";
 import { useAuthUser } from "../useAuthUser";
 import type { WatchStatus } from "../../components/WatchButton";
 import type { Movie, Show } from "../../types/calendar";
-import { TrackingLimitError } from "./useSubscription";
 
 interface ListData {
   movies: Movie[];
@@ -14,19 +13,6 @@ interface ListData {
 interface StatusResult {
   status: WatchStatus;
   rating: number | null;
-}
-
-async function checkedFetch(path: string, options: RequestInit): Promise<void> {
-  const res = await apiFetch(path, options);
-  if (!res.ok) {
-    if (res.status === 403) {
-      const body = await res.json().catch(() => ({}));
-      if (body?.detail?.error === "tracking_limit_reached") {
-        throw new TrackingLimitError(body.detail.limit, body.detail.current);
-      }
-    }
-    throw new Error(`Request failed: ${res.status}`);
-  }
 }
 
 export function useUpdateWatchStatus() {
@@ -187,7 +173,7 @@ export function useRateItem() {
       contentId: number;
       rating: number | null;
     }) => {
-      await apiFetch("/watched/rate", {
+      await checkedFetch("/watched/rate", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

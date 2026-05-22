@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import type { Show, Movie } from "../types/calendar";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { BASE_IMAGE_URL } from "../constants";
+import VirtualGrid from "../components/VirtualGrid";
 import ListFilterPanel, {
   DEFAULT_FILTERS,
   type ListFilters,
@@ -44,15 +45,11 @@ function applySort<T extends Movie | Show>(items: T[], sort: SortType): T[] {
   switch (sort) {
     case "watched_desc":
       return sorted.sort((a, b) =>
-        ((b as any).watched_at ?? "").localeCompare(
-          (a as any).watched_at ?? "",
-        ),
+        (b.watched_at ?? "").localeCompare(a.watched_at ?? ""),
       );
     case "watched_asc":
       return sorted.sort((a, b) =>
-        ((a as any).watched_at ?? "").localeCompare(
-          (b as any).watched_at ?? "",
-        ),
+        (a.watched_at ?? "").localeCompare(b.watched_at ?? ""),
       );
     case "title_asc":
       return sorted.sort((a, b) => getTitle(a).localeCompare(getTitle(b)));
@@ -115,6 +112,9 @@ function WatchedCard({
             <img
               src={`${BASE_IMAGE_URL}/w342${item.poster_path}`}
               alt={title}
+              width={342}
+              height={513}
+              loading="lazy"
               className="w-full h-full object-cover transition-opacity duration-200 group-hover/card:opacity-85"
             />
           ) : (
@@ -479,8 +479,12 @@ export default function Watched() {
 
       {/* Poster grid */}
       {!isLoading && hasResults && (
-        <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 gap-x-3 gap-y-5 mt-8">
-          {gridItems.map((item) => (
+        <VirtualGrid
+          items={gridItems}
+          className="mt-8"
+          colGap={12}
+          rowGap={20}
+          renderItem={(item) => (
             <WatchedCard
               key={`${item._contentType}-${item.id}`}
               item={item}
@@ -491,8 +495,8 @@ export default function Watched() {
               }
               onRemove={() => onRemove(item._contentType, item.id)}
             />
-          ))}
-        </div>
+          )}
+        />
       )}
     </div>
   );

@@ -7,7 +7,7 @@ class Activity(Base):
     __tablename__ = "activity"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(String, ForeignKey("user.id"), index=True)
+    user_id = Column(String, ForeignKey("user.id", ondelete="CASCADE"), index=True)
     # activity_type: 'watched', 'currently_watching', 'want_to_watch', 'rated', 'episode_watched'
     activity_type = Column(String, nullable=False)
     content_type = Column(String, nullable=False)  # 'movie' or 'tv'

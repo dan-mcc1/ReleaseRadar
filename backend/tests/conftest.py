@@ -41,9 +41,19 @@ sys.modules["firebase_admin._apps"] = {}
 
 # -- SQLite test engine (StaticPool = one shared in-memory DB) ---------------
 engine = create_engine(
-    "sqlite:///./test.db",
+    "sqlite:///:memory:",
     connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
 )
+
+# Register PostgreSQL-compatible functions that SQLite lacks.
+# stats_service uses LEAST/GREATEST for rating-distribution bucketing.
+from sqlalchemy import event
+
+@event.listens_for(engine, "connect")
+def _register_sqlite_compat_functions(dbapi_conn, _):
+    dbapi_conn.create_function("least", -1, min)
+    dbapi_conn.create_function("greatest", -1, max)
 # expire_on_commit=False prevents re-queries after commit, reducing cursor churn
 TestingSessionLocal = sessionmaker(
     autocommit=False, autoflush=False, bind=engine, expire_on_commit=False
@@ -68,24 +78,7 @@ limiter.enabled = False
 
 
 def create_tables():
-    # Import all models so metadata is populated
-    import app.models.user
-    import app.models.show
-    import app.models.movie
-    import app.models.episode
-    import app.models.season
-    import app.models.genre
-    import app.models.provider
-    import app.models.watchlist
-    import app.models.watched
-    import app.models.currently_watching
-    import app.models.episode_watched
-    import app.models.favorite
-    import app.models.recommendation
-    import app.models.friendship
-    import app.models.activity
-    import app.models.review
-
+    import app.models  # noqa: F401 — registers all models with Base.metadata
     Base.metadata.create_all(bind=engine)
 
 
@@ -134,13 +127,25 @@ def make_client(uid: str = "test-uid-1"):
     """
     app.dependency_overrides[get_db] = _make_override_get_db()
 
-    from app.dependencies.auth import get_current_user
+    from app.dependencies.auth import (
+        get_current_user,
+        get_current_user_strict,
+        get_token_claims,
+        get_token_claims_strict,
+    )
 
     # Read UID from X-Test-UID header so each client carries its own identity
     async def _uid_from_header(request: FastAPIRequest):
         return request.headers.get("X-Test-UID", "test-uid-1")
 
+    async def _claims_from_header(request: FastAPIRequest):
+        test_uid = request.headers.get("X-Test-UID", "test-uid-1")
+        return {"uid": test_uid, "email": f"{test_uid}@test.com", "email_verified": True}
+
     app.dependency_overrides[get_current_user] = _uid_from_header
+    app.dependency_overrides[get_current_user_strict] = _uid_from_header
+    app.dependency_overrides[get_token_claims] = _claims_from_header
+    app.dependency_overrides[get_token_claims_strict] = _claims_from_header
 
     client = TestClient(
         app,

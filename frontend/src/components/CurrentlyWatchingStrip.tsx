@@ -255,8 +255,8 @@ export default function CurrentlyWatchingStrip() {
   const [open, setOpen] = useState(false);
 
   const { data } = useCurrentlyWatching();
-  const shows = ((data as any)?.shows ?? []) as Show[];
-  const movies = ((data as any)?.movies ?? []) as Movie[];
+  const shows: Show[] = data?.shows ?? [];
+  const movies: Movie[] = data?.movies ?? [];
   const total = shows.length + movies.length;
 
   const showIds = shows.map((s) => s.id);

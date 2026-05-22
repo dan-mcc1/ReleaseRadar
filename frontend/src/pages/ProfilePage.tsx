@@ -6,7 +6,7 @@ import FriendSearch from "../components/FriendSearch";
 import FriendRequests from "../components/FriendRequests";
 import StatsSection from "../components/StatsSection";
 import { usePageTitle } from "../hooks/usePageTitle";
-import { useProfileSummary } from "../hooks/api/useUser";
+import { useProfileSummary, type ProfileSummary } from "../hooks/api/useUser";
 import { useShelves } from "../hooks/api/useShelves";
 import { useSendFriendRequest, useRemoveFriend } from "../hooks/api/useFriends";
 import { useQueryClient } from "@tanstack/react-query";
@@ -14,11 +14,10 @@ import { queryKeys } from "../hooks/api/queryKeys";
 
 type FriendsTab = "friends" | "requests" | "followers" | "add";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function patchSummary(queryClient: ReturnType<typeof useQueryClient>, uid: string, updater: (old: any) => any) {
+function patchSummary(queryClient: ReturnType<typeof useQueryClient>, uid: string, updater: (old: ProfileSummary) => ProfileSummary) {
   queryClient.setQueryData(queryKeys.profileSummary(uid), (old: unknown) => {
     if (!old) return old;
-    return updater(old);
+    return updater(old as ProfileSummary);
   });
 }
 
@@ -115,33 +114,243 @@ function PosterGrid({
   );
 }
 
-export default function ProfilePage() {
-  usePageTitle("My Profile");
+// Self-contained friends panel — owns its tab + confirm state so switching
+// tabs doesn't re-render the hero, stats, or shelves above it.
+function FriendsWidget() {
   const user = useAuthUser();
   const queryClient = useQueryClient();
   const [friendsTab, setFriendsTab] = useState<FriendsTab>("friends");
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
+
+  const { data: summary } = useProfileSummary();
+  const removeMutation = useRemoveFriend();
+  const sendRequestMutation = useSendFriendRequest();
+
+  const typedDbUser = summary?.user;
+  const friends = summary?.friends ?? [];
+  const incoming = summary?.incoming_requests ?? [];
+  const outgoing = summary?.outgoing_requests ?? [];
+  const followers = summary?.followers ?? [];
+  const incomingCount = incoming.length;
+  const addingBackUsername = sendRequestMutation.isPending
+    ? sendRequestMutation.variables?.addresseeUsername ?? null
+    : null;
+
+  async function addBack(follower: { id: string; username: string }) {
+    await sendRequestMutation.mutateAsync({ addresseeUsername: follower.username }).catch(() => {});
+  }
+
+  async function removeFriend(friendId: string) {
+    try {
+      await removeMutation.mutateAsync(friendId);
+      if (!user) return;
+      patchSummary(queryClient, user.uid, (old) => ({
+        ...old,
+        friends: old.friends.filter((f: { friend: { id: string } }) => f.friend.id !== friendId),
+      }));
+    } finally {
+      setConfirmRemoveId(null);
+    }
+  }
+
+  return (
+    <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <div className="font-mono text-[10px] tracking-[0.15em] text-neutral-500 uppercase flex-1">
+          Friends · {friends.length}
+        </div>
+        {incomingCount > 0 && (
+          <span className="font-mono text-[10px] font-bold bg-primary-500 text-neutral-900 px-1.5 py-0.5 rounded">
+            {incomingCount} new
+          </span>
+        )}
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 border-b border-neutral-800 mb-4 -mx-1 px-1">
+        {(
+          [
+            { id: "friends" as FriendsTab, label: "Friends", count: friends.length },
+            ...(typedDbUser?.profile_visibility === "public"
+              ? [{ id: "followers" as FriendsTab, label: "Followers", count: followers.length }]
+              : []),
+            { id: "requests" as FriendsTab, label: "Requests", count: incomingCount, badge: incomingCount > 0 },
+            { id: "add" as FriendsTab, label: "Add" },
+          ] as { id: FriendsTab; label: string; count?: number; badge?: boolean }[]
+        ).map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setFriendsTab(t.id)}
+            className={[
+              "flex items-center gap-1.5 pb-2.5 text-[12px] font-medium border-b-2 -mb-px transition-colors px-1",
+              friendsTab === t.id
+                ? "border-primary-500 text-neutral-100"
+                : "border-transparent text-neutral-500 hover:text-neutral-300",
+            ].join(" ")}
+          >
+            {t.label}
+            {t.count != null && t.count > 0 && (
+              <span
+                className={[
+                  "font-mono text-[9.5px] px-1 py-px rounded font-semibold",
+                  t.badge ? "bg-primary-500 text-neutral-900" : "bg-neutral-800 text-neutral-500",
+                ].join(" ")}
+              >
+                {t.count}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* Friends list */}
+      {friendsTab === "friends" && (
+        <div className="flex flex-col gap-2.5">
+          {friends.length === 0 ? (
+            <p className="text-neutral-500 text-[13px]">No friends yet.</p>
+          ) : (
+            friends.map(({ friendship_id, friend }) => (
+              <div key={friendship_id} className="flex items-center gap-3">
+                <div
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-semibold shrink-0"
+                  style={{
+                    background: `oklch(0.32 0.10 ${avatarKeyToHue(undefined) + (friend.username.charCodeAt(0) * 7) % 360})`,
+                    color: `oklch(0.85 0.08 ${(friend.username.charCodeAt(0) * 7) % 360})`,
+                  }}
+                >
+                  {friend.username.slice(0, 2).toUpperCase()}
+                </div>
+                <Link
+                  to={`/user/${friend.username}`}
+                  className="flex-1 text-[13px] font-medium text-neutral-200 hover:text-primary-400 transition-colors truncate"
+                >
+                  @{friend.username}
+                </Link>
+                {confirmRemoveId === friend.id ? (
+                  <div className="flex gap-1 items-center">
+                    <button
+                      onClick={() => removeFriend(friend.id)}
+                      disabled={removeMutation.isPending && removeMutation.variables === friend.id}
+                      className="text-[10.5px] bg-error-600 hover:bg-error-500 text-white px-2 py-0.5 rounded disabled:opacity-50"
+                    >
+                      Yes
+                    </button>
+                    <button
+                      onClick={() => setConfirmRemoveId(null)}
+                      className="text-[10.5px] text-neutral-500 hover:text-neutral-300"
+                    >
+                      No
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setConfirmRemoveId(friend.id)}
+                    className="text-neutral-700 hover:text-neutral-400 transition-colors"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                      <circle cx="12" cy="5" r="2" />
+                      <circle cx="12" cy="12" r="2" />
+                      <circle cx="12" cy="19" r="2" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* Followers list */}
+      {friendsTab === "followers" && typedDbUser?.profile_visibility === "public" && (
+        <div className="flex flex-col gap-2.5">
+          {followers.length === 0 ? (
+            <p className="text-neutral-500 text-[13px]">No followers yet.</p>
+          ) : (
+            followers.map(({ friendship_id, follower }) => (
+              <div key={friendship_id} className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-semibold shrink-0 bg-neutral-800 text-neutral-400">
+                  {follower.username.slice(0, 2).toUpperCase()}
+                </div>
+                <Link
+                  to={`/user/${follower.username}`}
+                  className="flex-1 text-[13px] font-medium text-neutral-200 hover:text-primary-400 transition-colors truncate"
+                >
+                  @{follower.username}
+                </Link>
+                <button
+                  onClick={() => addBack(follower)}
+                  disabled={addingBackUsername === follower.username}
+                  className="text-[11px] font-semibold text-primary-400 bg-primary-500/15 hover:bg-primary-500/25 disabled:opacity-50 px-2.5 py-1 rounded-lg transition-colors"
+                >
+                  {addingBackUsername === follower.username ? "…" : "Add back"}
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* Requests */}
+      {friendsTab === "requests" && (
+        <FriendRequests
+          incoming={incoming}
+          outgoing={outgoing}
+          onResponded={(friendshipId, accepted, req) => {
+            if (!user) return;
+            patchSummary(queryClient, user.uid, (old) => ({
+              ...old,
+              incoming_requests: old.incoming_requests.filter(
+                (r: { friendship_id: number }) => r.friendship_id !== friendshipId,
+              ),
+              friends: accepted
+                ? [...old.friends, { friendship_id: friendshipId, friend: req.from_user }]
+                : old.friends,
+            }));
+          }}
+          onCancelled={(friendshipId) => {
+            if (!user) return;
+            patchSummary(queryClient, user.uid, (old) => ({
+              ...old,
+              outgoing_requests: old.outgoing_requests.filter(
+                (r: { friendship_id: number }) => r.friendship_id !== friendshipId,
+              ),
+            }));
+          }}
+        />
+      )}
+
+      {/* Add friend search */}
+      {friendsTab === "add" && (
+        <FriendSearch
+          friendIds={new Set(friends.map((f) => f.friend.id))}
+          onRequestSent={() => setFriendsTab("requests")}
+        />
+      )}
+
+      <button
+        onClick={() => setFriendsTab("add")}
+        className="mt-4 w-full text-[12.5px] font-medium text-primary-400 bg-primary-500/10 hover:bg-primary-500/20 border border-primary-500/20 py-2 rounded-xl transition-colors"
+      >
+        + Find friends
+      </button>
+    </div>
+  );
+}
+
+export default function ProfilePage() {
+  usePageTitle("My Profile");
+  const user = useAuthUser();
   const [shareCopied, setShareCopied] = useState(false);
 
   const { data: summary, isLoading: summaryLoading } = useProfileSummary();
   const { data: shelves = [] } = useShelves();
-
-  const removeMutation = useRemoveFriend();
-  const sendRequestMutation = useSendFriendRequest();
-  const addingBackUsername = sendRequestMutation.isPending
-    ? sendRequestMutation.variables?.addresseeUsername ?? null
-    : null;
 
   const typedDbUser = summary?.user;
   const favorites = summary?.favorites ?? { movies: [], shows: [] };
   const watchlistPreview = summary?.watchlist ?? { movies: [], shows: [], total_movies: 0, total_shows: 0 };
   const watchedPreview = summary?.watched ?? { movies: [], shows: [], total_movies: 0, total_shows: 0 };
   const friends = summary?.friends ?? [];
-  const incoming = summary?.incoming_requests ?? [];
-  const outgoing = summary?.outgoing_requests ?? [];
-  const followers = summary?.followers ?? [];
 
-  const incomingCount = incoming.length;
   const totalWatched = watchedPreview.total_movies + watchedPreview.total_shows;
   const totalWatchlist = watchlistPreview.total_movies + watchlistPreview.total_shows;
   const totalFavorites = favorites.movies.length + favorites.shows.length;
@@ -158,23 +367,6 @@ export default function ProfilePage() {
       await navigator.clipboard.writeText(url).catch(() => {});
       setShareCopied(true);
       setTimeout(() => setShareCopied(false), 2000);
-    }
-  }
-
-  async function addBack(follower: { id: string; username: string }) {
-    await sendRequestMutation.mutateAsync({ addresseeUsername: follower.username }).catch(() => {});
-  }
-
-  async function removeFriend(friendId: string) {
-    try {
-      await removeMutation.mutateAsync(friendId);
-      if (!user) return;
-      patchSummary(queryClient, user.uid, (old) => ({
-        ...old,
-        friends: old.friends.filter((f: { friend: { id: string } }) => f.friend.id !== friendId),
-      }));
-    } finally {
-      setConfirmRemoveId(null);
     }
   }
 
@@ -574,189 +766,8 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          {/* Friends */}
-          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="font-mono text-[10px] tracking-[0.15em] text-neutral-500 uppercase flex-1">
-                Friends · {friends.length}
-              </div>
-              {incomingCount > 0 && (
-                <span className="font-mono text-[10px] font-bold bg-primary-500 text-neutral-900 px-1.5 py-0.5 rounded">
-                  {incomingCount} new
-                </span>
-              )}
-            </div>
-
-            {/* Tabs */}
-            <div className="flex gap-1 border-b border-neutral-800 mb-4 -mx-1 px-1">
-              {(
-                [
-                  { id: "friends" as FriendsTab, label: "Friends", count: friends.length },
-                  ...(typedDbUser?.profile_visibility === "public"
-                    ? [{ id: "followers" as FriendsTab, label: "Followers", count: followers.length }]
-                    : []),
-                  { id: "requests" as FriendsTab, label: "Requests", count: incomingCount, badge: incomingCount > 0 },
-                  { id: "add" as FriendsTab, label: "Add" },
-                ] as { id: FriendsTab; label: string; count?: number; badge?: boolean }[]
-              ).map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => setFriendsTab(t.id)}
-                  className={[
-                    "flex items-center gap-1.5 pb-2.5 text-[12px] font-medium border-b-2 -mb-px transition-colors px-1",
-                    friendsTab === t.id
-                      ? "border-primary-500 text-neutral-100"
-                      : "border-transparent text-neutral-500 hover:text-neutral-300",
-                  ].join(" ")}
-                >
-                  {t.label}
-                  {t.count != null && t.count > 0 && (
-                    <span
-                      className={[
-                        "font-mono text-[9.5px] px-1 py-px rounded font-semibold",
-                        t.badge ? "bg-primary-500 text-neutral-900" : "bg-neutral-800 text-neutral-500",
-                      ].join(" ")}
-                    >
-                      {t.count}
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
-
-            {/* Friends list */}
-            {friendsTab === "friends" && (
-              <div className="flex flex-col gap-2.5">
-                {friends.length === 0 ? (
-                  <p className="text-neutral-500 text-[13px]">No friends yet.</p>
-                ) : (
-                  friends.map(({ friendship_id, friend }) => (
-                    <div key={friendship_id} className="flex items-center gap-3">
-                      <div
-                        className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-semibold shrink-0"
-                        style={{
-                          background: `oklch(0.32 0.10 ${avatarKeyToHue(undefined) + (friend.username.charCodeAt(0) * 7) % 360})`,
-                          color: `oklch(0.85 0.08 ${(friend.username.charCodeAt(0) * 7) % 360})`,
-                        }}
-                      >
-                        {friend.username.slice(0, 2).toUpperCase()}
-                      </div>
-                      <Link
-                        to={`/user/${friend.username}`}
-                        className="flex-1 text-[13px] font-medium text-neutral-200 hover:text-primary-400 transition-colors truncate"
-                      >
-                        @{friend.username}
-                      </Link>
-                      {confirmRemoveId === friend.id ? (
-                        <div className="flex gap-1 items-center">
-                          <button
-                            onClick={() => removeFriend(friend.id)}
-                            disabled={removeMutation.isPending && removeMutation.variables === friend.id}
-                            className="text-[10.5px] bg-error-600 hover:bg-error-500 text-white px-2 py-0.5 rounded disabled:opacity-50"
-                          >
-                            Yes
-                          </button>
-                          <button
-                            onClick={() => setConfirmRemoveId(null)}
-                            className="text-[10.5px] text-neutral-500 hover:text-neutral-300"
-                          >
-                            No
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => setConfirmRemoveId(friend.id)}
-                          className="text-neutral-700 hover:text-neutral-400 transition-colors"
-                        >
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                            <circle cx="12" cy="5" r="2" />
-                            <circle cx="12" cy="12" r="2" />
-                            <circle cx="12" cy="19" r="2" />
-                          </svg>
-                        </button>
-                      )}
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
-
-            {/* Followers list */}
-            {friendsTab === "followers" && typedDbUser?.profile_visibility === "public" && (
-              <div className="flex flex-col gap-2.5">
-                {followers.length === 0 ? (
-                  <p className="text-neutral-500 text-[13px]">No followers yet.</p>
-                ) : (
-                  followers.map(({ friendship_id, follower }) => (
-                    <div key={friendship_id} className="flex items-center gap-3">
-                      <div
-                        className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-semibold shrink-0 bg-neutral-800 text-neutral-400"
-                      >
-                        {follower.username.slice(0, 2).toUpperCase()}
-                      </div>
-                      <Link
-                        to={`/user/${follower.username}`}
-                        className="flex-1 text-[13px] font-medium text-neutral-200 hover:text-primary-400 transition-colors truncate"
-                      >
-                        @{follower.username}
-                      </Link>
-                      <button
-                        onClick={() => addBack(follower)}
-                        disabled={addingBackUsername === follower.username}
-                        className="text-[11px] font-semibold text-primary-400 bg-primary-500/15 hover:bg-primary-500/25 disabled:opacity-50 px-2.5 py-1 rounded-lg transition-colors"
-                      >
-                        {addingBackUsername === follower.username ? "…" : "Add back"}
-                      </button>
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
-
-            {/* Requests */}
-            {friendsTab === "requests" && (
-              <FriendRequests
-                incoming={incoming}
-                outgoing={outgoing}
-                onResponded={(friendshipId, accepted, req) => {
-                  if (!user) return;
-                  patchSummary(queryClient, user.uid, (old) => ({
-                    ...old,
-                    incoming_requests: old.incoming_requests.filter(
-                      (r: { friendship_id: number }) => r.friendship_id !== friendshipId,
-                    ),
-                    friends: accepted
-                      ? [...old.friends, { friendship_id: friendshipId, friend: req.from_user }]
-                      : old.friends,
-                  }));
-                }}
-                onCancelled={(friendshipId) => {
-                  if (!user) return;
-                  patchSummary(queryClient, user.uid, (old) => ({
-                    ...old,
-                    outgoing_requests: old.outgoing_requests.filter(
-                      (r: { friendship_id: number }) => r.friendship_id !== friendshipId,
-                    ),
-                  }));
-                }}
-              />
-            )}
-
-            {/* Add friend search */}
-            {friendsTab === "add" && (
-              <FriendSearch
-                friendIds={new Set(friends.map((f) => f.friend.id))}
-                onRequestSent={() => setFriendsTab("requests")}
-              />
-            )}
-
-            <button
-              onClick={() => setFriendsTab("add")}
-              className="mt-4 w-full text-[12.5px] font-medium text-primary-400 bg-primary-500/10 hover:bg-primary-500/20 border border-primary-500/20 py-2 rounded-xl transition-colors"
-            >
-              + Find friends
-            </button>
-          </div>
+          {/* Friends — isolated component, tab state doesn't re-render the hero */}
+          <FriendsWidget />
         </div>
       </div>
     </div>

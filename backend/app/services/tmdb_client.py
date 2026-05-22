@@ -1,3 +1,4 @@
+import threading
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -10,25 +11,36 @@ HEADERS = {
     "Accept": "application/json",
 }
 
-# Retry on transient network errors and 5xx responses (not 4xx — those are caller errors).
-# Backoff: 0s, 1s, 2s between attempts (backoff_factor=1 → 0, 1*2^1, 1*2^2... capped at 3 tries).
+# Retry on transient network errors, 5xx responses, and 429 rate-limit responses.
+# For 429, urllib3 reads the Retry-After header and sleeps that many seconds before
+# retrying, so the ThreadPoolExecutor burst in the nightly refresh loop is self-healing.
+# Backoff applies when no Retry-After header is present: 0s, 2s, 4s between attempts.
 _retry = Retry(
-    total=3,
+    total=5,
     backoff_factor=1,
-    status_forcelist=[500, 502, 503, 504],
+    status_forcelist=[429, 500, 502, 503, 504],
     allowed_methods=["GET"],
     raise_on_status=False,
+    respect_retry_after_header=True,
 )
 
-# Session with redirects disabled so the Authorization header can't leak to a
-# third-party host via a MITM or unexpected TMDb redirect.
-_session = requests.Session()
-_session.max_redirects = 0
-_session.mount("https://", HTTPAdapter(max_retries=_retry))
+_local = threading.local()
+
+
+def _session() -> requests.Session:
+    s = getattr(_local, "session", None)
+    if s is None:
+        s = requests.Session()
+        # Redirects disabled so the Authorization header can't leak to a
+        # third-party host via a MITM or unexpected TMDb redirect.
+        s.max_redirects = 0
+        s.mount("https://", HTTPAdapter(max_retries=_retry))
+        _local.session = s
+    return s
 
 
 def get(path: str, params: dict | None = None):
-    res = _session.get(
+    res = _session().get(
         f"{BASE_URL}{path}",
         headers=HEADERS,
         params=params or {},

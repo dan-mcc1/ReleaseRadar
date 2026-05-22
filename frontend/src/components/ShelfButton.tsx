@@ -10,6 +10,7 @@ import {
 import { useSubscription } from "../hooks/api/useSubscription";
 import { isPremiumFeature } from "../config/features";
 import ProUpgradeModal from "./ProUpgradeModal";
+import { useToast } from "./Toast";
 
 interface ShelfButtonProps {
   contentType: "movie" | "tv";
@@ -97,6 +98,7 @@ function IconPlus() {
 export default function ShelfButton({ contentType, contentId, compact = false }: ShelfButtonProps) {
   const user = useAuthUser();
   const { isPremium } = useSubscription();
+  const toast = useToast();
   const shelvesGated = isPremiumFeature("shelves") && !isPremium;
   const [menuOpen, setMenuOpen] = useState(false);
   const [showNewInput, setShowNewInput] = useState(false);
@@ -135,7 +137,7 @@ export default function ShelfButton({ contentType, contentId, compact = false }:
 
   async function handleToggleShelf(shelfId: number) {
     if (!user) {
-      alert("You must be signed in.");
+      toast.error("You must be signed in.");
       return;
     }
     const isOn = itemShelfIds.includes(shelfId);
@@ -146,7 +148,7 @@ export default function ShelfButton({ contentType, contentId, compact = false }:
         await addToShelf.mutateAsync({ shelfId, contentType, contentId });
       }
     } catch {
-      alert("Failed to update shelf");
+      toast.error("Failed to update shelf");
     }
   }
 
@@ -163,7 +165,7 @@ export default function ShelfButton({ contentType, contentId, compact = false }:
         setMenuOpen(false);
         setShowUpgradeModal(true);
       } else {
-        alert("Failed to create shelf");
+        toast.error("Failed to create shelf");
       }
     }
   }
@@ -182,7 +184,7 @@ export default function ShelfButton({ contentType, contentId, compact = false }:
         disabled={isMutating}
         onClick={() => {
           if (!user) {
-            alert("You must be signed in.");
+            toast.error("You must be signed in.");
             return;
           }
           if (shelvesGated) {

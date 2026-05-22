@@ -42,7 +42,7 @@ function TimelineItem({ item }: { item: CalendarItem }) {
   const isTv = item.type === "tv";
   const tvItem = isTv ? (item as Episode & { type: "tv"; showData: Show }) : null;
 
-  const title = isTv ? item.showData.name : (item as any).title;
+  const title = item.type === "tv" ? item.showData.name : item.title;
   const posterPath = item.showData.poster_path;
   const backdropPath = item.showData.backdrop_path;
   const logoPath = item.showData.logo_path;
@@ -233,7 +233,7 @@ export default function CalendarTimeline({ weekDays, today, isLoading }: Props) 
                     <TimelineItem
                       key={
                         item.type === "tv"
-                          ? `tv_${item.showData.id}_${(item as any).season_number}_${(item as any).episode_number}`
+                          ? `tv_${item.showData.id}_${item.season_number}_${item.episode_number}`
                           : `movie_${item.showData.id}_${idx}`
                       }
                       item={item}

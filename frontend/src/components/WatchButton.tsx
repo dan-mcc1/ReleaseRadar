@@ -9,6 +9,7 @@ import {
 import { TrackingLimitError, useSubscription } from "../hooks/api/useSubscription";
 import { isPremiumFeature } from "../config/features";
 import ProUpgradeModal from "./ProUpgradeModal";
+import { useToast } from "./Toast";
 
 export type WatchStatus =
   | "none"
@@ -133,6 +134,7 @@ export default function WatchButton({
 }: WatchButtonProps) {
   const user = useAuthUser();
   const { isPremium } = useSubscription();
+  const toast = useToast();
   const [menuOpen, setMenuOpen] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [showNotifyPrompt, setShowNotifyPrompt] = useState(false);
@@ -169,7 +171,7 @@ export default function WatchButton({
 
   async function handleStatusChange(targetStatus: WatchStatus, notify?: boolean) {
     if (!user) {
-      alert("You must be signed in.");
+      toast.error("You must be signed in.");
       return;
     }
     if (watchStatus === targetStatus) return;
@@ -198,7 +200,7 @@ export default function WatchButton({
         setShowUpgradeModal(true);
       } else {
         console.error(err);
-        alert("Failed to update status");
+        toast.error("Failed to update status");
       }
     }
   }

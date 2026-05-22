@@ -1,21 +1,18 @@
 # app/services/watched_service.py
-from concurrent.futures import ThreadPoolExecutor
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, text
 from datetime import datetime, timezone
 from app.models.watched import Watched
 from app.models.movie import Movie
 from app.models.show import Show
-from app.services.watchlist_service import (
+from app.services.watchlist_service import _get_item_title_and_poster, _is_tracked_on_any
+from app.services.media_serializers import (
     serialize_show_list,
     serialize_movie_list,
     _show_query_options_list,
     _movie_query_options_list,
-    _get_item_title_and_poster,
-    _is_tracked_on_any,
-    ensure_movie_in_db,
-    ensure_show_in_db,
 )
+from app.services.media_upsert import ensure_movie_in_db, ensure_show_in_db, decrement_tracking_count
 from app.services.episode_service import sync_show_episodes
 from app.services.activity_service import log_activity
 from app.models.activity import Activity
@@ -36,7 +33,7 @@ def _is_on_other_list(
 
 
 def add_to_watched(
-    db: Session, user_id: str, content_type: str, content_id: int, rating: float = None
+    db: Session, user_id: str, content_type: str, content_id: int, rating: float = None, commit: bool = True
 ):
     """
     Mark a movie or show as watched.
@@ -65,7 +62,7 @@ def add_to_watched(
         user_id=user_id,
         content_type=content_type,
         content_id=content_id,
-        watched_at=datetime.utcnow(),
+        watched_at=datetime.now(timezone.utc),
         rating=rating,
     )
     db.add(entry)
@@ -88,7 +85,8 @@ def add_to_watched(
         "watched_at": entry.watched_at.isoformat() if entry.watched_at else None,
         "rating": entry.rating,
     }
-    db.commit()
+    if commit:
+        db.commit()
     return result
 
 
@@ -111,7 +109,7 @@ def _mark_episodes_watched(db: Session, user_id: str, content_id: int):
             episode_id=ep.id,
             season_number=ep.season_number,
             episode_number=ep.episode_number,
-            watched_at=datetime.utcnow(),
+            watched_at=datetime.now(timezone.utc),
         )
         for ep in episodes
         if (ep.season_number, ep.episode_number) not in existing_keys
@@ -176,7 +174,7 @@ def update_watched_rating(
         )
         if existing_activity:
             existing_activity.rating = rating
-            existing_activity.created_at = datetime.utcnow()
+            existing_activity.created_at = datetime.now(timezone.utc)
         else:
             log_activity(
                 db, user_id, "watched", content_type, content_id, title, poster, rating=rating
@@ -215,15 +213,7 @@ def remove_from_watched(db: Session, user_id: str, content_type: str, content_id
     if not bool(row.still_tracked):
         if content_type == "tv":
             db.query(EpisodeWatched).filter_by(user_id=user_id, show_id=content_id).delete()
-            db.query(Show).filter(Show.id == content_id, Show.tracking_count > 0).update(
-                {Show.tracking_count: Show.tracking_count - 1, Show.updated_at: datetime.now(timezone.utc)},
-                synchronize_session=False,
-            )
-        elif content_type == "movie":
-            db.query(Movie).filter(Movie.id == content_id, Movie.tracking_count > 0).update(
-                {Movie.tracking_count: Movie.tracking_count - 1, Movie.updated_at: datetime.now(timezone.utc)},
-                synchronize_session=False,
-            )
+        decrement_tracking_count(db, content_type, content_id)
 
     db.commit()
     return {"message": "Removed from watched"}
@@ -376,15 +366,7 @@ def get_watched(db: Session, user_id: str):
             "shows": _get_watched_items(db, user_id, "tv"),
         }
 
-    def _with_session(fn):
-        s = SessionLocal()
-        try:
-            return fn(s)
-        finally:
-            s.close()
-
-    with ThreadPoolExecutor(max_workers=2) as ex:
-        f_movies = ex.submit(_with_session, lambda s: _fetch_watched_movies_pg(s, user_id))
-        f_shows = ex.submit(_with_session, lambda s: _fetch_watched_shows_pg(s, user_id))
-
-    return {"movies": f_movies.result(), "shows": f_shows.result()}
+    return {
+        "movies": _fetch_watched_movies_pg(db, user_id),
+        "shows": _fetch_watched_shows_pg(db, user_id),
+    }

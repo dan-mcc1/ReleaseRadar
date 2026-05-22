@@ -592,8 +592,9 @@ export default function AdminUsersPage() {
   }, [search]);
 
   const { data, isLoading, refetch } = useAdminUsers(debouncedSearch, skip);
-  const users: AdminUser[] = (data as any)?.users ?? [];
-  const total: number = (data as any)?.total ?? 0;
+  const pagedUsers = data as { users: AdminUser[]; total: number } | undefined;
+  const users: AdminUser[] = pagedUsers?.users ?? [];
+  const total: number = pagedUsers?.total ?? 0;
   const totalPages = Math.ceil(total / PAGE_SIZE);
   const currentPage = Math.floor(skip / PAGE_SIZE) + 1;
 

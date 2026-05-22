@@ -1,7 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "./queryKeys";
-import { queryFetch } from "./queryFetch";
-import { apiFetch } from "../../utils/apiFetch";
+import { queryFetch, checkedFetch } from "./queryFetch";
 import { useAuthUser } from "../useAuthUser";
 import type { Movie, Show } from "../../types/calendar";
 
@@ -59,7 +58,7 @@ export function useSendRecommendation() {
       content_poster_path: string;
       message: string;
     }) =>
-      apiFetch("/recommendations/send", {
+      checkedFetch("/recommendations/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -72,7 +71,7 @@ export function useMarkRecRead() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (recommendationId: number) =>
-      apiFetch(`/recommendations/${recommendationId}/read`, {
+      checkedFetch(`/recommendations/${recommendationId}/read`, {
         method: "PATCH",
       }),
     onSuccess: () => {
@@ -92,7 +91,7 @@ export function useDeleteRecommendation() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (recommendationId: number) =>
-      apiFetch(`/recommendations/${recommendationId}`, {
+      checkedFetch(`/recommendations/${recommendationId}`, {
         method: "DELETE",
       }),
     onSuccess: () => {

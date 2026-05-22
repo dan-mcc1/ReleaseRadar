@@ -8,7 +8,6 @@ class Subscription(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(String, unique=True, nullable=False, index=True)
-    tier = Column(String, default="free", nullable=False, server_default="free")
     status = Column(String, nullable=True)  # active, canceled, past_due, trialing
     source = Column(String, nullable=True)  # stripe, apple, google, promo
     stripe_customer_id = Column(String, nullable=True, unique=True, index=True)

@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { useAuthUser } from "../hooks/useAuthUser";
 import { useWatchStatus } from "../hooks/api/useWatchStatus";
 import { useUpdateWatchStatus } from "../hooks/api/useWatchActions";
@@ -15,6 +16,7 @@ export default function MiniWatchButton({ contentType, contentId, initialStatus,
   const user = useAuthUser();
   const statusQuery = useWatchStatus(contentType, contentId, { skip: bulkManaged });
   const updateMutation = useUpdateWatchStatus();
+  const clickPending = useRef(false);
 
   const status: WatchStatus = initialStatus ?? statusQuery.data?.status ?? "none";
   const loading = (!bulkManaged && statusQuery.isPending) || updateMutation.isPending;
@@ -22,9 +24,13 @@ export default function MiniWatchButton({ contentType, contentId, initialStatus,
   function handleClick(e: React.MouseEvent) {
     e.stopPropagation();
     e.preventDefault();
-    if (!user || loading) return;
+    if (!user || loading || clickPending.current) return;
+    clickPending.current = true;
     const targetStatus: WatchStatus = status === "none" ? "Want To Watch" : "none";
-    updateMutation.mutate({ contentType, contentId, currentStatus: status, targetStatus });
+    updateMutation.mutate(
+      { contentType, contentId, currentStatus: status, targetStatus },
+      { onSettled: () => { clickPending.current = false; } },
+    );
   }
 
   const colorClass =

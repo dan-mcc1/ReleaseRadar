@@ -1,7 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "./queryKeys";
-import { queryFetch } from "./queryFetch";
-import { apiFetch } from "../../utils/apiFetch";
+import { queryFetch, checkedFetch } from "./queryFetch";
 import { useAuthUser } from "../useAuthUser";
 
 export interface NotificationPrefs {
@@ -29,7 +28,7 @@ export function useUpdateNotificationPrefs() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (prefs: Partial<NotificationPrefs>) =>
-      apiFetch("/notifications/preferences", {
+      checkedFetch("/notifications/preferences", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(prefs),

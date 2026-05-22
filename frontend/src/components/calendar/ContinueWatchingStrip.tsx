@@ -170,8 +170,8 @@ type CWEntry =
 
 export default function ContinueWatchingStrip() {
   const { data } = useCurrentlyWatching();
-  const shows = ((data as any)?.shows ?? []) as Show[];
-  const movies = ((data as any)?.movies ?? []) as Movie[];
+  const shows: Show[] = data?.shows ?? [];
+  const movies: Movie[] = data?.movies ?? [];
 
   const allEntries: CWEntry[] = [
     ...shows.map((s): CWEntry => ({ kind: "show", show: s })),

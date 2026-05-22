@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "./queryKeys";
-import { queryFetch } from "./queryFetch";
+import { queryFetch, checkedFetch } from "./queryFetch";
 import { apiFetch } from "../../utils/apiFetch";
 import { useAuthUser } from "../useAuthUser";
 import type { AggregateRating, ExternalScores } from "../../types/media";
@@ -95,7 +95,7 @@ export function useDeleteReview() {
       contentType: string;
       contentId: number;
     }) => {
-      await apiFetch("/reviews", {
+      await checkedFetch("/reviews", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

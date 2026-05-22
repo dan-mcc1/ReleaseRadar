@@ -1,7 +1,7 @@
 # app/services/user_service.py
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, func, literal
-from datetime import datetime
+from datetime import datetime, timezone
 from app.models.user import User
 from app.models.watchlist import Watchlist
 from app.models.watched import Watched
@@ -28,7 +28,7 @@ def create_user(
         id=user_id,
         email=email,
         username=username,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
         avatar_key=avatar_key,
     )
     db.add(db_user)

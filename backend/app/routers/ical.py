@@ -11,11 +11,13 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db.session import get_db
+from app.dependencies.auth import get_current_user
 from app.dependencies.subscription import feature_gate
 from app.models.currently_watching import CurrentlyWatching
 from app.models.episode import Episode
 from app.models.movie import Movie
 from app.models.show import Show
+from app.models.user import User
 from app.models.watchlist import Watchlist
 from app.core.limiter import limiter
 
@@ -25,26 +27,29 @@ router = APIRouter()
 # ── Token helpers ─────────────────────────────────────────────────────────────
 
 
-def _make_token(user_id: str) -> str:
-    """Return a URL-safe token that encodes and authenticates the user_id."""
+def _make_token(user_id: str, version: int) -> str:
+    """Return a URL-safe token that encodes and authenticates the user_id + version."""
     uid_b64 = base64.urlsafe_b64encode(user_id.encode()).decode().rstrip("=")
-    sig = hmac.new(
-        settings.ICAL_SECRET.encode(), user_id.encode(), hashlib.sha256
-    ).hexdigest()[:32]
-    return f"{uid_b64}.{sig}"
+    payload = f"{user_id}:{version}".encode()
+    sig = hmac.new(settings.ICAL_SECRET.encode(), payload, hashlib.sha256).hexdigest()[:32]
+    return f"{uid_b64}.{version}.{sig}"
 
 
-def _verify_token(token: str) -> str | None:
-    """Return the user_id if the token is valid, else None."""
+def _verify_token(token: str, db: Session) -> str | None:
+    """Return the user_id if the token is valid and the version matches, else None."""
     try:
-        uid_b64, sig = token.split(".", 1)
+        uid_b64, version_str, sig = token.split(".", 2)
+        version = int(version_str)
         padding = (4 - len(uid_b64) % 4) % 4
         user_id = base64.urlsafe_b64decode(uid_b64 + "=" * padding).decode()
-        expected = hmac.new(
-            settings.ICAL_SECRET.encode(), user_id.encode(), hashlib.sha256
-        ).hexdigest()[:32]
-        if hmac.compare_digest(sig, expected):
-            return user_id
+        payload = f"{user_id}:{version}".encode()
+        expected = hmac.new(settings.ICAL_SECRET.encode(), payload, hashlib.sha256).hexdigest()[:32]
+        if not hmac.compare_digest(sig, expected):
+            return None
+        user = db.get(User, user_id)
+        if user is None or (user.ical_token_version or 1) != version:
+            return None
+        return user_id
     except Exception:
         pass
     return None
@@ -54,22 +59,47 @@ def _verify_token(token: str) -> str | None:
 
 
 @router.get("/token")
-def get_ical_token(uid: str = Depends(feature_gate("ical_sync"))):
+def get_ical_token(
+    uid: str = Depends(feature_gate("ical_sync")),
+    db: Session = Depends(get_db),
+):
     """Return the user's personal iCal feed token — requires a premium subscription."""
-    return {"token": _make_token(uid)}
+    user = db.get(User, uid)
+    version = user.ical_token_version if user else 1
+    return {"token": _make_token(uid, version)}
+
+
+@router.post("/revoke")
+def revoke_ical_token(
+    uid: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Invalidate the current iCal feed URL and return a new token."""
+    user = db.get(User, uid)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.ical_token_version = (user.ical_token_version or 1) + 1
+    db.commit()
+    return {"token": _make_token(uid, user.ical_token_version)}
+
+
+def _ical_key(request: Request) -> str:
+    return request.path_params.get("token", request.client.host)
 
 
 @router.get("/feed/{token}")
-@limiter.limit("6/minute")
+@limiter.limit("6/minute", key_func=_ical_key)
 def get_ical_feed(request: Request, token: str, db: Session = Depends(get_db)):
     """
     Public endpoint — returns a .ics calendar file for the user's watchlist
     and currently-watching shows and movies.  Calendar apps subscribe to this
     URL and refresh it periodically.
     """
-    user_id = _verify_token(token)
+    user_id = _verify_token(token, db)
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid or expired calendar token")
+
+    client_etag = request.headers.get("If-None-Match", "")
 
     # ── Collect tracked show IDs ──────────────────────────────────────────────
     watchlist_show_ids = {
@@ -105,8 +135,6 @@ def get_ical_feed(request: Request, token: str, db: Session = Depends(get_db)):
         .all()
     }
     movie_ids = list(watchlist_movie_ids | cw_movie_ids)
-
-    now = datetime.now(timezone.utc)
 
     # ── Build the iCalendar object ────────────────────────────────────────────
     cal = Calendar()
@@ -195,7 +223,7 @@ def get_ical_feed(request: Request, token: str, db: Session = Depends(get_db)):
                     "uid",
                     f"tv-{ep.show_id}-s{ep.season_number}e{ep.episode_number}@releaseradar",
                 )
-                event.add("dtstamp", now)
+                event.add("dtstamp", dtstart)
                 event.add("summary", summary)
                 event.add("dtstart", dtstart)
                 event.add("dtend", dtend)
@@ -222,7 +250,7 @@ def get_ical_feed(request: Request, token: str, db: Session = Depends(get_db)):
                 dtstart, dtend = _allday_event(movie.release_date)
                 event = Event()
                 event.add("uid", f"movie-{movie.id}@releaseradar")
-                event.add("dtstamp", now)
+                event.add("dtstamp", dtstart)
                 event.add("summary", movie.title)
                 event.add("dtstart", dtstart)
                 event.add("dtend", dtend)
@@ -233,8 +261,17 @@ def get_ical_feed(request: Request, token: str, db: Session = Depends(get_db)):
             except Exception as e:
                 print(f"[ical] Skipped movie {movie.id}: {e}")
 
+    body = cal.to_ical()
+    etag = '"' + hashlib.sha256(body).hexdigest() + '"'
+    if client_etag == etag:
+        return Response(status_code=304, headers={"ETag": etag})
+
     return Response(
-        content=cal.to_ical(),
+        content=body,
         media_type="text/calendar; charset=utf-8",
-        headers={"Content-Disposition": 'inline; filename="releaseradar.ics"'},
+        headers={
+            "Content-Disposition": 'inline; filename="releaseradar.ics"',
+            "ETag": etag,
+            "Cache-Control": "private, max-age=3600",
+        },
     )
