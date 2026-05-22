@@ -6,6 +6,7 @@ from collections import defaultdict
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query, Request
 from pydantic import BaseModel
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
@@ -225,6 +226,112 @@ def _build_items_for_window(db: Session, user_id: str, days: int) -> list:
     return upcoming
 
 
+def _build_items_for_bucket(
+    db: Session, user_ids: list[str], days: int
+) -> dict[str, list]:
+    """
+    Bulk version of _build_items_for_window for a set of users sharing the same
+    look-ahead window. Returns {user_id: [item, ...]} in two passes (movies,
+    then TV) instead of N×3 per-user queries.
+    """
+    if not user_ids:
+        return {}
+
+    today = date.today()
+    end = today + timedelta(days=days)
+    results: dict[str, list] = {uid: [] for uid in user_ids}
+
+    # --- Movies ---
+    movie_rows = (
+        db.query(Watchlist.user_id, Movie)
+        .join(Movie, Movie.id == Watchlist.content_id)
+        .filter(
+            Watchlist.user_id.in_(user_ids),
+            Watchlist.content_type == "movie",
+            Watchlist.notify == True,  # noqa: E712
+            Movie.release_date >= today,
+            Movie.release_date < end,
+        )
+        .all()
+    )
+    for user_id, m in movie_rows:
+        results[user_id].append(
+            {
+                "title": m.title,
+                "date": str(m.release_date),
+                "content_type": "movie",
+                "content_id": m.id,
+                "poster_path": m.poster_path,
+            }
+        )
+
+    # --- TV episodes ---
+    # Collect tracked show IDs per user across both Watchlist and CurrentlyWatching.
+    watchlist_tv = (
+        db.query(Watchlist.user_id, Watchlist.content_id)
+        .filter(
+            Watchlist.user_id.in_(user_ids),
+            Watchlist.content_type == "tv",
+            Watchlist.notify == True,  # noqa: E712
+        )
+        .all()
+    )
+    cw_tv = (
+        db.query(CurrentlyWatching.user_id, CurrentlyWatching.content_id)
+        .filter(
+            CurrentlyWatching.user_id.in_(user_ids),
+            CurrentlyWatching.content_type == "tv",
+        )
+        .all()
+    )
+
+    user_show_ids: dict[str, set[int]] = defaultdict(set)
+    for user_id, content_id in watchlist_tv:
+        user_show_ids[user_id].add(content_id)
+    for user_id, content_id in cw_tv:
+        user_show_ids[user_id].add(content_id)
+
+    all_show_ids = {sid for sids in user_show_ids.values() for sid in sids}
+    if not all_show_ids:
+        return results
+
+    episode_rows = (
+        db.query(Episode, Show)
+        .join(Show, Show.id == Episode.show_id)
+        .filter(
+            Episode.show_id.in_(all_show_ids),
+            Episode.air_date >= today,
+            Episode.air_date < end,
+        )
+        .all()
+    )
+
+    # Index by show_id so each user→show lookup is O(1).
+    show_episodes: dict[int, list] = defaultdict(list)
+    for ep, show in episode_rows:
+        show_episodes[ep.show_id].append((ep, show))
+
+    for user_id, show_ids in user_show_ids.items():
+        for show_id in show_ids:
+            for ep, show in show_episodes.get(show_id, []):
+                results[user_id].append(
+                    {
+                        "title": (
+                            f"{show.name} S{ep.season_number:02d}E{ep.episode_number:02d}"
+                            + (f" — {ep.name}" if ep.name else "")
+                        ),
+                        "date": str(ep.air_date),
+                        "air_time": format_air_time(show.air_time, show.air_timezone),
+                        "content_type": "tv",
+                        "content_id": show.id,
+                        "poster_path": show.poster_path,
+                        "episode_type": ep.episode_type,
+                    }
+                )
+
+    return results
+
+
 def _frequency_window(frequency: str) -> int:
     """Return the number of days to look ahead for a given frequency."""
     return {"daily": 1, "weekly": 7, "monthly": 30}.get(frequency, 1)
@@ -362,40 +469,83 @@ def send_season_premiere_alerts_to_all(db: Session, now_utc: datetime | None = N
 
 def send_daily_digest_to_all(db: Session, now_utc: datetime | None = None):
     """
-    Runs every hour. Sends a digest to each opted-in user whose local clock
-    has just reached their preferred digest_hour.
+    Runs every hour. All hour/date/frequency filtering happens in a single SQL
+    query so Python only sees the small bucket of users who actually need a
+    digest right now. Items are then fetched in bulk (one query per frequency
+    group) instead of N per-user queries.
     """
-    if now_utc is None:
-        now_utc = datetime.now(dt_timezone.utc)
+    # All timezone arithmetic runs in the DB. digest_timezones must be valid
+    # IANA names; the preferences endpoint enforces this on write.
+    bucket_sql = text("""
+        SELECT
+            id,
+            email,
+            username,
+            notification_frequency,
+            digest_timezone,
+            (NOW() AT TIME ZONE COALESCE(digest_timezone, 'America/New_York'))::date
+                AS local_date
+        FROM "user"
+        WHERE email_notifications
+          AND email IS NOT NULL
+          AND ((COALESCE(digest_hour, 9)
+                - EXTRACT(HOUR FROM (NOW() AT TIME ZONE COALESCE(digest_timezone, 'America/New_York')))::int
+               ) % 24) = 0
+          AND (
+            last_digest_sent_at IS NULL
+            OR last_digest_sent_at
+               < (NOW() AT TIME ZONE COALESCE(digest_timezone, 'America/New_York'))::date
+          )
+          AND (
+            COALESCE(notification_frequency, 'daily') = 'daily'
+            OR (COALESCE(notification_frequency, 'daily') = 'weekly'
+                AND EXTRACT(DOW FROM (NOW() AT TIME ZONE COALESCE(digest_timezone, 'America/New_York'))) = 1)
+            OR (COALESCE(notification_frequency, 'daily') = 'monthly'
+                AND EXTRACT(DAY FROM (NOW() AT TIME ZONE COALESCE(digest_timezone, 'America/New_York'))) = 1)
+          )
+    """)
 
-    users = (
-        db.query(User)
-        .filter(User.email_notifications == True, User.email != None)  # noqa: E711,E712
-        .all()
-    )
-    for user in users:
+    rows = db.execute(bucket_sql).mappings().all()
+    if not rows:
+        return
+
+    # Group by frequency so we can run one bulk-items query per window size.
+    freq_groups: dict[str, list] = defaultdict(list)
+    for row in rows:
+        freq = row["notification_frequency"] or "daily"
+        freq_groups[freq].append(row)
+
+    all_items: dict[str, list] = {}
+    for freq, freq_rows in freq_groups.items():
+        window = _frequency_window(freq)
+        user_ids = [r["id"] for r in freq_rows]
+        all_items.update(_build_items_for_bucket(db, user_ids, window))
+
+    # Send emails; collect IDs to batch-mark as sent afterwards.
+    updates: list[tuple[str, date]] = []
+    for row in rows:
+        user_id = row["id"]
+        items = all_items.get(user_id, [])
+        if not items:
+            continue
         try:
-            local_now = _user_local_now(user, now_utc)
-            preferred_hour = user.digest_hour if user.digest_hour is not None else 9
-            if local_now.hour != preferred_hour:
-                continue
-            local_date = local_now.date()
-            if user.last_digest_sent_at == local_date:
-                continue
-            freq = user.notification_frequency or "daily"
-            if not _should_send_today(freq, local_date):
-                continue
-            window = _frequency_window(freq)
-            items = _build_items_for_window(db, user.id, window)
-            if items:
-                send_notification_email(
-                    user.email, user.username or "", items, uid=user.id, frequency=freq
-                )
-            user.last_digest_sent_at = local_date
-            db.commit()
+            send_notification_email(
+                row["email"],
+                row["username"] or "",
+                items,
+                uid=user_id,
+                frequency=row["notification_frequency"] or "daily",
+            )
+            updates.append((user_id, row["local_date"]))
         except Exception:
-            db.rollback()
-            logger.exception("Daily digest failed for user %s", user.id)
+            logger.exception("Daily digest failed for user %s", user_id)
+
+    if updates:
+        for user_id, local_date in updates:
+            db.query(User).filter_by(id=user_id).update(
+                {"last_digest_sent_at": local_date}, synchronize_session=False
+            )
+        db.commit()
 
 
 @router.post("/send-digest")

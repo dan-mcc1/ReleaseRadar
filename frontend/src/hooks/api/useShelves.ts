@@ -19,7 +19,7 @@ export function useShelves() {
   const user = useAuthUser();
   return useQuery({
     queryKey: queryKeys.shelves(user?.uid ?? ""),
-    queryFn: () => apiFetch("/shelf").then((r) => r.json() as Promise<Shelf[]>),
+    queryFn: ({ signal }) => apiFetch("/shelf", { signal }).then((r) => r.json() as Promise<Shelf[]>),
     enabled: !!user,
     staleTime: 60_000,
   });
@@ -29,8 +29,8 @@ export function useShelfItems(shelfId: number) {
   const user = useAuthUser();
   return useQuery({
     queryKey: queryKeys.shelfItems(user?.uid ?? "", shelfId),
-    queryFn: () =>
-      apiFetch(`/shelf/${shelfId}/items`).then((r) => r.json()),
+    queryFn: ({ signal }) =>
+      apiFetch(`/shelf/${shelfId}/items`, { signal }).then((r) => r.json()),
     enabled: !!user,
   });
 }
@@ -43,9 +43,10 @@ export function useShelfCalendar(
   const user = useAuthUser();
   return useQuery({
     queryKey: [...queryKeys.shelfCalendar(user?.uid ?? "", shelfId), fromDate, toDate],
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       apiFetch(
-        `/shelf/${shelfId}/calendar?from_date=${fromDate}&to_date=${toDate}`
+        `/shelf/${shelfId}/calendar?from_date=${fromDate}&to_date=${toDate}`,
+        { signal },
       ).then((r) => r.json()),
     enabled: !!user,
   });
@@ -55,9 +56,10 @@ export function useItemShelves(contentType: "movie" | "tv", contentId: number) {
   const user = useAuthUser();
   return useQuery({
     queryKey: queryKeys.itemShelves(user?.uid ?? "", contentType, contentId),
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       apiFetch(
-        `/shelf/item-shelves?content_type=${contentType}&content_id=${contentId}`
+        `/shelf/item-shelves?content_type=${contentType}&content_id=${contentId}`,
+        { signal },
       ).then((r) => r.json() as Promise<number[]>),
     enabled: !!user,
   });

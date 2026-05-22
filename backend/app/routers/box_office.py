@@ -1,15 +1,19 @@
+import asyncio
 import calendar
 import time
-from concurrent.futures import ThreadPoolExecutor
-from fastapi import APIRouter, Query, HTTPException
-from app.services.tmdb_client import get
+
+from fastapi import APIRouter, HTTPException, Query
+
+from app.services.tmdb_client import async_get
 
 router = APIRouter()
 
-# Simple TTL cache keyed by (year, month_or_0, limit)
 _cache: dict[tuple, tuple[list, float]] = {}
 _TTL_HISTORICAL = 7 * 24 * 3600
 _TTL_CURRENT = 6 * 3600
+
+_all_time_cache: dict[tuple, tuple[list, float]] = {}
+_TTL_ALL_TIME = 24 * 3600
 
 
 def _ttl(year: int, month: int) -> float:
@@ -20,21 +24,20 @@ def _ttl(year: int, month: int) -> float:
 
 
 def _date_range(year: int, month: int):
-    """month=0 means full year."""
     if month:
         last_day = calendar.monthrange(year, month)[1]
         return f"{year}-{month:02d}-01", f"{year}-{month:02d}-{last_day:02d}"
     return f"{year}-01-01", f"{year}-12-31"
 
 
-def _fetch_detail(movie_id: int) -> dict | None:
+async def _fetch_detail(movie_id: int) -> dict | None:
     try:
-        return get(f"/movie/{movie_id}")
+        return await async_get(f"/movie/{movie_id}")
     except Exception:
         return None
 
 
-def _build_leaderboard(year: int, month: int, limit: int) -> list[dict]:
+async def _build_leaderboard(year: int, month: int, limit: int) -> list[dict]:
     cache_key = (year, month, limit)
     cached = _cache.get(cache_key)
     if cached:
@@ -43,10 +46,8 @@ def _build_leaderboard(year: int, month: int, limit: int) -> list[dict]:
             return result
 
     gte, lte = _date_range(year, month)
-
-    # Get sorted movie IDs from TMDB discover
     try:
-        data = get(
+        data = await async_get(
             "/discover/movie",
             {
                 "sort_by": "revenue.desc",
@@ -64,32 +65,20 @@ def _build_leaderboard(year: int, month: int, limit: int) -> list[dict]:
         return []
 
     ids = [r["id"] for r in discover_results]
+    details = await asyncio.gather(*[_fetch_detail(mid) for mid in ids])
+    fetched = {ids[i]: d for i, d in enumerate(details) if d}
 
-    # Always fetch fresh from TMDB so revenue figures match the movie detail page
-    fetched: dict[int, dict] = {}
-    with ThreadPoolExecutor(max_workers=min(len(ids), 20)) as executor:
-        futures = {executor.submit(_fetch_detail, mid): mid for mid in ids}
-        for future in futures:
-            mid = futures[future]
-            result = future.result()
-            if result:
-                fetched[mid] = result
-
-    # Build ranked list preserving discover sort order
     ranked = []
     rank = 1
     for mid in ids:
         if rank > limit:
             break
-
         m = fetched.get(mid)
         if not m:
             continue
-
         revenue = m.get("revenue") or 0
         if revenue <= 0:
             continue
-
         ranked.append(
             {
                 "rank": rank,
@@ -111,11 +100,7 @@ def _build_leaderboard(year: int, month: int, limit: int) -> list[dict]:
     return ranked
 
 
-_all_time_cache: dict[tuple, tuple[list, float]] = {}
-_TTL_ALL_TIME = 24 * 3600
-
-
-def _build_all_time_leaderboard(page: int, limit: int) -> list[dict]:
+async def _build_all_time_leaderboard(page: int, limit: int) -> list[dict]:
     cache_key = (page, limit)
     cached = _all_time_cache.get(cache_key)
     if cached:
@@ -124,7 +109,7 @@ def _build_all_time_leaderboard(page: int, limit: int) -> list[dict]:
             return result
 
     try:
-        data = get(
+        data = await async_get(
             "/discover/movie",
             {
                 "sort_by": "revenue.desc",
@@ -140,28 +125,19 @@ def _build_all_time_leaderboard(page: int, limit: int) -> list[dict]:
         return []
 
     ids = [r["id"] for r in discover_results[:limit]]
+    details = await asyncio.gather(*[_fetch_detail(mid) for mid in ids])
+    fetched = {ids[i]: d for i, d in enumerate(details) if d}
 
-    fetched: dict[int, dict] = {}
-    with ThreadPoolExecutor(max_workers=min(len(ids), 20)) as executor:
-        futures = {executor.submit(_fetch_detail, mid): mid for mid in ids}
-        for future in futures:
-            mid = futures[future]
-            result = future.result()
-            if result:
-                fetched[mid] = result
-
-    ranked = []
     rank_offset = (page - 1) * limit
+    ranked = []
     rank = rank_offset + 1
     for mid in ids:
         m = fetched.get(mid)
         if not m:
             continue
-
         revenue = m.get("revenue") or 0
         if revenue <= 0:
             continue
-
         ranked.append(
             {
                 "rank": rank,
@@ -184,25 +160,25 @@ def _build_all_time_leaderboard(page: int, limit: int) -> list[dict]:
 
 
 @router.get("/yearly")
-def box_office_yearly(
+async def box_office_yearly(
     year: int = Query(..., ge=1900, le=2100),
     limit: int = Query(20, ge=1, le=50),
 ):
-    return _build_leaderboard(year, 0, limit)
+    return await _build_leaderboard(year, 0, limit)
 
 
 @router.get("/monthly")
-def box_office_monthly(
+async def box_office_monthly(
     year: int = Query(..., ge=1900, le=2100),
     month: int = Query(..., ge=1, le=12),
     limit: int = Query(20, ge=1, le=50),
 ):
-    return _build_leaderboard(year, month, limit)
+    return await _build_leaderboard(year, month, limit)
 
 
 @router.get("/all-time")
-def box_office_all_time(
+async def box_office_all_time(
     page: int = Query(1, ge=1, le=20),
     limit: int = Query(20, ge=1, le=20),
 ):
-    return _build_all_time_leaderboard(page, limit)
+    return await _build_all_time_leaderboard(page, limit)

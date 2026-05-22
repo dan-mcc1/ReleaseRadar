@@ -730,28 +730,23 @@ def prune_stale_cache(db: Session) -> None:
     """Delete Show/Movie cache rows that have no trackers and haven't been touched in 90 days."""
     cutoff = datetime.now(timezone.utc) - timedelta(days=90)
 
-    stale_shows = (
+    # Cascading FKs on all child tables (episodes, seasons, providers, genres,
+    # show_videos, episode_watched, finish_by_goal) mean one DELETE handles everything.
+    deleted_shows = (
         db.query(Show)
         .filter(Show.tracking_count == 0, Show.updated_at < cutoff)
-        .all()
+        .delete(synchronize_session=False)
     )
-    for show in stale_shows:
-        db.query(Episode).filter_by(show_id=show.id).delete()
-        db.delete(show)
-
-    stale_movies = (
+    deleted_movies = (
         db.query(Movie)
         .filter(Movie.tracking_count == 0, Movie.updated_at < cutoff)
-        .all()
+        .delete(synchronize_session=False)
     )
-    for movie in stale_movies:
-        db.delete(movie)
 
     db.commit()
 
-    total = len(stale_shows) + len(stale_movies)
-    if total:
+    if deleted_shows or deleted_movies:
         logger.info(
             "Cache prune: removed %d show(s) and %d movie(s) with no trackers",
-            len(stale_shows), len(stale_movies),
+            deleted_shows, deleted_movies,
         )

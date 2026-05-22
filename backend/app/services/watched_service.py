@@ -273,14 +273,14 @@ def _fetch_watched_movies_pg(s: Session, user_id: str) -> list[dict]:
             ) AS genres,
             COALESCE(
                 array_agg(DISTINCT mp.provider_id)
-                    FILTER (WHERE mp.flatrate = true AND mp.provider_id IS NOT NULL),
+                    FILTER (WHERE mp.provider_id IS NOT NULL),
                 ARRAY[]::integer[]
             ) AS flatrate_provider_ids
         FROM watched w
         JOIN movie m ON m.id = w.content_id AND w.content_type = 'movie'
         LEFT JOIN movie_genre mg ON mg.movie_id = m.id
         LEFT JOIN genre g ON g.id = mg.genre_id
-        LEFT JOIN movie_provider mp ON mp.movie_id = m.id
+        LEFT JOIN movie_provider mp ON mp.movie_id = m.id AND mp.flatrate = true
         WHERE w.user_id = :uid
         GROUP BY m.id, w.rating, w.watched_at
     """), {"uid": user_id}).mappings().all()
@@ -322,14 +322,14 @@ def _fetch_watched_shows_pg(s: Session, user_id: str) -> list[dict]:
             ) AS genres,
             COALESCE(
                 array_agg(DISTINCT sp.provider_id)
-                    FILTER (WHERE sp.flatrate = true AND sp.provider_id IS NOT NULL),
+                    FILTER (WHERE sp.provider_id IS NOT NULL),
                 ARRAY[]::integer[]
             ) AS flatrate_provider_ids
         FROM watched w
         JOIN show sh ON sh.id = w.content_id AND w.content_type = 'tv'
         LEFT JOIN show_genre sg ON sg.show_id = sh.id
         LEFT JOIN genre g ON g.id = sg.genre_id
-        LEFT JOIN show_provider sp ON sp.show_id = sh.id
+        LEFT JOIN show_provider sp ON sp.show_id = sh.id AND sp.flatrate = true
         WHERE w.user_id = :uid
         GROUP BY sh.id, w.rating, w.watched_at
     """), {"uid": user_id}).mappings().all()

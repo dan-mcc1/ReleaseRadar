@@ -21,9 +21,10 @@ export function useRewatches(contentType: string, contentId: number) {
   const user = useAuthUser();
   return useQuery({
     queryKey: rewatchKey(user?.uid ?? "", contentType, contentId),
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       queryFetch<{ rewatches: RewatchEntry[]; count: number }>(
         `/rewatch/${contentType}/${contentId}`,
+        { signal },
       ),
     enabled: !!user,
   });

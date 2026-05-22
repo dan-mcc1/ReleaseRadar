@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+﻿import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryFetch, checkedFetch } from "./queryFetch";
 import { useAuthUser } from "../useAuthUser";
 
@@ -11,7 +11,7 @@ export interface StreamingProvider {
 export function useAllProviders() {
   return useQuery<StreamingProvider[]>({
     queryKey: ["streaming", "providers"],
-    queryFn: () => queryFetch<StreamingProvider[]>("/streaming/providers"),
+    queryFn: ({ signal }) => queryFetch<StreamingProvider[]>("/streaming/providers", { signal }),
     staleTime: 1000 * 60 * 60 * 24, // providers list rarely changes
   });
 }
@@ -20,7 +20,7 @@ export function useMyStreamingServices() {
   const user = useAuthUser();
   return useQuery<StreamingProvider[]>({
     queryKey: ["streaming", "services"],
-    queryFn: () => queryFetch<StreamingProvider[]>("/streaming/services"),
+    queryFn: ({ signal }) => queryFetch<StreamingProvider[]>("/streaming/services", { signal }),
     enabled: !!user,
     staleTime: 1000 * 60 * 5,
   });
@@ -113,7 +113,7 @@ export function useStreamingOptimizer() {
   const user = useAuthUser();
   return useQuery<StreamingOptimizerResult>({
     queryKey: ["streaming", "optimizer"],
-    queryFn: () => queryFetch<StreamingOptimizerResult>("/streaming/optimizer"),
+    queryFn: ({ signal }) => queryFetch<StreamingOptimizerResult>("/streaming/optimizer", { signal }),
     enabled: !!user,
     staleTime: 1000 * 60 * 5,
   });

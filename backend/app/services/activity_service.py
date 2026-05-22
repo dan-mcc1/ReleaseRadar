@@ -1,6 +1,7 @@
 import logging
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy import or_, func
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from datetime import datetime, timedelta, timezone
 from app.models.activity import Activity
 from app.models.friendship import Friendship
@@ -28,22 +29,31 @@ def log_activity(
     season_number: int = None,
     episode_number: int = None,
 ):
-    # Remove any existing entry for the same user/type/content so re-adding
-    # a show doesn't accumulate duplicate activity rows.
-    q = db.query(Activity).filter(
-        Activity.user_id == user_id,
-        Activity.activity_type == activity_type,
-        Activity.content_type == content_type,
-        Activity.content_id == content_id,
-    )
     if activity_type == "episode_watched":
-        q = q.filter(
+        # Partial unique index excludes episode_watched rows; keep old path.
+        db.query(Activity).filter(
+            Activity.user_id == user_id,
+            Activity.activity_type == activity_type,
+            Activity.content_type == content_type,
+            Activity.content_id == content_id,
             Activity.season_number == season_number,
             Activity.episode_number == episode_number,
-        )
-    q.delete(synchronize_session=False)
+        ).delete(synchronize_session=False)
+        db.add(Activity(
+            user_id=user_id,
+            activity_type=activity_type,
+            content_type=content_type,
+            content_id=content_id,
+            content_title=content_title,
+            content_poster_path=content_poster_path,
+            rating=rating,
+            season_number=season_number,
+            episode_number=episode_number,
+        ))
+        db.flush()
+        return
 
-    # Collapse preceding "started watching" entries into the watched event
+    # Collapse preceding "started watching" entries into the watched event.
     if activity_type == "watched":
         db.query(Activity).filter(
             Activity.user_id == user_id,
@@ -52,7 +62,8 @@ def log_activity(
             Activity.content_id == content_id,
         ).delete(synchronize_session=False)
 
-    entry = Activity(
+    # One round-trip: INSERT … ON CONFLICT DO UPDATE using the partial unique index.
+    stmt = pg_insert(Activity).values(
         user_id=user_id,
         activity_type=activity_type,
         content_type=content_type,
@@ -63,7 +74,17 @@ def log_activity(
         season_number=season_number,
         episode_number=episode_number,
     )
-    db.add(entry)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["user_id", "activity_type", "content_type", "content_id"],
+        index_where=Activity.activity_type != "episode_watched",
+        set_=dict(
+            content_title=stmt.excluded.content_title,
+            content_poster_path=stmt.excluded.content_poster_path,
+            rating=stmt.excluded.rating,
+            created_at=func.now(),
+        ),
+    )
+    db.execute(stmt)
     db.flush()
 
 

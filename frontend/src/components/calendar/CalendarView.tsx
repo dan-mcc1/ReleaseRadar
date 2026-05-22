@@ -73,17 +73,6 @@ export default function CalendarView() {
     [shows, movies],
   );
 
-  useEffect(() => {
-    const urls = new Set<string>();
-    for (const item of allItems) {
-      if (item.showData.backdrop_path)
-        urls.add(`https://image.tmdb.org/t/p/w780${item.showData.backdrop_path}`);
-      if (item.showData.logo_path)
-        urls.add(`https://image.tmdb.org/t/p/w185${item.showData.logo_path}`);
-    }
-    urls.forEach((url) => { new Image().src = url; });
-  }, [allItems]);
-
   const cwIds = useMemo((): CurrentlyWatchingIds | undefined => {
     if (!currentlyWatchingFilter || !cwData) return undefined;
     return {
@@ -120,6 +109,19 @@ export default function CalendarView() {
       ),
     [selectedDate, allItems, filterType, watchFilter, cwIds],
   );
+
+  useEffect(() => {
+    const rawItems = viewMode === "month" ? weekDays.flatMap((d) => d.items) : selectedDateItems;
+    const visibleItems = rawItems.filter((item): item is NonNullable<typeof item> => item != null);
+    const urls = new Set<string>();
+    for (const item of visibleItems) {
+      if (item.showData.backdrop_path)
+        urls.add(`https://image.tmdb.org/t/p/w780${item.showData.backdrop_path}`);
+      if (item.showData.logo_path)
+        urls.add(`https://image.tmdb.org/t/p/w185${item.showData.logo_path}`);
+    }
+    urls.forEach((url) => { new Image().src = url; });
+  }, [viewMode, weekDays, selectedDateItems]);
 
   const upcomingThisMonth = useMemo(
     () => countUpcomingThisMonth(allItems, today, currentMonth, currentYear),

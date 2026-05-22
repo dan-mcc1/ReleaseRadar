@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+﻿import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "./queryKeys";
 import { queryFetch, checkedFetch } from "./queryFetch";
 import { useAuthUser } from "../useAuthUser";
@@ -14,8 +14,8 @@ export function useForYou(mode: string) {
   const user = useAuthUser();
   return useQuery({
     queryKey: queryKeys.forYou(user?.uid ?? "", mode),
-    queryFn: () =>
-      queryFetch<ForYouData>(`/recommendations/for-you?mode=${mode}`),
+    queryFn: ({ signal }) =>
+      queryFetch<ForYouData>(`/recommendations/for-you?mode=${mode}`, { signal }),
     enabled: !!user,
   });
 }
@@ -24,8 +24,8 @@ export function useForYouPreview() {
   const user = useAuthUser();
   return useQuery({
     queryKey: queryKeys.forYou(user?.uid ?? "", "default"),
-    queryFn: () =>
-      queryFetch<{ movies: Movie[]; shows: Show[] }>("/recommendations/for-you"),
+    queryFn: ({ signal }) =>
+      queryFetch<{ movies: Movie[]; shows: Show[] }>("/recommendations/for-you", { signal }),
     enabled: !!user,
   });
 }
@@ -34,7 +34,7 @@ export function useRecommendationsInbox() {
   const user = useAuthUser();
   return useQuery({
     queryKey: queryKeys.recommendationsInbox(user?.uid ?? ""),
-    queryFn: () => queryFetch("/recommendations/inbox"),
+    queryFn: ({ signal }) => queryFetch("/recommendations/inbox", { signal }),
     enabled: !!user,
   });
 }
@@ -43,7 +43,7 @@ export function useUnreadRecCount() {
   const user = useAuthUser();
   return useQuery({
     queryKey: queryKeys.unreadRecCount(user?.uid ?? ""),
-    queryFn: () => queryFetch<{ count: number }>("/recommendations/unread-count"),
+    queryFn: ({ signal }) => queryFetch<{ count: number }>("/recommendations/unread-count", { signal }),
     enabled: !!user,
   });
 }

@@ -5,6 +5,7 @@ from fastapi import (
     Body,
     HTTPException,
     Request,
+    Response,
     Query,
 )
 from datetime import date
@@ -28,6 +29,7 @@ from app.models.show import Show
 from app.models.movie import Movie
 from app.dependencies.auth import get_current_user
 from app.dependencies.subscription import feature_gate
+from app.core.etag import etag_response
 from app.core.limiter import limiter
 from app.services.episode_service import sync_show_episodes_background
 from app.services.media_upsert import populate_show_bg, populate_movie_bg
@@ -82,10 +84,15 @@ def remove_item(
 
 @router.get("")
 def get_user_watchlist(
+    request: Request,
+    response: Response,
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
-    return get_watchlist(db, uid)
+    payload = get_watchlist(db, uid)
+    if hit := etag_response(request, response, payload):
+        return hit
+    return payload
 
 
 @router.post("/reorder")
@@ -113,26 +120,43 @@ def reorder_item(
 
 @router.get("/tv/calendar")
 def watchlist_tv_calendar(
+    request: Request,
+    response: Response,
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
     from_date: str = Query(...),
     to_date: str = Query(...),
 ):
-    return get_tv_calendar(db, uid, from_date=from_date, to_date=to_date)
+    payload = get_tv_calendar(db, uid, from_date=from_date, to_date=to_date)
+    if hit := etag_response(request, response, payload):
+        return hit
+    return payload
 
 
 @router.get("/tv")
 def watchlist_tv_info(
-    db: Session = Depends(get_db), uid: str = Depends(get_current_user)
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
 ):
-    return _get_watchlist_items(db, uid, "tv")
+    payload = _get_watchlist_items(db, uid, "tv")
+    if hit := etag_response(request, response, payload):
+        return hit
+    return payload
 
 
 @router.get("/movie")
 def watchlist_movie_info(
-    db: Session = Depends(get_db), uid: str = Depends(get_current_user)
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
 ):
-    return _get_watchlist_items(db, uid, "movie")
+    payload = _get_watchlist_items(db, uid, "movie")
+    if hit := etag_response(request, response, payload):
+        return hit
+    return payload
 
 
 @router.post("/status/bulk")

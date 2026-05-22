@@ -12,10 +12,10 @@ export function useNavCounts() {
   const user = useAuthUser();
   return useQuery({
     queryKey: queryKeys.navCounts(user?.uid ?? ""),
-    queryFn: async (): Promise<NavCounts> => {
+    queryFn: async ({ signal }): Promise<NavCounts> => {
       const [incomingRes, unreadRes] = await Promise.all([
-        queryFetch<{ count: number }>("/friends/requests/incoming/count"),
-        queryFetch<{ count: number }>("/recommendations/unread-count"),
+        queryFetch<{ count: number }>("/friends/requests/incoming/count", { signal }),
+        queryFetch<{ count: number }>("/recommendations/unread-count", { signal }),
       ]);
       return {
         pendingRequests: incomingRes.count,
@@ -31,8 +31,8 @@ export function useNavAvatar() {
   const user = useAuthUser();
   return useQuery({
     queryKey: queryKeys.navAvatar(user?.uid ?? ""),
-    queryFn: async () => {
-      const data = await queryFetch<{ avatar_key: string | null }>("/user/me");
+    queryFn: async ({ signal }) => {
+      const data = await queryFetch<{ avatar_key: string | null }>("/user/me", { signal });
       return data.avatar_key;
     },
     enabled: !!user,

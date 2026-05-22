@@ -20,9 +20,10 @@ interface Review {
 export function useReviews(contentType: string, contentId: number, sort: "newest" | "top" = "newest") {
   return useQuery({
     queryKey: [...queryKeys.reviews(contentType, contentId), sort],
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       queryFetch<Review[]>(
         `/reviews?content_type=${contentType}&content_id=${contentId}&sort=${sort}`,
+        { signal },
       ),
   });
 }
@@ -30,9 +31,10 @@ export function useReviews(contentType: string, contentId: number, sort: "newest
 export function useAggregateRating(contentType: string, id: string) {
   return useQuery({
     queryKey: queryKeys.aggregateRating(contentType, id),
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       queryFetch<AggregateRating>(
         `/reviews/aggregate?content_type=${contentType}&content_id=${id}`,
+        { signal },
       ),
     enabled: !!id,
   });
@@ -42,9 +44,10 @@ export function useExternalScores(imdbId: string | undefined) {
   const user = useAuthUser();
   return useQuery({
     queryKey: queryKeys.externalScores(imdbId ?? ""),
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       queryFetch<ExternalScores>(
         `/reviews/external-scores?imdb_id=${encodeURIComponent(imdbId!)}`,
+        { signal },
       ),
     enabled: !!imdbId && !!user,
   });

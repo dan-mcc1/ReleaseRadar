@@ -84,11 +84,11 @@ export function useShelfCalendarData(shelfId: number) {
 
   const { data, isPending, isPlaceholderData } = useQuery<CalendarResponse>({
     queryKey: cacheKey,
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const { start, end } = initialLoadRange();
       const from = monthBounds(start.year, start.month).from;
       const to = monthBounds(end.year, end.month).to;
-      const res = await apiFetch(`/shelf/${shelfId}/calendar?from_date=${from}&to_date=${to}`);
+      const res = await apiFetch(`/shelf/${shelfId}/calendar?from_date=${from}&to_date=${to}`, { signal });
       if (!res.ok) throw new Error("Failed to fetch shelf calendar");
       return res.json() as Promise<CalendarResponse>;
     },

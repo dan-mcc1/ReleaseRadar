@@ -18,9 +18,10 @@ export function useWatchStatus(
   const uid = user?.uid;
   return useQuery({
     queryKey: queryKeys.watchStatus(uid ?? "", contentType, contentId),
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       queryFetch<StatusResult>(
         `/watchlist/${contentType}/${contentId}/status`,
+        { signal },
       ),
     enabled: !!uid && contentId > 0 && !options?.skip,
   });
@@ -38,11 +39,12 @@ export function useBulkWatchStatus(
 
   return useQuery({
     queryKey: queryKeys.bulkWatchStatus(uid ?? "", key),
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       queryFetch<Record<string, StatusResult>>("/watchlist/status/bulk", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(items),
+        signal,
       }),
     enabled: !!uid && items.length > 0,
   });

@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+﻿import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "./queryKeys";
 import { queryFetch } from "./queryFetch";
 import { useAuthUser } from "../useAuthUser";
@@ -36,7 +36,7 @@ export function useAdminStats() {
   const user = useAuthUser();
   return useQuery({
     queryKey: queryKeys.adminStats(),
-    queryFn: () => queryFetch<AdminStats>("/admin/stats"),
+    queryFn: ({ signal }) => queryFetch<AdminStats>("/admin/stats", { signal }),
     enabled: !!user,
     staleTime: 60_000,
   });

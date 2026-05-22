@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+﻿import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "./queryKeys";
 import { queryFetch, checkedFetch } from "./queryFetch";
 import { apiFetch } from "../../utils/apiFetch";
@@ -14,7 +14,7 @@ export function useWatchlist(enabled = true) {
   const user = useAuthUser();
   return useQuery({
     queryKey: queryKeys.watchlist(user?.uid ?? ""),
-    queryFn: () => queryFetch<ListData>("/watchlist"),
+    queryFn: ({ signal }) => queryFetch<ListData>("/watchlist", { signal }),
     enabled: !!user && enabled,
   });
 }
@@ -23,7 +23,7 @@ export function useWatched(enabled = true) {
   const user = useAuthUser();
   return useQuery({
     queryKey: queryKeys.watched(user?.uid ?? ""),
-    queryFn: () => queryFetch<ListData>("/watched"),
+    queryFn: ({ signal }) => queryFetch<ListData>("/watched", { signal }),
     enabled: !!user && enabled,
   });
 }
@@ -32,7 +32,7 @@ export function useCurrentlyWatching() {
   const user = useAuthUser();
   return useQuery({
     queryKey: queryKeys.currentlyWatching(user?.uid ?? ""),
-    queryFn: () => queryFetch<ListData>("/currently-watching"),
+    queryFn: ({ signal }) => queryFetch<ListData>("/currently-watching", { signal }),
     enabled: !!user,
   });
 }
@@ -41,7 +41,7 @@ export function useFavorites() {
   const user = useAuthUser();
   return useQuery({
     queryKey: queryKeys.favorites(user?.uid ?? ""),
-    queryFn: () => queryFetch<ListData>("/favorites"),
+    queryFn: ({ signal }) => queryFetch<ListData>("/favorites", { signal }),
     enabled: !!user,
   });
 }
@@ -50,9 +50,10 @@ export function useFavoriteStatus(contentType: string, contentId: number) {
   const user = useAuthUser();
   return useQuery({
     queryKey: queryKeys.favoriteStatus(user?.uid ?? "", contentType, contentId),
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       queryFetch<{ favorited: boolean }>(
         `/favorites/status?content_type=${contentType}&content_id=${contentId}`,
+        { signal },
       ),
     enabled: !!user,
   });

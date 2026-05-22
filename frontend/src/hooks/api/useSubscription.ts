@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+﻿import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useUserMe } from "./useUser";
 import { queryKeys } from "./queryKeys";
 import { queryFetch } from "./queryFetch";
@@ -29,7 +29,7 @@ export function useBillingStatus() {
   const user = useAuthUser();
   return useQuery({
     queryKey: queryKeys.billingStatus(user?.uid ?? ""),
-    queryFn: () => queryFetch<BillingStatus>("/billing/status"),
+    queryFn: ({ signal }) => queryFetch<BillingStatus>("/billing/status", { signal }),
     enabled: !!user,
   });
 }

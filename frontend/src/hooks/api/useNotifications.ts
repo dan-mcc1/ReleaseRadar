@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+﻿import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "./queryKeys";
 import { queryFetch, checkedFetch } from "./queryFetch";
 import { useAuthUser } from "../useAuthUser";
@@ -18,7 +18,7 @@ export function useNotificationPrefs() {
   const user = useAuthUser();
   return useQuery({
     queryKey: queryKeys.notificationPrefs(user?.uid ?? ""),
-    queryFn: () => queryFetch<NotificationPrefs>("/notifications/preferences"),
+    queryFn: ({ signal }) => queryFetch<NotificationPrefs>("/notifications/preferences", { signal }),
     enabled: !!user,
   });
 }

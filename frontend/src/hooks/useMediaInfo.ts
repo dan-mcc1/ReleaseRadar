@@ -23,6 +23,15 @@ export interface UseMediaInfoResult<T> {
   aggRating: AggregateRating | null;
 }
 
+export async function fetchMediaFull(type: "movie" | "tv", id: string | number): Promise<any> {
+  const path = type === "tv" ? `/tv/${id}/full` : `/movies/${id}/info`;
+  const rawData = await queryFetch<any>(path);
+  if (rawData["watch/providers"]?.["results"]?.["US"]) {
+    return { ...rawData, providers: rawData["watch/providers"]["results"]["US"] };
+  }
+  return rawData;
+}
+
 export function useMediaInfo<T extends { id: number; external_ids?: { imdb_id?: string } }>(
   options: UseMediaInfoOptions,
 ): UseMediaInfoResult<T> {
@@ -31,8 +40,8 @@ export function useMediaInfo<T extends { id: number; external_ids?: { imdb_id?: 
   // Main data fetch
   const mediaQuery = useQuery({
     queryKey: queryKeys.mediaDetailFull(contentType, id ?? ""),
-    queryFn: async () => {
-      const rawData = await queryFetch<any>(fetchUrl);
+    queryFn: async ({ signal }) => {
+      const rawData = await queryFetch<any>(fetchUrl, { signal });
       if (rawData["watch/providers"]?.["results"]?.["US"]) {
         return { ...rawData, providers: rawData["watch/providers"]["results"]["US"] } as T;
       }

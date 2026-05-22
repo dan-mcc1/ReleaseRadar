@@ -7,7 +7,7 @@ class FinishByGoal(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(String, ForeignKey("user.id"), nullable=False)
-    show_id = Column(Integer, ForeignKey("show.id"), nullable=False)
+    show_id = Column(Integer, ForeignKey("show.id", ondelete="CASCADE"), nullable=False)
     target_date = Column(Date, nullable=False)
 
     __table_args__ = (

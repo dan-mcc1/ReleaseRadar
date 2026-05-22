@@ -19,8 +19,8 @@ export interface BoxOfficeMovie {
 export function useAllTimeBoxOffice(page: number) {
   return useQuery({
     queryKey: queryKeys.boxOfficeAllTime(page),
-    queryFn: () =>
-      queryFetch<BoxOfficeMovie[]>(`/box-office/all-time?page=${page}&limit=20`),
+    queryFn: ({ signal }) =>
+      queryFetch<BoxOfficeMovie[]>(`/box-office/all-time?page=${page}&limit=20`, { signal }),
   });
 }
 
@@ -32,12 +32,12 @@ export function useBoxOffice(
 ) {
   return useQuery({
     queryKey: queryKeys.boxOffice(mode, year, month),
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       const params =
         mode === "yearly"
           ? `year=${year}&limit=${limit}`
           : `year=${year}&month=${month}&limit=${limit}`;
-      return queryFetch<BoxOfficeMovie[]>(`/box-office/${mode}?${params}`);
+      return queryFetch<BoxOfficeMovie[]>(`/box-office/${mode}?${params}`, { signal });
     },
   });
 }

@@ -4,6 +4,8 @@ uvicorn
 pydantic_settings
 sqlalchemy
 requests
+httpx[http2]
+orjson
 firebase_admin
 psycopg2-binary
 icalendar

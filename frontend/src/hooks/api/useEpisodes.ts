@@ -25,8 +25,8 @@ export function useEpisodeDetail<T>(
 ) {
   return useQuery<T>({
     queryKey: queryKeys.episodeDetail(showId ?? "", season ?? "", episode ?? ""),
-    queryFn: () =>
-      queryFetch<T>(`/tv/${showId}/season/${season}/episode/${episode}`),
+    queryFn: ({ signal }) =>
+      queryFetch<T>(`/tv/${showId}/season/${season}/episode/${episode}`, { signal }),
     enabled: !!showId && !!season && !!episode,
   });
 }
@@ -35,8 +35,8 @@ export function useWatchedEpisodes(showId: number) {
   const user = useAuthUser();
   return useQuery({
     queryKey: queryKeys.watchedEpisodes(user?.uid ?? "", showId),
-    queryFn: () =>
-      queryFetch<WatchedEpisode[]>(`/watched-episode/${showId}`),
+    queryFn: ({ signal }) =>
+      queryFetch<WatchedEpisode[]>(`/watched-episode/${showId}`, { signal }),
     enabled: !!user && showId > 0,
   });
 }
@@ -45,8 +45,8 @@ export function useNextEpisode(showId: number) {
   const user = useAuthUser();
   return useQuery({
     queryKey: queryKeys.nextEpisode(user?.uid ?? "", showId),
-    queryFn: () =>
-      queryFetch<NextEpisode>(`/watched-episode/${showId}/next`),
+    queryFn: ({ signal }) =>
+      queryFetch<NextEpisode>(`/watched-episode/${showId}/next`, { signal }),
     enabled: !!user && showId > 0,
   });
 }
@@ -56,9 +56,10 @@ export function useNextEpisodesBulk(showIds: number[]) {
   const idsStr = showIds.sort().join(",");
   return useQuery({
     queryKey: queryKeys.nextEpisodesBulk(user?.uid ?? "", idsStr),
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       queryFetch<Record<string, NextEpisode>>(
         `/watched-episode/next/bulk?show_ids=${idsStr}`,
+        { signal },
       ),
     enabled: !!user && showIds.length > 0,
   });

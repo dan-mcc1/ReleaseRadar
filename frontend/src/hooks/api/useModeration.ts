@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+﻿import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "./queryKeys";
 import { queryFetch, checkedFetch } from "./queryFetch";
 import { useAuthUser } from "../useAuthUser";
@@ -13,7 +13,7 @@ export function useMyBlocks() {
   const user = useAuthUser();
   return useQuery<BlockEntry[]>({
     queryKey: queryKeys.myBlocks(user?.uid ?? ""),
-    queryFn: () => queryFetch<BlockEntry[]>("/moderation/blocks"),
+    queryFn: ({ signal }) => queryFetch<BlockEntry[]>("/moderation/blocks", { signal }),
     enabled: !!user,
   });
 }
@@ -70,12 +70,12 @@ export function useSubmitReport() {
   });
 }
 
-// ── Admin hooks ────────────────────────────────────────────────────────────────
+// â”€â”€ Admin hooks â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function useAdminReports(status: "pending" | "accepted" | "rejected" = "pending") {
   return useQuery({
     queryKey: queryKeys.adminReports(status),
-    queryFn: () => queryFetch(`/admin/reports?status=${status}`),
+    queryFn: ({ signal }) => queryFetch(`/admin/reports?status=${status}`, { signal }),
   });
 }
 
@@ -169,7 +169,7 @@ export function useAdminDeleteUser() {
 export function useAdminAppeals(status: "pending" | "approved" | "rejected" = "pending") {
   return useQuery({
     queryKey: ["admin", "appeals", status],
-    queryFn: () => queryFetch(`/admin/appeals?status=${status}`),
+    queryFn: ({ signal }) => queryFetch(`/admin/appeals?status=${status}`, { signal }),
   });
 }
 
@@ -206,8 +206,8 @@ export function useRejectAppeal() {
 export function useAdminUsers(search: string, skip: number) {
   return useQuery({
     queryKey: queryKeys.adminUsers(search, skip),
-    queryFn: () =>
-      queryFetch(`/admin/users?search=${encodeURIComponent(search)}&skip=${skip}&limit=50`),
+    queryFn: ({ signal }) =>
+      queryFetch(`/admin/users?search=${encodeURIComponent(search)}&skip=${skip}&limit=50`, { signal }),
   });
 }
 
@@ -266,9 +266,10 @@ export function useAdminUnsilenceUser() {
 export function useAdminBannedEmails() {
   return useQuery({
     queryKey: ["admin", "banned-emails"],
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       queryFetch<{ id: number; email: string; user_id: string | null; banned_at: string }[]>(
-        "/admin/banned-emails"
+        "/admin/banned-emails",
+        { signal },
       ),
   });
 }

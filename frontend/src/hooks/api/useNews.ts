@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+﻿import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "./queryKeys";
 import { queryFetch } from "./queryFetch";
 
@@ -26,7 +26,7 @@ export function useNews(category: NewsCategory, page: number, q?: string) {
 
   return useQuery({
     queryKey: queryKeys.news(category, page, q ?? ""),
-    queryFn: () => queryFetch<NewsResults>(`/news/?${params}`),
+    queryFn: ({ signal }) => queryFetch<NewsResults>(`/news/?${params}`, { signal }),
     staleTime: 30 * 60 * 1000,
   });
 }

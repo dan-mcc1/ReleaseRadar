@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+﻿import { useQuery } from "@tanstack/react-query";
 import { queryFetch } from "./queryFetch";
 import { useAuthUser } from "../useAuthUser";
 
@@ -20,7 +20,7 @@ export function useShowProgress(showId: number | undefined) {
   const user = useAuthUser();
   return useQuery({
     queryKey: ["showProgress", user?.uid ?? "", showId],
-    queryFn: () => queryFetch<ShowProgress>(`/watchlist/progress/${showId}`),
+    queryFn: ({ signal }) => queryFetch<ShowProgress>(`/watchlist/progress/${showId}`, { signal }),
     enabled: !!user && !!showId,
     staleTime: 60_000,
   });
@@ -31,18 +31,19 @@ export function useShowProgressBulk(showIds: number[]) {
   const sortedIds = [...showIds].sort((a, b) => a - b);
   return useQuery({
     queryKey: ["showProgress", "bulk", user?.uid ?? "", sortedIds],
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       queryFetch<Record<string, ShowProgress>>(`/watchlist/progress-bulk`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ show_ids: sortedIds }),
+        signal,
       }),
     enabled: !!user && showIds.length > 0,
     staleTime: 60_000,
   });
 }
 
-// Back-compat aliases — remove once all call sites are updated
+// Back-compat aliases â€” remove once all call sites are updated
 export type BingePlan = ShowProgress;
 export const useBingePlan = useShowProgress;
 export const useBingePlanBulk = useShowProgressBulk;

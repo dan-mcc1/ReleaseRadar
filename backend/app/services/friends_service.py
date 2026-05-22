@@ -1,7 +1,7 @@
 # app/services/friends_service.py
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, and_, func, literal, null
+from sqlalchemy import or_, and_, func, literal, null, union_all, text
 from fastapi import HTTPException
 
 from app.models.friendship import Friendship
@@ -396,143 +396,93 @@ def get_suggested_friends(db: Session, user_id: str, limit: int = 10) -> list[di
     2. Popular users (most total connections) as fallback
     Private profiles and blocked/banned users are excluded.
     """
-    # Build the set of IDs to exclude from suggestions
-    connected_req = db.query(Friendship.addressee_id).filter(
-        Friendship.requester_id == user_id,
-        Friendship.status.in_(["accepted", "following", "pending"]),
-    )
-    connected_addr = db.query(Friendship.requester_id).filter(
-        Friendship.addressee_id == user_id,
-        Friendship.status.in_(["accepted", "following", "pending"]),
-    )
-    blocked_ids = db.query(Block.blocked_id).filter(Block.blocker_id == user_id)
-    blocker_ids = db.query(Block.blocker_id).filter(Block.blocked_id == user_id)
-
-    exclude_ids: set[str] = {user_id}
-    for (uid,) in connected_req.all():
-        exclude_ids.add(uid)
-    for (uid,) in connected_addr.all():
-        exclude_ids.add(uid)
-    for (uid,) in blocked_ids.all():
-        exclude_ids.add(uid)
-    for (uid,) in blocker_ids.all():
-        exclude_ids.add(uid)
-
-    my_friend_ids = list(exclude_ids - {user_id})
-
-    # --- Step 1: friends-of-friends ---
-    fof_counts: dict[str, int] = {}
-    if my_friend_ids:
-        fof_req = (
-            db.query(Friendship.addressee_id)
-            .filter(
-                Friendship.requester_id.in_(my_friend_ids),
-                Friendship.status.in_(["accepted", "following"]),
-            )
-            .all()
+    sql = text("""
+        WITH
+        -- Both sides of my accepted/following/pending connections
+        my_connections AS (
+            SELECT addressee_id AS friend_id
+            FROM friendship
+            WHERE requester_id = :user_id
+              AND status IN ('accepted', 'following', 'pending')
+            UNION
+            SELECT requester_id
+            FROM friendship
+            WHERE addressee_id = :user_id
+              AND status IN ('accepted', 'following', 'pending')
+        ),
+        -- Full exclusion set: me + my connections + blocks in both directions
+        excluded AS (
+            SELECT friend_id AS id FROM my_connections
+            UNION
+            SELECT :user_id
+            UNION
+            SELECT blocked_id FROM block WHERE blocker_id = :user_id
+            UNION
+            SELECT blocker_id FROM block WHERE blocked_id = :user_id
+        ),
+        -- Friends-of-my-friends with mutual connection count
+        fof AS (
+            SELECT candidate, COUNT(*) AS mutual_count
+            FROM (
+                SELECT f.addressee_id AS candidate
+                FROM friendship f
+                JOIN my_connections mc ON f.requester_id = mc.friend_id
+                WHERE f.status IN ('accepted', 'following')
+                UNION ALL
+                SELECT f.requester_id
+                FROM friendship f
+                JOIN my_connections mc ON f.addressee_id = mc.friend_id
+                WHERE f.status IN ('accepted', 'following')
+            ) sub
+            WHERE sub.candidate NOT IN (SELECT id FROM excluded)
+            GROUP BY candidate
+        ),
+        -- Total connection count per user for popularity ranking
+        pop_counts AS (
+            SELECT uid, SUM(cnt) AS total
+            FROM (
+                SELECT requester_id AS uid, COUNT(*) AS cnt
+                FROM friendship
+                WHERE status IN ('accepted', 'following')
+                GROUP BY requester_id
+                UNION ALL
+                SELECT addressee_id, COUNT(*)
+                FROM friendship
+                WHERE status IN ('accepted', 'following')
+                GROUP BY addressee_id
+            ) sub
+            GROUP BY uid
         )
-        fof_addr = (
-            db.query(Friendship.requester_id)
-            .filter(
-                Friendship.addressee_id.in_(my_friend_ids),
-                Friendship.status.in_(["accepted", "following"]),
-            )
-            .all()
-        )
-        for (uid,) in fof_req:
-            if uid not in exclude_ids:
-                fof_counts[uid] = fof_counts.get(uid, 0) + 1
-        for (uid,) in fof_addr:
-            if uid not in exclude_ids:
-                fof_counts[uid] = fof_counts.get(uid, 0) + 1
+        SELECT
+            u.id,
+            u.username,
+            COALESCE(u.profile_visibility, 'friends_only') AS profile_visibility,
+            COALESCE(fof.mutual_count, 0)                  AS mutual_friends,
+            CASE WHEN fof.candidate IS NOT NULL
+                 THEN 'mutual_friends' ELSE 'popular' END  AS reason
+        FROM "user" u
+        LEFT JOIN fof        ON u.id = fof.candidate
+        LEFT JOIN pop_counts ON u.id = pop_counts.uid
+        WHERE u.id NOT IN (SELECT id FROM excluded)
+          AND u.username IS NOT NULL
+          AND u.profile_visibility != 'private'
+          AND u.is_banned = false
+          AND (fof.candidate IS NOT NULL OR pop_counts.uid IS NOT NULL)
+        ORDER BY fof.mutual_count DESC NULLS LAST, pop_counts.total DESC NULLS LAST
+        LIMIT :limit
+    """)
 
-    suggestions: list[dict] = []
-    if fof_counts:
-        sorted_fof = sorted(fof_counts.items(), key=lambda x: x[1], reverse=True)
-        fof_ids = [uid for uid, _ in sorted_fof[:limit]]
-        fof_users = (
-            db.query(User)
-            .filter(
-                User.id.in_(fof_ids),
-                User.username.isnot(None),
-                User.profile_visibility != "private",
-                User.is_banned == False,
-            )
-            .all()
-        )
-        user_map = {u.id: u for u in fof_users}
-        for uid, mutual in sorted_fof[:limit]:
-            if uid in user_map:
-                u = user_map[uid]
-                suggestions.append(
-                    {
-                        "id": u.id,
-                        "username": u.username,
-                        "profile_visibility": u.profile_visibility or "friends_only",
-                        "mutual_friends": mutual,
-                        "reason": "mutual_friends",
-                    }
-                )
-
-    # --- Step 2: popular users fallback ---
-    if len(suggestions) < limit:
-        needed = limit - len(suggestions)
-        already_suggested = exclude_ids | {s["id"] for s in suggestions}
-
-        # Count total connections per user via UNION subquery
-        # Union the raw queries before subquery-ing so column labels are preserved
-        req_counts_q = (
-            db.query(
-                Friendship.requester_id.label("uid"),
-                func.count().label("cnt"),
-            )
-            .filter(Friendship.status.in_(["accepted", "following"]))
-            .group_by(Friendship.requester_id)
-        )
-        addr_counts_q = (
-            db.query(
-                Friendship.addressee_id.label("uid"),
-                func.count().label("cnt"),
-            )
-            .filter(Friendship.status.in_(["accepted", "following"]))
-            .group_by(Friendship.addressee_id)
-        )
-        combined = req_counts_q.union_all(addr_counts_q).subquery()
-        total_counts_sub = (
-            db.query(
-                combined.c.uid,
-                func.sum(combined.c.cnt).label("total"),
-            )
-            .group_by(combined.c.uid)
-            .subquery()
-        )
-
-        popular_rows = (
-            db.query(User, total_counts_sub.c.total)
-            .join(total_counts_sub, User.id == total_counts_sub.c.uid)
-            .filter(
-                User.id.notin_(list(already_suggested)),
-                User.username.isnot(None),
-                User.profile_visibility != "private",
-                User.is_banned == False,
-            )
-            .order_by(total_counts_sub.c.total.desc())
-            .limit(needed)
-            .all()
-        )
-
-        for u, _ in popular_rows:
-            suggestions.append(
-                {
-                    "id": u.id,
-                    "username": u.username,
-                    "profile_visibility": u.profile_visibility or "friends_only",
-                    "mutual_friends": 0,
-                    "reason": "popular",
-                }
-            )
-
-    return suggestions[:limit]
+    rows = db.execute(sql, {"user_id": user_id, "limit": limit}).fetchall()
+    return [
+        {
+            "id": row.id,
+            "username": row.username,
+            "profile_visibility": row.profile_visibility,
+            "mutual_friends": row.mutual_friends,
+            "reason": row.reason,
+        }
+        for row in rows
+    ]
 
 
 def get_followers(db: Session, user_id: str) -> list[dict]:
@@ -574,57 +524,61 @@ def get_friends_content_activity(
     if not friend_ids:
         return []
 
-    results: list[dict] = []
-
-    # Watched
-    watched_rows = (
-        db.query(User.username, Watched.rating)
-        .join(Watched, User.id == Watched.user_id)
+    watched_q = (
+        db.query(
+            Watched.user_id,
+            literal("Watched").label("status"),
+            Watched.rating.label("rating"),
+            literal(1).label("prio"),
+        )
         .filter(
             Watched.user_id.in_(friend_ids),
             Watched.content_type == content_type,
             Watched.content_id == content_id,
-            User.profile_visibility != "private",
         )
-        .all()
     )
-    for username, rating in watched_rows:
-        results.append({"username": username, "status": "Watched", "rating": rating})
-
-    watched_usernames = {r["username"] for r in results}
-
-    # Currently Watching
-    cw_rows = (
-        db.query(User.username)
-        .join(CurrentlyWatching, User.id == CurrentlyWatching.user_id)
+    cw_q = (
+        db.query(
+            CurrentlyWatching.user_id,
+            literal("Currently Watching").label("status"),
+            null().label("rating"),
+            literal(2).label("prio"),
+        )
         .filter(
             CurrentlyWatching.user_id.in_(friend_ids),
             CurrentlyWatching.content_type == content_type,
             CurrentlyWatching.content_id == content_id,
-            User.profile_visibility != "private",
-            User.username.notin_(watched_usernames),
         )
-        .all()
     )
-    for (username,) in cw_rows:
-        results.append({"username": username, "status": "Currently Watching", "rating": None})
-
-    cw_usernames = {r["username"] for r in results if r["status"] == "Currently Watching"}
-
-    # Watchlist
-    wl_rows = (
-        db.query(User.username)
-        .join(Watchlist, User.id == Watchlist.user_id)
+    wl_q = (
+        db.query(
+            Watchlist.user_id,
+            literal("Want To Watch").label("status"),
+            null().label("rating"),
+            literal(3).label("prio"),
+        )
         .filter(
             Watchlist.user_id.in_(friend_ids),
             Watchlist.content_type == content_type,
             Watchlist.content_id == content_id,
-            User.profile_visibility != "private",
-            User.username.notin_(watched_usernames | cw_usernames),
         )
+    )
+
+    combined = union_all(
+        watched_q.statement, cw_q.statement, wl_q.statement
+    ).subquery()
+
+    rows = (
+        db.query(
+            User.username,
+            combined.c.status,
+            combined.c.rating,
+        )
+        .join(combined, User.id == combined.c.user_id)
+        .filter(User.profile_visibility != "private")
+        .distinct(User.username)
+        .order_by(User.username, combined.c.prio)
         .all()
     )
-    for (username,) in wl_rows:
-        results.append({"username": username, "status": "Want To Watch", "rating": None})
 
-    return results
+    return [{"username": username, "status": status, "rating": rating} for username, status, rating in rows]

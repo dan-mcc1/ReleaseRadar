@@ -141,9 +141,13 @@ export default function MovieInfo() {
         <div className="absolute inset-0 overflow-hidden">
           {movie.backdrop_path ? (
             <img
-              src={`${BASE_IMAGE_URL}/original${movie.backdrop_path}`}
+              src={`${BASE_IMAGE_URL}/w1280${movie.backdrop_path}`}
+              srcSet={`${BASE_IMAGE_URL}/w780${movie.backdrop_path} 780w, ${BASE_IMAGE_URL}/w1280${movie.backdrop_path} 1280w`}
+              sizes="100vw"
               alt=""
               className="absolute inset-0 w-full h-full object-cover object-[center_25%]"
+              loading="eager"
+              fetchPriority="high"
             />
           ) : (
             <div className="absolute inset-0 bg-gradient-to-br from-neutral-800 to-neutral-900" />

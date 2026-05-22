@@ -13,7 +13,8 @@ def _get_tier(user_id: str, db: Session) -> str:
 
 
 def is_premium(user_id: str, db: Session) -> bool:
-    return _get_tier(user_id, db) in PREMIUM_TIERS
+    return True  # open beta: all users get premium access
+    # return _get_tier(user_id, db) in PREMIUM_TIERS
 
 
 def require_premium(

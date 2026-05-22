@@ -15,8 +15,8 @@ export function useWatchlistNotifyPrefs() {
   const user = useAuthUser();
   return useQuery({
     queryKey: [...NOTIFY_PREFS_KEY, user?.uid ?? ""],
-    queryFn: () =>
-      apiFetch("/watchlist/notify-prefs").then((r) => r.json() as Promise<WatchlistNotifyItem[]>),
+    queryFn: ({ signal }) =>
+      apiFetch("/watchlist/notify-prefs", { signal }).then((r) => r.json() as Promise<WatchlistNotifyItem[]>),
     enabled: !!user,
   });
 }

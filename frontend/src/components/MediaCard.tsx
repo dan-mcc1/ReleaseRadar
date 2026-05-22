@@ -3,6 +3,9 @@ import { BASE_IMAGE_URL } from "../constants";
 import { Link } from "react-router-dom";
 import { parseLocalDate } from "../utils/date";
 import ContentRatingBadge from "./media/ContentRatingBadge";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "../hooks/api/queryKeys";
+import { fetchMediaFull } from "../hooks/useMediaInfo";
 
 type MediaCardProps =
   | {
@@ -17,6 +20,7 @@ type MediaCardProps =
     };
 
 export default function MediaCard({ item, type, onRemove }: MediaCardProps) {
+  const qc = useQueryClient();
   const title = type === "tv" ? (item as Show).name : (item as Movie).title;
   const date =
     type === "tv"
@@ -31,6 +35,11 @@ export default function MediaCard({ item, type, onRemove }: MediaCardProps) {
       <Link
         to={type === "tv" ? `/tv/${item.id}` : `/movie/${item.id}`}
         className="flex flex-col flex-1"
+        onMouseEnter={() => qc.prefetchQuery({
+          queryKey: queryKeys.mediaDetailFull(type, String(item.id)),
+          queryFn: () => fetchMediaFull(type, item.id),
+          staleTime: 60_000,
+        })}
       >
         {/* Backdrop image */}
         <div className="relative aspect-video overflow-hidden">

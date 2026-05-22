@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+﻿import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "./queryKeys";
 import { queryFetch, checkedFetch } from "./queryFetch";
 import { useAuthUser } from "../useAuthUser";
@@ -37,7 +37,7 @@ export function useAccountStatus() {
   const user = useAuthUser();
   return useQuery({
     queryKey: ["accountStatus", user?.uid ?? ""],
-    queryFn: () => queryFetch<AccountStatus>("/user/account-status"),
+    queryFn: ({ signal }) => queryFetch<AccountStatus>("/user/account-status", { signal }),
     enabled: !!user,
     // Only poll when the account is actually restricted so we can detect when
     // a ban/suspension is lifted. Normal users get zero background polling.
@@ -64,7 +64,7 @@ export function useUserMe() {
   const user = useAuthUser();
   return useQuery({
     queryKey: queryKeys.userMe(user?.uid ?? ""),
-    queryFn: () => queryFetch<DBUser>("/user/me"),
+    queryFn: ({ signal }) => queryFetch<DBUser>("/user/me", { signal }),
     enabled: !!user,
   });
 }
@@ -84,7 +84,7 @@ export function useUserStats() {
   const user = useAuthUser();
   return useQuery({
     queryKey: queryKeys.userStats(user?.uid ?? ""),
-    queryFn: () => queryFetch("/user/stats"),
+    queryFn: ({ signal }) => queryFetch("/user/stats", { signal }),
     enabled: !!user,
   });
 }
@@ -107,9 +107,10 @@ export function useWatchTimeStats(year: number | null) {
   const user = useAuthUser();
   return useQuery({
     queryKey: queryKeys.watchTimeStats(user?.uid ?? "", year),
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       queryFetch<WatchTimeStats>(
         `/user/watch-time-stats${year ? `?year=${year}` : ""}`,
+        { signal },
       ),
     enabled: !!user,
   });
@@ -168,7 +169,7 @@ export function useProfileSummary() {
   const user = useAuthUser();
   return useQuery({
     queryKey: queryKeys.profileSummary(user?.uid ?? ""),
-    queryFn: () => queryFetch<ProfileSummary>("/user/profile-summary"),
+    queryFn: ({ signal }) => queryFetch<ProfileSummary>("/user/profile-summary", { signal }),
     enabled: !!user,
     staleTime: 60_000,
   });
@@ -178,9 +179,10 @@ export function useFriendProfile(username: string | undefined) {
   const user = useAuthUser();
   return useQuery({
     queryKey: queryKeys.friendProfile(username ?? ""),
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const res = await apiFetch(
         `/user/profile/${encodeURIComponent(username!)}`,
+        { signal },
       );
       if (res.status === 400) return { isSelf: true } as const;
       if (!res.ok) throw new Error(`${res.status}`);
@@ -194,9 +196,10 @@ export function useFriendProfile(username: string | undefined) {
 export function useCheckUsername(username: string) {
   return useQuery({
     queryKey: queryKeys.usernameAvailable(username),
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       queryFetch<{ available: boolean }>(
         `/user/check-username?username=${encodeURIComponent(username)}`,
+        { signal },
       ),
     enabled: username.length >= 3,
   });
