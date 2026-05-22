@@ -726,7 +726,7 @@ export default function Watchlist() {
         </p>
         <div className="flex items-baseline gap-4 mt-2 flex-wrap">
           <h1
-            className="text-4xl font-normal leading-tight tracking-tight"
+            className="w-full sm:w-auto text-4xl font-normal leading-tight tracking-tight"
             style={{ fontFamily: "var(--font-serif)" }}
           >
             Your{" "}
@@ -735,7 +735,7 @@ export default function Watchlist() {
             </em>
           </h1>
           <div className="flex-1 hidden sm:block" />
-          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+          <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto sm:justify-end">
             <button
               onClick={() => setShowFilters((v) => !v)}
               className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors ${

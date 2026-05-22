@@ -105,7 +105,7 @@ function WatchedCard({
   const userRating = item.user_rating;
 
   return (
-    <div className="flex flex-col gap-2 group/card">
+    <div className="flex flex-col gap-2 group/card w-full">
       <div className="relative cursor-pointer" onClick={onNavigate}>
         <div className="aspect-[2/3] rounded-xl overflow-hidden bg-neutral-800">
           {item.poster_path ? (
@@ -176,7 +176,13 @@ export default function Watched() {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = (searchParams.get("tab") as TabType) ?? "all";
   function setActiveTab(tab: TabType) {
-    setSearchParams((p) => { p.set("tab", tab); return p; }, { replace: true });
+    setSearchParams(
+      (p) => {
+        p.set("tab", tab);
+        return p;
+      },
+      { replace: true },
+    );
   }
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortType>("watched_desc");
@@ -272,7 +278,7 @@ export default function Watched() {
         </p>
         <div className="flex items-baseline gap-4 mt-2 flex-wrap">
           <h1
-            className="text-4xl font-normal leading-tight tracking-tight"
+            className="w-full sm:w-auto text-4xl font-normal leading-tight tracking-tight"
             style={{ fontFamily: "var(--font-serif)" }}
           >
             Already{" "}
@@ -281,7 +287,7 @@ export default function Watched() {
             </em>
           </h1>
           <div className="flex-1 hidden sm:block" />
-          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+          <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto sm:justify-end">
             <button
               onClick={() => setShowFilters((v) => !v)}
               className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors ${

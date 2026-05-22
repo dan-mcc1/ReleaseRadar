@@ -1,4 +1,10 @@
-import { useRef, useEffect, useState, useLayoutEffect, useCallback } from "react";
+import {
+  useRef,
+  useEffect,
+  useState,
+  useLayoutEffect,
+  useCallback,
+} from "react";
 import { useWindowVirtualizer } from "@tanstack/react-virtual";
 
 export interface ColBreakpoint {
@@ -10,9 +16,9 @@ export interface ColBreakpoint {
 export const POSTER_COLS: ColBreakpoint[] = [
   { minWidth: 1280, cols: 8 },
   { minWidth: 1024, cols: 7 },
-  { minWidth: 768,  cols: 6 },
-  { minWidth: 640,  cols: 5 },
-  { minWidth: 0,    cols: 4 },
+  { minWidth: 768, cols: 6 },
+  { minWidth: 640, cols: 5 },
+  { minWidth: 0, cols: 4 },
 ];
 
 interface Props<T> {
@@ -56,7 +62,9 @@ export default function VirtualGrid<T>({
   useLayoutEffect(() => {
     const update = () => {
       if (containerRef.current) {
-        setScrollMargin(containerRef.current.getBoundingClientRect().top + window.scrollY);
+        setScrollMargin(
+          containerRef.current.getBoundingClientRect().top + window.scrollY,
+        );
       }
     };
     update();
@@ -105,7 +113,7 @@ export default function VirtualGrid<T>({
                 right: 0,
                 transform: `translateY(${vRow.start - scrollMargin}px)`,
                 display: "grid",
-                gridTemplateColumns: `repeat(${numCols}, 1fr)`,
+                gridTemplateColumns: `repeat(${numCols}, minmax(0, 1fr))`,
                 columnGap: colGap,
                 rowGap,
               }}
