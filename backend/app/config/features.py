@@ -9,11 +9,11 @@
 
 PREMIUM_FEATURES: dict[str, bool] = {
     "shelves": False,
-    "rewatch": True,
-    "watch_time_stats": True,
-    "ical_sync": True,
+    "rewatch": False,
+    "watch_time_stats": False,
+    "ical_sync": False,
     "binge_planner": False,
     "finish_by_goal": False,
-    "watchlist_notify_prompt": True,
-    "notification_settings": True,
+    "watchlist_notify_prompt": False,
+    "notification_settings": False,
 }

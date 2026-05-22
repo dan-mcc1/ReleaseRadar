@@ -5,7 +5,12 @@ import { signOut } from "firebase/auth";
 import { auth } from "../firebase";
 import { useAuthUser } from "../hooks/useAuthUser";
 import { useNavigate, Link, useLocation } from "react-router-dom";
-import { AVATAR_PRESETS, getAvatarColor, BASE_IMAGE_URL, API_URL } from "../constants";
+import {
+  AVATAR_PRESETS,
+  getAvatarColor,
+  BASE_IMAGE_URL,
+  API_URL,
+} from "../constants";
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useQuery } from "@tanstack/react-query";
 import { queryFetch } from "../hooks/api/queryFetch";
@@ -332,9 +337,7 @@ export default function Settings() {
   }, []);
 
   const prefSaving = updatePrefsMutation.isPending;
-  const isPremium =
-    userMe?.subscription_tier === "premium" ||
-    userMe?.subscription_tier === "admin";
+  const isPremium = true; // open beta: all users get premium access
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [notifySearch, setNotifySearch] = useState("");
   const [notifyTypeFilter, setNotifyTypeFilter] = useState<
@@ -423,7 +426,9 @@ export default function Settings() {
     const top = el.getBoundingClientRect().top + window.scrollY - 80;
     window.scrollTo({ top, behavior: "smooth" });
     // Release manual lock once scroll settles
-    setTimeout(() => { manualSection.current = null; }, 1000);
+    setTimeout(() => {
+      manualSection.current = null;
+    }, 1000);
   }
 
   function patchPreferences(patch: Partial<NotificationPrefs>) {
@@ -468,7 +473,7 @@ export default function Settings() {
     if (!user) return;
     if (
       !window.confirm(
-        "Are you sure you want to permanently delete your account? This cannot be undone."
+        "Are you sure you want to permanently delete your account? This cannot be undone.",
       )
     )
       return;
@@ -481,7 +486,7 @@ export default function Settings() {
       const e = err as { code?: string; message?: string };
       if (e.code === "auth/requires-recent-login") {
         setError(
-          "Please sign out and sign back in before deleting your account."
+          "Please sign out and sign back in before deleting your account.",
         );
       } else {
         setError(e.message ?? "An error occurred.");
@@ -722,9 +727,7 @@ export default function Settings() {
                   </div>
                 ) : (
                   <FieldInput
-                    value={
-                      userMe?.username ? `@${userMe.username}` : "Not set"
-                    }
+                    value={userMe?.username ? `@${userMe.username}` : "Not set"}
                     readOnly
                     suffix={
                       <button
@@ -758,8 +761,7 @@ export default function Settings() {
                   <button
                     onClick={saveBio}
                     disabled={
-                      updateBioMutation.isPending ||
-                      bio === (userMe?.bio ?? "")
+                      updateBioMutation.isPending || bio === (userMe?.bio ?? "")
                     }
                     className="text-sm bg-primary-600 enabled:hover:bg-primary-500 disabled:opacity-40 text-white px-4 py-1.5 rounded-lg transition-colors"
                   >
@@ -781,7 +783,10 @@ export default function Settings() {
             subtitle="Control what you hear about — and when."
           >
             {/* Email master toggle */}
-            <div data-tour="notifications-toggle" className="flex items-center justify-between py-3.5 border-b border-neutral-700/40">
+            <div
+              data-tour="notifications-toggle"
+              className="flex items-center justify-between py-3.5 border-b border-neutral-700/40"
+            >
               <div>
                 <p className="text-[14px] font-semibold text-white">
                   Email notifications
@@ -820,7 +825,9 @@ export default function Settings() {
                           onClick={() =>
                             locked
                               ? setShowUpgradeModal(true)
-                              : patchPreferences({ notification_frequency: freq })
+                              : patchPreferences({
+                                  notification_frequency: freq,
+                                })
                           }
                           disabled={prefSaving && !locked}
                           className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium transition-colors disabled:opacity-50 ${
@@ -859,7 +866,9 @@ export default function Settings() {
                     <select
                       value={digestHour}
                       onChange={(e) =>
-                        patchPreferences({ digest_hour: Number(e.target.value) })
+                        patchPreferences({
+                          digest_hour: Number(e.target.value),
+                        })
                       }
                       disabled={prefSaving}
                       className="bg-neutral-900/70 text-neutral-100 text-sm px-3 py-2 rounded-xl border border-neutral-700/50 focus:outline-none focus:ring-2 focus:ring-primary-400 disabled:opacity-50"
@@ -883,7 +892,7 @@ export default function Settings() {
                       >
                         <span className="flex-1 text-left">
                           {TIMEZONE_OPTIONS.find(
-                            ([v]) => v === digestTimezone
+                            ([v]) => v === digestTimezone,
                           )?.[1] ?? digestTimezone}
                         </span>
                         <svg
@@ -1101,12 +1110,16 @@ export default function Settings() {
                                 bulkToggleWatchlistNotify.isPending
                               }
                               className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
-                                item.notify ? "bg-primary-600" : "bg-neutral-600"
+                                item.notify
+                                  ? "bg-primary-600"
+                                  : "bg-neutral-600"
                               }`}
                             >
                               <span
                                 className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
-                                  item.notify ? "translate-x-4" : "translate-x-0.5"
+                                  item.notify
+                                    ? "translate-x-4"
+                                    : "translate-x-0.5"
                                 }`}
                               />
                             </button>
@@ -1148,12 +1161,16 @@ export default function Settings() {
                               }
                               disabled={toggleShelfNotify.isPending}
                               className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
-                                shelf.notify ? "bg-primary-600" : "bg-neutral-600"
+                                shelf.notify
+                                  ? "bg-primary-600"
+                                  : "bg-neutral-600"
                               }`}
                             >
                               <span
                                 className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
-                                  shelf.notify ? "translate-x-4" : "translate-x-0.5"
+                                  shelf.notify
+                                    ? "translate-x-4"
+                                    : "translate-x-0.5"
                                 }`}
                               />
                             </button>
@@ -1275,7 +1292,7 @@ export default function Settings() {
                         !myServiceIds.has(p.id) &&
                         p.name
                           .toLowerCase()
-                          .includes(providerSearch.toLowerCase())
+                          .includes(providerSearch.toLowerCase()),
                     )
                     .map((p) => (
                       <button
@@ -1311,7 +1328,7 @@ export default function Settings() {
                       !myServiceIds.has(p.id) &&
                       p.name
                         .toLowerCase()
-                        .includes(providerSearch.toLowerCase())
+                        .includes(providerSearch.toLowerCase()),
                   ).length === 0 && (
                     <p className="text-neutral-500 text-sm">
                       {providerSearch
@@ -1444,7 +1461,7 @@ export default function Settings() {
                   <button
                     onClick={() =>
                       setOpenInstructions(
-                        openInstructions === app.name ? null : app.name
+                        openInstructions === app.name ? null : app.name,
                       )
                     }
                     className="w-full flex items-center justify-between px-4 py-3 bg-neutral-900/40 hover:bg-neutral-800/60 text-left transition-colors"
@@ -1519,7 +1536,9 @@ export default function Settings() {
               ).map(({ value, label, desc }) => (
                 <button
                   key={value}
-                  onClick={() => patchPreferences({ profile_visibility: value })}
+                  onClick={() =>
+                    patchPreferences({ profile_visibility: value })
+                  }
                   disabled={prefSaving}
                   className={`w-full flex items-start gap-3 px-3 py-2.5 rounded-xl border text-left transition-colors disabled:opacity-50 ${
                     profileVisibility === value
@@ -1595,19 +1614,17 @@ export default function Settings() {
                   {userMe?.subscription_tier ?? "Free"}
                 </p>
               </div>
-              {!isPremium && (
+              {/* {!isPremium && (
                 <span className="text-[10px] font-bold uppercase tracking-wider bg-amber-400/15 text-amber-400 border border-amber-400/30 rounded-full px-2 py-0.5">
                   Upgrade available
                 </span>
-              )}
+              )} */}
             </div>
-            <Link
+            {/* <Link
               to="/billing"
               className="flex items-center justify-between w-full bg-neutral-900/50 hover:bg-neutral-800/70 border border-neutral-700/40 text-neutral-200 py-3 px-4 rounded-xl transition-colors text-sm"
             >
-              <span>
-                {isPremium ? "Manage billing" : "Upgrade to Premium"}
-              </span>
+              <span>{isPremium ? "Manage billing" : "Upgrade to Premium"}</span>
               <svg
                 className="w-4 h-4 text-neutral-400"
                 fill="none"
@@ -1621,7 +1638,7 @@ export default function Settings() {
                   d="M9 5l7 7-7 7"
                 />
               </svg>
-            </Link>
+            </Link> */}
           </SectionCard>
 
           {/* ── Account ── */}

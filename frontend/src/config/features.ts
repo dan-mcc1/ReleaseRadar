@@ -9,13 +9,13 @@
 
 export const PREMIUM_FEATURES = {
   shelves: false,
-  rewatch: true,
-  watchTimeStats: true,
-  icalSync: true,
+  rewatch: false,
+  watchTimeStats: false,
+  icalSync: false,
   bingePlanner: false,
   finishByGoal: false,
-  watchlistNotifyPrompt: true,
-  notificationSettings: true,
+  watchlistNotifyPrompt: false,
+  notificationSettings: false,
 } as const;
 
 export type Feature = keyof typeof PREMIUM_FEATURES;

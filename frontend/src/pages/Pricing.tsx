@@ -195,7 +195,7 @@ export default function Pricing() {
               </button>
             ) : (
               <>
-                <button
+                {/* <button
                   onClick={() => handleUpgrade("yearly")}
                   disabled={checkout.isPending}
                   className="w-full py-3 px-6 rounded-xl font-semibold text-sm bg-amber-500 hover:bg-amber-400 text-black transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
@@ -220,7 +220,10 @@ export default function Pricing() {
                 )}
                 <p className="text-center text-xs text-neutral-500">
                   7-day free trial · Cancel any time
-                </p>
+                </p> */}
+                <button className="w-full py-3 px-6 rounded-xl font-semibold text-sm bg-amber-500 text-black transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
+                  Currently in Beta, upgrading will be available soon
+                </button>
               </>
             )}
           </div>

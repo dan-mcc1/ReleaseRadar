@@ -185,48 +185,48 @@ function ShelfCard({
       {/* Poster stack + count */}
       <div className="flex items-end pl-2 mt-1">
         <div className="flex">
-          {shelf.preview_posters.length > 0
-            ? shelf.preview_posters.slice(0, 4).map((poster, i) => (
-                <div
-                  key={i}
-                  className="rounded-md overflow-hidden"
-                  style={{
-                    marginLeft: i === 0 ? 0 : -14,
-                    transform: `rotate(${(i - 1.5) * 2.5}deg)`,
-                    zIndex: i,
-                    boxShadow: `0 4px 10px rgba(0,0,0,0.5), 0 0 0 2px #262626`,
-                    width: 52,
-                    height: 78,
-                    flexShrink: 0,
-                  }}
-                >
-                  <img
-                    src={`${BASE_IMAGE_URL}/w154${poster}`}
-                    alt=""
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-              ))
-            : (
-                <div
-                  className="rounded-md bg-neutral-700 border border-neutral-600 flex items-center justify-center"
-                  style={{ width: 52, height: 78 }}
-                >
-                  <svg
-                    className="w-5 h-5 text-neutral-600"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={1.5}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M19 3H5a2 2 0 00-2 2v16l7-3.5L17 21V5a2 2 0 00-2-2z"
-                    />
-                  </svg>
-                </div>
-              )}
+          {shelf.preview_posters.length > 0 ? (
+            shelf.preview_posters.slice(0, 4).map((poster, i) => (
+              <div
+                key={i}
+                className="rounded-md overflow-hidden"
+                style={{
+                  marginLeft: i === 0 ? 0 : -14,
+                  transform: `rotate(${(i - 1.5) * 2.5}deg)`,
+                  zIndex: i,
+                  boxShadow: `0 4px 10px rgba(0,0,0,0.5), 0 0 0 2px #262626`,
+                  width: 52,
+                  height: 78,
+                  flexShrink: 0,
+                }}
+              >
+                <img
+                  src={`${BASE_IMAGE_URL}/w154${poster}`}
+                  alt=""
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            ))
+          ) : (
+            <div
+              className="rounded-md bg-neutral-700 border border-neutral-600 flex items-center justify-center"
+              style={{ width: 52, height: 78 }}
+            >
+              <svg
+                className="w-5 h-5 text-neutral-600"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={1.5}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M19 3H5a2 2 0 00-2 2v16l7-3.5L17 21V5a2 2 0 00-2-2z"
+                />
+              </svg>
+            </div>
+          )}
         </div>
         <div className="flex-1" />
         <div className="text-right">
@@ -254,7 +254,8 @@ export default function ShelvesPage() {
 
   const isPremium = userMe == null ? null : userMe.subscription_tier !== "free";
   const FREE_SHELF_LIMIT = 3;
-  const atFreeLimit = isPremium === false && shelves.length >= FREE_SHELF_LIMIT;
+  const atFreeLimit = false; // open beta: no shelf limit enforced
+  // const atFreeLimit = isPremium === false && shelves.length >= FREE_SHELF_LIMIT;
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
@@ -346,8 +347,8 @@ export default function ShelvesPage() {
         </button>
       </div>
 
-      {/* Free tier banner */}
-      {isPremium === false && (
+      {/* Free tier banner — hidden during open beta */}
+      {false && isPremium === false && (
         <div className="mb-6 flex items-center gap-3.5 px-4 py-3.5 rounded-2xl border border-neutral-700 bg-primary-600/5 text-sm">
           <span className="w-7 h-7 rounded-lg bg-primary-600 text-white flex items-center justify-center shrink-0">
             <svg

@@ -1,7 +1,12 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { usePageTitle } from "../hooks/usePageTitle";
-import { useSubscription, useBillingStatus, useCreatePortalSession, useCancelStripeSubscription } from "../hooks/api/useSubscription";
+import {
+  useSubscription,
+  useBillingStatus,
+  useCreatePortalSession,
+  useCancelStripeSubscription,
+} from "../hooks/api/useSubscription";
 import { useCreateCheckoutSession } from "../hooks/api/useSubscription";
 
 const TIER_LABELS: Record<string, string> = {
@@ -55,7 +60,9 @@ export default function BillingSettings() {
       const { url } = await openPortal.mutateAsync();
       window.location.href = url;
     } catch (err) {
-      setPortalError(err instanceof Error ? err.message : "Something went wrong");
+      setPortalError(
+        err instanceof Error ? err.message : "Something went wrong",
+      );
     }
   }
 
@@ -64,7 +71,11 @@ export default function BillingSettings() {
       await cancelMutation.mutateAsync();
       setConfirmingCancel(false);
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to cancel subscription. Please try again.");
+      alert(
+        err instanceof Error
+          ? err.message
+          : "Failed to cancel subscription. Please try again.",
+      );
     }
   }
 
@@ -74,7 +85,9 @@ export default function BillingSettings() {
       const { url } = await checkout.mutateAsync(interval);
       window.location.href = url;
     } catch (err) {
-      setCheckoutError(err instanceof Error ? err.message : "Something went wrong");
+      setCheckoutError(
+        err instanceof Error ? err.message : "Something went wrong",
+      );
     }
   }
 
@@ -84,17 +97,25 @@ export default function BillingSettings() {
   return (
     <div className="w-full max-w-2xl mx-auto px-4 sm:px-6 py-10 space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-neutral-100">Billing & Subscription</h1>
-        <p className="text-sm text-neutral-400 mt-1">Manage your Release Radar plan.</p>
+        <h1 className="text-2xl font-bold text-neutral-100">
+          Billing & Subscription
+        </h1>
+        <p className="text-sm text-neutral-400 mt-1">
+          Manage your Release Radar plan.
+        </p>
       </div>
 
       {/* Current plan */}
       <div className="rounded-2xl bg-neutral-900 border border-neutral-700 overflow-hidden">
         <div className="px-6 py-5 border-b border-neutral-800 flex items-center justify-between">
           <div>
-            <p className="text-xs uppercase tracking-widest text-neutral-500 font-semibold mb-1">Current plan</p>
+            <p className="text-xs uppercase tracking-widest text-neutral-500 font-semibold mb-1">
+              Current plan
+            </p>
             <div className="flex items-center gap-2">
-              <span className="text-xl font-bold text-white">{TIER_LABELS[tier] ?? tier}</span>
+              <span className="text-xl font-bold text-white">
+                {TIER_LABELS[tier] ?? tier}
+              </span>
               {isPremium && !isAdmin && (
                 <span className="text-[10px] font-bold uppercase tracking-wider bg-amber-400/15 text-amber-400 border border-amber-400/30 rounded-full px-2 py-0.5">
                   Premium
@@ -110,13 +131,25 @@ export default function BillingSettings() {
 
           {isPremium ? (
             <div className="flex items-center gap-2 text-sm text-neutral-400">
-              <svg className="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              <svg
+                className="w-4 h-4 text-emerald-400"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
               </svg>
               {cancelAtPeriodEnd ? "Cancels at period end" : "Active"}
             </div>
           ) : (
-            <span className="text-xs text-neutral-500 bg-neutral-800 border border-neutral-700 rounded-full px-3 py-1">Free tier</span>
+            <span className="text-xs text-neutral-500 bg-neutral-800 border border-neutral-700 rounded-full px-3 py-1">
+              Free tier
+            </span>
           )}
         </div>
 
@@ -125,10 +158,23 @@ export default function BillingSettings() {
             <div className="space-y-4">
               {!billingLoading && periodEnd && (
                 <p className="text-sm text-neutral-400">
-                  {cancelAtPeriodEnd
-                    ? <>Your subscription is canceled and access ends on <span className="text-neutral-200 font-medium">{formatDate(periodEnd)}</span>.</>
-                    : <>Next billing date: <span className="text-neutral-200 font-medium">{formatDate(periodEnd)}</span>.</>
-                  }
+                  {cancelAtPeriodEnd ? (
+                    <>
+                      Your subscription is canceled and access ends on{" "}
+                      <span className="text-neutral-200 font-medium">
+                        {formatDate(periodEnd)}
+                      </span>
+                      .
+                    </>
+                  ) : (
+                    <>
+                      Next billing date:{" "}
+                      <span className="text-neutral-200 font-medium">
+                        {formatDate(periodEnd)}
+                      </span>
+                      .
+                    </>
+                  )}
                 </p>
               )}
 
@@ -150,14 +196,28 @@ export default function BillingSettings() {
           ) : (
             <div className="space-y-5">
               <p className="text-sm text-neutral-400">
-                You're on the Free plan. Upgrade to Premium to unlock all features.
+                You're on the Free plan. Upgrade to Premium to unlock all
+                features.
               </p>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {PRO_FEATURES.map((f) => (
-                  <div key={f} className="flex items-center gap-2 text-sm text-neutral-300">
-                    <svg className="w-3.5 h-3.5 shrink-0 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  <div
+                    key={f}
+                    className="flex items-center gap-2 text-sm text-neutral-300"
+                  >
+                    <svg
+                      className="w-3.5 h-3.5 shrink-0 text-amber-400"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2.5}
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M5 13l4 4L19 7"
+                      />
                     </svg>
                     {f}
                   </div>
@@ -165,7 +225,7 @@ export default function BillingSettings() {
               </div>
 
               <div className="flex flex-col sm:flex-row gap-3 pt-1">
-                <button
+                {/* <button
                   onClick={() => handleUpgrade("yearly")}
                   disabled={checkout.isPending}
                   className="px-5 py-2.5 rounded-xl text-sm font-semibold bg-amber-500 hover:bg-amber-400 text-black transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
@@ -178,19 +238,24 @@ export default function BillingSettings() {
                   className="px-5 py-2.5 rounded-xl text-sm font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30 hover:bg-amber-500/25 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {checkout.isPending ? "Redirecting…" : "Upgrade monthly — $4.99/mo"}
+                </button> */}
+                <button className="px-5 py-2.5 rounded-xl text-sm font-semibold bg-amber-500 text-black transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
+                  Currently in Beta
                 </button>
               </div>
               {checkoutError && (
                 <p className="text-xs text-red-400">{checkoutError}</p>
               )}
-              <p className="text-xs text-neutral-500">7-day free trial · Cancel any time</p>
+              <p className="text-xs text-neutral-500">
+                7-day free trial · Cancel any time
+              </p>
 
-              <button
+              {/* <button
                 onClick={() => navigate("/pricing")}
                 className="text-sm text-neutral-500 hover:text-neutral-300 transition-colors"
               >
                 See full pricing details →
-              </button>
+              </button> */}
             </div>
           )}
         </div>
@@ -199,9 +264,14 @@ export default function BillingSettings() {
       {/* Tracking usage (free only) */}
       {!isPremium && (
         <div className="rounded-2xl bg-neutral-900 border border-neutral-700 px-6 py-5 space-y-2">
-          <p className="text-xs uppercase tracking-widest text-neutral-500 font-semibold">Tracking limit</p>
+          <p className="text-xs uppercase tracking-widest text-neutral-500 font-semibold">
+            Tracking limit
+          </p>
           <p className="text-sm text-neutral-400">
-            Free accounts can track up to <span className="text-white font-semibold">30 titles</span> across Watchlist and Currently Watching. Upgrade to Premium for unlimited tracking.
+            Free accounts can track up to{" "}
+            <span className="text-white font-semibold">30 titles</span> across
+            Watchlist and Currently Watching. Upgrade to Premium for unlimited
+            tracking.
           </p>
         </div>
       )}
@@ -209,12 +279,15 @@ export default function BillingSettings() {
       {/* Cancel subscription (premium non-admin, not already canceling) */}
       {isPremium && !isAdmin && !cancelAtPeriodEnd && (
         <div className="rounded-2xl bg-neutral-900 border border-neutral-700 px-6 py-5 space-y-3">
-          <p className="text-xs uppercase tracking-widest text-neutral-500 font-semibold">Cancel subscription</p>
+          <p className="text-xs uppercase tracking-widest text-neutral-500 font-semibold">
+            Cancel subscription
+          </p>
 
           {!confirmingCancel ? (
             <>
               <p className="text-sm text-neutral-400">
-                You'll keep Premium access until the end of your current billing period, then your account will revert to Free.
+                You'll keep Premium access until the end of your current billing
+                period, then your account will revert to Free.
               </p>
               <button
                 onClick={() => setConfirmingCancel(true)}
@@ -225,10 +298,19 @@ export default function BillingSettings() {
             </>
           ) : (
             <>
-              <p className="text-sm text-neutral-300 font-medium">Are you sure?</p>
+              <p className="text-sm text-neutral-300 font-medium">
+                Are you sure?
+              </p>
               <p className="text-sm text-neutral-400">
                 Your subscription won't renew. You'll keep Premium access until{" "}
-                {periodEnd ? <span className="text-neutral-200 font-medium">{formatDate(periodEnd)}</span> : "the end of your billing period"}.
+                {periodEnd ? (
+                  <span className="text-neutral-200 font-medium">
+                    {formatDate(periodEnd)}
+                  </span>
+                ) : (
+                  "the end of your billing period"
+                )}
+                .
               </p>
               <div className="flex gap-3">
                 <button
@@ -236,7 +318,9 @@ export default function BillingSettings() {
                   disabled={cancelMutation.isPending}
                   className="px-4 py-2 rounded-xl text-sm font-semibold bg-red-600 hover:bg-red-500 text-white disabled:opacity-50 transition-colors"
                 >
-                  {cancelMutation.isPending ? "Cancelling…" : "Yes, cancel my subscription"}
+                  {cancelMutation.isPending
+                    ? "Cancelling…"
+                    : "Yes, cancel my subscription"}
                 </button>
                 <button
                   onClick={() => setConfirmingCancel(false)}
