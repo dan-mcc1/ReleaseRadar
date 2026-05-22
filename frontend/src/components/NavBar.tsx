@@ -772,6 +772,10 @@ export default function NavBar() {
       if (!currentUser) {
         esRef.current?.close();
         esRef.current = null;
+        if (connectedUidRef.current !== null) {
+          // Signed out — purge any cached per-user data so it can't leak into a new session
+          queryClient.clear();
+        }
         connectedUidRef.current = null;
         setUser(null);
         return;
@@ -780,6 +784,10 @@ export default function NavBar() {
       setUser(currentUser);
 
       if (currentUser.uid !== connectedUidRef.current) {
+        // Switched accounts (or first sign-in after a prior session) — drop the old user's cache
+        if (connectedUidRef.current !== null) {
+          queryClient.clear();
+        }
         esRef.current?.close();
         esRef.current = null;
         connectedUidRef.current = currentUser.uid;
