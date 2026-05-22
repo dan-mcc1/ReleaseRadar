@@ -66,7 +66,7 @@ export default function RecommendButton({
     if (!user) return;
     setError(null);
     try {
-      const res = await sendMutation.mutateAsync({
+      await sendMutation.mutateAsync({
         recipient_username: selected,
         content_type: contentType,
         content_id: contentId,
@@ -74,12 +74,7 @@ export default function RecommendButton({
         content_poster_path: contentPosterPath ?? "",
         message: message.trim(),
       });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setError(data.detail ?? "Failed to send recommendation.");
-      } else {
-        setSent(true);
-      }
+      setSent(true);
     } catch {
       setError("Network error.");
     }

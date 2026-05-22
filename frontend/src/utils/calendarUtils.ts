@@ -54,15 +54,28 @@ export function getItemsForDate(
   );
 }
 
+export interface CurrentlyWatchingIds {
+  showIds: Set<number>;
+  movieIds: Set<number>;
+}
+
 export function applyFilters(
   items: CalendarItem[],
   filterType: "all" | "tv" | "movie",
   watchFilter: "all" | "watched" | "unwatched",
+  currentlyWatching?: CurrentlyWatchingIds,
 ): CalendarItem[] {
   let filtered =
     filterType === "all" ? items : items.filter((i) => i.type === filterType);
   if (watchFilter === "watched") filtered = filtered.filter((i) => i.is_watched);
   if (watchFilter === "unwatched") filtered = filtered.filter((i) => !i.is_watched);
+  if (currentlyWatching) {
+    filtered = filtered.filter((i) =>
+      i.type === "tv"
+        ? currentlyWatching.showIds.has(i.showData.id)
+        : currentlyWatching.movieIds.has((i.showData as Movie).id),
+    );
+  }
   return filtered;
 }
 
@@ -77,6 +90,7 @@ export function getDaysInMonth(
   allItems: CalendarItem[],
   filterType: "all" | "tv" | "movie",
   watchFilter: "all" | "watched" | "unwatched",
+  currentlyWatching?: CurrentlyWatchingIds,
 ): DayItem[] {
   const date = new Date(year, month, 1);
   const days: DayItem[] = [];
@@ -84,7 +98,7 @@ export function getDaysInMonth(
     const raw = getItemsForDate(allItems, date);
     days.push({
       date: new Date(date),
-      items: applyFilters(raw, filterType, watchFilter),
+      items: applyFilters(raw, filterType, watchFilter, currentlyWatching),
     });
     date.setDate(date.getDate() + 1);
   }
@@ -96,6 +110,7 @@ export function getWeekDays(
   allItems: CalendarItem[],
   filterType: "all" | "tv" | "movie",
   watchFilter: "all" | "watched" | "unwatched",
+  currentlyWatching?: CurrentlyWatchingIds,
 ): DayItem[] {
   const start = new Date(selectedDate);
   start.setDate(selectedDate.getDate() - selectedDate.getDay());
@@ -103,7 +118,7 @@ export function getWeekDays(
     const d = new Date(start);
     d.setDate(start.getDate() + i);
     const raw = getItemsForDate(allItems, d);
-    return { date: d, items: applyFilters(raw, filterType, watchFilter) };
+    return { date: d, items: applyFilters(raw, filterType, watchFilter, currentlyWatching) };
   });
 }
 

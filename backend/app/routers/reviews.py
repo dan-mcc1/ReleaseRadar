@@ -1,13 +1,29 @@
+from typing import Optional
 from fastapi import APIRouter, Depends, Body, HTTPException, Query, Request
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.core.limiter import limiter
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, select
 from app.db.session import get_db
-from app.dependencies.auth import get_current_user
+from app.dependencies.auth import get_current_user, require_not_silenced
+from app.core.firebase import verify_token
 from app.models.review import Review
+from app.models.review_like import ReviewLike
 from app.models.user import User
 from app.models.watched import Watched
+from app.models.block import Block
 from app.services.omdb_service import get_omdb_scores
+
+_bearer = HTTPBearer(auto_error=False)
+
+
+def _optional_user(credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer)) -> Optional[str]:
+    if not credentials:
+        return None
+    try:
+        return verify_token(credentials.credentials)["uid"]
+    except Exception:
+        return None
 
 router = APIRouter()
 
@@ -18,11 +34,35 @@ def get_reviews(
     request: Request,
     content_type: str = Query(...),
     content_id: int = Query(...),
+    sort: str = Query("newest"),
     db: Session = Depends(get_db),
+    uid: Optional[str] = Depends(_optional_user),
 ):
-    """Get all reviews for a piece of content."""
-    rows = (
-        db.query(Review, User.username, Watched.rating)
+    """Get reviews for a piece of content, sorted by newest or top (most liked)."""
+    like_uid = uid or ""
+
+    like_count_sq = (
+        select(func.count())
+        .where(ReviewLike.review_id == Review.id)
+        .correlate(Review)
+        .scalar_subquery()
+    )
+
+    user_liked_sq = (
+        select(func.count())
+        .where(ReviewLike.review_id == Review.id, ReviewLike.user_id == like_uid)
+        .correlate(Review)
+        .scalar_subquery()
+    )
+
+    query = (
+        db.query(
+            Review,
+            User.username,
+            Watched.rating,
+            like_count_sq.label("like_count"),
+            user_liked_sq.label("user_has_liked"),
+        )
         .join(User, Review.user_id == User.id)
         .outerjoin(
             Watched,
@@ -31,10 +71,22 @@ def get_reviews(
             & (Watched.content_id == Review.content_id),
         )
         .filter(Review.content_type == content_type, Review.content_id == content_id)
-        .order_by(Review.created_at.desc())
-        .limit(5)
-        .all()
     )
+
+    if uid:
+        blocked_ids = [
+            b.blocked_id
+            for b in db.query(Block.blocked_id).filter(Block.blocker_id == uid).all()
+        ]
+        if blocked_ids:
+            query = query.filter(Review.user_id.notin_(blocked_ids))
+
+    if sort == "top":
+        query = query.order_by(like_count_sq.desc(), Review.created_at.desc())
+    else:
+        query = query.order_by(Review.created_at.desc())
+
+    rows = query.limit(5).all()
     return [
         {
             "id": row.Review.id,
@@ -44,6 +96,8 @@ def get_reviews(
             "rating": row.rating,
             "created_at": row.Review.created_at,
             "updated_at": row.Review.updated_at,
+            "like_count": row.like_count,
+            "user_has_liked": bool(row.user_has_liked),
         }
         for row in rows
     ]
@@ -85,13 +139,40 @@ def get_external_scores(
     return get_omdb_scores(imdb_id)
 
 
+@router.post("/{review_id}/like")
+def toggle_like(
+    review_id: int,
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    """Toggle a like on a review. Cannot like your own review."""
+    review = db.query(Review).filter_by(id=review_id).first()
+    if not review:
+        raise HTTPException(status_code=404, detail="Review not found.")
+    if review.user_id == uid:
+        raise HTTPException(status_code=400, detail="Cannot like your own review.")
+
+    existing = db.query(ReviewLike).filter_by(user_id=uid, review_id=review_id).first()
+    if existing:
+        db.delete(existing)
+        db.commit()
+        liked = False
+    else:
+        db.add(ReviewLike(user_id=uid, review_id=review_id))
+        db.commit()
+        liked = True
+
+    count = db.query(func.count(ReviewLike.id)).filter(ReviewLike.review_id == review_id).scalar()
+    return {"liked": liked, "like_count": count}
+
+
 @router.post("")
 def add_or_update_review(
     content_type: str = Body(...),
     content_id: int = Body(...),
     review_text: str = Body(...),
     db: Session = Depends(get_db),
-    uid: str = Depends(get_current_user),
+    uid: str = Depends(require_not_silenced),
 ):
     """Add or update the current user's review."""
     review_text = review_text.strip()
@@ -114,6 +195,7 @@ def add_or_update_review(
             .filter_by(user_id=uid, content_type=content_type, content_id=content_id)
             .first()
         )
+        like_count = db.query(func.count(ReviewLike.id)).filter(ReviewLike.review_id == r.id).scalar()
         return {
             "id": r.id,
             "user_id": r.user_id,
@@ -122,6 +204,8 @@ def add_or_update_review(
             "rating": watched.rating if watched else None,
             "created_at": r.created_at,
             "updated_at": r.updated_at,
+            "like_count": like_count,
+            "user_has_liked": False,
         }
 
     if existing:

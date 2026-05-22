@@ -1,12 +1,14 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "./queryKeys";
-import { queryFetch } from "./queryFetch";
+import { queryFetch, checkedFetch } from "./queryFetch";
 import { apiFetch } from "../../utils/apiFetch";
 import { useAuthUser } from "../useAuthUser";
 
-interface WatchedEpisode {
+export interface WatchedEpisode {
   season_number: number;
   episode_number: number;
+  rating: number | null;
+  notes: string | null;
 }
 
 interface NextEpisode {
@@ -23,8 +25,8 @@ export function useEpisodeDetail<T>(
 ) {
   return useQuery<T>({
     queryKey: queryKeys.episodeDetail(showId ?? "", season ?? "", episode ?? ""),
-    queryFn: () =>
-      queryFetch<T>(`/tv/${showId}/season/${season}/episode/${episode}`),
+    queryFn: ({ signal }) =>
+      queryFetch<T>(`/tv/${showId}/season/${season}/episode/${episode}`, { signal }),
     enabled: !!showId && !!season && !!episode,
   });
 }
@@ -33,8 +35,8 @@ export function useWatchedEpisodes(showId: number) {
   const user = useAuthUser();
   return useQuery({
     queryKey: queryKeys.watchedEpisodes(user?.uid ?? "", showId),
-    queryFn: () =>
-      queryFetch<WatchedEpisode[]>(`/watched-episode/${showId}`),
+    queryFn: ({ signal }) =>
+      queryFetch<WatchedEpisode[]>(`/watched-episode/${showId}`, { signal }),
     enabled: !!user && showId > 0,
   });
 }
@@ -43,8 +45,8 @@ export function useNextEpisode(showId: number) {
   const user = useAuthUser();
   return useQuery({
     queryKey: queryKeys.nextEpisode(user?.uid ?? "", showId),
-    queryFn: () =>
-      queryFetch<NextEpisode>(`/watched-episode/${showId}/next`),
+    queryFn: ({ signal }) =>
+      queryFetch<NextEpisode>(`/watched-episode/${showId}/next`, { signal }),
     enabled: !!user && showId > 0,
   });
 }
@@ -54,9 +56,10 @@ export function useNextEpisodesBulk(showIds: number[]) {
   const idsStr = showIds.sort().join(",");
   return useQuery({
     queryKey: queryKeys.nextEpisodesBulk(user?.uid ?? "", idsStr),
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       queryFetch<Record<string, NextEpisode>>(
         `/watched-episode/next/bulk?show_ids=${idsStr}`,
+        { signal },
       ),
     enabled: !!user && showIds.length > 0,
   });
@@ -81,7 +84,7 @@ export function useToggleEpisode() {
       const endpoint = watched
         ? "/watched-episode/remove"
         : "/watched-episode/add";
-      await apiFetch(
+      await checkedFetch(
         `${endpoint}?show_id=${showId}&season_number=${seasonNumber}&episode_number=${episodeNumber}`,
         { method },
       );
@@ -99,6 +102,46 @@ export function useToggleEpisode() {
       });
       queryClient.invalidateQueries({
         queryKey: ["watchStatus", user.uid],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["showProgress", user.uid, showId],
+      });
+    },
+  });
+}
+
+export function useAnnotateEpisode() {
+  const user = useAuthUser();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      showId,
+      seasonNumber,
+      episodeNumber,
+      rating,
+      notes,
+    }: {
+      showId: number;
+      seasonNumber: number;
+      episodeNumber: number;
+      rating?: number | null;
+      notes?: string | null;
+    }) => {
+      const res = await apiFetch(
+        `/watched-episode/annotate?show_id=${showId}&season_number=${seasonNumber}&episode_number=${episodeNumber}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rating, notes }),
+        },
+      );
+      if (!res.ok) throw new Error("Failed to save annotation.");
+      return res.json();
+    },
+    onSuccess: (_, { showId }) => {
+      if (!user) return;
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.watchedEpisodes(user.uid, showId),
       });
     },
   });
@@ -121,7 +164,7 @@ export function useToggleSeason() {
       const endpoint = allWatched
         ? "/watched-episode/season/remove"
         : "/watched-episode/season/add";
-      await apiFetch(
+      await checkedFetch(
         `${endpoint}?show_id=${showId}&season_number=${seasonNumber}`,
         { method },
       );
@@ -139,6 +182,9 @@ export function useToggleSeason() {
       });
       queryClient.invalidateQueries({
         queryKey: ["watchStatus", user.uid],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["showProgress", user.uid, showId],
       });
     },
   });

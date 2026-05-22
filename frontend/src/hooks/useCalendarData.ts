@@ -107,12 +107,12 @@ export function useCalendarData() {
 
   const { data, isPending, isPlaceholderData } = useQuery<CalendarResponse>({
     queryKey: calendarQueryKey(user?.uid ?? ""),
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const { start, end } = initialLoadRange();
       const from = monthBounds(start.year, start.month).from;
       const to = monthBounds(end.year, end.month).to;
 
-      const res = await apiFetch(`/calendar?from_date=${from}&to_date=${to}`);
+      const res = await apiFetch(`/calendar?from_date=${from}&to_date=${to}`, { signal });
       if (!res.ok) throw new Error("Failed to fetch calendar data");
       return res.json() as Promise<CalendarResponse>;
     },

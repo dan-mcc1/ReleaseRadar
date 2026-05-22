@@ -124,8 +124,9 @@ class TestWatchlistRemove:
         remove_movie(client)
         db.expire_all()
         m = db.query(Movie).filter_by(id=550).first()
-        # tracking_count hits 0 → movie is deleted
-        assert m is None
+        # tracking_count hits 0 → record is retained until 90-day cleanup job removes it
+        assert m is not None
+        assert m.tracking_count == 0
 
     def test_remove_show_decrements_tracking_count(self, client, db, seed_show):
         from app.models.show import Show
@@ -134,7 +135,9 @@ class TestWatchlistRemove:
         remove_show(client)
         db.expire_all()
         s = db.query(Show).filter_by(id=1396).first()
-        assert s is None
+        # tracking_count hits 0 → record is retained until 90-day cleanup job removes it
+        assert s is not None
+        assert s.tracking_count == 0
 
     def test_remove_does_not_delete_when_another_user_tracks(self, db, seed_movie):
         from app.models.movie import Movie

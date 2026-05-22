@@ -1,6 +1,7 @@
 import { BASE_IMAGE_URL } from "../constants";
 import { Link } from "react-router-dom";
 import { Movie, Show, Person, CollectionResult } from "../types/calendar";
+import ContentRatingBadge from "./media/ContentRatingBadge";
 import { parseLocalDate } from "../utils/date";
 import { useState, useMemo } from "react";
 import { useAuthUser } from "../hooks/useAuthUser";
@@ -68,6 +69,10 @@ function MediaRow({
   const rawDate =
     "release_date" in item ? item.release_date : item.first_air_date;
   const releaseDate = rawDate ? formatFullDate(rawDate) : null;
+  const skipNotifyPrompt =
+    type === "movie"
+      ? !!(item as Movie).release_date && new Date((item as Movie).release_date + "T00:00:00") <= new Date()
+      : (item as Show).status === "Ended" || (item as Show).status === "Canceled" || (item as Show).status === "Cancelled";
 
   return (
     <div className="flex gap-4 bg-neutral-800/60 border border-neutral-700 hover:border-neutral-600 rounded-xl transition-all duration-200 hover:bg-neutral-800 hover:shadow-lg hover:shadow-black/30">
@@ -129,6 +134,9 @@ function MediaRow({
               </h3>
             </Link>
             <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+              {item.certification && (
+                <ContentRatingBadge rating={item.certification} />
+              )}
               {releaseDate ? (
                 <span className="text-xs text-neutral-500">{releaseDate}</span>
               ) : (
@@ -168,6 +176,7 @@ function MediaRow({
                   contentId={item.id}
                   initialStatus={statusMap[`${type}:${item.id}`]?.status}
                   initialRating={statusMap[`${type}:${item.id}`]?.rating}
+                  skipNotifyPrompt={skipNotifyPrompt}
                 />
               )}
             </div>

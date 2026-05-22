@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, union_all, select, literal, null
 from app.models.currently_watching import CurrentlyWatching
@@ -7,11 +8,8 @@ from app.models.watchlist import Watchlist
 from app.models.watched import Watched
 from app.models.episode import Episode
 from app.models.episode_watched import EpisodeWatched
-from app.services.watchlist_service import (
-    _is_tracked_on_any,
-    ensure_movie_in_db,
-    ensure_show_in_db,
-)
+from app.services.watchlist_service import _is_tracked_on_any
+from app.services.media_upsert import ensure_movie_stub_in_db, ensure_show_stub_in_db, decrement_tracking_count
 
 
 def _is_on_other_list(
@@ -102,9 +100,9 @@ def add_to_currently_watching(
     db.add(entry)
 
     if content_type == "movie":
-        ensure_movie_in_db(db, content_id, already_tracked)
+        ensure_movie_stub_in_db(db, content_id, already_tracked)
     elif content_type == "tv":
-        ensure_show_in_db(db, content_id, already_tracked)
+        ensure_show_stub_in_db(db, content_id, already_tracked)
 
     db.commit()
     db.refresh(entry)
@@ -113,7 +111,7 @@ def add_to_currently_watching(
 
 
 def remove_from_currently_watching(
-    db: Session, user_id: str, content_type: str, content_id: int
+    db: Session, user_id: str, content_type: str, content_id: int, commit: bool = True
 ):
     entry = (
         db.query(CurrentlyWatching)
@@ -127,22 +125,10 @@ def remove_from_currently_watching(
     still_tracked = _is_on_other_list(db, user_id, content_type, content_id)
 
     if not still_tracked:
-        if content_type == "movie":
-            movie = db.query(Movie).filter_by(id=content_id).first()
-            if movie:
-                movie.tracking_count -= 1
-                if movie.tracking_count <= 0:
-                    db.delete(movie)
-        elif content_type == "tv":
-            show = db.query(Show).filter_by(id=content_id).first()
-            if show:
-                show.tracking_count -= 1
-                if show.tracking_count <= 0:
-                    db.query(EpisodeWatched).filter_by(show_id=content_id).delete()
-                    db.query(Episode).filter_by(show_id=content_id).delete()
-                    db.delete(show)
+        decrement_tracking_count(db, content_type, content_id)
 
-    db.commit()
+    if commit:
+        db.commit()
     return {"message": "Removed from currently watching"}
 
 

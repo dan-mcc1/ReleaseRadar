@@ -3,10 +3,10 @@ import { useState } from "react";
 import { BASE_IMAGE_URL } from "../constants";
 import { useNavigate } from "react-router-dom";
 import { Link } from "react-router-dom";
-import { apiFetch } from "../utils/apiFetch";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { calendarQueryKey } from "../hooks/useCalendarData";
 import { useAuthUser } from "../hooks/useAuthUser";
+import { useRemoveFromList } from "../hooks/api/useLists";
 import type { CalendarData } from "../types/calendar";
 
 interface WatchlistModalProps {
@@ -22,6 +22,7 @@ export default function WatchlistModal({
 
   const user = useAuthUser();
   const queryClient = useQueryClient();
+  const removeFromList = useRemoveFromList();
   const [filter, setFilter] = useState<"all" | "tv" | "movies">("all");
   const navigate = useNavigate();
 
@@ -35,28 +36,17 @@ export default function WatchlistModal({
   const moviesToDisplay =
     filter === "all" || filter === "movies" ? (data?.movies ?? []) : [];
 
-  const handleRemove = async (contentType: "tv" | "movie", id: number) => {
-    try {
-      const res = await apiFetch("/watchlist/remove", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          content_type: contentType,
-          content_id: id,
-        }),
-      });
-
-      if (!res.ok) {
-        console.error(`Failed to remove ${contentType} ${id} from watchlist`);
-        return;
-      }
-
-      if (user) {
-        queryClient.invalidateQueries({ queryKey: calendarQueryKey(user.uid) });
-      }
-    } catch (err) {
-      console.error("Error removing from watchlist:", err);
-    }
+  const handleRemove = (contentType: "tv" | "movie", id: number) => {
+    removeFromList.mutate(
+      { list: "watchlist", contentType, contentId: id },
+      {
+        onSuccess: () => {
+          if (user) {
+            queryClient.invalidateQueries({ queryKey: calendarQueryKey(user.uid) });
+          }
+        },
+      },
+    );
   };
 
   const handleAddShows = async () => {

@@ -1,8 +1,11 @@
+alembic
 fastapi
 uvicorn
 pydantic_settings
 sqlalchemy
 requests
+httpx[http2]
+orjson
 firebase_admin
 psycopg2-binary
 icalendar
@@ -10,3 +13,5 @@ resend
 slowapi
 pydantic[email]
 cachetools
+stripe
+python-multipart

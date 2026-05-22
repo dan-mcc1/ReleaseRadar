@@ -1,6 +1,6 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+﻿import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "./queryKeys";
-import { queryFetch } from "./queryFetch";
+import { queryFetch, checkedFetch } from "./queryFetch";
 import { apiFetch } from "../../utils/apiFetch";
 import { useAuthUser } from "../useAuthUser";
 import type { Movie, Show } from "../../types/calendar";
@@ -14,7 +14,7 @@ export function useWatchlist(enabled = true) {
   const user = useAuthUser();
   return useQuery({
     queryKey: queryKeys.watchlist(user?.uid ?? ""),
-    queryFn: () => queryFetch<ListData>("/watchlist"),
+    queryFn: ({ signal }) => queryFetch<ListData>("/watchlist", { signal }),
     enabled: !!user && enabled,
   });
 }
@@ -23,7 +23,7 @@ export function useWatched(enabled = true) {
   const user = useAuthUser();
   return useQuery({
     queryKey: queryKeys.watched(user?.uid ?? ""),
-    queryFn: () => queryFetch<ListData>("/watched"),
+    queryFn: ({ signal }) => queryFetch<ListData>("/watched", { signal }),
     enabled: !!user && enabled,
   });
 }
@@ -32,7 +32,7 @@ export function useCurrentlyWatching() {
   const user = useAuthUser();
   return useQuery({
     queryKey: queryKeys.currentlyWatching(user?.uid ?? ""),
-    queryFn: () => queryFetch<ListData>("/currently-watching"),
+    queryFn: ({ signal }) => queryFetch<ListData>("/currently-watching", { signal }),
     enabled: !!user,
   });
 }
@@ -41,7 +41,7 @@ export function useFavorites() {
   const user = useAuthUser();
   return useQuery({
     queryKey: queryKeys.favorites(user?.uid ?? ""),
-    queryFn: () => queryFetch<ListData>("/favorites"),
+    queryFn: ({ signal }) => queryFetch<ListData>("/favorites", { signal }),
     enabled: !!user,
   });
 }
@@ -50,9 +50,10 @@ export function useFavoriteStatus(contentType: string, contentId: number) {
   const user = useAuthUser();
   return useQuery({
     queryKey: queryKeys.favoriteStatus(user?.uid ?? "", contentType, contentId),
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       queryFetch<{ favorited: boolean }>(
         `/favorites/status?content_type=${contentType}&content_id=${contentId}`,
+        { signal },
       ),
     enabled: !!user,
   });
@@ -74,14 +75,29 @@ export function useToggleFavorite() {
     }) => {
       const method = favorited ? "DELETE" : "POST";
       const endpoint = favorited ? "/favorites/remove" : "/favorites/add";
-      await apiFetch(endpoint, {
+      await checkedFetch(endpoint, {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content_type: contentType, content_id: contentId }),
       });
       return !favorited;
     },
-    onSuccess: (_newState, { contentType, contentId }) => {
+    onMutate: async ({ contentType, contentId, favorited }) => {
+      if (!user) return;
+      const key = queryKeys.favoriteStatus(user.uid, contentType, contentId);
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<{ favorited: boolean }>(key);
+      queryClient.setQueryData<{ favorited: boolean }>(key, { favorited: !favorited });
+      return { previous };
+    },
+    onError: (_err, { contentType, contentId }, ctx) => {
+      if (!user || ctx?.previous === undefined) return;
+      queryClient.setQueryData(
+        queryKeys.favoriteStatus(user.uid, contentType, contentId),
+        ctx.previous,
+      );
+    },
+    onSettled: (_newState, _err, { contentType, contentId }) => {
       if (!user) return;
       queryClient.invalidateQueries({
         queryKey: queryKeys.favoriteStatus(user.uid, contentType, contentId),
@@ -107,15 +123,20 @@ export function useRemoveFromList() {
       contentType: string;
       contentId: number;
     }) => {
-      await apiFetch(`/${list}/remove`, {
+      await checkedFetch(`/${list}/remove`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content_type: contentType, content_id: contentId }),
       });
     },
     onMutate: async ({ list, contentType, contentId }) => {
-      if (!user || list !== "watchlist") return;
-      const key = queryKeys.watchlist(user.uid);
+      if (!user) return;
+      const keyMap = {
+        watchlist: queryKeys.watchlist(user.uid),
+        watched: queryKeys.watched(user.uid),
+        "currently-watching": queryKeys.currentlyWatching(user.uid),
+      };
+      const key = keyMap[list];
       await queryClient.cancelQueries({ queryKey: key });
       const previous = queryClient.getQueryData<ListData>(key);
       if (previous) {
@@ -128,20 +149,17 @@ export function useRemoveFromList() {
             : previous.shows,
         });
       }
-      return { previous };
+      return { previous, key };
     },
-    onError: (_err, { list }, context) => {
-      if (!user || list !== "watchlist" || !context?.previous) return;
-      queryClient.setQueryData(queryKeys.watchlist(user.uid), context.previous);
+    onError: (_err, _vars, context) => {
+      if (!user || !context?.previous || !context?.key) return;
+      queryClient.setQueryData(context.key, context.previous);
     },
-    onSuccess: (_, { list }) => {
+    onSuccess: () => {
       if (!user) return;
-      const keyMap = {
-        watchlist: queryKeys.watchlist(user.uid),
-        watched: queryKeys.watched(user.uid),
-        "currently-watching": queryKeys.currentlyWatching(user.uid),
-      };
-      queryClient.invalidateQueries({ queryKey: keyMap[list] });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.profileSummary(user.uid),
+      });
     },
   });
 }

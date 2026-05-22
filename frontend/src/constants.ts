@@ -1,4 +1,4 @@
-export const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000"
+export const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000"
 export const BASE_IMAGE_URL = "https://image.tmdb.org/t/p"
 
 export const AVATAR_PRESETS = [

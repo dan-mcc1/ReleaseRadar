@@ -1,39 +1,74 @@
-import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
+import asyncio
+import time
+
+import httpx
+
 from app.config import settings
 
 BASE_URL = "https://api.themoviedb.org/3"
-
-HEADERS = {
+_HEADERS = {
     "Authorization": f"Bearer {settings.TMDB_BEARER_TOKEN}",
     "Accept": "application/json",
 }
+_RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
+_MAX_RETRIES = 5
 
-# Retry on transient network errors and 5xx responses (not 4xx — those are caller errors).
-# Backoff: 0s, 1s, 2s between attempts (backoff_factor=1 → 0, 1*2^1, 1*2^2... capped at 3 tries).
-_retry = Retry(
-    total=3,
-    backoff_factor=1,
-    status_forcelist=[500, 502, 503, 504],
-    allowed_methods=["GET"],
-    raise_on_status=False,
+# Sync client — used by background tasks and nightly refresh loops.
+# HTTPTransport(retries=2) handles connection-level errors; status-based
+# retry is handled in the get() loop below.
+_sync_client = httpx.Client(
+    http2=True,
+    headers=_HEADERS,
+    timeout=10.0,
+    follow_redirects=False,
+    transport=httpx.HTTPTransport(retries=2),
 )
 
-# Session with redirects disabled so the Authorization header can't leak to a
-# third-party host via a MITM or unexpected TMDb redirect.
-_session = requests.Session()
-_session.max_redirects = 0
-_session.mount("https://", HTTPAdapter(max_retries=_retry))
+# Async client — shared across all hot request-handling routes.
+# Created lazily so it lives inside the event loop that first touches it.
+_async_client: httpx.AsyncClient | None = None
+
+
+def _get_async_client() -> httpx.AsyncClient:
+    global _async_client
+    if _async_client is None:
+        _async_client = httpx.AsyncClient(
+            http2=True,
+            headers=_HEADERS,
+            timeout=10.0,
+            follow_redirects=False,
+            transport=httpx.AsyncHTTPTransport(retries=2),
+        )
+    return _async_client
+
+
+def _retry_delay(res: httpx.Response, attempt: int) -> float:
+    retry_after = res.headers.get("Retry-After")
+    return float(retry_after) if retry_after else min(2**attempt, 30)
 
 
 def get(path: str, params: dict | None = None):
-    res = _session.get(
-        f"{BASE_URL}{path}",
-        headers=HEADERS,
-        params=params or {},
-        timeout=10,
-        allow_redirects=False,
-    )
+    """Synchronous TMDb GET — for background tasks and nightly refresh loops."""
+    res: httpx.Response | None = None
+    for attempt in range(_MAX_RETRIES + 1):
+        res = _sync_client.get(f"{BASE_URL}{path}", params=params or {})
+        if res.status_code not in _RETRY_STATUSES:
+            res.raise_for_status()
+            return res.json()
+        if attempt < _MAX_RETRIES:
+            time.sleep(_retry_delay(res, attempt))
     res.raise_for_status()
-    return res.json()
+
+
+async def async_get(path: str, params: dict | None = None):
+    """Async TMDb GET — for hot request-handling routes (HTTP/2 multiplexed)."""
+    client = _get_async_client()
+    res: httpx.Response | None = None
+    for attempt in range(_MAX_RETRIES + 1):
+        res = await client.get(f"{BASE_URL}{path}", params=params or {})
+        if res.status_code not in _RETRY_STATUSES:
+            res.raise_for_status()
+            return res.json()
+        if attempt < _MAX_RETRIES:
+            await asyncio.sleep(_retry_delay(res, attempt))
+    res.raise_for_status()

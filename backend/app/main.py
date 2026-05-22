@@ -1,7 +1,8 @@
 import asyncio
+import logging
 import time
-from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
+from contextlib import asynccontextmanager, contextmanager
+from datetime import datetime, timedelta, timezone as dt_timezone
 from zoneinfo import ZoneInfo
 from fastapi import FastAPI, Header, HTTPException, Request
 from slowapi.errors import RateLimitExceeded
@@ -29,13 +30,25 @@ from app.routers import (
     box_office,
     collections,
     calendar,
+    shelf,
+    admin,
+    billing,
     dev,
+    news,
+    rewatch,
+    import_router,
+    moderation,
+    export_router,
+    streaming,
+    watch_status,
+    feedback,
 )
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from app.db.session import SessionLocal, engine
 from app.db.base import Base
-from app.services.activity_service import delete_old_activity
+from app.services.activity_service import delete_old_activity, lift_expired_moderation
 from app.services.recommendation_service import delete_old_recommendations
 from app.routers.notifications import (
     send_daily_digest_to_all,
@@ -45,28 +58,41 @@ from app.services.vote_update_service import update_all_vote_averages
 from app.services.episode_service import (
     refresh_episodes_for_active_shows,
     check_and_reactivate_watched_shows,
+    prune_stale_cache,
 )
+from app.services.streaming_notification_service import refresh_streaming_providers
+from app.services.trailer_notification_service import refresh_trailers
+from app.services.stripe_reconciliation_service import reconcile_stripe_subscriptions
+
+logger = logging.getLogger(__name__)
+
+
+@contextmanager
+def _db_session():
+    db = SessionLocal()
+    try:
+        yield db
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
 
 
 async def _activity_cleanup_loop():
     """Delete activity and old recommendations, runs every hour."""
     while True:
         try:
-            db = SessionLocal()
-            deleted_activity = delete_old_activity(db)
-            if deleted_activity:
-                print(
-                    f"[activity cleanup] Removed {deleted_activity} old activity entries"
-                )
-            deleted_recs = delete_old_recommendations(db)
-            if deleted_recs:
-                print(
-                    f"[activity cleanup] Removed {deleted_recs} expired recommendations"
-                )
+            with _db_session() as db:
+                deleted_activity = delete_old_activity(db)
+                if deleted_activity:
+                    logger.info("activity cleanup: removed %d old activity entries", deleted_activity)
+                deleted_recs = delete_old_recommendations(db)
+                if deleted_recs:
+                    logger.info("activity cleanup: removed %d expired recommendations", deleted_recs)
+                lift_expired_moderation(db)
         except Exception as e:
-            print(f"[activity cleanup] Error: {e}")
-        finally:
-            db.close()
+            logger.error("activity cleanup error: %s", e)
         await asyncio.sleep(3600)  # 1 hour
 
 
@@ -93,34 +119,25 @@ async def _activity_cleanup_loop():
 
 
 async def _daily_digest_loop():
-    eastern = ZoneInfo("America/New_York")
-
+    """Fires at the top of every hour. Each function filters users by their preferred local hour."""
     while True:
         try:
-            now = datetime.now(eastern)
-            next_run = now.replace(hour=9, minute=0, second=0, microsecond=0)
-
-            if now >= next_run:
-                next_run += timedelta(days=1)
-
-            wait_seconds = (next_run - now).total_seconds()
-
-            print(f"[daily digest] Sleeping for {wait_seconds:.2f}s")
+            now = datetime.now(dt_timezone.utc)
+            next_hour = (now + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
+            wait_seconds = (next_hour - now).total_seconds()
+            logger.info("daily digest: sleeping %.0fs until top of next hour", wait_seconds)
             await asyncio.sleep(wait_seconds)
 
-            print("[daily digest] Firing now...")
-
-            db = SessionLocal()
-            try:
-                send_daily_digest_to_all(db)
-                send_season_premiere_alerts_to_all(db)
-                print("[daily digest] Done — emails sent")
-            finally:
-                db.close()
+            now_utc = datetime.now(dt_timezone.utc)
+            logger.info("daily digest: hourly sweep firing at %s UTC", now_utc.strftime("%H:%M"))
+            with _db_session() as db:
+                await asyncio.to_thread(send_daily_digest_to_all, db, now_utc=now_utc)
+                await asyncio.to_thread(send_season_premiere_alerts_to_all, db, now_utc=now_utc)
+            logger.info("daily digest: hourly sweep done")
 
         except Exception as e:
-            print(f"[daily digest] Loop error: {e}")
-            await asyncio.sleep(60)  # prevent tight crash loop
+            logger.error("daily digest loop error: %s", e)
+            await asyncio.sleep(60)
 
 
 async def _episode_update_loop():
@@ -132,43 +149,90 @@ async def _episode_update_loop():
         if now >= next_run:
             next_run += timedelta(days=1)
         await asyncio.sleep((next_run - now).total_seconds())
-        print("[vote update] Starting daily vote_average refresh...")
+        logger.info("vote update: starting daily vote_average refresh")
         try:
-            db = SessionLocal()
-            refresh_episodes_for_active_shows(db)
-            check_and_reactivate_watched_shows(db)
-            await asyncio.to_thread(update_all_vote_averages, db)
+            with _db_session() as db:
+                refresh_episodes_for_active_shows(db)
+                check_and_reactivate_watched_shows(db)
+                await asyncio.to_thread(update_all_vote_averages, db)
+                prune_stale_cache(db)
         except Exception as e:
-            print(f"[vote update] Error: {e}")
-        finally:
-            db.close()
+            logger.error("vote update error: %s", e)
+
+
+async def _trailer_refresh_loop():
+    """Refresh trailers and notify users of new ones once a day at noon Eastern."""
+    eastern = ZoneInfo("America/New_York")
+    while True:
+        try:
+            now = datetime.now(eastern)
+            next_run = now.replace(hour=12, minute=0, second=0, microsecond=0)
+            if now >= next_run:
+                next_run += timedelta(days=1)
+            await asyncio.sleep((next_run - now).total_seconds())
+            logger.info("trailers: starting trailer refresh")
+            with _db_session() as db:
+                await asyncio.to_thread(refresh_trailers, db)
+            logger.info("trailers: done")
+        except Exception as e:
+            logger.error("trailers loop error: %s", e)
+            await asyncio.sleep(60)
+
+
+async def _stripe_reconciliation_loop():
+    """Reconcile local subscription state against Stripe once a day at 4am Eastern."""
+    eastern = ZoneInfo("America/New_York")
+    while True:
+        try:
+            now = datetime.now(eastern)
+            next_run = now.replace(hour=4, minute=0, second=0, microsecond=0)
+            if now >= next_run:
+                next_run += timedelta(days=1)
+            await asyncio.sleep((next_run - now).total_seconds())
+            logger.info("stripe reconcile: starting")
+            with _db_session() as db:
+                await asyncio.to_thread(reconcile_stripe_subscriptions, db)
+            logger.info("stripe reconcile: done")
+        except Exception as e:
+            logger.error("stripe reconcile loop error: %s", e)
+            await asyncio.sleep(60)
+
+
+async def _streaming_refresh_loop():
+    """Refresh streaming providers and notify users of changes once a day at 5am."""
+    eastern = ZoneInfo("America/New_York")
+    while True:
+        try:
+            now = datetime.now(eastern)
+            next_run = now.replace(hour=11, minute=0, second=0, microsecond=0)
+            if now >= next_run:
+                next_run += timedelta(days=1)
+            await asyncio.sleep((next_run - now).total_seconds())
+            logger.info("streaming: starting provider refresh")
+            with _db_session() as db:
+                await asyncio.to_thread(refresh_streaming_providers, db)
+            logger.info("streaming: done")
+        except Exception as e:
+            logger.error("streaming loop error: %s", e)
+            await asyncio.sleep(60)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Import all models so SQLAlchemy Base.metadata is populated before create_all
-    import app.models.user  # noqa: F401
-    import app.models.watched  # noqa: F401
-    import app.models.watchlist  # noqa: F401
-    import app.models.episode_watched  # noqa: F401
-    import app.models.currently_watching  # noqa: F401
-    import app.models.friendship  # noqa: F401
-    import app.models.favorite  # noqa: F401
-    import app.models.recommendation  # noqa: F401
-    import app.models.show  # noqa: F401
-    import app.models.movie  # noqa: F401
-    import app.models.episode  # noqa: F401
-    import app.models.activity  # noqa: F401
-    import app.models.review  # noqa: F401
+    import app.models  # noqa: F401 — registers all models with Base.metadata
 
     Base.metadata.create_all(engine)
     task = asyncio.create_task(_activity_cleanup_loop())
     digest_task = asyncio.create_task(_daily_digest_loop())
     vote_task = asyncio.create_task(_episode_update_loop())
+    streaming_task = asyncio.create_task(_streaming_refresh_loop())
+    trailer_task = asyncio.create_task(_trailer_refresh_loop())
+    reconcile_task = asyncio.create_task(_stripe_reconciliation_loop())
     yield
-    task.cancel()
-    digest_task.cancel()
-    vote_task.cancel()
+    tasks = [task, digest_task, vote_task, streaming_task, trailer_task, reconcile_task]
+    for t in tasks:
+        t.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
 
 
 app = FastAPI(title="ReleaseRadar API", lifespan=lifespan, redirect_slashes=True)
@@ -186,6 +250,7 @@ async def log_request_time(request: Request, call_next):
     return response
 
 
+app.add_middleware(GZipMiddleware, minimum_size=500)
 app.add_middleware(
     TrustedHostMiddleware,
     allowed_hosts=[
@@ -231,5 +296,16 @@ app.include_router(reviews.router, prefix="/reviews", tags=["reviews"])
 app.include_router(box_office.router, prefix="/box-office", tags=["box-office"])
 app.include_router(collections.router, prefix="/collections", tags=["collections"])
 app.include_router(calendar.router, prefix="/calendar", tags=["calendar"])
+app.include_router(shelf.router, prefix="/shelf", tags=["shelf"])
+app.include_router(admin.router, prefix="/admin", tags=["admin"])
+app.include_router(billing.router, prefix="/billing", tags=["billing"])
+app.include_router(news.router, prefix="/news", tags=["news"])
+app.include_router(rewatch.router, prefix="/rewatch", tags=["rewatch"])
+app.include_router(import_router.router, prefix="/import", tags=["import"])
+app.include_router(moderation.router, prefix="/moderation", tags=["moderation"])
+app.include_router(export_router.router, prefix="/export", tags=["export"])
+app.include_router(streaming.router, prefix="/streaming", tags=["streaming"])
+app.include_router(watch_status.router, prefix="/watch-status", tags=["watch-status"])
+app.include_router(feedback.router, tags=["feedback"])
 if settings.ENVIRONMENT != "production":
     app.include_router(dev.router, prefix="/dev", tags=["dev"])

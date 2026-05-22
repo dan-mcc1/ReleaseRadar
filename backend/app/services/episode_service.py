@@ -1,10 +1,24 @@
 # app/services/episode_service.py
+import logging
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
+from sqlalchemy import and_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app.models.episode import Episode
+from app.models.episode_watched import EpisodeWatched
+from app.models.movie import Movie
+from app.models.season import Season
 from app.models.show import Show
+from app.models.currently_watching import CurrentlyWatching
+from app.models.user import User
+from app.models.watched import Watched
+from app.models.watchlist import Watchlist
+from app.services.email_service import send_new_season_available_email
 from app.services.tmdb_client import get
+
+logger = logging.getLogger(__name__)
 
 
 def _compute_episode_type(
@@ -30,13 +44,23 @@ def ensure_show_in_db(db: Session, show_id: int) -> bool:
     if db.query(Show).filter_by(id=show_id).first():
         return True
 
+    # Release the DB connection before the blocking TMDB HTTP call so the
+    # pool isn't held for up to 10 s per show. db.close() expunges the
+    # identity map but leaves the session reusable.
+    db.close()
+
     try:
         show_data = get(f"/tv/{show_id}")
     except Exception:
+        logger.exception("Failed to fetch show %s from TMDB", show_id)
         return False
 
     if not show_data or not show_data.get("name"):
         return False
+
+    # Re-check: another worker may have inserted the row while we fetched.
+    if db.query(Show).filter_by(id=show_id).first():
+        return True
 
     show = Show(
         id=show_data["id"],
@@ -57,7 +81,10 @@ def ensure_show_in_db(db: Session, show_id: int) -> bool:
         tracking_count=0,
     )
     db.add(show)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
     return True
 
 
@@ -75,6 +102,7 @@ def sync_season_episodes(db: Session, show_id: int, season_number: int):
     try:
         season_data = get(f"/tv/{show_id}/season/{season_number}")
     except Exception:
+        logger.exception("Failed to fetch show %s season %s from TMDB", show_id, season_number)
         return
 
     for ep in season_data.get("episodes", []):
@@ -131,6 +159,7 @@ def sync_show_episodes(db: Session, show_id: int):
         try:
             return sn, get(f"/tv/{show_id}/season/{sn}")
         except Exception:
+            logger.exception("Failed to fetch show %s season %s from TMDB", show_id, sn)
             return sn, None
 
     max_workers = min(8, len(season_numbers)) if season_numbers else 1
@@ -188,15 +217,14 @@ def maybe_sync_show_episodes(db: Session, show_id: int):
 def sync_show_episodes_background(show_id: int):
     """
     Background task: sync all episodes for a show using its own DB session.
-    Intended to be called via FastAPI BackgroundTasks, not directly.
     """
     from app.db.session import SessionLocal
 
     db = SessionLocal()
     try:
-        maybe_sync_show_episodes(db, show_id)
-    except Exception as e:
-        print(f"[episode sync] Error syncing show {show_id}: {e}")
+        sync_show_episodes(db, show_id)
+    except Exception:
+        logger.exception("Error syncing episodes for show %s", show_id)
     finally:
         db.close()
 
@@ -220,18 +248,40 @@ def get_or_create_episode(
     if episode:
         return episode
 
+    # ensure_show_in_db releases the connection internally before its TMDB
+    # call, so no connection is held during that fetch.
     ensure_show_in_db(db, show_id)
-    show = db.query(Show).filter_by(id=show_id).first()
-    in_production = show.in_production if show else None
+
+    # Release the connection again before the second TMDB call.
+    db.close()
 
     try:
         ep_data = get(f"/tv/{show_id}/season/{season_number}/episode/{episode_number}")
     except Exception:
+        logger.exception(
+            "Failed to fetch show %s S%sE%s from TMDB", show_id, season_number, episode_number
+        )
         return None
 
     ep_id = ep_data.get("id")
     if not ep_id:
         return None
+
+    # Re-check: another worker may have inserted the episode while we fetched.
+    episode = (
+        db.query(Episode)
+        .filter_by(
+            show_id=show_id,
+            season_number=season_number,
+            episode_number=episode_number,
+        )
+        .first()
+    )
+    if episode:
+        return episode
+
+    show = db.query(Show).filter_by(id=show_id).first()
+    in_production = show.in_production if show else None
 
     episode = Episode(
         id=ep_id,
@@ -249,8 +299,20 @@ def get_or_create_episode(
         ),
     )
     db.add(episode)
-    db.commit()
-    db.refresh(episode)
+    try:
+        db.commit()
+        db.refresh(episode)
+    except IntegrityError:
+        db.rollback()
+        episode = (
+            db.query(Episode)
+            .filter_by(
+                show_id=show_id,
+                season_number=season_number,
+                episode_number=episode_number,
+            )
+            .first()
+        )
     return episode
 
 
@@ -270,11 +332,10 @@ def _refresh_show_metadata(db: Session, show: Show):
     Season rows that don't exist yet. This ensures refresh_episodes_for_show
     discovers seasons that were announced after the show was first added.
     """
-    from app.models.season import Season
-
     try:
         data = get(f"/tv/{show.id}")
     except Exception:
+        logger.exception("Failed to fetch metadata for show %s from TMDB", show.id)
         return
 
     if not data:
@@ -369,6 +430,7 @@ def refresh_episodes_for_show(db: Session, show_id: int):
         try:
             return sn, get(f"/tv/{show_id}/season/{sn}")
         except Exception:
+            logger.exception("Failed to fetch show %s season %s from TMDB", show_id, sn)
             return sn, None
 
     max_workers = min(8, len(seasons_to_refresh))
@@ -448,15 +510,28 @@ def refresh_episodes_for_show(db: Session, show_id: int):
         db.commit()
 
 
+def _refresh_one_show(show_id: int, show_name: str) -> None:
+    """Worker executed in a thread pool: refresh metadata + episodes for one show."""
+    from app.db.session import SessionLocal
+    db = SessionLocal()
+    try:
+        show = db.query(Show).filter_by(id=show_id).first()
+        if not show:
+            return
+        _refresh_show_metadata(db, show)
+        refresh_episodes_for_show(db, show_id)
+    except Exception:
+        logger.exception("Failed to refresh show %s (%s)", show_id, show_name)
+    finally:
+        db.close()
+
+
 def refresh_episodes_for_active_shows(db: Session):
     """
     Refresh episode data for all tracked shows (watchlist, currently watching,
     and watched) that are still in production. Intended to run nightly.
+    Runs up to 8 shows in parallel, each with its own DB session.
     """
-    from app.models.watchlist import Watchlist
-    from app.models.currently_watching import CurrentlyWatching
-    from app.models.watched import Watched
-
     tracked_ids = (
         {
             r.content_id
@@ -484,15 +559,11 @@ def refresh_episodes_for_active_shows(db: Session):
         .all()
     )
 
-    print(f"[episode refresh] Refreshing {len(shows)} in-production shows...")
-    for show in shows:
-        try:
-            # Re-fetch show metadata first so new seasons are discovered
-            _refresh_show_metadata(db, show)
-            refresh_episodes_for_show(db, show.id)
-        except Exception as e:
-            print(f"[episode refresh] Failed for show {show.id} ({show.name}): {e}")
-    print("[episode refresh] Done")
+    logger.info("Refreshing %d in-production shows...", len(shows))
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        for show in shows:
+            pool.submit(_refresh_one_show, show.id, show.name)
+    logger.info("Episode refresh done")
 
 
 def check_and_reactivate_watched_shows(db: Session):
@@ -502,15 +573,6 @@ def check_and_reactivate_watched_shows(db: Session):
     back to Watchlist and send an email notification.
     Intended to run nightly after refresh_episodes_for_active_shows.
     """
-    from datetime import datetime
-    from collections import defaultdict
-    from sqlalchemy import and_
-    from app.models.watched import Watched
-    from app.models.watchlist import Watchlist
-    from app.models.episode_watched import EpisodeWatched
-    from app.models.user import User
-    from app.services.email_service import send_new_season_available_email
-
     # Find all user+show pairs in Watched for in-production TV shows
     watched_rows = (
         db.query(Watched)
@@ -563,7 +625,12 @@ def check_and_reactivate_watched_shows(db: Session):
         .all()
     }
 
+    # First pass: decide what to reactivate, accumulate pending emails.
+    # No DB writes yet — keep the session free of email latency.
     reactivated = 0
+    pending_emails: list[dict] = []  # {user_id, user, show, new_season_number, premiere_date}
+    today = date.today()
+
     for row in watched_rows:
         user_id = row.user_id
         show_id = row.content_id
@@ -571,18 +638,14 @@ def check_and_reactivate_watched_shows(db: Session):
         all_episodes = all_episodes_by_show[show_id]
         watched_keys = watched_keys_by_user_show[(user_id, show_id)]
 
-        # Determine the highest season the user has watched any episode of
         max_watched_season = max((sn for sn, _ in watched_keys), default=0)
 
-        today = date.today()
         new_episodes = [
             ep
             for ep in all_episodes
             if (ep.season_number, ep.episode_number) not in watched_keys
             and (
-                # New season: always reactivate (enables advance notifications)
                 ep.season_number > max_watched_season
-                # Same season already in progress: only reactivate once the episode has aired
                 or (ep.air_date is not None and ep.air_date <= today)
             )
         ]
@@ -609,44 +672,81 @@ def check_and_reactivate_watched_shows(db: Session):
                     user_id=user_id,
                     content_type="tv",
                     content_id=show_id,
-                    added_at=datetime.utcnow(),
+                    added_at=datetime.now(timezone.utc),
                 )
             )
             existing_watchlist.add((user_id, show_id))
-            db.flush()
 
         db.delete(row)
-        db.commit()
-
         reactivated += 1
+
         show_name = show.name if show else str(show_id)
-        print(
-            f"[episode refresh] Reactivated '{show_name}' for user {user_id} — "
-            f"Season {new_season_number} premieres {premiere_date or 'TBD'}"
+        logger.info(
+            "Reactivated '%s' for user %s — Season %s premieres %s",
+            show_name, user_id, new_season_number, premiere_date or "TBD",
         )
 
         user = users_by_id.get(user_id)
         if user and user.email_notifications and user.email:
-            try:
-                send_new_season_available_email(
-                    to_email=user.email,
-                    username=user.username or "",
-                    shows=[
-                        {
-                            "show_name": show.name if show else "Unknown",
-                            "show_id": show_id,
-                            "poster_path": show.poster_path if show else None,
-                            "season_number": new_season_number,
-                            "premiere_date": premiere_date,
-                        }
-                    ],
-                    uid=user_id,
-                )
-            except Exception as e:
-                print(
-                    f"[episode refresh] Failed to send reactivation email "
-                    f"to user {user_id}: {e}"
-                )
+            pending_emails.append(
+                {
+                    "user_id": user_id,
+                    "user": user,
+                    "show": show,
+                    "show_id": show_id,
+                    "new_season_number": new_season_number,
+                    "premiere_date": premiere_date,
+                }
+            )
+
+    # Single commit for all watchlist inserts + watched deletions.
+    db.commit()
 
     if reactivated:
-        print(f"[episode refresh] Reactivated {reactivated} show(s) with new seasons")
+        logger.info("Reactivated %d show(s) with new seasons", reactivated)
+
+    # Send emails after the session is closed — failures don't roll back DB work.
+    for item in pending_emails:
+        try:
+            send_new_season_available_email(
+                to_email=item["user"].email,
+                username=item["user"].username or "",
+                shows=[
+                    {
+                        "show_name": item["show"].name if item["show"] else "Unknown",
+                        "show_id": item["show_id"],
+                        "poster_path": item["show"].poster_path if item["show"] else None,
+                        "season_number": item["new_season_number"],
+                        "premiere_date": item["premiere_date"],
+                    }
+                ],
+                uid=item["user_id"],
+            )
+        except Exception:
+            logger.exception("Failed to send reactivation email to user %s", item["user_id"])
+
+
+def prune_stale_cache(db: Session) -> None:
+    """Delete Show/Movie cache rows that have no trackers and haven't been touched in 90 days."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=90)
+
+    # Cascading FKs on all child tables (episodes, seasons, providers, genres,
+    # show_videos, episode_watched, finish_by_goal) mean one DELETE handles everything.
+    deleted_shows = (
+        db.query(Show)
+        .filter(Show.tracking_count == 0, Show.updated_at < cutoff)
+        .delete(synchronize_session=False)
+    )
+    deleted_movies = (
+        db.query(Movie)
+        .filter(Movie.tracking_count == 0, Movie.updated_at < cutoff)
+        .delete(synchronize_session=False)
+    )
+
+    db.commit()
+
+    if deleted_shows or deleted_movies:
+        logger.info(
+            "Cache prune: removed %d show(s) and %d movie(s) with no trackers",
+            deleted_shows, deleted_movies,
+        )

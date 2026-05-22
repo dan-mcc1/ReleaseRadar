@@ -2,6 +2,10 @@ import { Movie, Show } from "../types/calendar";
 import { BASE_IMAGE_URL } from "../constants";
 import { Link } from "react-router-dom";
 import { parseLocalDate } from "../utils/date";
+import ContentRatingBadge from "./media/ContentRatingBadge";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "../hooks/api/queryKeys";
+import { fetchMediaFull } from "../hooks/useMediaInfo";
 
 type MediaCardProps =
   | {
@@ -16,6 +20,7 @@ type MediaCardProps =
     };
 
 export default function MediaCard({ item, type, onRemove }: MediaCardProps) {
+  const qc = useQueryClient();
   const title = type === "tv" ? (item as Show).name : (item as Movie).title;
   const date =
     type === "tv"
@@ -30,6 +35,11 @@ export default function MediaCard({ item, type, onRemove }: MediaCardProps) {
       <Link
         to={type === "tv" ? `/tv/${item.id}` : `/movie/${item.id}`}
         className="flex flex-col flex-1"
+        onMouseEnter={() => qc.prefetchQuery({
+          queryKey: queryKeys.mediaDetailFull(type, String(item.id)),
+          queryFn: () => fetchMediaFull(type, item.id),
+          staleTime: 60_000,
+        })}
       >
         {/* Backdrop image */}
         <div className="relative aspect-video overflow-hidden">
@@ -37,6 +47,9 @@ export default function MediaCard({ item, type, onRemove }: MediaCardProps) {
             <img
               src={`${BASE_IMAGE_URL}/w780${item.backdrop_path}`}
               alt=""
+              width={780}
+              height={439}
+              loading="lazy"
               className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
             />
           ) : (
@@ -85,17 +98,13 @@ export default function MediaCard({ item, type, onRemove }: MediaCardProps) {
 
         {/* Info bar */}
         <div className="px-3 py-3 flex flex-col gap-1 flex-1">
-          {!item.logo_path && (
-            <div className="font-semibold text-neutral-100 line-clamp-1 group-hover:text-primary-300 transition-colors">
-              {title}
-            </div>
-          )}
-          {item.logo_path && (
-            <div className="font-semibold text-neutral-100 line-clamp-1 group-hover:text-primary-300 transition-colors">
-              {title}
-            </div>
-          )}
+          <div className="font-semibold text-neutral-100 line-clamp-1 group-hover:text-primary-300 transition-colors">
+            {title}
+          </div>
           <div className="flex items-center gap-2 flex-wrap">
+            {item.certification && (
+              <ContentRatingBadge rating={item.certification} />
+            )}
             {year && <span className="text-xs text-neutral-400">{year}</span>}
             {item.vote_average != null && item.vote_average > 0 && (
               <span className="flex items-center gap-0.5 text-xs text-warning-400 font-medium">
@@ -109,7 +118,7 @@ export default function MediaCard({ item, type, onRemove }: MediaCardProps) {
                 {item.vote_average.toFixed(1)}
               </span>
             )}
-            {genres.slice(0, 2).map((g) => (
+            {genres.map((g) => (
               <span
                 key={g.id}
                 className="text-xs text-neutral-500 bg-neutral-700/60 px-1.5 py-0.5 rounded"

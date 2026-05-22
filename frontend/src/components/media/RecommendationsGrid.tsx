@@ -18,11 +18,11 @@ export default function RecommendationsGrid({ items, linkPrefix }: Props) {
   if (!items.length) return null;
   return (
     <div>
-      <h2 className="text-xl font-semibold text-neutral-100 mb-4">
+      <h2 className="text-neutral-400 text-xs uppercase tracking-wider font-semibold mb-4">
         You Might Also Like
       </h2>
-      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
-        {items.slice(0, 12).map((rec) => {
+      <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2">
+        {items.slice(0, 20).map((rec) => {
           const label = rec.title ?? rec.name ?? "";
           return (
             <Link key={rec.id} to={`${linkPrefix}/${rec.id}`} className="group">

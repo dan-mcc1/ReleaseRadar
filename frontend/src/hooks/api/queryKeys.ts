@@ -6,6 +6,10 @@ export const queryKeys = {
   trendingMulti: () => ["trending", "multi"] as const,
   upcoming: (type: "movie" | "tv", page: number) => ["upcoming", type, page] as const,
   comingSoon: () => ["upcoming", "comingSoon"] as const,
+  airingToday: () => ["airingToday"] as const,
+  nowPlaying: () => ["nowPlaying"] as const,
+  popularMulti: () => ["popular", "multi"] as const,
+  topRatedMulti: () => ["topRated", "multi"] as const,
   genres: () => ["genres"] as const,
   genreResults: (type: string, genreId: number, page: number) =>
     ["genres", type, genreId, page] as const,
@@ -14,6 +18,7 @@ export const queryKeys = {
   person: (id: string) => ["person", id] as const,
   collection: (id: string) => ["collection", id] as const,
   mediaDetail: (type: "movie" | "tv", id: string) => ["media", type, id] as const,
+  mediaDetailFull: (type: "movie" | "tv", id: string) => ["media", type, id, "full"] as const,
   aggregateRating: (type: string, id: string) => ["reviews", "aggregate", type, id] as const,
   externalScores: (imdbId: string) => ["reviews", "externalScores", imdbId] as const,
 
@@ -36,11 +41,15 @@ export const queryKeys = {
   friendRequestsIncoming: (uid: string) => ["friends", "incoming", uid] as const,
   friendRequestsOutgoing: (uid: string) => ["friends", "outgoing", uid] as const,
   followers: (uid: string) => ["friends", "followers", uid] as const,
+  friendSuggestions: (uid: string) => ["friends", "suggestions", uid] as const,
+  friendsContentActivity: (uid: string, type: string, id: number) =>
+    ["friends", "content", uid, type, id] as const,
   friendProfile: (username: string) => ["friends", "profile", username] as const,
 
   // User
   userMe: (uid: string) => ["user", "me", uid] as const,
   userStats: (uid: string) => ["user", "stats", uid] as const,
+  watchTimeStats: (uid: string, year: number | null) => ["user", "watchTime", uid, year] as const,
   profileSummary: (uid: string) => ["user", "profileSummary", uid] as const,
   usernameAvailable: (username: string) => ["user", "checkUsername", username] as const,
 
@@ -82,4 +91,28 @@ export const queryKeys = {
   // Box office
   boxOffice: (mode: string, year: number, month: number) =>
     ["boxOffice", mode, year, month] as const,
+  boxOfficeAllTime: (page: number) =>
+    ["boxOffice", "all-time", page] as const,
+
+  // Shelves
+  shelves: (uid: string) => ["shelves", uid] as const,
+  shelfItems: (uid: string, shelfId: number) => ["shelves", uid, shelfId, "items"] as const,
+  shelfCalendar: (uid: string, shelfId: number) => ["shelves", uid, shelfId, "calendar"] as const,
+  itemShelves: (uid: string, contentType: string, contentId: number) =>
+    ["shelves", "item", uid, contentType, contentId] as const,
+
+  // News
+  news: (category: string, page: number, q: string) =>
+    ["news", category, page, q] as const,
+
+  // Admin
+  adminStats: () => ["admin", "stats"] as const,
+  adminReports: (status: string) => ["admin", "reports", status] as const,
+  adminUsers: (search: string, skip: number) => ["admin", "users", search, skip] as const,
+
+  // Moderation
+  myBlocks: (uid: string) => ["moderation", "blocks", uid] as const,
+
+  // Billing
+  billingStatus: (uid: string) => ["billing", "status", uid] as const,
 } as const;

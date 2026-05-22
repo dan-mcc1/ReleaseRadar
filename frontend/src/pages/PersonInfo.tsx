@@ -6,6 +6,8 @@ import { formatLocalDate } from "../utils/date";
 import { usePageTitle } from "../hooks/usePageTitle";
 import { usePersonInfo } from "../hooks/api/usePersonInfo";
 
+type CreditItem = (Movie | Show) & { character?: string };
+
 type FullPersonData = {
   id: number;
   name: string;
@@ -22,8 +24,8 @@ type FullPersonData = {
     twitter_id: string | null;
     wikidata_id: string | null;
   };
-  movie_credits: { cast: Movie[]; crew: Movie[] };
-  tv_credits: { cast: Show[]; crew: Show[] };
+  movie_credits: { cast: CreditItem[]; crew: CreditItem[] };
+  tv_credits: { cast: CreditItem[]; crew: CreditItem[] };
 };
 
 function ExternalLink({ href, label }: { href: string; label: string }) {
@@ -46,7 +48,7 @@ function CreditList({
   limit = 12,
 }: {
   title: string;
-  credits: (Movie | Show)[];
+  credits: CreditItem[];
   linkPrefix: string;
   limit?: number;
 }) {
@@ -61,7 +63,7 @@ function CreditList({
         {displayed.map((item) => {
           const name = "title" in item ? item.title : item.name;
           const poster = item.poster_path || item.backdrop_path;
-          const role = (item as any).character;
+          const role = item.character;
 
           return (
             <Link

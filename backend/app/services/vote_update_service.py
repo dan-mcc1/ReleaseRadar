@@ -1,8 +1,15 @@
+import logging
 from concurrent.futures import ThreadPoolExecutor
+from sqlalchemy import union, select
 from sqlalchemy.orm import Session
+from app.models.currently_watching import CurrentlyWatching
 from app.models.show import Show
 from app.models.movie import Movie
+from app.models.watched import Watched
+from app.models.watchlist import Watchlist
 from app.services.tmdb_client import get
+
+logger = logging.getLogger(__name__)
 
 
 def _fetch_show_vote(show_id: int) -> tuple[int, float | None]:
@@ -10,6 +17,7 @@ def _fetch_show_vote(show_id: int) -> tuple[int, float | None]:
         data = get(f"/tv/{show_id}")
         return show_id, data.get("vote_average")
     except Exception:
+        logger.exception("Failed to fetch vote_average for show %s from TMDB", show_id)
         return show_id, None
 
 
@@ -18,18 +26,30 @@ def _fetch_movie_vote(movie_id: int) -> tuple[int, float | None]:
         data = get(f"/movie/{movie_id}")
         return movie_id, data.get("vote_average")
     except Exception:
+        logger.exception("Failed to fetch vote_average for movie %s from TMDB", movie_id)
         return movie_id, None
+
+
+def _tracked_ids(db: Session, content_type: str) -> list[int]:
+    """Distinct content IDs of the given type that at least one user is tracking."""
+    ct = content_type
+    q = union(
+        select(Watchlist.content_id).where(Watchlist.content_type == ct),
+        select(CurrentlyWatching.content_id).where(CurrentlyWatching.content_type == ct),
+        select(Watched.content_id).where(Watched.content_type == ct),
+    )
+    return list(db.execute(q).scalars())
 
 
 def update_all_vote_averages(db: Session):
     """
-    Fetch the latest vote_average from TMDB for every show and movie
-    currently stored in the database and update the rows in bulk.
-    Uses a thread pool so all requests run in parallel.
+    Fetch the latest vote_average from TMDb for every tracked show and movie
+    and update the rows in bulk. Only content tracked by at least one user is
+    refreshed — untracked cache rows are skipped to conserve TMDb quota.
     """
-    print("Updating vote averages")
-    show_ids = [r[0] for r in db.query(Show.id).all()]
-    movie_ids = [r[0] for r in db.query(Movie.id).all()]
+    logger.info("Updating vote averages")
+    show_ids = _tracked_ids(db, "tv")
+    movie_ids = _tracked_ids(db, "movie")
 
     updated_shows = 0
     updated_movies = 0
@@ -56,4 +76,4 @@ def update_all_vote_averages(db: Session):
             db.bulk_update_mappings(Movie, movie_updates)
             db.commit()
 
-    print(f"[vote update] Updated {updated_shows} shows and {updated_movies} movies")
+    logger.info("[vote update] Updated %d shows and %d movies", updated_shows, updated_movies)

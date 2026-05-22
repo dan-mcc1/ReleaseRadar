@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Body, BackgroundTasks, HTTPException, Request
+from fastapi import APIRouter, Depends, Body, BackgroundTasks, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.services.watched_service import (
@@ -12,6 +12,9 @@ from app.services.watched_service import (
 )
 from app.dependencies.auth import get_current_user
 from app.core.limiter import limiter
+from app.core.etag import etag_response
+from app.services.stats_service import invalidate_stats_cache
+from app.services.media_upsert import populate_show_bg, populate_movie_bg
 
 router = APIRouter()
 
@@ -32,8 +35,12 @@ def add_item(
         )
     result = add_to_watched(db, uid, content_type, content_id)
     if content_type == "tv":
+        background_tasks.add_task(populate_show_bg, content_id)
         mark_existing_episodes_watched(db, uid, content_id)
         background_tasks.add_task(sync_watched_episodes_bg, uid, content_id)
+    else:
+        background_tasks.add_task(populate_movie_bg, content_id)
+    invalidate_stats_cache(uid)
     return result
 
 
@@ -45,9 +52,12 @@ def rate_item(
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
+    if rating is not None and (not (0.5 <= rating <= 5.0) or rating != rating):
+        raise HTTPException(status_code=422, detail="Rating must be between 0.5 and 5.0")
     result = update_watched_rating(db, uid, content_type, content_id, rating)
     if result is None:
         raise HTTPException(status_code=404, detail="Item not in watched list")
+    invalidate_stats_cache(uid)
     return result
 
 
@@ -62,26 +72,45 @@ def remove_item(
         raise HTTPException(
             status_code=400, detail="content_type must be 'movie' or 'tv'"
         )
-    return remove_from_watched(db, uid, content_type, content_id)
+    result = remove_from_watched(db, uid, content_type, content_id)
+    invalidate_stats_cache(uid)
+    return result
 
 
 @router.get("")
 def get_user_watched(
+    request: Request,
+    response: Response,
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
-    return get_watched(db, uid)
+    payload = get_watched(db, uid)
+    if hit := etag_response(request, response, payload):
+        return hit
+    return payload
 
 
 @router.get("/tv")
 def watched_tv_info(
-    db: Session = Depends(get_db), uid: str = Depends(get_current_user)
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
 ):
-    return _get_watched_items(db, uid, "tv")
+    payload = _get_watched_items(db, uid, "tv")
+    if hit := etag_response(request, response, payload):
+        return hit
+    return payload
 
 
 @router.get("/movie")
 def watched_movie_info(
-    db: Session = Depends(get_db), uid: str = Depends(get_current_user)
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
 ):
-    return _get_watched_items(db, uid, "movie")
+    payload = _get_watched_items(db, uid, "movie")
+    if hit := etag_response(request, response, payload):
+        return hit
+    return payload

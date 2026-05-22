@@ -1,8 +1,11 @@
 # app/services/episode_watched_service.py
 from sqlalchemy.orm import Session
-from datetime import datetime
+from sqlalchemy import select, exists, union_all, literal
+from datetime import datetime, timezone
 from app.models.episode_watched import EpisodeWatched
 from app.models.episode import Episode
+from app.models.season import Season
+from app.models.show import Show
 from app.models.watchlist import Watchlist
 from app.models.currently_watching import CurrentlyWatching
 from app.services.episode_service import (
@@ -10,9 +13,11 @@ from app.services.episode_service import (
     sync_season_episodes,
     ensure_show_in_db,
 )
+from app.db.session import SessionLocal
 from app.services.watched_service import add_to_watched
 from app.services.watchlist_service import remove_from_watchlist
 from app.services.currently_watching_service import remove_from_currently_watching
+from app.services.activity_service import log_activity
 
 
 def add_episode_watched(
@@ -45,6 +50,7 @@ def add_episode_watched(
 
     # Ensure the show and episode rows exist (satisfies FK constraints)
     ensure_show_in_db(db, show_id)
+    show = db.query(Show).filter_by(id=show_id).first()
     episode = get_or_create_episode(db, show_id, season_number, episode_number)
 
     entry = EpisodeWatched(
@@ -53,14 +59,25 @@ def add_episode_watched(
         episode_id=episode.id if episode else None,
         season_number=season_number,
         episode_number=episode_number,
-        watched_at=datetime.utcnow(),
+        watched_at=datetime.now(timezone.utc),
         rating=rating,
     )
     db.add(entry)
     db.commit()
     db.refresh(entry)
 
-    _maybe_auto_complete_show(db, user_id, show_id)
+    log_activity(
+        db,
+        user_id,
+        "episode_watched",
+        "tv",
+        show_id,
+        show.name if show else None,
+        show.poster_path if show else None,
+        season_number=season_number,
+        episode_number=episode_number,
+    )
+    maybe_auto_complete_show(db, user_id, show_id)
 
     return entry
 
@@ -138,12 +155,12 @@ def add_season_watched(db: Session, user_id: str, show_id: int, season_number: i
                     episode_id=ep.id,
                     season_number=season_number,
                     episode_number=ep.episode_number,
-                    watched_at=datetime.utcnow(),
+                    watched_at=datetime.now(timezone.utc),
                 )
             )
     db.commit()
 
-    _maybe_auto_complete_show(db, user_id, show_id)
+    maybe_auto_complete_show(db, user_id, show_id)
 
     return {"message": f"Season {season_number} marked as watched"}
 
@@ -167,9 +184,6 @@ def get_next_unwatched_episode(db: Session, user_id: str, show_id: int) -> dict:
     Returns {"finished": True} if all known episodes are watched.
     Syncs the next un-synced season from TMDb if needed.
     """
-    from app.models.show import Show
-    from app.services.episode_service import sync_season_episodes
-
     watched_set = {
         (w.season_number, w.episode_number)
         for w in db.query(EpisodeWatched)
@@ -316,7 +330,7 @@ def get_watched_episodes_by_show(db: Session, user_id: str, show_id: int):
     ]
 
 
-def _maybe_auto_complete_show(db: Session, user_id: str, show_id: int) -> bool:
+def maybe_auto_complete_show(db: Session, user_id: str, show_id: int) -> bool:
     """
     After marking episode(s) as watched, auto-move the show to Watched status
     if all episodes have been seen. Returns True if auto-completed.
@@ -328,23 +342,27 @@ def _maybe_auto_complete_show(db: Session, user_id: str, show_id: int) -> bool:
     episode count. This prevents the show from bouncing between Watched and
     Watchlist for every week's episode on a currently-airing season.
     """
-    from app.models.show import Show
-    from app.models.season import Season
-
-    in_watchlist = (
-        db.query(Watchlist)
-        .filter_by(user_id=user_id, content_type="tv", content_id=show_id)
-        .first()
+    # Single UNION ALL EXISTS instead of two separate .first() queries
+    tracked_subq = union_all(
+        select(literal(1))
+        .select_from(Watchlist)
+        .where(
+            Watchlist.user_id == user_id,
+            Watchlist.content_type == "tv",
+            Watchlist.content_id == show_id,
+        ),
+        select(literal(1))
+        .select_from(CurrentlyWatching)
+        .where(
+            CurrentlyWatching.user_id == user_id,
+            CurrentlyWatching.content_type == "tv",
+            CurrentlyWatching.content_id == show_id,
+        ),
     )
-    in_currently_watching = (
-        db.query(CurrentlyWatching)
-        .filter_by(user_id=user_id, content_type="tv", content_id=show_id)
-        .first()
-    )
-    if not in_watchlist and not in_currently_watching:
+    if not db.execute(select(exists(tracked_subq.subquery()))).scalar():
         return False
 
-    # Quick count check — skip expensive TMDB sync if episodes are clearly remaining
+    # Quick count check — skip expensive TMDb sync if episodes are clearly remaining
     stored_count = (
         db.query(Episode)
         .filter(Episode.show_id == show_id, Episode.season_number > 0)
@@ -356,15 +374,11 @@ def _maybe_auto_complete_show(db: Session, user_id: str, show_id: int) -> bool:
     if watched_count < stored_count:
         return False
 
-    # Full check — may sync unseen seasons from TMDB to confirm nothing is left
-    result = get_next_unwatched_episode(db, user_id, show_id)
-    if not result.get("finished"):
-        return False
-
-    # For in-production shows, only auto-complete when a season is truly finished.
-    # This prevents the weekly-airing bounce where the user watches the latest
-    # available episode but more are still coming in the same season.
+    # For in-production shows, skip the TMDb sync entirely unless the user has
+    # already watched the last stored episode of the latest season. This avoids
+    # a potential 500ms+ TMDb network call on every mid-season episode mark.
     show = db.query(Show).filter_by(id=show_id).first()
+    last_episode = None
     if show and show.in_production:
         last_episode = (
             db.query(Episode)
@@ -374,8 +388,32 @@ def _maybe_auto_complete_show(db: Session, user_id: str, show_id: int) -> bool:
         )
         if not last_episode:
             return False
+        has_watched_last = (
+            db.query(EpisodeWatched)
+            .filter_by(
+                user_id=user_id,
+                show_id=show_id,
+                season_number=last_episode.season_number,
+                episode_number=last_episode.episode_number,
+            )
+            .first()
+        ) is not None
+        if not has_watched_last:
+            return False
 
-        # Primary: TMDB explicitly tagged the last episode as a finale
+    # Full check — may sync unseen seasons from TMDb to confirm nothing is left
+    result = get_next_unwatched_episode(db, user_id, show_id)
+    if not result.get("finished"):
+        return False
+
+    # For in-production shows, only auto-complete when a season is truly finished.
+    # This prevents the weekly-airing bounce where the user watches the latest
+    # available episode but more are still coming in the same season.
+    if show and show.in_production:
+        if not last_episode:
+            return False
+
+        # Primary: TMDb explicitly tagged the last episode as a finale
         finale_types = ("season_finale", "series_finale", "mid_season")
         is_season_complete = last_episode.episode_type in finale_types
 
@@ -401,14 +439,25 @@ def _maybe_auto_complete_show(db: Session, user_id: str, show_id: int) -> bool:
         if not is_season_complete:
             return False
 
-    # Add to Watched first so the subsequent removes see it still tracked
-    # and leave tracking_count unchanged
-    add_to_watched(db, user_id, "tv", show_id)
-
-    if in_watchlist:
-        remove_from_watchlist(db, user_id, "tv", show_id)
-    if in_currently_watching:
-        remove_from_currently_watching(db, user_id, "tv", show_id)
+    # All three writes share one transaction so a crash can't leave the show in two lists.
+    # add_to_watched flushes via log_activity, making the Watched row visible to the
+    # still_tracked checks inside the two remove calls before the single commit below.
+    add_to_watched(db, user_id, "tv", show_id, commit=False)
+    remove_from_watchlist(db, user_id, "tv", show_id, commit=False)
+    remove_from_currently_watching(db, user_id, "tv", show_id, commit=False)
+    db.commit()
 
     print(f"[auto-complete] Show {show_id} auto-moved to Watched for user {user_id}")
     return True
+
+
+def maybe_auto_complete_show_bg(user_id: str, show_id: int) -> None:
+    """Background-task wrapper that opens its own session (the request session is closed by the time this runs)."""
+    db = SessionLocal()
+    try:
+        maybe_auto_complete_show(db, user_id, show_id)
+    except Exception as e:
+        db.rollback()
+        print(f"[maybe_auto_complete_show_bg] Error for show {show_id}: {e}")
+    finally:
+        db.close()

@@ -4,15 +4,19 @@ import type { MediaExternalIds } from "../../types/media";
 
 interface Props {
   externalIds: MediaExternalIds;
+  homepage?: string | null;
 }
 
-export default function ExternalLinksSection({ externalIds }: Props) {
+export default function ExternalLinksSection({ externalIds, homepage }: Props) {
   return (
     <div>
       <h2 className="text-neutral-400 text-xs uppercase tracking-wider font-semibold mb-3">
         External Links
       </h2>
       <div className="flex flex-wrap gap-2">
+        {homepage && (
+          <ExternalLink href={homepage} label="Official Site" />
+        )}
         {externalIds.imdb_id && (
           <ExternalLink
             href={`https://www.imdb.com/title/${externalIds.imdb_id}`}

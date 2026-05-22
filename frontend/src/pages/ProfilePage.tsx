@@ -1,71 +1,338 @@
 import { useState } from "react";
 import { useAuthUser } from "../hooks/useAuthUser";
-import { BASE_IMAGE_URL, getAvatarColor } from "../constants";
+import { BASE_IMAGE_URL, AVATAR_PRESETS, getAvatarColor } from "../constants";
 import { Link } from "react-router-dom";
 import FriendSearch from "../components/FriendSearch";
 import FriendRequests from "../components/FriendRequests";
-import FriendsList from "../components/FriendsList";
 import StatsSection from "../components/StatsSection";
 import { usePageTitle } from "../hooks/usePageTitle";
-import { useProfileSummary } from "../hooks/api/useUser";
-import { useWatchlist, useWatched } from "../hooks/api/useLists";
-import { useSendFriendRequest } from "../hooks/api/useFriends";
+import { useProfileSummary, type ProfileSummary } from "../hooks/api/useUser";
+import { useShelves } from "../hooks/api/useShelves";
+import { useSendFriendRequest, useRemoveFriend } from "../hooks/api/useFriends";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "../hooks/api/queryKeys";
 
 type FriendsTab = "friends" | "requests" | "followers" | "add";
 
-/** Avatar for the profile hero: color preset → Google photo → grey fallback. */
-function HeroAvatar({
-  avatarKey,
-  photoURL,
-}: {
-  avatarKey: string | null | undefined;
-  photoURL?: string | null;
-}) {
-  const color = getAvatarColor(avatarKey);
-  const borderStyle = "4px solid rgba(255,255,255,0.2)";
-  const shadow = "0 20px 25px -5px rgba(0,0,0,0.4)";
+function patchSummary(queryClient: ReturnType<typeof useQueryClient>, uid: string, updater: (old: ProfileSummary) => ProfileSummary) {
+  queryClient.setQueryData(queryKeys.profileSummary(uid), (old: unknown) => {
+    if (!old) return old;
+    return updater(old as ProfileSummary);
+  });
+}
 
-  if (!color && photoURL) {
-    return (
-      <img
-        src={photoURL}
-        alt="Profile"
-        style={{
-          width: 96,
-          height: 96,
-          borderRadius: "50%",
-          objectFit: "cover",
-          flexShrink: 0,
-          border: borderStyle,
-          boxShadow: shadow,
-        }}
-      />
-    );
+function avatarKeyToHue(key: string | null | undefined): number {
+  const map: Record<string, number> = {
+    green: 160, purple: 280, blue: 220, red: 5,
+    orange: 30, teal: 175, pink: 330, yellow: 55,
+  };
+  return key ? (map[key] ?? 160) : 160;
+}
+
+function SectionHead({
+  title, sub, action, actionHref,
+}: {
+  title: string;
+  sub?: string;
+  action?: string;
+  actionHref?: string;
+}) {
+  return (
+    <div className="flex items-baseline gap-3 mb-4">
+      <h2 className="m-0 font-normal text-[22px] tracking-tight text-neutral-100 italic leading-none">
+        {title}
+      </h2>
+      {sub && (
+        <span className="font-mono text-[10.5px] text-neutral-500 tracking-[0.06em]">
+          · {sub.toUpperCase()}
+        </span>
+      )}
+      <span className="flex-1" />
+      {action && actionHref && (
+        <Link
+          to={actionHref}
+          className="text-[12.5px] text-neutral-400 hover:text-neutral-200 font-medium transition-colors"
+        >
+          {action} →
+        </Link>
+      )}
+    </div>
+  );
+}
+
+type ListPreviewItem = {
+  id: number;
+  title?: string;
+  name?: string;
+  poster_path: string | null;
+};
+
+function PosterGrid({
+  items,
+  type,
+  cols = 5,
+}: {
+  items: ListPreviewItem[];
+  type: "movie" | "tv";
+  cols?: number;
+}) {
+  const gridClass =
+    cols === 8
+      ? "grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2"
+      : cols === 6
+        ? "grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3"
+        : cols === 4
+          ? "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3"
+          : "grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3";
+
+  return (
+    <div className={gridClass}>
+      {items.map((item) => {
+        const label = item.title ?? item.name ?? "";
+        const href = type === "movie" ? `/movie/${item.id}` : `/tv/${item.id}`;
+        const fallback = type === "movie" ? "/movie-icon.png" : "/tv-icon.png";
+        return (
+          <Link key={item.id} to={href} className="group block">
+            <div className="rounded-xl overflow-hidden aspect-[2/3] bg-neutral-800">
+              <img
+                src={
+                  item.poster_path
+                    ? `${BASE_IMAGE_URL}/w342${item.poster_path}`
+                    : fallback
+                }
+                alt={label}
+                className="w-full h-full object-cover group-hover:opacity-80 transition-opacity"
+              />
+            </div>
+            <p className="mt-1.5 text-[11.5px] font-medium text-neutral-400 text-center line-clamp-1">
+              {label}
+            </p>
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
+
+// Self-contained friends panel — owns its tab + confirm state so switching
+// tabs doesn't re-render the hero, stats, or shelves above it.
+function FriendsWidget() {
+  const user = useAuthUser();
+  const queryClient = useQueryClient();
+  const [friendsTab, setFriendsTab] = useState<FriendsTab>("friends");
+  const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
+
+  const { data: summary } = useProfileSummary();
+  const removeMutation = useRemoveFriend();
+  const sendRequestMutation = useSendFriendRequest();
+
+  const typedDbUser = summary?.user;
+  const friends = summary?.friends ?? [];
+  const incoming = summary?.incoming_requests ?? [];
+  const outgoing = summary?.outgoing_requests ?? [];
+  const followers = summary?.followers ?? [];
+  const incomingCount = incoming.length;
+  const addingBackUsername = sendRequestMutation.isPending
+    ? sendRequestMutation.variables?.addresseeUsername ?? null
+    : null;
+
+  async function addBack(follower: { id: string; username: string }) {
+    await sendRequestMutation.mutateAsync({ addresseeUsername: follower.username }).catch(() => {});
+  }
+
+  async function removeFriend(friendId: string) {
+    try {
+      await removeMutation.mutateAsync(friendId);
+      if (!user) return;
+      patchSummary(queryClient, user.uid, (old) => ({
+        ...old,
+        friends: old.friends.filter((f: { friend: { id: string } }) => f.friend.id !== friendId),
+      }));
+    } finally {
+      setConfirmRemoveId(null);
+    }
   }
 
   return (
-    <div
-      style={{
-        width: 96,
-        height: 96,
-        borderRadius: "50%",
-        backgroundColor: color ?? "#475569",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        flexShrink: 0,
-        border: borderStyle,
-        boxShadow: shadow,
-      }}
-    >
-      <svg
-        width={53}
-        height={53}
-        viewBox="0 0 24 24"
-        fill="rgba(255,255,255,0.9)"
+    <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <div className="font-mono text-[10px] tracking-[0.15em] text-neutral-500 uppercase flex-1">
+          Friends · {friends.length}
+        </div>
+        {incomingCount > 0 && (
+          <span className="font-mono text-[10px] font-bold bg-primary-500 text-neutral-900 px-1.5 py-0.5 rounded">
+            {incomingCount} new
+          </span>
+        )}
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 border-b border-neutral-800 mb-4 -mx-1 px-1">
+        {(
+          [
+            { id: "friends" as FriendsTab, label: "Friends", count: friends.length },
+            ...(typedDbUser?.profile_visibility === "public"
+              ? [{ id: "followers" as FriendsTab, label: "Followers", count: followers.length }]
+              : []),
+            { id: "requests" as FriendsTab, label: "Requests", count: incomingCount, badge: incomingCount > 0 },
+            { id: "add" as FriendsTab, label: "Add" },
+          ] as { id: FriendsTab; label: string; count?: number; badge?: boolean }[]
+        ).map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setFriendsTab(t.id)}
+            className={[
+              "flex items-center gap-1.5 pb-2.5 text-[12px] font-medium border-b-2 -mb-px transition-colors px-1",
+              friendsTab === t.id
+                ? "border-primary-500 text-neutral-100"
+                : "border-transparent text-neutral-500 hover:text-neutral-300",
+            ].join(" ")}
+          >
+            {t.label}
+            {t.count != null && t.count > 0 && (
+              <span
+                className={[
+                  "font-mono text-[9.5px] px-1 py-px rounded font-semibold",
+                  t.badge ? "bg-primary-500 text-neutral-900" : "bg-neutral-800 text-neutral-500",
+                ].join(" ")}
+              >
+                {t.count}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* Friends list */}
+      {friendsTab === "friends" && (
+        <div className="flex flex-col gap-2.5">
+          {friends.length === 0 ? (
+            <p className="text-neutral-500 text-[13px]">No friends yet.</p>
+          ) : (
+            friends.map(({ friendship_id, friend }) => (
+              <div key={friendship_id} className="flex items-center gap-3">
+                <div
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-semibold shrink-0"
+                  style={{
+                    background: `oklch(0.32 0.10 ${avatarKeyToHue(undefined) + (friend.username.charCodeAt(0) * 7) % 360})`,
+                    color: `oklch(0.85 0.08 ${(friend.username.charCodeAt(0) * 7) % 360})`,
+                  }}
+                >
+                  {friend.username.slice(0, 2).toUpperCase()}
+                </div>
+                <Link
+                  to={`/user/${friend.username}`}
+                  className="flex-1 text-[13px] font-medium text-neutral-200 hover:text-primary-400 transition-colors truncate"
+                >
+                  @{friend.username}
+                </Link>
+                {confirmRemoveId === friend.id ? (
+                  <div className="flex gap-1 items-center">
+                    <button
+                      onClick={() => removeFriend(friend.id)}
+                      disabled={removeMutation.isPending && removeMutation.variables === friend.id}
+                      className="text-[10.5px] bg-error-600 hover:bg-error-500 text-white px-2 py-0.5 rounded disabled:opacity-50"
+                    >
+                      Yes
+                    </button>
+                    <button
+                      onClick={() => setConfirmRemoveId(null)}
+                      className="text-[10.5px] text-neutral-500 hover:text-neutral-300"
+                    >
+                      No
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setConfirmRemoveId(friend.id)}
+                    className="text-neutral-700 hover:text-neutral-400 transition-colors"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                      <circle cx="12" cy="5" r="2" />
+                      <circle cx="12" cy="12" r="2" />
+                      <circle cx="12" cy="19" r="2" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* Followers list */}
+      {friendsTab === "followers" && typedDbUser?.profile_visibility === "public" && (
+        <div className="flex flex-col gap-2.5">
+          {followers.length === 0 ? (
+            <p className="text-neutral-500 text-[13px]">No followers yet.</p>
+          ) : (
+            followers.map(({ friendship_id, follower }) => (
+              <div key={friendship_id} className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-semibold shrink-0 bg-neutral-800 text-neutral-400">
+                  {follower.username.slice(0, 2).toUpperCase()}
+                </div>
+                <Link
+                  to={`/user/${follower.username}`}
+                  className="flex-1 text-[13px] font-medium text-neutral-200 hover:text-primary-400 transition-colors truncate"
+                >
+                  @{follower.username}
+                </Link>
+                <button
+                  onClick={() => addBack(follower)}
+                  disabled={addingBackUsername === follower.username}
+                  className="text-[11px] font-semibold text-primary-400 bg-primary-500/15 hover:bg-primary-500/25 disabled:opacity-50 px-2.5 py-1 rounded-lg transition-colors"
+                >
+                  {addingBackUsername === follower.username ? "…" : "Add back"}
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* Requests */}
+      {friendsTab === "requests" && (
+        <FriendRequests
+          incoming={incoming}
+          outgoing={outgoing}
+          onResponded={(friendshipId, accepted, req) => {
+            if (!user) return;
+            patchSummary(queryClient, user.uid, (old) => ({
+              ...old,
+              incoming_requests: old.incoming_requests.filter(
+                (r: { friendship_id: number }) => r.friendship_id !== friendshipId,
+              ),
+              friends: accepted
+                ? [...old.friends, { friendship_id: friendshipId, friend: req.from_user }]
+                : old.friends,
+            }));
+          }}
+          onCancelled={(friendshipId) => {
+            if (!user) return;
+            patchSummary(queryClient, user.uid, (old) => ({
+              ...old,
+              outgoing_requests: old.outgoing_requests.filter(
+                (r: { friendship_id: number }) => r.friendship_id !== friendshipId,
+              ),
+            }));
+          }}
+        />
+      )}
+
+      {/* Add friend search */}
+      {friendsTab === "add" && (
+        <FriendSearch
+          friendIds={new Set(friends.map((f) => f.friend.id))}
+          onRequestSent={() => setFriendsTab("requests")}
+        />
+      )}
+
+      <button
+        onClick={() => setFriendsTab("add")}
+        className="mt-4 w-full text-[12.5px] font-medium text-primary-400 bg-primary-500/10 hover:bg-primary-500/20 border border-primary-500/20 py-2 rounded-xl transition-colors"
       >
-        <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z" />
-      </svg>
+        + Find friends
+      </button>
     </div>
   );
 }
@@ -73,60 +340,34 @@ function HeroAvatar({
 export default function ProfilePage() {
   usePageTitle("My Profile");
   const user = useAuthUser();
-
-  // Collapsible sections
-  const [watchlistOpen, setWatchlistOpen] = useState(false);
-  const [watchedOpen, setWatchedOpen] = useState(false);
-  const [statsOpen, setStatsOpen] = useState(false);
-
-  // Friends tab
-  const [friendsTab, setFriendsTab] = useState<FriendsTab>("friends");
+  const [shareCopied, setShareCopied] = useState(false);
 
   const { data: summary, isLoading: summaryLoading } = useProfileSummary();
-  const { data: watchlistFull, isLoading: watchlistLoading } =
-    useWatchlist(watchlistOpen);
-  const { data: watchedFull, isLoading: watchedLoading } =
-    useWatched(watchedOpen);
+  const { data: shelves = [] } = useShelves();
 
   const typedDbUser = summary?.user;
   const favorites = summary?.favorites ?? { movies: [], shows: [] };
-  const watchlistPreview = summary?.watchlist ?? {
-    movies: [],
-    shows: [],
-    total_movies: 0,
-    total_shows: 0,
-  };
-  const watchedPreview = summary?.watched ?? {
-    movies: [],
-    shows: [],
-    total_movies: 0,
-    total_shows: 0,
-  };
+  const watchlistPreview = summary?.watchlist ?? { movies: [], shows: [], total_movies: 0, total_shows: 0 };
+  const watchedPreview = summary?.watched ?? { movies: [], shows: [], total_movies: 0, total_shows: 0 };
   const friends = summary?.friends ?? [];
-  const incoming = summary?.incoming_requests ?? [];
-  const outgoing = summary?.outgoing_requests ?? [];
-  const followers = summary?.followers ?? [];
 
-  const watchlist = watchlistFull ?? {
-    movies: watchlistPreview.movies,
-    shows: watchlistPreview.shows,
-  };
-  const watched = watchedFull ?? {
-    movies: watchedPreview.movies,
-    shows: watchedPreview.shows,
-  };
+  const totalWatched = watchedPreview.total_movies + watchedPreview.total_shows;
+  const totalWatchlist = watchlistPreview.total_movies + watchlistPreview.total_shows;
+  const totalFavorites = favorites.movies.length + favorites.shows.length;
+  const hue = avatarKeyToHue(typedDbUser?.avatar_key);
+  const avatarColor = getAvatarColor(typedDbUser?.avatar_key);
 
-  const loading = summaryLoading || watchlistLoading || watchedLoading;
-
-  const sendRequestMutation = useSendFriendRequest();
-  const addingBackUsername =
-    sendRequestMutation.isPending &&
-    typeof sendRequestMutation.variables === "string"
-      ? (sendRequestMutation.variables as string)
-      : null;
-
-  async function addBack(follower: { id: string; username: string }) {
-    await sendRequestMutation.mutateAsync(follower.username).catch(() => {});
+  async function handleShareProfile() {
+    const username = typedDbUser?.username;
+    if (!username) return;
+    const url = `${window.location.origin}/user/${username}`;
+    if (navigator.share) {
+      await navigator.share({ title: `${username} on ReleaseRadar`, url }).catch(() => {});
+    } else {
+      await navigator.clipboard.writeText(url).catch(() => {});
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 2000);
+    }
   }
 
   if (!user) {
@@ -137,452 +378,396 @@ export default function ProfilePage() {
     );
   }
 
-  const incomingCount = incoming.length;
-  const totalWatched = watchedPreview.total_movies + watchedPreview.total_shows;
-  const totalWatchlist =
-    watchlistPreview.total_movies + watchlistPreview.total_shows;
-  const totalFavorites = favorites.movies.length + favorites.shows.length;
+  const initials = (user.displayName ?? typedDbUser?.username ?? "?")
+    .split(" ")
+    .map((w) => w[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
+  const statStrip = [
+    { label: "Watched",   value: summaryLoading ? "—" : totalWatched },
+    { label: "Watchlist", value: summaryLoading ? "—" : totalWatchlist },
+    { label: "Favorites", value: summaryLoading ? "—" : totalFavorites },
+    { label: "Shelves",   value: summaryLoading ? "—" : shelves.length },
+    { label: "Friends",   value: summaryLoading ? "—" : friends.length },
+  ];
 
   return (
-    <div className="w-full max-w-6xl mx-auto px-4 py-8 space-y-6">
-      {/* ── Hero banner ── */}
-      <div className="rounded-2xl overflow-hidden bg-gradient-to-br from-primary-800 via-primary-700 to-primary-900">
-        <div className="px-6 pt-8 pb-6 flex flex-col sm:flex-row items-center sm:items-end gap-5">
-          <HeroAvatar
-            avatarKey={typedDbUser?.avatar_key}
-            photoURL={user.photoURL}
-          />
-          <div className="flex-1 text-center sm:text-left">
-            <h1 className="text-2xl sm:text-3xl font-bold text-white">
-              {user.displayName ?? "User"}
-            </h1>
-            <div className="mt-1 flex items-center gap-2 justify-center sm:justify-start">
-              {typedDbUser?.username ? (
-                <span className="text-neutral-300 text-sm">
+    <div className="w-full">
+      {/* ── Hero ────────────────────────────────────────────────────── */}
+      <div
+        className="relative overflow-hidden border-b border-neutral-800"
+        style={{ background: "#111" }}
+      >
+        {/* Atmospheric gradient */}
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background: `radial-gradient(80% 70% at 80% 0%, oklch(0.28 0.12 ${hue}) 0%, transparent 65%), radial-gradient(60% 70% at 10% 80%, oklch(0.20 0.08 ${hue} / 0.5) 0%, transparent 70%)`,
+            opacity: 0.7,
+          }}
+        />
+        {/* Radar rings decoration */}
+        <svg
+          viewBox="0 0 600 400"
+          className="absolute pointer-events-none"
+          style={{ right: -80, top: -80, width: 600, height: 400, opacity: 0.14 }}
+        >
+          {[60, 110, 160, 210, 260].map((r) => (
+            <circle key={r} cx="400" cy="200" r={r} stroke="#10b981" strokeWidth="0.8" fill="none" />
+          ))}
+        </svg>
+
+        <div
+          className="relative flex flex-col gap-5 sm:grid sm:items-end sm:gap-8 px-6 sm:px-10 pt-10 pb-8"
+          style={{ gridTemplateColumns: "116px 1fr auto" }}
+        >
+          {/* Avatar */}
+          <div className="relative shrink-0">
+            {!avatarColor && user.photoURL ? (
+              <img
+                src={user.photoURL}
+                alt="Profile"
+                style={{ width: 116, height: 116 }}
+                className="rounded-full object-cover border-4 border-white/10 shadow-2xl"
+              />
+            ) : (
+              <div
+                style={{
+                  width: 116, height: 116, borderRadius: "50%",
+                  background: avatarColor
+                    ? `linear-gradient(135deg, ${avatarColor}cc, ${avatarColor}88)`
+                    : `linear-gradient(135deg, oklch(0.55 0.14 ${hue}), oklch(0.38 0.14 ${(hue + 40) % 360}))`,
+                  boxShadow: "0 16px 40px rgba(0,0,0,0.4), 0 0 0 4px rgba(255,255,255,0.07)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 40, fontWeight: 700, color: "rgba(255,255,255,0.92)",
+                  letterSpacing: "-0.02em",
+                }}
+              >
+                {initials}
+              </div>
+            )}
+            {typedDbUser?.subscription_tier === "premium" && (
+              <span className="absolute bottom-0 right-0 font-mono text-[9px] font-bold tracking-wider bg-amber-400 text-amber-900 rounded-full px-2 py-0.5 shadow-lg uppercase">
+                ★ Pro
+              </span>
+            )}
+          </div>
+
+          {/* Name + meta */}
+          <div className="min-w-0">
+            <div className="font-mono text-[11px] tracking-[0.15em] text-primary-400 uppercase mb-2">
+              ◉ Member since{" "}
+              {user.metadata?.creationTime
+                ? new Date(user.metadata.creationTime).toLocaleDateString("en-US", { month: "long", year: "numeric" })
+                : "—"}
+            </div>
+            <div className="flex items-baseline gap-4 flex-wrap">
+              <h1 className="m-0 font-normal text-[32px] sm:text-[50px] tracking-[-0.025em] leading-none text-neutral-100">
+                {user.displayName ?? "User"}
+              </h1>
+              {typedDbUser?.username && (
+                <span className="font-mono text-[14px] text-neutral-400 tracking-[0.02em]">
                   @{typedDbUser.username}
                 </span>
-              ) : (
-                <span className="text-amber-400 text-sm">No username set</span>
+              )}
+              {typedDbUser?.subscription_tier === "admin" && (
+                <span className="text-[10px] font-bold uppercase tracking-wider bg-highlight-500/20 text-highlight-400 border border-highlight-500/30 rounded-full px-2 py-0.5">
+                  Admin
+                </span>
               )}
             </div>
-            <p className="text-neutral-400 text-sm mt-1">{user.email}</p>
-            <p className="text-neutral-500 text-xs mt-0.5">
-              Joined {user.metadata?.creationTime?.split("T")[0]}
-            </p>
             {typedDbUser?.bio && (
-              <p className="text-neutral-300 text-sm mt-2">{typedDbUser.bio}</p>
+              <p className="italic text-[17px] leading-snug tracking-tight text-neutral-300 mt-3 max-w-xl">
+                {typedDbUser.bio}
+              </p>
+            )}
+            <div className="flex gap-4 mt-3 font-mono text-[11.5px] text-neutral-500 tracking-[0.02em] uppercase flex-wrap">
+              {user.email && <span>{user.email}</span>}
+              {user.email && <span className="text-neutral-700">·</span>}
+              <span className="flex items-center gap-1.5">
+                <span
+                  className="w-1.5 h-1.5 rounded-full bg-primary-500"
+                  style={{ display: "inline-block" }}
+                />
+                Online now
+              </span>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex flex-col gap-2 items-start sm:items-end shrink-0">
+            <div className="flex gap-2">
+              {typedDbUser?.username && (
+                <button
+                  onClick={handleShareProfile}
+                  className="flex items-center gap-1.5 text-[12.5px] font-medium text-neutral-300 hover:text-neutral-100 bg-neutral-800/80 hover:bg-neutral-700 border border-neutral-700 px-3.5 py-2 rounded-xl transition-colors"
+                >
+                  {shareCopied ? (
+                    <>
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                      </svg>
+                      Copied!
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z" />
+                      </svg>
+                      Share profile
+                    </>
+                  )}
+                </button>
+              )}
+              <Link
+                to="/settings"
+                className="flex items-center gap-1.5 text-[12.5px] font-medium text-neutral-900 bg-primary-500 hover:bg-primary-400 px-3.5 py-2 rounded-xl transition-colors"
+              >
+                Edit profile
+              </Link>
+            </div>
+            {typedDbUser?.username && (
+              <span className="font-mono text-[10px] text-neutral-600 tracking-[0.06em] uppercase">
+                releaseradar.app/user/{typedDbUser.username}
+              </span>
             )}
           </div>
         </div>
 
-        {/* Quick-stat pills */}
-        <div className="flex gap-px border-t border-white/10">
-          {[
-            { label: "Watched", value: totalWatched },
-            { label: "Watchlist", value: totalWatchlist },
-            { label: "Favorites", value: totalFavorites },
-            { label: "Friends", value: friends.length },
-          ].map(({ label, value }) => (
-            <div key={label} className="flex-1 py-3 text-center">
-              <p className="text-lg font-bold text-white">{value}</p>
-              <p className="text-xs text-neutral-400">{label}</p>
+        {/* Stat strip */}
+        <div
+          className="relative grid grid-cols-3 sm:grid-cols-5 border-t border-neutral-800"
+          style={{ background: "#0d0d0d" }}
+        >
+          {statStrip.map((s, i) => (
+            <div
+              key={s.label}
+              className="flex flex-col gap-1 px-4 sm:px-6 py-4 sm:py-5 border-neutral-800"
+              style={{ borderLeft: i === 0 ? "none" : "1px solid #262626" }}
+            >
+              <div className="font-mono text-[10px] text-neutral-500 tracking-[0.12em] uppercase">
+                {s.label}
+              </div>
+              <div className="text-[22px] sm:text-[30px] leading-none tracking-tight text-neutral-100 italic font-normal">
+                {s.value}
+              </div>
             </div>
           ))}
         </div>
       </div>
 
-      {/* ── Two-column body ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-        {/* Left: content (2/3) */}
-        <div className="lg:col-span-2 space-y-4">
+      {/* ── Body ────────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-8 px-6 sm:px-10 py-8 items-start">
+        {/* Main column */}
+        <div className="flex flex-col gap-10">
+
           {/* Favorites */}
           {(favorites.movies.length > 0 || favorites.shows.length > 0) && (
-            <div className="bg-neutral-800 rounded-xl p-4">
-              <h2 className="text-base font-semibold text-white mb-3">
-                Favorites
-              </h2>
-              {favorites.movies.length > 0 && (
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-2">
-                    Movies
-                  </p>
-                  <div className="flex gap-3 overflow-x-auto pb-1">
-                    {favorites.movies.map((movie) => (
-                      <div key={movie.id} className="flex-shrink-0 w-28">
-                        <Link to={`/movie/${movie.id}`}>
-                          <img
-                            src={
-                              movie.poster_path
-                                ? `${BASE_IMAGE_URL}/w342${movie.poster_path}`
-                                : "/movie-icon.png"
-                            }
-                            alt={movie.title}
-                            className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity"
-                          />
-                          <p className="mt-1 text-xs font-medium text-neutral-300 text-center line-clamp-1">
-                            {movie.title}
-                          </p>
-                        </Link>
-                      </div>
-                    ))}
+            <section>
+              <SectionHead title="Favorites" sub={`${totalFavorites} pinned`} />
+              <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 flex flex-col gap-6">
+                {favorites.shows.length > 0 && (
+                  <div>
+                    <div className="font-mono text-[10px] text-neutral-500 tracking-[0.12em] uppercase mb-3">
+                      TV Shows · {favorites.shows.length}
+                    </div>
+                    <PosterGrid items={favorites.shows} type="tv" cols={8} />
                   </div>
-                </div>
-              )}
-              {favorites.shows.length > 0 && (
-                <div className={favorites.movies.length > 0 ? "mt-3" : ""}>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-2">
-                    TV Shows
-                  </p>
-                  <div className="flex gap-3 overflow-x-auto pb-1">
-                    {favorites.shows.map((show) => (
-                      <div key={show.id} className="flex-shrink-0 w-28">
-                        <Link to={`/tv/${show.id}`}>
-                          <img
-                            src={
-                              show.poster_path
-                                ? `${BASE_IMAGE_URL}/w342${show.poster_path}`
-                                : "/tv-icon.png"
-                            }
-                            alt={show.name}
-                            className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity"
-                          />
-                          <p className="mt-1 text-xs font-medium text-neutral-300 text-center line-clamp-1">
-                            {show.name}
-                          </p>
-                        </Link>
-                      </div>
-                    ))}
+                )}
+                {favorites.movies.length > 0 && (
+                  <div>
+                    <div className="font-mono text-[10px] text-neutral-500 tracking-[0.12em] uppercase mb-3">
+                      Movies · {favorites.movies.length}
+                    </div>
+                    <PosterGrid items={favorites.movies} type="movie" cols={8} />
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            </section>
           )}
 
-          {/* Watchlist + Watched */}
-          <div className="bg-neutral-800 rounded-xl overflow-hidden divide-y divide-neutral-700">
-            {/* Watchlist */}
-            <div>
-              <button
-                onClick={() => setWatchlistOpen((o) => !o)}
-                className="w-full flex items-center justify-between px-4 py-3.5 text-left hover:bg-neutral-700/50 transition-colors"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="text-base font-semibold text-white">
-                    Watchlist
-                  </span>
-                  <span className="text-xs text-neutral-400 bg-neutral-700 px-1.5 py-0.5 rounded-full">
-                    {totalWatchlist}
-                  </span>
-                </div>
-                <svg
-                  className={`w-4 h-4 text-neutral-400 transition-transform duration-200 ${watchlistOpen ? "rotate-180" : ""}`}
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M19 9l-7 7-7-7"
-                  />
-                </svg>
-              </button>
-              {watchlistOpen && (
-                <div className="px-4 pb-4">
-                  {watchlist.movies.length > 0 && (
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-2">
-                        Movies
-                      </p>
-                      <div className="flex gap-3 overflow-x-auto pb-1">
-                        {watchlist.movies.slice(0, 5).map((movie) => (
-                          <div key={movie.id} className="flex-shrink-0 w-28">
-                            <Link to={`/movie/${movie.id}`}>
-                              <img
-                                src={
-                                  movie.poster_path
-                                    ? `${BASE_IMAGE_URL}/w342${movie.poster_path}`
-                                    : "/movie-icon.png"
-                                }
-                                alt={movie.title ?? ""}
-                                className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity"
-                              />
-                              <p className="mt-1 text-xs font-medium text-neutral-300 text-center line-clamp-1">
-                                {movie.title}
-                              </p>
-                            </Link>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {watchlist.shows.length > 0 && (
-                    <div className={watchlist.movies.length > 0 ? "mt-3" : ""}>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-2">
-                        TV Shows
-                      </p>
-                      <div className="flex gap-3 overflow-x-auto pb-1">
-                        {watchlist.shows.slice(0, 5).map((show) => (
-                          <div key={show.id} className="flex-shrink-0 w-28">
-                            <Link to={`/tv/${show.id}`}>
-                              <img
-                                src={
-                                  show.poster_path
-                                    ? `${BASE_IMAGE_URL}/w342${show.poster_path}`
-                                    : "/tv-icon.png"
-                                }
-                                alt={show.name ?? ""}
-                                className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity"
-                              />
-                              <p className="mt-1 text-xs font-medium text-neutral-300 text-center line-clamp-1">
-                                {show.name}
-                              </p>
-                            </Link>
-                          </div>
-                        ))}
-                      </div>
-                      <Link
-                        to="/watchlist"
-                        className="text-primary-400 hover:text-primary-300 text-sm mt-2 inline-block"
-                      >
-                        View full watchlist →
-                      </Link>
-                    </div>
-                  )}
-                  {totalWatchlist === 0 && !loading && (
-                    <p className="text-neutral-400 text-sm">
-                      Your watchlist is empty.
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
+          {/* Watchlist + Watched side by side */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <section>
+              <SectionHead
+                title="Watchlist"
+                sub={String(totalWatchlist)}
+                action="View all"
+                actionHref="/watchlist"
+              />
+              <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
+                {watchlistPreview.shows.length > 0 && (
+                  <div className="mb-4">
+                    <div className="font-mono text-[10px] text-neutral-500 tracking-[0.12em] uppercase mb-3">TV</div>
+                    <PosterGrid items={watchlistPreview.shows} type="tv" cols={5} />
+                  </div>
+                )}
+                {watchlistPreview.movies.length > 0 && (
+                  <div>
+                    <div className="font-mono text-[10px] text-neutral-500 tracking-[0.12em] uppercase mb-3">Movies</div>
+                    <PosterGrid items={watchlistPreview.movies} type="movie" cols={5} />
+                  </div>
+                )}
+                {totalWatchlist === 0 && !summaryLoading && (
+                  <p className="text-neutral-500 text-[13px]">Your watchlist is empty.</p>
+                )}
+              </div>
+            </section>
 
-            {/* Watched */}
-            <div>
-              <button
-                onClick={() => setWatchedOpen((o) => !o)}
-                className="w-full flex items-center justify-between px-4 py-3.5 text-left hover:bg-neutral-700/50 transition-colors"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="text-base font-semibold text-white">
-                    Watched
-                  </span>
-                  <span className="text-xs text-neutral-400 bg-neutral-700 px-1.5 py-0.5 rounded-full">
-                    {totalWatched}
-                  </span>
-                </div>
-                <svg
-                  className={`w-4 h-4 text-neutral-400 transition-transform duration-200 ${watchedOpen ? "rotate-180" : ""}`}
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M19 9l-7 7-7-7"
-                  />
-                </svg>
-              </button>
-              {watchedOpen && (
-                <div className="px-4 pb-4">
-                  {watched.movies.length > 0 && (
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-2">
-                        Movies
-                      </p>
-                      <div className="flex gap-3 overflow-x-auto pb-1">
-                        {watched.movies.slice(0, 5).map((movie) => (
-                          <div key={movie.id} className="flex-shrink-0 w-28">
-                            <Link to={`/movie/${movie.id}`}>
-                              <img
-                                src={
-                                  movie.poster_path
-                                    ? `${BASE_IMAGE_URL}/w342${movie.poster_path}`
-                                    : "/movie-icon.png"
-                                }
-                                alt={movie.title ?? ""}
-                                className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity"
-                              />
-                              <p className="mt-1 text-xs font-medium text-neutral-300 text-center line-clamp-1">
-                                {movie.title}
-                              </p>
-                            </Link>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {watched.shows.length > 0 && (
-                    <div className={watched.movies.length > 0 ? "mt-3" : ""}>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-2">
-                        TV Shows
-                      </p>
-                      <div className="flex gap-3 overflow-x-auto pb-1">
-                        {watched.shows.slice(0, 5).map((show) => (
-                          <div key={show.id} className="flex-shrink-0 w-28">
-                            <Link to={`/tv/${show.id}`}>
-                              <img
-                                src={
-                                  show.poster_path
-                                    ? `${BASE_IMAGE_URL}/w342${show.poster_path}`
-                                    : "/tv-icon.png"
-                                }
-                                alt={show.name ?? ""}
-                                className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity"
-                              />
-                              <p className="mt-1 text-xs font-medium text-neutral-300 text-center line-clamp-1">
-                                {show.name}
-                              </p>
-                            </Link>
-                          </div>
-                        ))}
-                      </div>
-                      <Link
-                        to="/watched"
-                        className="text-primary-400 hover:text-primary-300 text-sm mt-2 inline-block"
-                      >
-                        View full watched list →
-                      </Link>
-                    </div>
-                  )}
-                  {totalWatched === 0 && !loading && (
-                    <p className="text-neutral-400 text-sm">
-                      Nothing watched yet.
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
+            <section>
+              <SectionHead
+                title="Watched"
+                sub={String(totalWatched)}
+                action="View all"
+                actionHref="/watched"
+              />
+              <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
+                {watchedPreview.shows.length > 0 && (
+                  <div className="mb-4">
+                    <div className="font-mono text-[10px] text-neutral-500 tracking-[0.12em] uppercase mb-3">TV</div>
+                    <PosterGrid items={watchedPreview.shows} type="tv" cols={5} />
+                  </div>
+                )}
+                {watchedPreview.movies.length > 0 && (
+                  <div>
+                    <div className="font-mono text-[10px] text-neutral-500 tracking-[0.12em] uppercase mb-3">Movies</div>
+                    <PosterGrid items={watchedPreview.movies} type="movie" cols={5} />
+                  </div>
+                )}
+                {totalWatched === 0 && !summaryLoading && (
+                  <p className="text-neutral-500 text-[13px]">Nothing watched yet.</p>
+                )}
+              </div>
+            </section>
           </div>
+
+          {/* Shelves */}
+          {shelves.length > 0 && (
+            <section>
+              <SectionHead
+                title="Shelves"
+                sub={`${shelves.length} curated`}
+                action="Manage"
+                actionHref="/shelves"
+              />
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {shelves.map((shelf, i) => {
+                  const SHELF_HUES = [160, 220, 285, 30, 175, 330];
+                  const shelfHue = SHELF_HUES[i % SHELF_HUES.length];
+                  return (
+                    <Link
+                      key={shelf.id}
+                      to={`/shelves/${shelf.id}`}
+                      className="group block bg-neutral-900 border border-neutral-800 hover:border-neutral-700 rounded-2xl p-5 transition-colors relative overflow-hidden"
+                    >
+                      <div
+                        className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-2xl"
+                        style={{
+                          background: `linear-gradient(180deg, oklch(0.65 0.14 ${shelfHue}), oklch(0.45 0.14 ${shelfHue}))`,
+                        }}
+                      />
+                      <div className="pl-1">
+                        <h3 className="font-normal text-[17px] tracking-tight text-neutral-100 italic group-hover:text-primary-400 transition-colors truncate">
+                          {shelf.name}
+                        </h3>
+                        <div className="font-mono text-[10px] text-neutral-500 tracking-[0.08em] uppercase mt-1.5">
+                          {shelf.item_count} {shelf.item_count === 1 ? "title" : "titles"}
+                        </div>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            </section>
+          )}
 
           {/* Stats */}
-          <div className="bg-neutral-800 rounded-xl overflow-hidden">
-            <button
-              onClick={() => setStatsOpen((o) => !o)}
-              className="w-full flex items-center justify-between px-4 py-3.5 text-left hover:bg-neutral-700/50 transition-colors"
-            >
-              <span className="text-base font-semibold text-white">Stats</span>
-              <svg
-                className={`w-4 h-4 text-neutral-400 transition-transform duration-200 ${statsOpen ? "rotate-180" : ""}`}
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M19 9l-7 7-7-7"
-                />
-              </svg>
-            </button>
-            {statsOpen && (
-              <div className="px-4 pb-4 border-t border-neutral-700">
-                <StatsSection />
-              </div>
-            )}
-          </div>
+          <section>
+            <SectionHead title="Your stats" action="Full stats" actionHref="/stats" />
+            <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6">
+              <StatsSection />
+            </div>
+          </section>
         </div>
 
-        {/* Right: Friends (1/3) */}
-        <div className="bg-neutral-800 rounded-xl p-4">
-          <h2 className="text-base font-semibold text-white mb-3">Friends</h2>
+        {/* Right rail */}
+        <div className="flex flex-col gap-5 lg:sticky lg:top-24 lg:self-start">
 
-          <div className="flex gap-1 mb-4 border-b border-neutral-700 flex-wrap">
-            <button
-              onClick={() => setFriendsTab("friends")}
-              className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${friendsTab === "friends" ? "border-primary-500 text-primary-400" : "border-transparent text-neutral-400 hover:text-neutral-200"}`}
-            >
-              Friends ({friends.length})
-            </button>
-            {typedDbUser?.profile_visibility === "public" && (
-              <button
-                onClick={() => setFriendsTab("followers")}
-                className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${friendsTab === "followers" ? "border-primary-500 text-primary-400" : "border-transparent text-neutral-400 hover:text-neutral-200"}`}
-              >
-                Followers
-                {followers.length > 0 && (
-                  <span className="ml-1.5 bg-neutral-600 text-neutral-300 text-xs font-bold rounded-full px-1.5 py-0.5">
-                    {followers.length}
-                  </span>
+          {/* About */}
+          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
+            <div className="font-mono text-[10px] tracking-[0.15em] text-neutral-500 uppercase mb-4">
+              About
+            </div>
+            <div className="grid gap-x-4 gap-y-2.5 text-[13px]" style={{ gridTemplateColumns: "72px 1fr" }}>
+              <span className="text-neutral-500">Joined</span>
+              <span className="font-medium text-neutral-200">
+                {user.metadata?.creationTime
+                  ? new Date(user.metadata.creationTime).toLocaleDateString("en-US", { month: "long", year: "numeric" })
+                  : "—"}
+              </span>
+              <span className="text-neutral-500">Plan</span>
+              <span className="font-medium text-neutral-200 flex items-center gap-1.5">
+                {typedDbUser?.subscription_tier === "premium" ? (
+                  <>
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
+                    Premium
+                  </>
+                ) : typedDbUser?.subscription_tier === "admin" ? (
+                  <>
+                    <span className="w-1.5 h-1.5 rounded-full bg-highlight-400 inline-block" />
+                    Admin
+                  </>
+                ) : (
+                  <>
+                    <span className="w-1.5 h-1.5 rounded-full bg-neutral-500 inline-block" />
+                    Free
+                  </>
                 )}
-              </button>
-            )}
-            <button
-              onClick={() => setFriendsTab("requests")}
-              className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${friendsTab === "requests" ? "border-primary-500 text-primary-400" : "border-transparent text-neutral-400 hover:text-neutral-200"}`}
-            >
-              Requests
-              {incomingCount > 0 && (
-                <span className="ml-1.5 bg-error-500 text-white text-xs font-bold rounded-full px-1.5 py-0.5">
-                  {incomingCount}
-                </span>
+              </span>
+              <span className="text-neutral-500">Visibility</span>
+              <span className="font-medium text-neutral-200 capitalize">
+                {typedDbUser?.profile_visibility?.replace("_", " ") ?? "—"}
+              </span>
+              {user.email && (
+                <>
+                  <span className="text-neutral-500">Email</span>
+                  <span className="font-medium text-neutral-200 text-[12px] truncate">{user.email}</span>
+                </>
               )}
-            </button>
-            <button
-              onClick={() => setFriendsTab("add")}
-              className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${friendsTab === "add" ? "border-primary-500 text-primary-400" : "border-transparent text-neutral-400 hover:text-neutral-200"}`}
-            >
-              Add
-            </button>
+            </div>
+            {/* Avatar color picker hint */}
+            <div className="mt-4 pt-4 border-t border-neutral-800">
+              <div className="font-mono text-[10px] text-neutral-500 tracking-[0.12em] uppercase mb-2.5">
+                Avatar color
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                {AVATAR_PRESETS.map((p) => (
+                  <div
+                    key={p.key}
+                    title={p.label}
+                    className="w-5 h-5 rounded-full ring-1 ring-neutral-700"
+                    style={{
+                      background: p.color,
+                      boxShadow: typedDbUser?.avatar_key === p.key
+                        ? `0 0 0 2px #0d0d0d, 0 0 0 4px ${p.color}`
+                        : undefined,
+                    }}
+                  />
+                ))}
+              </div>
+              <Link
+                to="/settings"
+                className="mt-2 inline-block text-[11.5px] text-primary-400 hover:text-primary-300 transition-colors"
+              >
+                Change in settings →
+              </Link>
+            </div>
           </div>
 
-          {friendsTab === "friends" && (
-            <FriendsList
-              friends={friends}
-              onFriendRemoved={() => {}}
-              onFindFriends={() => setFriendsTab("add")}
-            />
-          )}
-          {friendsTab === "followers" &&
-            typedDbUser?.profile_visibility === "public" && (
-              <div className="space-y-2">
-                {followers.length === 0 ? (
-                  <p className="text-neutral-400 text-sm">No followers yet.</p>
-                ) : (
-                  followers.map(({ friendship_id, follower }) => (
-                    <div
-                      key={friendship_id}
-                      className="flex items-center justify-between bg-neutral-700 px-3 py-2 rounded-lg"
-                    >
-                      <Link
-                        to={`/user/${follower.username}`}
-                        className="text-neutral-200 text-sm font-medium hover:text-primary-400 transition-colors"
-                      >
-                        @{follower.username}
-                      </Link>
-                      <button
-                        onClick={() => addBack(follower)}
-                        disabled={addingBackUsername === follower.username}
-                        className="text-xs bg-primary-600 hover:bg-primary-500 disabled:opacity-50 text-white px-3 py-1 rounded transition-colors"
-                      >
-                        {addingBackUsername === follower.username
-                          ? "Adding…"
-                          : "Add back"}
-                      </button>
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
-          {friendsTab === "requests" && (
-            <FriendRequests
-              incoming={incoming}
-              outgoing={outgoing}
-              onResponded={() => {}}
-              onCancelled={() => {}}
-            />
-          )}
-          {friendsTab === "add" && (
-            <FriendSearch
-              friendIds={new Set(friends.map((f) => f.friend.id))}
-              onRequestSent={() => setFriendsTab("requests")}
-            />
-          )}
+          {/* Friends — isolated component, tab state doesn't re-render the hero */}
+          <FriendsWidget />
         </div>
       </div>
     </div>

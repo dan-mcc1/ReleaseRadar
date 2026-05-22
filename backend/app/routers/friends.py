@@ -5,7 +5,7 @@ from app.core.limiter import limiter
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.services import friends_service
-from app.services.friends_service import get_followers
+from app.services.friends_service import get_followers, get_suggested_friends
 from app.services.user_service import search_users_by_username
 from app.services.activity_service import (
     get_friends_activity,
@@ -40,16 +40,28 @@ def search_users(
     ]
 
 
-@router.post("/request")
+@router.get("/suggestions")
 @limiter.limit("20/minute")
+def suggest_friends(
+    request: Request,
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    """Return suggested users to connect with."""
+    return get_suggested_friends(db, uid)
+
+
+@router.post("/request")
+@limiter.limit("5/minute")
 def send_request(
     request: Request,
-    addressee_username: str = Body(..., embed=True),
+    addressee_username: str = Body(...),
+    message: str | None = Body(None, max_length=200),
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
     """Send a friend request to a user by their username."""
-    result = friends_service.send_friend_request(db, uid, addressee_username)
+    result = friends_service.send_friend_request(db, uid, addressee_username, message)
     addressee = db.query(User).filter(User.username == addressee_username).first()
     if addressee:
         pending_count = (
@@ -128,6 +140,15 @@ def get_friends(
     return friends_service.get_friends(db, uid)
 
 
+@router.get("/requests/incoming/count")
+def get_incoming_count(
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    """Return the count of pending incoming friend requests."""
+    return {"count": friends_service.get_incoming_request_count(db, uid)}
+
+
 @router.get("/requests/incoming")
 def get_incoming(
     db: Session = Depends(get_db),
@@ -171,6 +192,20 @@ def friends_activity(
 ):
     """Get recent activity from accepted friends."""
     return get_friends_activity(db, uid)
+
+
+@router.get("/content/{content_type}/{content_id}")
+def friends_content_activity(
+    content_type: str,
+    content_id: int,
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    """Return accepted friends' watch statuses and ratings for a specific content item."""
+    if content_type not in ("movie", "tv"):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=422, detail="content_type must be 'movie' or 'tv'")
+    return friends_service.get_friends_content_activity(db, uid, content_type, content_id)
 
 
 @router.get("/feed")

@@ -1,6 +1,6 @@
-import { useState, useCallback, useMemo } from "react";
+import { memo, useState, useCallback, useMemo } from "react";
 import type { Show, Movie } from "../types/calendar";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   DndContext,
   closestCenter,
@@ -11,19 +11,31 @@ import {
 } from "@dnd-kit/core";
 import {
   SortableContext,
-  verticalListSortingStrategy,
+  rectSortingStrategy,
   arrayMove,
+  useSortable,
 } from "@dnd-kit/sortable";
-import MediaCard from "../components/MediaCard";
-import WatchlistOrderRow from "../components/WatchlistOrderRow";
+import { CSS } from "@dnd-kit/utilities";
+import { BASE_IMAGE_URL } from "../constants";
+import ListFilterPanel, {
+  DEFAULT_FILTERS,
+  type ListFilters,
+  countActiveFilters,
+  applyFilters,
+} from "../components/ListFilterPanel";
 import { usePageTitle } from "../hooks/usePageTitle";
 import {
   useWatchlist,
   useRemoveFromList,
   useReorderWatchlist,
 } from "../hooks/api/useLists";
+import {
+  useShowProgressBulk,
+  type ShowProgress,
+} from "../hooks/api/useBingePlan";
+import { useMyProviderIds } from "../hooks/api/useStreamingServices";
 
-type TabType = "all" | "movies" | "tv";
+type TabType = "up_next" | "movies" | "shows" | "all";
 type SortType =
   | "default"
   | "added_desc"
@@ -35,6 +47,8 @@ type SortType =
   | "popularity_desc"
   | "tmdb_rating_desc"
   | "tmdb_rating_asc"
+  | "time_remaining_asc"
+  | "time_remaining_desc"
   | "my_order";
 
 type CombinedItem = (Movie | Show) & {
@@ -57,19 +71,30 @@ function getYear(item: Movie | Show): string {
   return getDate(item).slice(0, 4) || "—";
 }
 
-function applySort<T extends Movie | (Show & { added_at?: string | null })>(
+function getTimeRemaining(
+  item: Movie | Show,
+  bingePlans?: Record<string, ShowProgress>,
+): number {
+  if ("name" in item) {
+    return bingePlans?.[String(item.id)]?.remaining_minutes ?? Infinity;
+  }
+  return (item as Movie).runtime ?? 0;
+}
+
+function applySort<T extends Movie | Show>(
   items: T[],
   sort: SortType,
+  bingePlans?: Record<string, ShowProgress>,
 ): T[] {
   const sorted = [...items];
   switch (sort) {
     case "added_desc":
       return sorted.sort((a, b) =>
-        ((b as any).added_at ?? "").localeCompare((a as any).added_at ?? ""),
+        ((b.added_at ?? "")).localeCompare((a.added_at ?? "")),
       );
     case "added_asc":
       return sorted.sort((a, b) =>
-        ((a as any).added_at ?? "").localeCompare((b as any).added_at ?? ""),
+        ((a.added_at ?? "")).localeCompare((b.added_at ?? "")),
       );
     case "title_asc":
       return sorted.sort((a, b) => getTitle(a).localeCompare(getTitle(b)));
@@ -88,6 +113,16 @@ function applySort<T extends Movie | (Show & { added_at?: string | null })>(
     case "tmdb_rating_asc":
       return sorted.sort(
         (a, b) => (a.vote_average ?? 0) - (b.vote_average ?? 0),
+      );
+    case "time_remaining_asc":
+      return sorted.sort(
+        (a, b) =>
+          getTimeRemaining(a, bingePlans) - getTimeRemaining(b, bingePlans),
+      );
+    case "time_remaining_desc":
+      return sorted.sort(
+        (a, b) =>
+          getTimeRemaining(b, bingePlans) - getTimeRemaining(a, bingePlans),
       );
     default:
       return sorted;
@@ -121,32 +156,376 @@ function buildCombined(
   );
 }
 
+function getProgress(
+  item: CombinedItem,
+  bingePlans?: Record<string, ShowProgress>,
+): number {
+  if (item._contentType === "movie") return 0;
+  const p = bingePlans?.[String(item.id)];
+  if (!p || p.total_episodes === 0) return 0;
+  return p.watched_episodes / p.total_episodes;
+}
+
+function getStatusText(
+  item: CombinedItem,
+  bingePlans?: Record<string, ShowProgress>,
+): string | null {
+  if (item._contentType === "movie") return null;
+  const p = bingePlans?.[String(item.id)];
+  if (!p || p.watched_episodes === 0) return null;
+  if (p.remaining_episodes === 0) return "Caught up";
+  return `${p.remaining_episodes} ep${p.remaining_episodes === 1 ? "" : "s"} left`;
+}
+
+const WatchlistCard = memo(function WatchlistCard({
+  item,
+  bingePlans,
+  onNavigate,
+  onRemove,
+}: {
+  item: CombinedItem;
+  bingePlans?: Record<string, ShowProgress>;
+  onNavigate: (type: "movie" | "tv", id: number) => void;
+  onRemove: (type: "movie" | "tv", id: number) => void;
+}) {
+  const progress = getProgress(item, bingePlans);
+  const statusText = getStatusText(item, bingePlans);
+  const isCaughtUp =
+    item._contentType === "tv" &&
+    bingePlans?.[String(item.id)]?.remaining_episodes === 0;
+  const title = getTitle(item);
+
+  return (
+    <div className="flex flex-col gap-2 group/card">
+      <div className="relative cursor-pointer" onClick={() => onNavigate(item._contentType, item.id)}>
+        <div className="aspect-[2/3] rounded-xl overflow-hidden bg-neutral-800">
+          {item.poster_path ? (
+            <img
+              src={`${BASE_IMAGE_URL}/w342${item.poster_path}`}
+              alt={title}
+              className="w-full h-full object-cover transition-opacity duration-200 group-hover/card:opacity-85"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center p-3 text-center">
+              <span className="text-neutral-600 text-xs leading-tight">
+                {title}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Progress bar */}
+        {progress > 0 && !isCaughtUp && (
+          <div className="absolute left-2 right-2 bottom-2 h-[3px] bg-black/50 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-primary-500 rounded-full"
+              style={{ width: `${Math.min(progress * 100, 100)}%` }}
+            />
+          </div>
+        )}
+
+        {/* Caught up badge */}
+        {isCaughtUp && (
+          <div className="absolute top-2 right-2 w-6 h-6 rounded-full bg-primary-500 text-neutral-950 flex items-center justify-center shadow-lg">
+            <svg
+              className="w-3.5 h-3.5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2.5}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M5 13l4 4L19 7"
+              />
+            </svg>
+          </div>
+        )}
+
+        {/* Remove button */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove(item._contentType, item.id);
+          }}
+          title="Remove from watchlist"
+          className="absolute top-2 left-2 w-6 h-6 rounded-full bg-black/70 text-neutral-400 flex items-center justify-center opacity-0 group-hover/card:opacity-100 transition-opacity hover:text-white hover:bg-black/90"
+        >
+          <svg
+            className="w-3 h-3"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2.5}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M6 18L18 6M6 6l12 12"
+            />
+          </svg>
+        </button>
+      </div>
+
+      <div>
+        <p className="text-[13.5px] font-semibold text-neutral-100 leading-tight tracking-tight truncate">
+          {title}
+        </p>
+        {item.vote_average != null && item.vote_average > 0 && (
+          <p className="text-[11px] text-neutral-400 mt-0.5 flex items-center gap-1">
+            <svg className="w-3 h-3 text-yellow-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+            </svg>
+            {item.vote_average.toFixed(1)}
+          </p>
+        )}
+        {statusText && (
+          <p className="text-[11.5px] text-neutral-500 mt-1 flex items-center gap-1.5">
+            <span
+              className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isCaughtUp ? "bg-neutral-500" : "bg-primary-500"}`}
+            />
+            {statusText}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+});
+
+const SortableWatchlistCard = memo(function SortableWatchlistCard({
+  item,
+  bingePlans,
+  rank,
+  dndId,
+  isFirst,
+  isLast,
+  isDragDisabled = false,
+  onNavigate,
+  onRemove,
+  onMoveUp,
+  onMoveDown,
+  onMoveToTop,
+}: {
+  item: CombinedItem;
+  bingePlans?: Record<string, ShowProgress>;
+  rank: number;
+  dndId: string;
+  isFirst: boolean;
+  isLast: boolean;
+  isDragDisabled?: boolean;
+  onNavigate: (type: "movie" | "tv", id: number) => void;
+  onRemove: (type: "movie" | "tv", id: number) => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  onMoveToTop: () => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: dndId, disabled: isDragDisabled });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+  };
+
+  const progress = getProgress(item, bingePlans);
+  const statusText = getStatusText(item, bingePlans);
+  const isCaughtUp =
+    item._contentType === "tv" &&
+    bingePlans?.[String(item.id)]?.remaining_episodes === 0;
+  const title = getTitle(item);
+
+  return (
+    <div ref={setNodeRef} style={style} className="flex flex-col gap-2 group/card">
+      <div className="relative">
+        <div
+          className="aspect-[2/3] rounded-xl overflow-hidden bg-neutral-800 transition-opacity duration-200 group-hover/card:opacity-85"
+          style={{ cursor: isDragDisabled ? "pointer" : isDragging ? "grabbing" : "grab" }}
+          onClick={() => onNavigate(item._contentType, item.id)}
+          {...(!isDragDisabled ? { ...attributes, ...listeners } : {})}
+        >
+          {item.poster_path ? (
+            <img
+              src={`${BASE_IMAGE_URL}/w342${item.poster_path}`}
+              alt={title}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center p-3 text-center">
+              <span className="text-neutral-600 text-xs leading-tight">{title}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Progress bar */}
+        {progress > 0 && !isCaughtUp && (
+          <div className="absolute left-2 right-2 bottom-2 h-[3px] bg-black/50 rounded-full overflow-hidden pointer-events-none">
+            <div
+              className="h-full bg-primary-500 rounded-full"
+              style={{ width: `${Math.min(progress * 100, 100)}%` }}
+            />
+          </div>
+        )}
+
+        {/* Caught-up badge */}
+        {isCaughtUp && (
+          <div className="absolute top-2 right-2 w-6 h-6 rounded-full bg-primary-500 text-neutral-950 flex items-center justify-center shadow-lg pointer-events-none">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+        )}
+
+        {/* Rank badge */}
+        {!isCaughtUp && (
+          <div className="absolute top-2 right-2 min-w-[1.5rem] h-5 px-1.5 rounded-full bg-black/60 text-neutral-300 flex items-center justify-center text-[10px] font-bold leading-none pointer-events-none">
+            #{rank}
+          </div>
+        )}
+
+        {/* Remove button */}
+        <button
+          onClick={(e) => { e.stopPropagation(); onRemove(item._contentType, item.id); }}
+          onPointerDown={(e) => e.stopPropagation()}
+          title="Remove from watchlist"
+          className="absolute top-2 left-2 w-6 h-6 rounded-full bg-black/70 text-neutral-400 flex items-center justify-center opacity-0 group-hover/card:opacity-100 transition-opacity hover:text-white hover:bg-black/90"
+        >
+          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <div>
+        <p className="text-[13.5px] font-semibold text-neutral-100 leading-tight tracking-tight truncate">
+          {title}
+        </p>
+        {item.vote_average != null && item.vote_average > 0 && (
+          <p className="text-[11px] text-neutral-400 mt-0.5 flex items-center gap-1">
+            <svg className="w-3 h-3 text-yellow-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+            </svg>
+            {item.vote_average.toFixed(1)}
+          </p>
+        )}
+        {statusText && (
+          <p className="text-[11.5px] text-neutral-500 mt-1 flex items-center gap-1.5">
+            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isCaughtUp ? "bg-neutral-500" : "bg-primary-500"}`} />
+            {statusText}
+          </p>
+        )}
+        {/* Reorder controls */}
+        <div
+          className="flex items-center gap-1 mt-1.5 opacity-0 group-hover/card:opacity-100 transition-opacity"
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={(e) => { e.stopPropagation(); onMoveToTop(); }}
+            disabled={isFirst}
+            title="Move to first"
+            className="w-5 h-5 rounded bg-neutral-700 text-neutral-400 flex items-center justify-center hover:text-neutral-200 hover:bg-neutral-600 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+          >
+            <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M11 19l-7-7 7-7M19 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onMoveUp(); }}
+            disabled={isFirst}
+            title="Move left"
+            className="w-5 h-5 rounded bg-neutral-700 text-neutral-400 flex items-center justify-center hover:text-neutral-200 hover:bg-neutral-600 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+          >
+            <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onMoveDown(); }}
+            disabled={isLast}
+            title="Move right"
+            className="w-5 h-5 rounded bg-neutral-700 text-neutral-400 flex items-center justify-center hover:text-neutral-200 hover:bg-neutral-600 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+          >
+            <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+});
+
 export default function Watchlist() {
   usePageTitle("Watchlist");
   const navigate = useNavigate();
   const { data, isPending: loading } = useWatchlist();
+  const myProviderIds = useMyProviderIds();
   const results = data ?? { movies: [], shows: [] };
   const removeFromList = useRemoveFromList();
   const reorderWatchlist = useReorderWatchlist();
-  const [activeTab, setActiveTab] = useState<TabType>("all");
+
+  const tvShowIds = results.shows.map((s) => s.id);
+  const { data: bingePlans } = useShowProgressBulk(tvShowIds);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = (searchParams.get("tab") as TabType) ?? "all";
+  function setActiveTab(tab: TabType) {
+    setSearchParams((p) => { p.set("tab", tab); return p; }, { replace: true });
+  }
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortType>("my_order");
+  const [filters, setFilters] = useState<ListFilters>(DEFAULT_FILTERS);
+  const [showFilters, setShowFilters] = useState(false);
+
+  const availableGenres = useMemo(() => {
+    const set = new Set<string>();
+    [...results.movies, ...results.shows].forEach((item) =>
+      (item.genres ?? []).forEach((g) => set.add(g.name)),
+    );
+    return [...set].sort();
+  }, [results.movies, results.shows]);
+
+  const availableCertifications = useMemo(() => {
+    const set = new Set<string>();
+    [...results.movies, ...results.shows].forEach((item) => {
+      if (item.certification) set.add(item.certification);
+    });
+    return [...set];
+  }, [results.movies, results.shows]);
+
+  const activeFilterCount = countActiveFilters(filters);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
   );
 
-  async function onRemove(type: "tv" | "movie", content_id: number) {
-    try {
-      await removeFromList.mutateAsync({
-        list: "watchlist",
-        contentType: type,
-        contentId: content_id,
-      });
-    } catch (err) {
-      console.error(err);
-    }
-  }
+  const onRemove = useCallback(
+    async (type: "tv" | "movie", content_id: number) => {
+      try {
+        await removeFromList.mutateAsync({
+          list: "watchlist",
+          contentType: type,
+          contentId: content_id,
+        });
+      } catch (err) {
+        console.error(err);
+      }
+    },
+    [removeFromList],
+  );
+
+  const onNavigate = useCallback(
+    (type: "movie" | "tv", id: number) => {
+      navigate(`/${type === "movie" ? "movie" : "tv"}/${id}`);
+    },
+    [navigate],
+  );
 
   const fireReorder = useCallback(
     (
@@ -170,7 +549,6 @@ export default function Watchlist() {
   function handleDragEnd(event: DragEndEvent, items: CombinedItem[]) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-
     const activeIdx = items.findIndex(
       (i) => `${i._contentType}-${i.id}` === active.id,
     );
@@ -178,12 +556,10 @@ export default function Watchlist() {
       (i) => `${i._contentType}-${i.id}` === over.id,
     );
     if (activeIdx === -1 || overIdx === -1) return;
-
     const newItems = arrayMove(items, activeIdx, overIdx);
     const moved = newItems[overIdx];
     const beforeItem = newItems[overIdx - 1] ?? null;
     const afterItem = newItems[overIdx + 1] ?? null;
-
     fireReorder(
       moved._contentType,
       moved.id,
@@ -196,19 +572,66 @@ export default function Watchlist() {
   const isMyOrder = sort === "my_order";
   const q = query.toLowerCase();
 
-  const filteredMovies = applySort(
-    results.movies.filter((m) => m.title.toLowerCase().includes(q)),
-    sort,
+  const filteredMovies = useMemo(
+    () =>
+      applySort(
+        applyFilters(
+          results.movies.filter((m) => m.title.toLowerCase().includes(q)),
+          filters,
+          myProviderIds,
+        ),
+        sort,
+        bingePlans,
+      ),
+    [results.movies, q, filters, myProviderIds, sort, bingePlans],
   );
-  const filteredShows = applySort(
-    results.shows.filter((s) => s.name.toLowerCase().includes(q)),
-    sort,
+
+  const filteredShows = useMemo(
+    () =>
+      applySort(
+        applyFilters(
+          results.shows.filter((s) => s.name.toLowerCase().includes(q)),
+          filters,
+          myProviderIds,
+        ),
+        sort,
+        bingePlans,
+      ),
+    [results.shows, q, filters, myProviderIds, sort, bingePlans],
+  );
+
+  const upNextShows = useMemo(
+    () =>
+      applySort(
+        applyFilters(
+          results.shows.filter((s) => {
+            const p = bingePlans?.[String(s.id)];
+            return (
+              p &&
+              p.watched_episodes > 0 &&
+              p.remaining_episodes > 0 &&
+              s.name.toLowerCase().includes(q)
+            );
+          }),
+          filters,
+          myProviderIds,
+        ),
+        sort,
+        bingePlans,
+      ),
+    [results.shows, bingePlans, q, filters, myProviderIds, sort],
   );
 
   const combinedItems = useMemo(
     () =>
-      isMyOrder ? buildCombined(results.movies, results.shows, query) : [],
-    [isMyOrder, results.movies, results.shows, query],
+      isMyOrder
+        ? buildCombined(
+            applyFilters(results.movies, filters, myProviderIds),
+            applyFilters(results.shows, filters, myProviderIds),
+            query,
+          )
+        : [],
+    [isMyOrder, results.movies, results.shows, query, filters, myProviderIds],
   );
   const combinedByType = useMemo(
     () => ({
@@ -218,83 +641,181 @@ export default function Watchlist() {
     [combinedItems],
   );
 
-  const tabs: { id: TabType; label: string; count: number }[] = [
-    { id: "all", label: "All", count: totalCount },
-    { id: "movies", label: "Movies", count: results.movies.length },
-    { id: "tv", label: "TV Shows", count: results.shows.length },
-  ];
+  // Grid items for non-my-order views, and for up_next regardless of sort
+  const gridItems: CombinedItem[] = useMemo(() => {
+    if (isMyOrder && activeTab !== "up_next") return [];
+    switch (activeTab) {
+      case "up_next":
+        return upNextShows.map((s) => ({
+          ...s,
+          _contentType: "tv" as const,
+          sort_key: s.sort_key ?? 0,
+          watchlist_id: s.watchlist_id!,
+        }));
+      case "movies":
+        return filteredMovies.map((m) => ({
+          ...m,
+          _contentType: "movie" as const,
+          sort_key: m.sort_key ?? 0,
+          watchlist_id: m.watchlist_id!,
+        }));
+      case "shows":
+        return filteredShows.map((s) => ({
+          ...s,
+          _contentType: "tv" as const,
+          sort_key: s.sort_key ?? 0,
+          watchlist_id: s.watchlist_id!,
+        }));
+      case "all":
+      default:
+        return [
+          ...filteredMovies.map((m) => ({
+            ...m,
+            _contentType: "movie" as const,
+            sort_key: m.sort_key ?? 0,
+            watchlist_id: m.watchlist_id!,
+          })),
+          ...filteredShows.map((s) => ({
+            ...s,
+            _contentType: "tv" as const,
+            sort_key: s.sort_key ?? 0,
+            watchlist_id: s.watchlist_id!,
+          })),
+        ];
+    }
+  }, [isMyOrder, activeTab, filteredMovies, filteredShows, upNextShows]);
 
-  // Items to render in My Order filtered views (no drag, arrows only)
+  // My order filtered items for movies/shows tabs
   const myOrderFilteredItems =
     activeTab === "movies"
       ? combinedByType.movies
-      : activeTab === "tv"
+      : activeTab === "shows"
         ? combinedByType.shows
         : [];
 
+  const upNextCount = useMemo(
+    () =>
+      results.shows.filter((s) => {
+        const p = bingePlans?.[String(s.id)];
+        return p && p.watched_episodes > 0 && p.remaining_episodes > 0;
+      }).length,
+    [results.shows, bingePlans],
+  );
+
+  const tabs: { id: TabType; label: string; count: number }[] = [
+    { id: "up_next", label: "Up next", count: upNextCount },
+    { id: "all", label: "All", count: totalCount },
+    { id: "shows", label: "Shows", count: results.shows.length },
+    { id: "movies", label: "Movies", count: results.movies.length },
+  ];
+
+  const hasResults = isMyOrder
+    ? activeTab === "all"
+      ? combinedItems.length > 0
+      : activeTab === "up_next"
+        ? gridItems.length > 0
+        : myOrderFilteredItems.length > 0
+    : gridItems.length > 0;
+
   return (
-    <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-8 pb-16">
-      <div className="mb-8">
-        <div className="flex items-center gap-3 mb-1">
-          <h1 className="text-3xl font-bold text-white">My Watchlist</h1>
-          <span className="bg-primary-600/20 text-primary-400 border border-primary-600/30 text-sm font-medium px-2.5 py-0.5 rounded-full">
-            {totalCount}
-          </span>
-        </div>
-        <p className="text-neutral-400">Shows and movies you want to watch</p>
-      </div>
-
-      {loading && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <div
-              key={i}
-              className="rounded-xl overflow-hidden bg-neutral-800 border border-neutral-700 flex flex-col animate-pulse"
+    <div className="w-full px-6 sm:px-10 pt-8 pb-16">
+      {/* Header */}
+      <div data-tour="watchlist-header">
+        <p className="font-mono text-[11px] tracking-[0.12em] uppercase text-neutral-500">
+          {totalCount} title{totalCount !== 1 ? "s" : ""} tracking
+        </p>
+        <div className="flex items-baseline gap-4 mt-2 flex-wrap">
+          <h1
+            className="w-full sm:w-auto text-4xl font-normal leading-tight tracking-tight"
+            style={{ fontFamily: "var(--font-serif)" }}
+          >
+            Your{" "}
+            <em className="text-primary-400" style={{ fontStyle: "italic" }}>
+              watchlist
+            </em>
+          </h1>
+          <div className="flex-1 hidden sm:block" />
+          <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto sm:justify-end">
+            <button
+              onClick={() => setShowFilters((v) => !v)}
+              className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors ${
+                showFilters || activeFilterCount > 0
+                  ? "bg-primary-600/20 border-primary-600/40 text-primary-300"
+                  : "bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-neutral-200 hover:border-neutral-600"
+              }`}
             >
-              <div className="aspect-[2/3] bg-neutral-700" />
-              <div className="p-3 flex flex-col gap-2">
-                <div className="h-4 bg-neutral-700 rounded w-3/4" />
-                <div className="h-3 bg-neutral-700 rounded w-1/2" />
-              </div>
-            </div>
-          ))}
+              <svg
+                className="w-3.5 h-3.5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z"
+                />
+              </svg>
+              Filters
+              {activeFilterCount > 0 && (
+                <span className="bg-primary-600 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center leading-none">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as SortType)}
+              className="text-sm bg-neutral-800 border border-neutral-700 text-neutral-300 rounded-lg px-3 py-1.5 focus:outline-none focus:border-neutral-500 max-w-[160px] sm:max-w-none"
+            >
+              <option value="my_order">My Order</option>
+              <option value="added_desc">Recently Added</option>
+              <option value="added_asc">Oldest Added</option>
+              <option value="title_asc">Title: A → Z</option>
+              <option value="title_desc">Title: Z → A</option>
+              <option value="date_desc">Release Date: Newest</option>
+              <option value="date_asc">Release Date: Oldest</option>
+              <option value="popularity_desc">Most Popular</option>
+              <option value="tmdb_rating_desc">Rating: High → Low</option>
+              <option value="tmdb_rating_asc">Rating: Low → High</option>
+              <option value="time_remaining_asc">
+                Time Remaining: Shortest
+              </option>
+              <option value="time_remaining_desc">
+                Time Remaining: Longest
+              </option>
+            </select>
+          </div>
         </div>
-      )}
 
-      {!loading && (
-        <div className="flex gap-1 border-b border-neutral-700 mb-6">
+        {/* Tabs */}
+        <div className="flex gap-0 border-b border-neutral-800 mt-6">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`px-4 py-2.5 text-sm font-medium transition-all duration-150 border-b-2 -mb-px ${
+              className={`px-3.5 py-3 text-sm font-medium inline-flex items-center gap-1.5 border-b-2 -mb-px transition-colors ${
                 activeTab === tab.id
-                  ? "border-primary-500 text-primary-400"
-                  : "border-transparent text-neutral-400 hover:text-neutral-200"
+                  ? "border-primary-500 text-neutral-100"
+                  : "border-transparent text-neutral-500 hover:text-neutral-300"
               }`}
             >
               {tab.label}
-              {tab.count > 0 && (
-                <span
-                  className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-full ${
-                    activeTab === tab.id
-                      ? "bg-primary-600/30 text-primary-300"
-                      : "bg-neutral-700 text-neutral-400"
-                  }`}
-                >
-                  {tab.count}
-                </span>
-              )}
+              <span className="font-mono text-[10.5px] text-neutral-500 leading-none translate-y-px">
+                {tab.count}
+              </span>
             </button>
           ))}
         </div>
-      )}
+      </div>
 
+      {/* Search + filter panel */}
       {!loading && totalCount > 0 && (
-        <div className="flex gap-3 mb-6">
-          <div className="relative flex-1">
+        <div className="mt-4 space-y-3">
+          <div className="relative max-w-xs">
             <svg
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500"
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-500"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -310,16 +831,16 @@ export default function Watchlist() {
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search your watchlist…"
-              className="w-full bg-neutral-800 border border-neutral-700 text-neutral-200 placeholder-neutral-500 rounded-lg pl-9 pr-4 py-2 text-sm focus:outline-none focus:border-neutral-500"
+              placeholder="Search…"
+              className="w-full bg-neutral-800/60 border border-neutral-700 text-neutral-200 placeholder-neutral-600 rounded-lg pl-8 pr-8 py-1.5 text-sm focus:outline-none focus:border-neutral-500"
             />
             {query && (
               <button
                 onClick={() => setQuery("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-300"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-300"
               >
                 <svg
-                  className="w-4 h-4"
+                  className="w-3.5 h-3.5"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -334,27 +855,33 @@ export default function Watchlist() {
               </button>
             )}
           </div>
-          <select
-            value={sort}
-            onChange={(e) => setSort(e.target.value as SortType)}
-            className="w-28 sm:w-auto shrink-0 text-sm bg-neutral-800 border border-neutral-700 text-neutral-300 rounded-lg px-3 py-2 focus:outline-none focus:border-neutral-500"
-          >
-            <option value="my_order">My Order</option>
-            <option value="added_desc">Recently Added</option>
-            <option value="added_asc">Oldest Added</option>
-            <option value="title_asc">Title: A → Z</option>
-            <option value="title_desc">Title: Z → A</option>
-            <option value="date_desc">Release Date: Newest</option>
-            <option value="date_asc">Release Date: Oldest</option>
-            <option value="popularity_desc">Most Popular</option>
-            <option value="tmdb_rating_desc">TMDB Rating: High → Low</option>
-            <option value="tmdb_rating_asc">TMDB Rating: Low → High</option>
-          </select>
+          {showFilters && (
+            <ListFilterPanel
+              filters={filters}
+              onChange={setFilters}
+              availableGenres={availableGenres}
+              availableCertifications={availableCertifications}
+              hasMyServices={myProviderIds.size > 0}
+            />
+          )}
         </div>
       )}
 
+      {/* Loading skeleton */}
+      {loading && (
+        <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 gap-3 mt-8">
+          {Array.from({ length: 12 }).map((_, i) => (
+            <div key={i} className="flex flex-col gap-2 animate-pulse">
+              <div className="aspect-[2/3] rounded-xl bg-neutral-800" />
+              <div className="h-3 bg-neutral-800 rounded w-3/4" />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Empty watchlist */}
       {!loading && totalCount === 0 && (
-        <div className="flex flex-col items-center justify-center py-20 text-center">
+        <div className="flex flex-col items-center justify-center py-24 text-center mt-8">
           <div className="w-16 h-16 rounded-full bg-neutral-800 border border-neutral-700 flex items-center justify-center mb-4">
             <svg
               className="w-8 h-8 text-neutral-500"
@@ -385,140 +912,122 @@ export default function Watchlist() {
         </div>
       )}
 
-      {!loading &&
-        totalCount > 0 &&
-        query &&
-        filteredMovies.length === 0 &&
-        filteredShows.length === 0 &&
-        !isMyOrder && (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <p className="text-neutral-400 font-medium mb-1">
-              No results for "{query}"
+      {/* No results */}
+      {!loading && totalCount > 0 && !hasResults && (
+        <div className="flex flex-col items-center justify-center py-24 text-center mt-8">
+          <p className="text-neutral-400 font-medium mb-1">
+            {activeFilterCount > 0
+              ? "No results match your filters"
+              : activeTab === "up_next"
+                ? "Nothing in progress yet"
+                : `No results for "${query}"`}
+          </p>
+          {activeFilterCount > 0 ? (
+            <button
+              onClick={() => setFilters(DEFAULT_FILTERS)}
+              className="text-primary-400 hover:text-primary-300 text-sm mt-1 transition-colors"
+            >
+              Clear filters
+            </button>
+          ) : activeTab === "up_next" ? (
+            <p className="text-neutral-500 text-sm mt-1">
+              Start watching a show to see your progress here
             </p>
+          ) : (
             <p className="text-neutral-500 text-sm">
               Try a different search term
             </p>
-          </div>
-        )}
+          )}
+        </div>
+      )}
 
-      {!loading &&
-        totalCount > 0 &&
-        query &&
-        isMyOrder &&
-        combinedItems.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <p className="text-neutral-400 font-medium mb-1">
-              No results for "{query}"
-            </p>
-            <p className="text-neutral-500 text-sm">
-              Try a different search term
-            </p>
-          </div>
-        )}
-
-      {/* ── My Order: All tab — combined sortable list ── */}
+      {/* ── My Order: All tab — DnD grid ── */}
       {!loading &&
         isMyOrder &&
         activeTab === "all" &&
         combinedItems.length > 0 && (
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={(e) => handleDragEnd(e, combinedItems)}
-          >
-            <SortableContext
-              items={combinedItems.map((i) => `${i._contentType}-${i.id}`)}
-              strategy={verticalListSortingStrategy}
+          <div className="mt-8">
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={(e) => handleDragEnd(e, combinedItems)}
             >
-              <div className="flex flex-col gap-2">
-                {combinedItems.map((item, idx) => (
-                  <WatchlistOrderRow
-                    key={`${item._contentType}-${item.id}`}
-                    dndId={`${item._contentType}-${item.id}`}
-                    rank={idx + 1}
-                    title={getTitle(item)}
-                    posterPath={item.poster_path}
-                    year={getYear(item)}
-                    contentType={item._contentType}
-                    voteAverage={item.vote_average}
-                    userRating={item.user_rating}
-                    genres={item.genres}
-                    isFirst={idx === 0}
-                    isLast={idx === combinedItems.length - 1}
-                    onMoveUp={() => {
-                      const before = combinedItems[idx - 2] ?? null;
-                      const after = combinedItems[idx - 1];
-                      fireReorder(
-                        item._contentType,
-                        item.id,
-                        before?.watchlist_id ?? null,
-                        after.watchlist_id,
-                      );
-                    }}
-                    onMoveDown={() => {
-                      const before = combinedItems[idx + 1];
-                      const after = combinedItems[idx + 2] ?? null;
-                      fireReorder(
-                        item._contentType,
-                        item.id,
-                        before.watchlist_id,
-                        after?.watchlist_id ?? null,
-                      );
-                    }}
-                    onMoveToTop={() => {
-                      if (idx === 0) return;
-                      const after = combinedItems[0];
-                      fireReorder(
-                        item._contentType,
-                        item.id,
-                        null,
-                        after.watchlist_id,
-                      );
-                    }}
-                    onDelete={() =>
-                      removeFromList.mutate({
-                        list: "watchlist",
-                        contentType: item._contentType,
-                        contentId: item.id,
-                      })
-                    }
-                    onClick={() =>
-                      navigate(
-                        `/${item._contentType === "movie" ? "movie" : "tv"}/${item.id}`,
-                      )
-                    }
-                  />
-                ))}
-              </div>
-            </SortableContext>
-          </DndContext>
+              <SortableContext
+                items={combinedItems.map((i) => `${i._contentType}-${i.id}`)}
+                strategy={rectSortingStrategy}
+              >
+                <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 gap-x-3 gap-y-5">
+                  {combinedItems.map((item, idx) => (
+                    <SortableWatchlistCard
+                      key={`${item._contentType}-${item.id}`}
+                      dndId={`${item._contentType}-${item.id}`}
+                      item={item}
+                      bingePlans={bingePlans}
+                      rank={idx + 1}
+                      isFirst={idx === 0}
+                      isLast={idx === combinedItems.length - 1}
+                      onNavigate={onNavigate}
+                      onRemove={onRemove}
+                      onMoveUp={() => {
+                        const before = combinedItems[idx - 2] ?? null;
+                        const after = combinedItems[idx - 1];
+                        fireReorder(
+                          item._contentType,
+                          item.id,
+                          before?.watchlist_id ?? null,
+                          after.watchlist_id,
+                        );
+                      }}
+                      onMoveDown={() => {
+                        const before = combinedItems[idx + 1];
+                        const after = combinedItems[idx + 2] ?? null;
+                        fireReorder(
+                          item._contentType,
+                          item.id,
+                          before.watchlist_id,
+                          after?.watchlist_id ?? null,
+                        );
+                      }}
+                      onMoveToTop={() => {
+                        if (idx === 0) return;
+                        fireReorder(
+                          item._contentType,
+                          item.id,
+                          null,
+                          combinedItems[0].watchlist_id,
+                        );
+                      }}
+                    />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
+          </div>
         )}
 
-      {/* ── My Order: Movies or TV tab — filtered list, arrows only (no drag) ── */}
+      {/* ── My Order: Movies or Shows tab — grid with arrows ── */}
       {!loading &&
         isMyOrder &&
         activeTab !== "all" &&
+        activeTab !== "up_next" &&
         myOrderFilteredItems.length > 0 && (
-          <div className="flex flex-col gap-2">
+          <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 gap-x-3 gap-y-5 mt-8">
             {myOrderFilteredItems.map((item) => {
               const allIdx = combinedItems.findIndex(
                 (c) => c._contentType === item._contentType && c.id === item.id,
               );
               return (
-                <WatchlistOrderRow
+                <SortableWatchlistCard
                   key={`${item._contentType}-${item.id}`}
                   dndId={`${item._contentType}-${item.id}`}
+                  item={item}
+                  bingePlans={bingePlans}
                   rank={allIdx + 1}
-                  title={getTitle(item)}
-                  posterPath={item.poster_path}
-                  year={getYear(item)}
-                  contentType={item._contentType}
-                  voteAverage={item.vote_average}
-                  userRating={item.user_rating}
-                  genres={item.genres}
                   isFirst={allIdx === 0}
                   isLast={allIdx === combinedItems.length - 1}
                   isDragDisabled
+                  onNavigate={onNavigate}
+                  onRemove={onRemove}
                   onMoveUp={() => {
                     const before = combinedItems[allIdx - 2] ?? null;
                     const after = combinedItems[allIdx - 1];
@@ -543,82 +1052,33 @@ export default function Watchlist() {
                   }}
                   onMoveToTop={() => {
                     if (allIdx === 0) return;
-                    const after = combinedItems[0];
                     fireReorder(
                       item._contentType,
                       item.id,
                       null,
-                      after?.watchlist_id ?? null,
+                      combinedItems[0]?.watchlist_id ?? null,
                     );
                   }}
-                  onDelete={() =>
-                    removeFromList.mutate({
-                      list: "watchlist",
-                      contentType: item._contentType,
-                      contentId: item.id,
-                    })
-                  }
-                  onClick={() =>
-                    navigate(
-                      `/${item._contentType === "movie" ? "movie" : "tv"}/${item.id}`,
-                    )
-                  }
                 />
               );
             })}
           </div>
         )}
 
-      {/* ── Non-My-Order grid views ── */}
+      {/* ── Poster grid (all non-my-order sorts, and up_next in my-order) ── */}
       {!loading &&
-        !isMyOrder &&
-        (activeTab === "all" || activeTab === "movies") &&
-        filteredMovies.length > 0 && (
-          <div className="mb-10">
-            {activeTab === "all" && (
-              <h2 className="text-lg font-semibold text-neutral-200 mb-4 flex items-center gap-2">
-                Movies
-                <span className="text-xs text-neutral-500 font-normal bg-neutral-800 border border-neutral-700 px-2 py-0.5 rounded-full">
-                  {filteredMovies.length}
-                </span>
-              </h2>
-            )}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {filteredMovies.map((item) => (
-                <MediaCard
-                  key={`movie-${item.id}`}
-                  type="movie"
-                  item={item}
-                  onRemove={onRemove}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
-      {!loading &&
-        !isMyOrder &&
-        (activeTab === "all" || activeTab === "tv") &&
-        filteredShows.length > 0 && (
-          <div>
-            {activeTab === "all" && (
-              <h2 className="text-lg font-semibold text-neutral-200 mb-4 flex items-center gap-2">
-                TV Shows
-                <span className="text-xs text-neutral-500 font-normal bg-neutral-800 border border-neutral-700 px-2 py-0.5 rounded-full">
-                  {filteredShows.length}
-                </span>
-              </h2>
-            )}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {filteredShows.map((item) => (
-                <MediaCard
-                  key={`tv-${item.id}`}
-                  type="tv"
-                  item={item}
-                  onRemove={onRemove}
-                />
-              ))}
-            </div>
+        (!isMyOrder || activeTab === "up_next") &&
+        gridItems.length > 0 && (
+          <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 gap-x-3 gap-y-5 mt-8">
+            {gridItems.map((item) => (
+              <WatchlistCard
+                key={`${item._contentType}-${item.id}`}
+                item={item}
+                bingePlans={bingePlans}
+                onNavigate={onNavigate}
+                onRemove={onRemove}
+              />
+            ))}
           </div>
         )}
     </div>

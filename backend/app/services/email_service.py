@@ -1,6 +1,6 @@
 import hmac
 import hashlib
-from datetime import datetime
+from datetime import datetime, timezone
 import resend
 from collections import defaultdict
 from app.config import settings
@@ -67,32 +67,43 @@ def _email_wrapper(body_html: str, uid: str) -> str:
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Release Radar</title>
 </head>
 <body style="margin:0;padding:0;background:#0a0a0a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0a0a0a;padding:32px 16px;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0a0a0a;padding:40px 16px;">
     <tr><td align="center">
-      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;border-radius:14px;overflow:hidden;border:1px solid #1f1f1f;">
 
         <!-- Header -->
-        <tr><td style="background:#065f46;border-radius:12px 12px 0 0;padding:24px 32px;text-align:center;">
-          <img src="{settings.FRONTEND_URL}/favicon-1024.png" width="48" height="48"
-               style="border-radius:10px;margin-bottom:10px;display:block;margin-left:auto;margin-right:auto;" alt="Release Radar" />
-          <span style="color:#ffffff;font-size:22px;font-weight:700;letter-spacing:-0.3px;">Release Radar</span>
+        <tr><td style="background:linear-gradient(135deg,#064e3b 0%,#065f46 50%,#047857 100%);padding:28px 36px;text-align:center;">
+          <div style="display:inline-block;background:rgba(0,0,0,0.25);border-radius:14px;padding:10px 12px;margin-bottom:12px;">
+            <img src="{settings.FRONTEND_URL}/favicon-1024.png" width="40" height="40"
+                 style="border-radius:8px;display:block;" alt="Release Radar" />
+          </div>
+          <div style="color:#ecfdf5;font-size:22px;font-weight:700;letter-spacing:-0.5px;line-height:1;">Release Radar</div>
+          <div style="color:#6ee7b7;font-size:12px;font-weight:500;margin-top:4px;letter-spacing:0.5px;text-transform:uppercase;">Track what you watch</div>
         </td></tr>
 
+        <!-- Accent stripe -->
+        <tr><td style="background:linear-gradient(90deg,#10b981,#059669,#047857);height:2px;padding:0;font-size:0;line-height:0;">&nbsp;</td></tr>
+
         <!-- Body -->
-        <tr><td style="background:#1f1f1f;padding:28px 32px;">
+        <tr><td style="background:#141414;padding:32px 36px;">
           {body_html}
         </td></tr>
 
         <!-- Footer -->
-        <tr><td style="background:#0a0a0a;border-radius:0 0 12px 12px;padding:20px 32px;text-align:center;">
-          <p style="margin:0 0 10px;color:#737373;font-size:12px;">
-            You're receiving this because you have email notifications enabled on Release Radar.
+        <tr><td style="background:#0d0d0d;border-top:1px solid #1a1a1a;padding:24px 36px;text-align:center;">
+          <p style="margin:0 0 4px;color:#525252;font-size:12px;line-height:1.6;">
+            You're receiving this because you have email notifications enabled on
+          </p>
+          <p style="margin:0 0 16px;color:#525252;font-size:12px;line-height:1.6;">
+            <a href="{settings.FRONTEND_URL}" style="color:#10b981;text-decoration:none;font-weight:500;">Release Radar</a>.
           </p>
           <a href="{unsubscribe_url}"
-             style="display:inline-block;padding:6px 16px;background:#262626;color:#a3a3a3;
-                    font-size:12px;text-decoration:none;border-radius:6px;border:1px solid #404040;">
+             style="display:inline-block;padding:7px 18px;background:#1a1a1a;color:#737373;
+                    font-size:11px;font-weight:500;text-decoration:none;border-radius:99px;
+                    border:1px solid #2a2a2a;letter-spacing:0.3px;">
             Unsubscribe
           </a>
         </td></tr>
@@ -110,8 +121,8 @@ def _poster_img(poster_path: str | None, alt: str, content_url: str) -> str:
     src = f"{TMDB_IMAGE_BASE}{poster_path}"
     return (
         f'<a href="{content_url}" style="display:block;flex-shrink:0;">'
-        f'<img src="{src}" alt="{alt}" width="56" height="84"'
-        f' style="border-radius:6px;object-fit:cover;display:block;" /></a>'
+        f'<img src="{src}" alt="{alt}" width="60" height="90"'
+        f' style="border-radius:8px;object-fit:cover;display:block;box-shadow:0 4px 12px rgba(0,0,0,0.5);" /></a>'
     )
 
 
@@ -131,46 +142,44 @@ def _digest_item_row(item: dict) -> str:
     # Poster with inline-block + right margin
     poster_path = item.get("poster_path")
     poster = (
-        f'<a href="{content_url}" style="display:inline-block;flex-shrink:0;margin-right:12px;">'
-        f'<img src="{TMDB_IMAGE_BASE}{poster_path}" alt="{escape(item["title"])}" width="56" height="84"'
-        f' style="border-radius:6px;object-fit:cover;display:block;" /></a>'
+        f'<a href="{content_url}" style="display:inline-block;flex-shrink:0;margin-right:14px;">'
+        f'<img src="{TMDB_IMAGE_BASE}{poster_path}" alt="{escape(item["title"])}" width="60" height="90"'
+        f' style="border-radius:8px;object-fit:cover;display:block;box-shadow:0 4px 12px rgba(0,0,0,0.5);" /></a>'
         if poster_path
         else ""
     )
 
-    # Time badge — emerald tones matching primary palette
     time_text = item.get("air_time") or (
-        "Theaters" if content_type == "movie" else "Streaming"
+        "In Theaters" if content_type == "movie" else "Streaming"
     )
-    time_color = "#065f46" if content_type == "movie" else "#064e3b"
 
     time_badge = (
-        f'<span style="display:inline-block;background:{time_color};color:#6ee7b7;'
-        f"font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;"
-        f'margin-left:6px;">{time_text}</span>'
+        f'<span style="display:inline-block;background:#052e16;color:#6ee7b7;border:1px solid #065f46;'
+        f"font-size:11px;font-weight:600;padding:2px 10px;border-radius:999px;"
+        f'margin-right:4px;">{time_text}</span>'
     )
 
     special_badge = ""
     if content_type == "tv" and item.get("episode_type"):
         ep_type_text = item["episode_type"].replace("_", " ").title()
         special_badge = (
-            f'<span style="display:inline-block;background:#d97706;color:#fff;'
-            f"font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;"
-            f'margin-left:6px;">{ep_type_text}</span>'
+            f'<span style="display:inline-block;background:#422006;color:#fde68a;border:1px solid #92400e;'
+            f"font-size:11px;font-weight:600;padding:2px 10px;border-radius:999px;"
+            f'margin-right:4px;">{ep_type_text}</span>'
         )
 
     has_poster = bool(poster_path)
     layout_style = "display:flex;align-items:flex-start;" if has_poster else ""
 
     return f"""
-<div style="{layout_style}background:#171717;border:1px solid #404040;
-            border-radius:10px;padding:14px;margin-bottom:10px;">
+<div style="{layout_style}background:#1a1a1a;border:1px solid #262626;
+            border-radius:12px;padding:16px;margin-bottom:8px;">
   {poster}
   <div style="flex:1;min-width:0;">
     <a href="{content_url}" style="color:#f5f5f5;font-size:15px;font-weight:600;
-       text-decoration:none;display:block;margin-bottom:3px;">{escape(item["title"])}</a>
-    <span style="color:#737373;font-size:13px;">{_format_date(item["date"])}</span>
-    {time_badge}{special_badge}
+       text-decoration:none;display:block;margin-bottom:4px;line-height:1.3;">{escape(item["title"])}</a>
+    <p style="margin:0 0 8px;color:#525252;font-size:12px;">{_format_date(item["date"])}</p>
+    <div>{time_badge}{special_badge}</div>
   </div>
 </div>"""
 
@@ -212,8 +221,8 @@ def send_notification_email(
         items_html = ""
         for day_date in sorted(by_day.keys()):
             items_html += f"""
-<p style="margin:20px 0 8px;color:#6ee7b7;font-size:13px;font-weight:700;
-          text-transform:uppercase;letter-spacing:0.8px;">
+<p style="margin:20px 0 8px;color:#10b981;font-size:11px;font-weight:700;
+          text-transform:uppercase;letter-spacing:1px;">
   {_format_date(day_date)}
 </p>"""
             for item in by_day[day_date]:
@@ -222,17 +231,18 @@ def send_notification_email(
         items_html = "".join(_digest_item_row(item) for item in upcoming_items)
 
     body = f"""
-<h2 style="margin:0 0 4px;color:#f5f5f5;font-size:20px;font-weight:700;">
+<h2 style="margin:0 0 6px;color:#f5f5f5;font-size:22px;font-weight:700;letter-spacing:-0.3px;">
   Hi {escape(username) or 'there'} 👋
 </h2>
-<p style="margin:0 0 20px;color:#a3a3a3;font-size:14px;">
+<p style="margin:0 0 24px;color:#737373;font-size:14px;line-height:1.6;">
   {intro}
 </p>
 {items_html}
-<div style="text-align:center;margin-top:24px;">
+<div style="text-align:center;margin-top:28px;">
   <a href="{settings.FRONTEND_URL}"
-     style="display:inline-block;background:#059669;color:#ffffff;font-weight:600;
-            font-size:14px;padding:12px 28px;border-radius:8px;text-decoration:none;">
+     style="display:inline-block;background:linear-gradient(135deg,#10b981,#059669);
+            color:#ffffff;font-weight:600;font-size:14px;padding:13px 32px;
+            border-radius:99px;text-decoration:none;letter-spacing:0.2px;">
     Open Release Radar
   </a>
 </div>"""
@@ -274,45 +284,46 @@ def send_season_premiere_email(
         )
         layout_style = "display:flex;align-items:flex-start;" if has_poster else ""
         return f"""
-<div style="{layout_style}background:#171717;border:1px solid #404040;
-            border-radius:10px;padding:14px;margin-bottom:10px;">
+<div style="{layout_style}background:#1a1a1a;border:1px solid #262626;
+            border-radius:12px;padding:16px;margin-bottom:8px;">
   {poster}
   <div style="flex:1;">
     <a href="{content_url}" style="color:#f5f5f5;font-size:15px;font-weight:600;
-       text-decoration:none;display:block;margin-bottom:2px;">{escape(a["show_name"])}</a>
-    <p style="margin:0 0 4px;color:#6ee7b7;font-size:13px;">{season_label}</p>
-    <p style="margin:0;color:#737373;font-size:12px;">Premieres {_format_date(a["air_date"])}</p>
+       text-decoration:none;display:block;margin-bottom:4px;line-height:1.3;">{escape(a["show_name"])}</a>
+    <p style="margin:0 0 2px;color:#10b981;font-size:13px;font-weight:500;">{season_label}</p>
+    <p style="margin:0;color:#525252;font-size:12px;">Premieres {_format_date(a["air_date"])}</p>
   </div>
 </div>"""
 
     sections = ""
     if thirty_day:
         sections += f"""
-<p style="margin:20px 0 8px;color:#f59e0b;font-size:13px;font-weight:700;
-          text-transform:uppercase;letter-spacing:0.8px;">Coming in one month</p>
+<p style="margin:20px 0 8px;color:#d97706;font-size:11px;font-weight:700;
+          text-transform:uppercase;letter-spacing:1px;">Coming in one month</p>
 {"".join(_alert_card(a) for a in thirty_day)}"""
     if seven_day:
         sections += f"""
-<p style="margin:20px 0 8px;color:#f97316;font-size:13px;font-weight:700;
-          text-transform:uppercase;letter-spacing:0.8px;">Coming in one week</p>
+<p style="margin:20px 0 8px;color:#f97316;font-size:11px;font-weight:700;
+          text-transform:uppercase;letter-spacing:1px;">Coming in one week</p>
 {"".join(_alert_card(a) for a in seven_day)}"""
 
     count = len(alerts)
     subject = f"New season{'s' if count > 1 else ''} coming soon — Release Radar"
 
     body = f"""
-<h2 style="margin:0 0 4px;color:#f5f5f5;font-size:20px;font-weight:700;">
+<h2 style="margin:0 0 6px;color:#f5f5f5;font-size:22px;font-weight:700;letter-spacing:-0.3px;">
   Hi {escape(username) or 'there'} 👋
 </h2>
-<p style="margin:0 0 20px;color:#a3a3a3;font-size:14px;">
+<p style="margin:0 0 24px;color:#737373;font-size:14px;line-height:1.6;">
   Heads up — the following show{'s' if count > 1 else ''} you're tracking
   ha{'ve' if count > 1 else 's'} a new season on the way:
 </p>
 {sections}
-<div style="text-align:center;margin-top:24px;">
+<div style="text-align:center;margin-top:28px;">
   <a href="{settings.FRONTEND_URL}"
-     style="display:inline-block;background:#059669;color:#ffffff;font-weight:600;
-            font-size:14px;padding:12px 28px;border-radius:8px;text-decoration:none;">
+     style="display:inline-block;background:linear-gradient(135deg,#10b981,#059669);
+            color:#ffffff;font-weight:600;font-size:14px;padding:13px 32px;
+            border-radius:99px;text-decoration:none;letter-spacing:0.2px;">
     Open Release Radar
   </a>
 </div>"""
@@ -337,7 +348,7 @@ def send_new_season_available_email(
     if not shows:
         return
 
-    today = datetime.utcnow().date()
+    today = datetime.now(timezone.utc).date()
 
     def _premiere_line(s: dict) -> str:
         season_number = s.get("season_number")
@@ -352,7 +363,7 @@ def send_new_season_available_email(
                 if pd > today:
                     date_str = _format_date(premiere_date)
                     return (
-                        f'<p style="margin:2px 0 0;color:#f59e0b;font-size:13px;font-weight:500;">'
+                        f'<p style="margin:2px 0 0;color:#d97706;font-size:13px;font-weight:500;">'
                         f"{season_label} premieres {date_str}</p>"
                     )
                 else:
@@ -364,7 +375,7 @@ def send_new_season_available_email(
                 pass
 
         return (
-            f'<p style="margin:2px 0 0;color:#f59e0b;font-size:13px;font-weight:500;">'
+            f'<p style="margin:2px 0 0;color:#d97706;font-size:13px;font-weight:500;">'
             f"{season_label} is coming — premiere date TBD</p>"
         )
 
@@ -385,14 +396,15 @@ def send_new_season_available_email(
         )
         layout_style = "display:flex;align-items:flex-start;" if has_poster else ""
         return f"""
-<div style="{layout_style}background:#171717;border:1px solid #404040;
-            border-radius:10px;padding:14px;margin-bottom:10px;">
+<div style="{layout_style}background:#1a1a1a;border:1px solid #262626;
+            border-radius:12px;padding:16px;margin-bottom:8px;">
   {poster}
   <div style="flex:1;">
     <a href="{content_url}" style="color:#f5f5f5;font-size:15px;font-weight:600;
-       text-decoration:none;display:block;margin-bottom:2px;">{escape(s["show_name"])}</a>
+       text-decoration:none;display:block;margin-bottom:4px;line-height:1.3;">{escape(s["show_name"])}</a>
     {_premiere_line(s)}
-    <p style="margin:4px 0 0;color:#737373;font-size:12px;">Added back to your watchlist</p>
+    <p style="margin:6px 0 0;color:#525252;font-size:11px;font-weight:500;
+       text-transform:uppercase;letter-spacing:0.5px;">Added back to your watchlist</p>
   </div>
 </div>"""
 
@@ -412,19 +424,20 @@ def send_new_season_available_email(
 
     cards = "".join(_show_card(s) for s in shows)
     body = f"""
-<h2 style="margin:0 0 4px;color:#f5f5f5;font-size:20px;font-weight:700;">
+<h2 style="margin:0 0 6px;color:#f5f5f5;font-size:22px;font-weight:700;letter-spacing:-0.3px;">
   Hi {escape(username) or 'there'} 👋
 </h2>
-<p style="margin:0 0 20px;color:#a3a3a3;font-size:14px;">
+<p style="margin:0 0 24px;color:#737373;font-size:14px;line-height:1.6;">
   {'A show' if count == 1 else 'Some shows'} you already finished
   {'is' if count == 1 else 'are'} getting a new season.
   {'It has' if count == 1 else 'They have'} been moved back to your watchlist:
 </p>
 {cards}
-<div style="text-align:center;margin-top:24px;">
+<div style="text-align:center;margin-top:28px;">
   <a href="{settings.FRONTEND_URL}"
-     style="display:inline-block;background:#059669;color:#ffffff;font-weight:600;
-            font-size:14px;padding:12px 28px;border-radius:8px;text-decoration:none;">
+     style="display:inline-block;background:linear-gradient(135deg,#10b981,#059669);
+            color:#ffffff;font-weight:600;font-size:14px;padding:13px 32px;
+            border-radius:99px;text-decoration:none;letter-spacing:0.2px;">
     Open Release Radar
   </a>
 </div>"""
@@ -453,42 +466,45 @@ def send_recommendation_email(
     poster_block = ""
     if poster_path:
         poster_block = (
-            f'<div style="text-align:center;margin-bottom:20px;">'
+            f'<div style="text-align:center;margin-bottom:24px;">'
             f'<a href="{content_url}">'
             f'<img src="{TMDB_IMAGE_BASE}{poster_path}" alt="{escape(content_title)}"'
-            f' width="100" height="150" style="border-radius:10px;object-fit:cover;display:inline-block;" />'
+            f' width="110" height="165" style="border-radius:12px;object-fit:cover;display:inline-block;'
+            f'box-shadow:0 8px 24px rgba(0,0,0,0.6);" />'
             f"</a></div>"
         )
 
     message_block = ""
     if message:
         message_block = (
-            f'<div style="background:#171717;border-left:3px solid #10b981;'
-            f'border-radius:0 8px 8px 0;padding:12px 16px;margin:16px 0;">'
-            f'<p style="margin:0;color:#a3a3a3;font-size:14px;font-style:italic;">"{escape(message)}"</p>'
+            f'<div style="background:#1a1a1a;border-left:3px solid #10b981;'
+            f'border-radius:0 10px 10px 0;padding:14px 18px;margin:16px 0;">'
+            f'<p style="margin:0;color:#737373;font-size:14px;font-style:italic;line-height:1.6;">"{escape(message)}"</p>'
             f"</div>"
         )
 
     body = f"""
-<h2 style="margin:0 0 4px;color:#f5f5f5;font-size:20px;font-weight:700;">
+<h2 style="margin:0 0 6px;color:#f5f5f5;font-size:22px;font-weight:700;letter-spacing:-0.3px;">
   Hi {escape(to_username) or 'there'} 👋
 </h2>
-<p style="margin:0 0 20px;color:#a3a3a3;font-size:14px;">
-  <strong style="color:#6ee7b7;">@{escape(from_username)}</strong> recommended a {kind} for you:
+<p style="margin:0 0 24px;color:#737373;font-size:14px;line-height:1.6;">
+  <strong style="color:#10b981;">@{escape(from_username)}</strong> recommended a {kind} for you:
 </p>
 {poster_block}
-<div style="background:#171717;border:1px solid #404040;border-radius:10px;padding:16px;margin-bottom:16px;">
+<div style="background:#1a1a1a;border:1px solid #262626;border-radius:12px;padding:18px;margin-bottom:16px;">
   <a href="{content_url}"
-     style="color:#f5f5f5;font-size:18px;font-weight:700;text-decoration:none;">
+     style="color:#f5f5f5;font-size:18px;font-weight:700;text-decoration:none;line-height:1.3;display:block;">
     {escape(content_title)}
   </a>
-  <p style="margin:4px 0 0;color:#737373;font-size:13px;text-transform:capitalize;">{kind}</p>
+  <p style="margin:6px 0 0;color:#525252;font-size:12px;font-weight:500;text-transform:capitalize;
+     letter-spacing:0.4px;">{kind}</p>
 </div>
 {message_block}
-<div style="text-align:center;margin-top:24px;">
+<div style="text-align:center;margin-top:28px;">
   <a href="{content_url}"
-     style="display:inline-block;background:#059669;color:#ffffff;font-weight:600;
-            font-size:14px;padding:12px 28px;border-radius:8px;text-decoration:none;">
+     style="display:inline-block;background:linear-gradient(135deg,#10b981,#059669);
+            color:#ffffff;font-weight:600;font-size:14px;padding:13px 32px;
+            border-radius:99px;text-decoration:none;letter-spacing:0.2px;">
     View {escape(content_title)}
   </a>
 </div>"""
@@ -498,6 +514,213 @@ def send_recommendation_email(
         f'@{escape(from_username)} recommended "{escape(content_title)}" to you',
         _email_wrapper(body, uid),
     )
+
+
+def send_streaming_alert_email(
+    to_email: str,
+    username: str,
+    alerts: list,
+    uid: str = "",
+):
+    """
+    Notify a user about streaming availability changes for their tracked content.
+    Each alert dict has: title, content_type, content_id, poster_path,
+    added (list of provider names), removed (list of provider names).
+    """
+    if not alerts:
+        return
+
+    def _provider_badges(names: list[str], bg: str, fg: str) -> str:
+        return "".join(
+            f'<span style="display:inline-block;background:{bg};color:{fg};'
+            f'font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;'
+            f'margin:2px 4px 2px 0;">{escape(n)}</span>'
+            for n in names
+        )
+
+    def _alert_card(a: dict) -> str:
+        content_type = a.get("content_type", "movie")
+        content_id = a.get("content_id")
+        content_url = (
+            f"{settings.FRONTEND_URL}/{content_type}/{content_id}"
+            if content_id
+            else settings.FRONTEND_URL
+        )
+        has_poster = bool(a.get("poster_path"))
+        poster = (
+            f'<a href="{content_url}" style="display:inline-block;flex-shrink:0;margin-right:14px;">'
+            f'<img src="{TMDB_IMAGE_BASE}{a["poster_path"]}" alt="{escape(a["title"])}" width="60" height="90"'
+            f' style="border-radius:8px;object-fit:cover;display:block;box-shadow:0 4px 12px rgba(0,0,0,0.5);" /></a>'
+            if has_poster
+            else ""
+        )
+        layout_style = "display:flex;align-items:flex-start;" if has_poster else ""
+
+        added_html = ""
+        if a.get("added"):
+            added_html = (
+                f'<div style="margin-top:8px;">'
+                f'<span style="color:#10b981;font-size:11px;font-weight:700;text-transform:uppercase;'
+                f'letter-spacing:0.5px;">Now streaming on </span>'
+                f'{_provider_badges(a["added"], "#052e16", "#6ee7b7")}'
+                f"</div>"
+            )
+        removed_html = ""
+        if a.get("removed"):
+            removed_html = (
+                f'<div style="margin-top:6px;">'
+                f'<span style="color:#ef4444;font-size:11px;font-weight:700;text-transform:uppercase;'
+                f'letter-spacing:0.5px;">No longer on </span>'
+                f'{_provider_badges(a["removed"], "#450a0a", "#fca5a5")}'
+                f"</div>"
+            )
+
+        return f"""
+<div style="{layout_style}background:#1a1a1a;border:1px solid #262626;
+            border-radius:12px;padding:16px;margin-bottom:8px;">
+  {poster}
+  <div style="flex:1;min-width:0;">
+    <a href="{content_url}" style="color:#f5f5f5;font-size:15px;font-weight:600;
+       text-decoration:none;display:block;margin-bottom:4px;line-height:1.3;">{escape(a["title"])}</a>
+    {added_html}
+    {removed_html}
+  </div>
+</div>"""
+
+    count = len(alerts)
+    if count == 1:
+        a = alerts[0]
+        if a.get("added") and not a.get("removed"):
+            subject = f"{a['title']} is now streaming — Release Radar"
+        elif a.get("removed") and not a.get("added"):
+            subject = f"{a['title']} has left streaming — Release Radar"
+        else:
+            subject = f"Streaming update for {a['title']} — Release Radar"
+    else:
+        subject = f"Streaming updates for {count} titles you're tracking — Release Radar"
+
+    cards = "".join(_alert_card(a) for a in alerts)
+    body = f"""
+<h2 style="margin:0 0 6px;color:#f5f5f5;font-size:22px;font-weight:700;letter-spacing:-0.3px;">
+  Hi {escape(username) or 'there'} 👋
+</h2>
+<p style="margin:0 0 24px;color:#737373;font-size:14px;line-height:1.6;">
+  There {'have been' if count > 1 else 'has been a'} streaming {'changes' if count > 1 else 'change'}
+  for {'titles' if count > 1 else 'a title'} you're tracking:
+</p>
+{cards}
+<div style="text-align:center;margin-top:28px;">
+  <a href="{settings.FRONTEND_URL}"
+     style="display:inline-block;background:linear-gradient(135deg,#10b981,#059669);
+            color:#ffffff;font-weight:600;font-size:14px;padding:13px 32px;
+            border-radius:99px;text-decoration:none;letter-spacing:0.2px;">
+    Open Release Radar
+  </a>
+</div>"""
+
+    send_email(to_email, subject, _email_wrapper(body, uid))
+
+
+def send_trailer_alert_email(
+    to_email: str,
+    username: str,
+    alerts: list,
+    uid: str = "",
+):
+    """
+    Notify a user about new official trailers/teasers for their tracked content.
+    Each alert dict has: title, content_type, content_id, poster_path,
+    videos (list of {key, name, type}).
+    """
+    if not alerts:
+        return
+
+    YOUTUBE_THUMB = "https://img.youtube.com/vi/{key}/mqdefault.jpg"
+
+    def _video_rows(videos: list[dict]) -> str:
+        rows = ""
+        for v in videos[:3]:
+            key = v.get("key", "")
+            name = escape(v.get("name") or "Official Trailer")
+            thumb = YOUTUBE_THUMB.format(key=key)
+            yt_url = f"https://www.youtube.com/watch?v={key}"
+            rows += f"""
+<a href="{yt_url}" style="display:flex;align-items:center;gap:12px;
+   background:#1f1f1f;border:1px solid #262626;border-radius:10px;
+   padding:10px 12px;margin-top:8px;text-decoration:none;">
+  <div style="flex-shrink:0;position:relative;">
+    <img src="{thumb}" width="88" height="50"
+         style="border-radius:6px;object-fit:cover;display:block;" />
+    <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;">
+      <div style="width:24px;height:24px;background:rgba(0,0,0,0.6);border-radius:50%;
+                  display:flex;align-items:center;justify-content:center;">
+        <div style="width:0;height:0;border-style:solid;border-width:5px 0 5px 9px;
+                    border-color:transparent transparent transparent #ffffff;margin-left:2px;"></div>
+      </div>
+    </div>
+  </div>
+  <div style="flex:1;min-width:0;">
+    <p style="margin:0 0 2px;color:#f5f5f5;font-size:13px;font-weight:600;
+       white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{name}</p>
+    <p style="margin:0;color:#525252;font-size:11px;font-weight:500;">YouTube · Official</p>
+  </div>
+</a>"""
+        return rows
+
+    def _alert_card(a: dict) -> str:
+        content_type = a.get("content_type", "movie")
+        content_id = a.get("content_id")
+        content_url = (
+            f"{settings.FRONTEND_URL}/{content_type}/{content_id}"
+            if content_id
+            else settings.FRONTEND_URL
+        )
+        has_poster = bool(a.get("poster_path"))
+        poster = (
+            f'<a href="{content_url}" style="display:inline-block;flex-shrink:0;margin-right:14px;">'
+            f'<img src="{TMDB_IMAGE_BASE}{a["poster_path"]}" alt="{escape(a["title"])}" width="60" height="90"'
+            f' style="border-radius:8px;object-fit:cover;display:block;box-shadow:0 4px 12px rgba(0,0,0,0.5);" /></a>'
+            if has_poster
+            else ""
+        )
+        layout_style = "display:flex;align-items:flex-start;" if has_poster else ""
+        videos_html = _video_rows(a.get("videos", []))
+        return f"""
+<div style="{layout_style}background:#1a1a1a;border:1px solid #262626;
+            border-radius:12px;padding:16px;margin-bottom:8px;">
+  {poster}
+  <div style="flex:1;min-width:0;">
+    <a href="{content_url}" style="color:#f5f5f5;font-size:15px;font-weight:600;
+       text-decoration:none;display:block;margin-bottom:4px;line-height:1.3;">{escape(a["title"])}</a>
+    {videos_html}
+  </div>
+</div>"""
+
+    count = len(alerts)
+    if count == 1:
+        subject = f"New trailer for {alerts[0]['title']} — Release Radar"
+    else:
+        subject = f"New trailers for {count} titles you're tracking — Release Radar"
+
+    cards = "".join(_alert_card(a) for a in alerts)
+    body = f"""
+<h2 style="margin:0 0 6px;color:#f5f5f5;font-size:22px;font-weight:700;letter-spacing:-0.3px;">
+  Hi {escape(username) or 'there'} 👋
+</h2>
+<p style="margin:0 0 24px;color:#737373;font-size:14px;line-height:1.6;">
+  New trailer{'s are' if count > 1 else ' is'} out for {'titles' if count > 1 else 'a title'} you're tracking:
+</p>
+{cards}
+<div style="text-align:center;margin-top:28px;">
+  <a href="{settings.FRONTEND_URL}"
+     style="display:inline-block;background:linear-gradient(135deg,#10b981,#059669);
+            color:#ffffff;font-weight:600;font-size:14px;padding:13px 32px;
+            border-radius:99px;text-decoration:none;letter-spacing:0.2px;">
+    Open Release Radar
+  </a>
+</div>"""
+
+    send_email(to_email, subject, _email_wrapper(body, uid))
 
 
 def send_email(to_email: str, subject: str, html_body: str):

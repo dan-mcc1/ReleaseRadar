@@ -1,15 +1,27 @@
-from functools import lru_cache
+import threading
 from datetime import date, timedelta
 from typing import Tuple, Optional
 
+from cachetools import TTLCache, cached
 from app.services.tmdb_client import get
+
+# All caches are thread-safe (individual RLock per cache) because the nightly
+# refresh loop calls these functions from a ThreadPoolExecutor.
+_TTL_SHORT = 1_800   # 30 min — trending / popular lists
+_TTL_STD   = 3_600   # 1 h  — show/season detail
+_TTL_LONG  = 86_400  # 24 h — rarely-changing data (external IDs)
+
+
+def _cache(maxsize: int, ttl: int):
+    return {"cache": TTLCache(maxsize=maxsize, ttl=ttl), "lock": threading.RLock()}
+
 
 # -------------------------
 # Core show info
 # -------------------------
 
 
-@lru_cache(maxsize=1024)
+@cached(**_cache(1024, _TTL_STD))
 def get_show(tv_id: int, append: Optional[Tuple[str, ...]] = None):
     params = {}
     if append:
@@ -23,7 +35,7 @@ def get_show(tv_id: int, append: Optional[Tuple[str, ...]] = None):
 # -------------------------
 
 
-@lru_cache(maxsize=1024)
+@cached(**_cache(1024, _TTL_SHORT))
 def get_popular_shows(region: str = "US", limit: int = 10):
     data = get(
         "/tv/popular",
@@ -32,7 +44,7 @@ def get_popular_shows(region: str = "US", limit: int = 10):
     return data.get("results", [])[:limit]
 
 
-@lru_cache(maxsize=1024)
+@cached(**_cache(1024, _TTL_SHORT))
 def get_trending_shows(time_window: str = "week"):
     # time_window: "day" | "week"
     data = get(f"/trending/tv/{time_window}")
@@ -44,7 +56,7 @@ def get_trending_shows(time_window: str = "week"):
 # -------------------------
 
 
-@lru_cache(maxsize=1024)
+@cached(**_cache(1024, _TTL_STD))
 def get_shows_airing_today(region: str = "US"):
     data = get(
         "/tv/airing_today",
@@ -53,7 +65,7 @@ def get_shows_airing_today(region: str = "US"):
     return data.get("results", [])
 
 
-@lru_cache(maxsize=1024)
+@cached(**_cache(1024, _TTL_STD))
 def get_upcoming_shows(region: str = "US", days: int = 7):
     today = date.today()
     end_date = today + timedelta(days=days)
@@ -75,7 +87,7 @@ def get_upcoming_shows(region: str = "US", days: int = 7):
 # -------------------------
 
 
-@lru_cache(maxsize=1024)
+@cached(**_cache(1024, _TTL_STD))
 def get_active_popular_shows(curr_month: int, curr_year: int):
     start_date = date(curr_year, curr_month, 1)
 
@@ -101,7 +113,7 @@ def get_active_popular_shows(curr_month: int, curr_year: int):
 # -------------------------
 
 
-@lru_cache(maxsize=1024)
+@cached(**_cache(1024, _TTL_STD))
 def search_tv(query: str):
     """
     - If query exists → /search/tv
@@ -123,7 +135,7 @@ def search_tv(query: str):
 # -------------------------
 
 
-@lru_cache(maxsize=1024)
+@cached(**_cache(1024, _TTL_STD))
 def get_shows_by_actor(query: str):
     """
     1. Search person
@@ -146,7 +158,7 @@ def get_shows_by_actor(query: str):
 # -------------------------
 
 
-@lru_cache(maxsize=1024)
+@cached(**_cache(1024, _TTL_STD))
 def get_show_recommendations(tv_id: int):
     data = get(f"/tv/{tv_id}/recommendations")
     return data.get("results", [])
@@ -157,7 +169,7 @@ def get_show_recommendations(tv_id: int):
 # -------------------------
 
 
-@lru_cache(maxsize=1024)
+@cached(**_cache(1024, _TTL_LONG))
 def get_show_external_ids(tv_id: int):
     return get(f"/tv/{tv_id}/external_ids")
 
@@ -167,7 +179,7 @@ def get_show_external_ids(tv_id: int):
 # -------------------------
 
 
-@lru_cache(maxsize=1024)
+@cached(**_cache(1024, _TTL_STD))
 def get_show_networks(tv_id: int):
     show = get(f"/tv/{tv_id}")
     return show.get("networks", [])
@@ -178,7 +190,7 @@ def get_show_networks(tv_id: int):
 # -------------------------
 
 
-@lru_cache(maxsize=512)
+@cached(**_cache(512, _TTL_STD))
 def get_show_full_calendar(tv_id: int):
     """
     Returns ALL episodes that have an air_date
@@ -211,7 +223,7 @@ def get_show_full_calendar(tv_id: int):
 # -------------------------
 
 
-@lru_cache(maxsize=512)
+@cached(**_cache(512, _TTL_STD))
 def get_show_season_calendar(tv_id: int):
     """
     Returns episodes in current season that have an air_date
@@ -251,7 +263,7 @@ def fetch_show_from_tmdb(show_id: int, append: str | None):
     return get(f"/tv/{show_id}", params=params)
 
 
-@lru_cache(maxsize=1024)
+@cached(**_cache(1024, _TTL_STD))
 def fetch_season_data_from_tmdb(show_id: int, season_number: int):
     episodes = []
 
@@ -264,6 +276,6 @@ def fetch_season_data_from_tmdb(show_id: int, season_number: int):
     return episodes
 
 
-@lru_cache(maxsize=1024)
+@cached(**_cache(1024, _TTL_STD))
 def get_full_season_info(id: int, season_number: int):
     return get(f"/tv/{id}/season/{season_number}")

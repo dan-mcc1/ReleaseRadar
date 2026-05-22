@@ -1,5 +1,5 @@
 # app/routers/episode_watched.py
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Body
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.services.watched_episode_service import (
@@ -14,6 +14,8 @@ from app.services.watched_episode_service import (
 )
 from app.dependencies.auth import get_current_user
 from app.core.limiter import limiter
+from app.models.episode_watched import EpisodeWatched
+from app.services.stats_service import invalidate_stats_cache
 
 router = APIRouter()
 
@@ -29,7 +31,9 @@ def add_episode(
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
-    return add_episode_watched(db, uid, show_id, season_number, episode_number)
+    result = add_episode_watched(db, uid, show_id, season_number, episode_number)
+    invalidate_stats_cache(uid)
+    return result
 
 
 # Remove an episode from watched
@@ -41,7 +45,9 @@ def remove_episode(
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
-    return remove_episode_watched(db, uid, show_id, season_number, episode_number)
+    result = remove_episode_watched(db, uid, show_id, season_number, episode_number)
+    invalidate_stats_cache(uid)
+    return result
 
 
 # Get all watched episodes for the current user
@@ -107,3 +113,39 @@ def get_next_episode(
     uid: str = Depends(get_current_user),
 ):
     return get_next_unwatched_episode(db, uid, show_id)
+
+
+# Update rating and/or notes for a watched episode
+@router.patch("/annotate")
+def annotate_episode(
+    show_id: int,
+    season_number: int,
+    episode_number: int,
+    rating: float | None = Body(None),
+    notes: str | None = Body(None),
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    row = (
+        db.query(EpisodeWatched)
+        .filter_by(
+            user_id=uid,
+            show_id=show_id,
+            season_number=season_number,
+            episode_number=episode_number,
+        )
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Episode not marked as watched.")
+    if rating is not None:
+        if not (0.5 <= rating <= 5.0):
+            raise HTTPException(status_code=422, detail="Rating must be between 0.5 and 5.0.")
+        row.rating = rating
+    if notes is not None:
+        if len(notes) > 2000:
+            raise HTTPException(status_code=422, detail="Notes must be 2000 characters or fewer.")
+        row.notes = notes.strip() or None
+    db.commit()
+    db.refresh(row)
+    return row

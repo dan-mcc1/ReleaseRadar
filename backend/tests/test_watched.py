@@ -90,7 +90,9 @@ class TestWatchedRemove:
         remove_from_watched(client)
         db.expire_all()
         m = db.query(Movie).filter_by(id=550).first()
-        assert m is None
+        # tracking_count hits 0 → record is retained until 90-day cleanup job removes it
+        assert m is not None
+        assert m.tracking_count == 0
 
     def test_remove_does_not_delete_movie_when_other_user_tracks(self, db, seed_movie):
         from app.models.movie import Movie
@@ -128,15 +130,15 @@ class TestWatchedRate:
         add_to_watched(client)
         r = client.patch(
             "/watched/rate",
-            json={"content_type": "movie", "content_id": 550, "rating": 8.5},
+            json={"content_type": "movie", "content_id": 550, "rating": 4.5},
         )
         assert r.status_code == 200
-        assert r.json()["rating"] == 8.5
+        assert r.json()["rating"] == 4.5
 
     def test_rate_not_in_watched_returns_404(self, client, seed_movie):
         r = client.patch(
             "/watched/rate",
-            json={"content_type": "movie", "content_id": 550, "rating": 7.0},
+            json={"content_type": "movie", "content_id": 550, "rating": 3.5},
         )
         assert r.status_code == 404
 
@@ -144,7 +146,7 @@ class TestWatchedRate:
         add_to_watched(client)
         client.patch(
             "/watched/rate",
-            json={"content_type": "movie", "content_id": 550, "rating": 8.0},
+            json={"content_type": "movie", "content_id": 550, "rating": 4.0},
         )
         r = client.patch(
             "/watched/rate",
@@ -157,13 +159,13 @@ class TestWatchedRate:
         add_to_watched(client)
         client.patch(
             "/watched/rate",
-            json={"content_type": "movie", "content_id": 550, "rating": 5.0},
+            json={"content_type": "movie", "content_id": 550, "rating": 2.5},
         )
         r = client.patch(
             "/watched/rate",
-            json={"content_type": "movie", "content_id": 550, "rating": 9.0},
+            json={"content_type": "movie", "content_id": 550, "rating": 4.5},
         )
-        assert r.json()["rating"] == 9.0
+        assert r.json()["rating"] == 4.5
 
 
 class TestWatchedFetch:
@@ -184,10 +186,10 @@ class TestWatchedFetch:
         add_to_watched(client)
         client.patch(
             "/watched/rate",
-            json={"content_type": "movie", "content_id": 550, "rating": 7.5},
+            json={"content_type": "movie", "content_id": 550, "rating": 3.5},
         )
         r = client.get("/watched")
-        assert r.json()["movies"][0]["user_rating"] == 7.5
+        assert r.json()["movies"][0]["user_rating"] == 3.5
 
     def test_fetch_returns_all_movies(self, client, db, seed_users):
         from app.models.movie import Movie

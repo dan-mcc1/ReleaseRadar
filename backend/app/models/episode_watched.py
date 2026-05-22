@@ -3,6 +3,7 @@ from sqlalchemy import (
     Column,
     Integer,
     String,
+    Text,
     ForeignKey,
     DateTime,
     Float,
@@ -17,13 +18,14 @@ class EpisodeWatched(Base):
     __tablename__ = "episode_watched"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(String, ForeignKey("user.id"), index=True)
-    show_id = Column(Integer, ForeignKey("show.id"))
-    episode_id = Column(Integer, ForeignKey("episode.id"), nullable=True)
+    user_id = Column(String, ForeignKey("user.id", ondelete="CASCADE"), index=True)
+    show_id = Column(Integer, ForeignKey("show.id", ondelete="CASCADE"))
+    episode_id = Column(Integer, ForeignKey("episode.id", ondelete="SET NULL"), nullable=True)
     season_number = Column(Integer)
     episode_number = Column(Integer)
     watched_at = Column(DateTime(timezone=True), server_default=func.now())
     rating = Column(Float, nullable=True)
+    notes = Column(Text, nullable=True)
 
     __table_args__ = (
         UniqueConstraint(

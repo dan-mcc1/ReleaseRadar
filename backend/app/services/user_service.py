@@ -1,12 +1,13 @@
 # app/services/user_service.py
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
-from datetime import datetime
+from sqlalchemy import and_, or_, func, literal, text
+from datetime import datetime, timezone
 from app.models.user import User
 from app.models.watchlist import Watchlist
 from app.models.watched import Watched
 from app.models.movie import Movie
 from app.models.show import Show
+from app.models.block import Block
 
 
 def create_user(
@@ -27,7 +28,7 @@ def create_user(
         id=user_id,
         email=email,
         username=username,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
         avatar_key=avatar_key,
     )
     db.add(db_user)
@@ -40,14 +41,14 @@ def get_user(db: Session, user_id: str):
     """
     Get a user by ID.
     """
-    return db.query(User).filter_by(id=user_id).first()
+    return db.get(User, user_id)
 
 
 def update_user_email(db: Session, user_id: str, new_email: str):
     """
     Update the email of a user.
     """
-    user = db.query(User).filter_by(id=user_id).first()
+    user = db.get(User, user_id)
     if not user:
         return None
 
@@ -67,7 +68,7 @@ def update_username(db: Session, user_id: str, new_username: str):
     if taken:
         return None
 
-    user = db.query(User).filter_by(id=user_id).first()
+    user = db.get(User, user_id)
     if not user:
         return None
 
@@ -78,7 +79,7 @@ def update_username(db: Session, user_id: str, new_username: str):
 
 
 def update_avatar_key(db: Session, user_id: str, avatar_key: str | None):
-    user = db.query(User).filter_by(id=user_id).first()
+    user = db.get(User, user_id)
     if not user:
         return None
     user.avatar_key = avatar_key
@@ -147,66 +148,206 @@ def get_profile_watchlist(db: Session, user_id: str) -> dict:
     }
 
 
+def get_profile_preview_data(db: Session, user_id: str, preview_limit: int = 5) -> dict:
+    """
+    Single-query replacement for the four separate preview calls previously run
+    in parallel threads (watchlist, watched, favorites, friends).
+
+    Uses a UNION ALL with a section discriminator and per-branch window functions
+    so the database trims the watchlist/watched previews before returning any rows.
+    Favorites and friends have no row limit.
+    """
+    sql = text("""
+        WITH preview AS (
+            SELECT
+                'watchlist_movie'::text AS section,
+                m.id                   AS content_id,
+                m.title                AS display_name,
+                m.poster_path,
+                wl.added_at            AS ts,
+                NULL::text             AS friend_id,
+                NULL::text             AS friend_username,
+                NULL::integer          AS friendship_id,
+                ROW_NUMBER() OVER (ORDER BY wl.added_at DESC) AS rn,
+                COUNT(*)    OVER ()                           AS section_total
+            FROM movie m
+            JOIN watchlist wl ON wl.content_id = m.id
+                             AND wl.content_type = 'movie'
+                             AND wl.user_id = :uid
+
+            UNION ALL
+
+            SELECT
+                'watchlist_show', s.id, s.name, s.poster_path, wl.added_at,
+                NULL, NULL, NULL,
+                ROW_NUMBER() OVER (ORDER BY wl.added_at DESC),
+                COUNT(*) OVER ()
+            FROM show s
+            JOIN watchlist wl ON wl.content_id = s.id
+                             AND wl.content_type = 'tv'
+                             AND wl.user_id = :uid
+
+            UNION ALL
+
+            SELECT
+                'watched_movie', m.id, m.title, m.poster_path, w.watched_at,
+                NULL, NULL, NULL,
+                ROW_NUMBER() OVER (ORDER BY w.watched_at DESC),
+                COUNT(*) OVER ()
+            FROM movie m
+            JOIN watched w ON w.content_id = m.id
+                          AND w.content_type = 'movie'
+                          AND w.user_id = :uid
+
+            UNION ALL
+
+            SELECT
+                'watched_show', s.id, s.name, s.poster_path, w.watched_at,
+                NULL, NULL, NULL,
+                ROW_NUMBER() OVER (ORDER BY w.watched_at DESC),
+                COUNT(*) OVER ()
+            FROM show s
+            JOIN watched w ON w.content_id = s.id
+                          AND w.content_type = 'tv'
+                          AND w.user_id = :uid
+
+            UNION ALL
+
+            SELECT
+                'favorite_movie', m.id, m.title, m.poster_path, NULL,
+                NULL, NULL, NULL, 1, 0
+            FROM movie m
+            JOIN favorite f ON f.content_id = m.id
+                           AND f.content_type = 'movie'
+                           AND f.user_id = :uid
+
+            UNION ALL
+
+            SELECT
+                'favorite_show', s.id, s.name, s.poster_path, NULL,
+                NULL, NULL, NULL, 1, 0
+            FROM show s
+            JOIN favorite f ON f.content_id = s.id
+                           AND f.content_type = 'tv'
+                           AND f.user_id = :uid
+
+            UNION ALL
+
+            SELECT
+                'friend', NULL, NULL, NULL, NULL,
+                u.id, u.username, fr.id, 1, 0
+            FROM friendship fr
+            JOIN "user" u ON u.id = fr.addressee_id
+            WHERE fr.requester_id = :uid AND fr.status = 'accepted'
+
+            UNION ALL
+
+            SELECT
+                'friend', NULL, NULL, NULL, NULL,
+                u.id, u.username, fr.id, 1, 0
+            FROM friendship fr
+            JOIN "user" u ON u.id = fr.requester_id
+            WHERE fr.addressee_id = :uid AND fr.status = 'accepted'
+        )
+        SELECT *
+        FROM preview
+        WHERE rn <= :lim
+           OR section IN ('favorite_movie', 'favorite_show', 'friend')
+    """)
+
+    rows = db.execute(sql, {"uid": user_id, "lim": preview_limit}).fetchall()
+
+    watchlist_movies, watchlist_shows = [], []
+    watched_movies, watched_shows = [], []
+    favorite_movies, favorite_shows = [], []
+    friends = []
+    wl_movie_total = wl_show_total = 0
+    w_movie_total = w_show_total = 0
+
+    for r in rows:
+        if r.section == "watchlist_movie":
+            wl_movie_total = r.section_total
+            watchlist_movies.append({"id": r.content_id, "title": r.display_name, "poster_path": r.poster_path, "added_at": r.ts})
+        elif r.section == "watchlist_show":
+            wl_show_total = r.section_total
+            watchlist_shows.append({"id": r.content_id, "name": r.display_name, "poster_path": r.poster_path, "added_at": r.ts})
+        elif r.section == "watched_movie":
+            w_movie_total = r.section_total
+            watched_movies.append({"id": r.content_id, "title": r.display_name, "poster_path": r.poster_path, "watched_at": r.ts})
+        elif r.section == "watched_show":
+            w_show_total = r.section_total
+            watched_shows.append({"id": r.content_id, "name": r.display_name, "poster_path": r.poster_path, "watched_at": r.ts})
+        elif r.section == "favorite_movie":
+            favorite_movies.append({"id": r.content_id, "title": r.display_name, "poster_path": r.poster_path})
+        elif r.section == "favorite_show":
+            favorite_shows.append({"id": r.content_id, "name": r.display_name, "poster_path": r.poster_path})
+        elif r.section == "friend":
+            friends.append({"friendship_id": r.friendship_id, "friend": {"id": r.friend_id, "username": r.friend_username}})
+
+    return {
+        "watchlist": {
+            "movies": watchlist_movies,
+            "shows": watchlist_shows,
+            "total_movies": wl_movie_total,
+            "total_shows": wl_show_total,
+        },
+        "watched": {
+            "movies": watched_movies,
+            "shows": watched_shows,
+            "total_movies": w_movie_total,
+            "total_shows": w_show_total,
+        },
+        "favorites": {"movies": favorite_movies, "shows": favorite_shows},
+        "friends": friends,
+    }
+
+
 def get_profile_watchlist_preview(db: Session, user_id: str, limit: int = 5) -> dict:
     """
     Return a preview of a user's watchlist with limited items and total counts.
     Returns lightweight objects (id, title/name, poster_path, added_at) only.
     """
-    total_movies = (
-        db.query(Watchlist).filter_by(user_id=user_id, content_type="movie").count()
-    )
-    total_shows = (
-        db.query(Watchlist).filter_by(user_id=user_id, content_type="tv").count()
-    )
-    movies = (
-        db.query(Movie.id, Movie.title, Movie.poster_path, Watchlist.added_at)
-        .join(
-            Watchlist,
-            and_(
-                Watchlist.content_id == Movie.id,
-                Watchlist.content_type == "movie",
-                Watchlist.user_id == user_id,
-            ),
+    movie_q = (
+        db.query(
+            literal("movie").label("type"),
+            Movie.id,
+            Movie.title.label("display_name"),
+            Movie.poster_path,
+            Watchlist.added_at,
+            func.count(Movie.id).over().label("total"),
         )
+        .join(Watchlist, and_(
+            Watchlist.content_id == Movie.id,
+            Watchlist.content_type == "movie",
+            Watchlist.user_id == user_id,
+        ))
         .order_by(Watchlist.added_at.desc())
         .limit(limit)
-        .all()
     )
-    shows = (
-        db.query(Show.id, Show.name, Show.poster_path, Watchlist.added_at)
-        .join(
-            Watchlist,
-            and_(
-                Watchlist.content_id == Show.id,
-                Watchlist.content_type == "tv",
-                Watchlist.user_id == user_id,
-            ),
+    show_q = (
+        db.query(
+            literal("tv").label("type"),
+            Show.id,
+            Show.name.label("display_name"),
+            Show.poster_path,
+            Watchlist.added_at,
+            func.count(Show.id).over().label("total"),
         )
+        .join(Watchlist, and_(
+            Watchlist.content_id == Show.id,
+            Watchlist.content_type == "tv",
+            Watchlist.user_id == user_id,
+        ))
         .order_by(Watchlist.added_at.desc())
         .limit(limit)
-        .all()
     )
+    movie_rows = movie_q.all()
+    show_rows = show_q.all()
     return {
-        "movies": [
-            {
-                "id": r.id,
-                "title": r.title,
-                "poster_path": r.poster_path,
-                "added_at": r.added_at,
-            }
-            for r in movies
-        ],
-        "shows": [
-            {
-                "id": r.id,
-                "name": r.name,
-                "poster_path": r.poster_path,
-                "added_at": r.added_at,
-            }
-            for r in shows
-        ],
-        "total_movies": total_movies,
-        "total_shows": total_shows,
+        "movies": [{"id": r.id, "title": r.display_name, "poster_path": r.poster_path, "added_at": r.added_at} for r in movie_rows],
+        "shows": [{"id": r.id, "name": r.display_name, "poster_path": r.poster_path, "added_at": r.added_at} for r in show_rows],
+        "total_movies": movie_rows[0].total if movie_rows else 0,
+        "total_shows": show_rows[0].total if show_rows else 0,
     }
 
 
@@ -268,61 +409,47 @@ def get_profile_watched_preview(db: Session, user_id: str, limit: int = 5) -> di
     Return a preview of a user's watched list with limited items and total counts.
     Returns lightweight objects (id, title/name, poster_path, watched_at) only.
     """
-    total_movies = (
-        db.query(Watched).filter_by(user_id=user_id, content_type="movie").count()
-    )
-    total_shows = (
-        db.query(Watched).filter_by(user_id=user_id, content_type="tv").count()
-    )
-    movies = (
-        db.query(Movie.id, Movie.title, Movie.poster_path, Watched.watched_at)
-        .join(
-            Watched,
-            and_(
-                Watched.content_id == Movie.id,
-                Watched.content_type == "movie",
-                Watched.user_id == user_id,
-            ),
+    movie_q = (
+        db.query(
+            literal("movie").label("type"),
+            Movie.id,
+            Movie.title.label("display_name"),
+            Movie.poster_path,
+            Watched.watched_at,
+            func.count(Movie.id).over().label("total"),
         )
+        .join(Watched, and_(
+            Watched.content_id == Movie.id,
+            Watched.content_type == "movie",
+            Watched.user_id == user_id,
+        ))
         .order_by(Watched.watched_at.desc())
         .limit(limit)
-        .all()
     )
-    shows = (
-        db.query(Show.id, Show.name, Show.poster_path, Watched.watched_at)
-        .join(
-            Watched,
-            and_(
-                Watched.content_id == Show.id,
-                Watched.content_type == "tv",
-                Watched.user_id == user_id,
-            ),
+    show_q = (
+        db.query(
+            literal("tv").label("type"),
+            Show.id,
+            Show.name.label("display_name"),
+            Show.poster_path,
+            Watched.watched_at,
+            func.count(Show.id).over().label("total"),
         )
+        .join(Watched, and_(
+            Watched.content_id == Show.id,
+            Watched.content_type == "tv",
+            Watched.user_id == user_id,
+        ))
         .order_by(Watched.watched_at.desc())
         .limit(limit)
-        .all()
     )
+    movie_rows = movie_q.all()
+    show_rows = show_q.all()
     return {
-        "movies": [
-            {
-                "id": r.id,
-                "title": r.title,
-                "poster_path": r.poster_path,
-                "watched_at": r.watched_at,
-            }
-            for r in movies
-        ],
-        "shows": [
-            {
-                "id": r.id,
-                "name": r.name,
-                "poster_path": r.poster_path,
-                "watched_at": r.watched_at,
-            }
-            for r in shows
-        ],
-        "total_movies": total_movies,
-        "total_shows": total_shows,
+        "movies": [{"id": r.id, "title": r.display_name, "poster_path": r.poster_path, "watched_at": r.watched_at} for r in movie_rows],
+        "shows": [{"id": r.id, "name": r.display_name, "poster_path": r.poster_path, "watched_at": r.watched_at} for r in show_rows],
+        "total_movies": movie_rows[0].total if movie_rows else 0,
+        "total_shows": show_rows[0].total if show_rows else 0,
     }
 
 
@@ -330,14 +457,18 @@ def search_users_by_username(
     db: Session, query: str, current_user_id: str, limit: int = 10
 ):
     """
-    Search users by partial username match, excluding the current user.
+    Search users by partial username match, excluding the current user and any blocked relationships.
     """
+    blocked_subquery = db.query(Block.blocked_id).filter(Block.blocker_id == current_user_id)
+    blocker_subquery = db.query(Block.blocker_id).filter(Block.blocked_id == current_user_id)
     return (
         db.query(User)
         .filter(
             User.username.ilike(f"%{query}%"),
             User.id != current_user_id,
             User.username.isnot(None),
+            User.id.notin_(blocked_subquery),
+            User.id.notin_(blocker_subquery),
         )
         .limit(limit)
         .all()

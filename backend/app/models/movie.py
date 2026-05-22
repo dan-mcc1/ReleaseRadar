@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, Date, Float
+from sqlalchemy import Column, Integer, String, Text, Date, DateTime, Float
 from sqlalchemy.orm import relationship
 from app.db.base import Base
 
@@ -22,6 +22,8 @@ class Movie(Base):
     title = Column(String)
     tracking_count = Column(Integer)
     vote_average = Column(Float, nullable=True)
+    certification = Column(String, nullable=True)
+    updated_at = Column(DateTime(timezone=True), nullable=True)
 
     genres = relationship(
         "Genre", secondary="movie_genre", back_populates="movies", passive_deletes=True

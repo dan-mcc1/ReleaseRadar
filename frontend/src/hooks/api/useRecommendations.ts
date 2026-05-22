@@ -1,7 +1,6 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+﻿import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "./queryKeys";
-import { queryFetch } from "./queryFetch";
-import { apiFetch } from "../../utils/apiFetch";
+import { queryFetch, checkedFetch } from "./queryFetch";
 import { useAuthUser } from "../useAuthUser";
 import type { Movie, Show } from "../../types/calendar";
 
@@ -15,8 +14,8 @@ export function useForYou(mode: string) {
   const user = useAuthUser();
   return useQuery({
     queryKey: queryKeys.forYou(user?.uid ?? "", mode),
-    queryFn: () =>
-      queryFetch<ForYouData>(`/recommendations/for-you?mode=${mode}`),
+    queryFn: ({ signal }) =>
+      queryFetch<ForYouData>(`/recommendations/for-you?mode=${mode}`, { signal }),
     enabled: !!user,
   });
 }
@@ -25,8 +24,8 @@ export function useForYouPreview() {
   const user = useAuthUser();
   return useQuery({
     queryKey: queryKeys.forYou(user?.uid ?? "", "default"),
-    queryFn: () =>
-      queryFetch<{ movies: Movie[]; shows: Show[] }>("/recommendations/for-you"),
+    queryFn: ({ signal }) =>
+      queryFetch<{ movies: Movie[]; shows: Show[] }>("/recommendations/for-you", { signal }),
     enabled: !!user,
   });
 }
@@ -35,7 +34,7 @@ export function useRecommendationsInbox() {
   const user = useAuthUser();
   return useQuery({
     queryKey: queryKeys.recommendationsInbox(user?.uid ?? ""),
-    queryFn: () => queryFetch("/recommendations/inbox"),
+    queryFn: ({ signal }) => queryFetch("/recommendations/inbox", { signal }),
     enabled: !!user,
   });
 }
@@ -44,7 +43,7 @@ export function useUnreadRecCount() {
   const user = useAuthUser();
   return useQuery({
     queryKey: queryKeys.unreadRecCount(user?.uid ?? ""),
-    queryFn: () => queryFetch<{ count: number }>("/recommendations/unread-count"),
+    queryFn: ({ signal }) => queryFetch<{ count: number }>("/recommendations/unread-count", { signal }),
     enabled: !!user,
   });
 }
@@ -59,7 +58,7 @@ export function useSendRecommendation() {
       content_poster_path: string;
       message: string;
     }) =>
-      apiFetch("/recommendations/send", {
+      checkedFetch("/recommendations/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -72,7 +71,7 @@ export function useMarkRecRead() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (recommendationId: number) =>
-      apiFetch(`/recommendations/${recommendationId}/read`, {
+      checkedFetch(`/recommendations/${recommendationId}/read`, {
         method: "PATCH",
       }),
     onSuccess: () => {
@@ -92,7 +91,7 @@ export function useDeleteRecommendation() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (recommendationId: number) =>
-      apiFetch(`/recommendations/${recommendationId}`, {
+      checkedFetch(`/recommendations/${recommendationId}`, {
         method: "DELETE",
       }),
     onSuccess: () => {

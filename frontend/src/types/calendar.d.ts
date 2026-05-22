@@ -5,34 +5,39 @@ export type CalendarData = {
 
 export type Show = {
   id: number;
+  name: string;
+  poster_path: string;
   backdrop_path: string;
   logo_path: string;
-  first_air_date: string;
-  genres: Genre[];
-  homepage: string;
-  in_production: boolean;
-  last_air_date: string;
-  name: string;
-  networks: number[];
-  number_of_episodes: number;
-  number_of_seasons: number;
-  overview: string;
-  poster_path: string;
-  seasons: Season[];
-  status: string;
-  tagline: string;
-  tracking_count: number;
-  type: string;
-  providers: Provider;
-
   air_time?: string | null;
   air_timezone?: string | null;
+
+  // Fields present on full show responses (watchlist/watched pages) but not calendar
+  overview?: string;
+  first_air_date?: string;
+  in_production?: boolean;
+  status?: string;
+  vote_average?: number;
+  genres?: Genre[];
+  seasons?: Season[];
+  providers?: Provider;
+  homepage?: string;
+  last_air_date?: string;
+  networks?: number[];
+  number_of_episodes?: number;
+  number_of_seasons?: number;
+  tagline?: string;
+  tracking_count?: number;
+  type?: string;
   bg_color?: string;
   popularity?: number;
-  vote_average?: number;
+  certification?: string | null;
   user_rating?: number | null;
   sort_key?: number;
   watchlist_id?: number;
+  flatrate_provider_ids?: number[];
+  added_at?: string | null;
+  watched_at?: string | null;
 }
 
 export type Season = {
@@ -62,8 +67,6 @@ export type Episode = {
   season_number: number;
   show_id: number;
   still_path: string | null;
-  vote_average: number;
-  vote_count: number;
   is_watched: boolean;
 
   showData: Show;
@@ -91,10 +94,14 @@ export type Movie = {
   bg_color?: string;
   popularity?: number;
   vote_average?: number;
+  certification?: string | null;
   is_watched: boolean;
   user_rating?: number | null;
   sort_key?: number;
   watchlist_id?: number;
+  flatrate_provider_ids?: number[];
+  added_at?: string | null;
+  watched_at?: string | null;
 }
 
 export type Genre = {

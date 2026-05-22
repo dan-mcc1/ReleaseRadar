@@ -8,7 +8,7 @@ function isIOS() {
 
 function isInStandaloneMode() {
   return (
-    ("standalone" in navigator && (navigator as any).standalone === true) ||
+    ("standalone" in navigator && (navigator as Navigator & { standalone: boolean }).standalone === true) ||
     window.matchMedia("(display-mode: standalone)").matches
   );
 }

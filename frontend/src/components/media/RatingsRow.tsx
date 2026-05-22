@@ -6,20 +6,24 @@ interface Props {
   voteAverage?: number | null;
   externalScores: ExternalScores | null;
   aggRating: AggregateRating | null;
+  hideTitle?: boolean;
 }
 
 export default function RatingsRow({
   voteAverage,
   externalScores,
   aggRating,
+  hideTitle = false,
 }: Props) {
   if (!voteAverage && !externalScores && !aggRating?.average) return null;
 
   return (
     <div>
-      <h2 className="text-neutral-400 text-xs uppercase tracking-wider font-semibold mb-3">
-        Ratings
-      </h2>
+      {!hideTitle && (
+        <h2 className="text-neutral-400 text-xs uppercase tracking-wider font-semibold mb-3">
+          Ratings
+        </h2>
+      )}
       <div className="flex flex-wrap gap-3">
         {voteAverage != null && voteAverage > 0 && (
           <RatingBadge

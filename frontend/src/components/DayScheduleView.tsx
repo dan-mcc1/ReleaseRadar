@@ -131,7 +131,7 @@ function ItemCard({ item }: ItemCardProps) {
   const episodeTag = isTv
     ? getEpisodeTag((item as Episode & { type: "tv" }).episode_type)
     : null;
-  const title = isTv ? item.showData.name : (item as any).title;
+  const title = item.type === "tv" ? item.showData.name : item.title;
   const episodeName = isTv
     ? (item as Episode & { type: "tv"; showData: Show }).name
     : null;

@@ -27,6 +27,12 @@ class Settings(BaseSettings):
     OMDB_API_KEY: str = (
         ""  # Free key from https://www.omdbapi.com/ (for RT/Metacritic scores)
     )
+    NEWS_API_KEY: str = ""  # Free key from https://newsapi.org/
+
+    STRIPE_SECRET_KEY: str = ""
+    STRIPE_WEBHOOK_SECRET: str = ""
+    STRIPE_PREMIUM_MONTHLY_PRICE_ID: str = ""
+    STRIPE_PREMIUM_YEARLY_PRICE_ID: str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -31,6 +31,7 @@ export interface MediaExternalIds {
 
 export interface MediaVideo {
   id: string;
+  name: string;
   key: string;
   site: string;
   type: string;

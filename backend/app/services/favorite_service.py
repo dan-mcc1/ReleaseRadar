@@ -1,14 +1,41 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
+from sqlalchemy import and_, literal
 from app.models.favorite import Favorite
 from app.models.movie import Movie
 from app.models.show import Show
-from app.services.watchlist_service import (
+from app.services.media_serializers import (
     serialize_movie_list,
     serialize_show_list,
     _movie_query_options_list,
     _show_query_options_list,
 )
+
+
+def get_favorites_preview(db: Session, user_id: str) -> dict:
+    """Lightweight favorites for list/profile views — poster, title, id only. No selectinload."""
+    movie_q = (
+        db.query(literal("movie").label("type"), Movie.id, Movie.title.label("display_name"), Movie.poster_path)
+        .select_from(Favorite)
+        .join(Movie, and_(
+            Favorite.content_id == Movie.id,
+            Favorite.content_type == "movie",
+            Favorite.user_id == user_id,
+        ))
+    )
+    show_q = (
+        db.query(literal("tv").label("type"), Show.id, Show.name.label("display_name"), Show.poster_path)
+        .select_from(Favorite)
+        .join(Show, and_(
+            Favorite.content_id == Show.id,
+            Favorite.content_type == "tv",
+            Favorite.user_id == user_id,
+        ))
+    )
+    rows = movie_q.union_all(show_q).all()
+    return {
+        "movies": [{"id": r.id, "title": r.display_name, "poster_path": r.poster_path} for r in rows if r.type == "movie"],
+        "shows": [{"id": r.id, "name": r.display_name, "poster_path": r.poster_path} for r in rows if r.type == "tv"],
+    }
 
 
 def add_to_favorites(db: Session, user_id: str, content_type: str, content_id: int):
