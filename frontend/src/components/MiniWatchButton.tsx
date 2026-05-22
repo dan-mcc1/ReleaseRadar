@@ -2,6 +2,8 @@ import { useRef } from "react";
 import { useAuthUser } from "../hooks/useAuthUser";
 import { useWatchStatus } from "../hooks/api/useWatchStatus";
 import { useUpdateWatchStatus } from "../hooks/api/useWatchActions";
+import { TrackingLimitError } from "../hooks/api/useSubscription";
+import { useToast } from "./Toast";
 import type { WatchStatus } from "./WatchButton";
 
 interface MiniWatchButtonProps {
@@ -14,6 +16,7 @@ interface MiniWatchButtonProps {
 
 export default function MiniWatchButton({ contentType, contentId, initialStatus, bulkManaged = false }: MiniWatchButtonProps) {
   const user = useAuthUser();
+  const toast = useToast();
   const statusQuery = useWatchStatus(contentType, contentId, { skip: bulkManaged });
   const updateMutation = useUpdateWatchStatus();
   const clickPending = useRef(false);
@@ -21,16 +24,21 @@ export default function MiniWatchButton({ contentType, contentId, initialStatus,
   const status: WatchStatus = initialStatus ?? statusQuery.data?.status ?? "none";
   const loading = (!bulkManaged && statusQuery.isPending) || updateMutation.isPending;
 
-  function handleClick(e: React.MouseEvent) {
+  async function handleClick(e: React.MouseEvent) {
     e.stopPropagation();
     e.preventDefault();
     if (!user || loading || clickPending.current) return;
     clickPending.current = true;
     const targetStatus: WatchStatus = status === "none" ? "Want To Watch" : "none";
-    updateMutation.mutate(
-      { contentType, contentId, currentStatus: status, targetStatus },
-      { onSettled: () => { clickPending.current = false; } },
-    );
+    try {
+      await updateMutation.mutateAsync({ contentType, contentId, currentStatus: status, targetStatus });
+    } catch (err) {
+      if (err instanceof TrackingLimitError) {
+        toast.error("You've hit the free tracking limit. Upgrade to Premium for unlimited tracking.");
+      }
+    } finally {
+      clickPending.current = false;
+    }
   }
 
   const colorClass =
