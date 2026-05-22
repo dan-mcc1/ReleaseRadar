@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Body, BackgroundTasks, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, Body, BackgroundTasks, HTTPException, Request
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.services.watched_service import (
@@ -12,7 +12,6 @@ from app.services.watched_service import (
 )
 from app.dependencies.auth import get_current_user
 from app.core.limiter import limiter
-from app.core.etag import etag_response
 from app.services.stats_service import invalidate_stats_cache
 from app.services.media_upsert import populate_show_bg, populate_movie_bg
 
@@ -79,38 +78,23 @@ def remove_item(
 
 @router.get("")
 def get_user_watched(
-    request: Request,
-    response: Response,
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
-    payload = get_watched(db, uid)
-    if hit := etag_response(request, response, payload):
-        return hit
-    return payload
+    return get_watched(db, uid)
 
 
 @router.get("/tv")
 def watched_tv_info(
-    request: Request,
-    response: Response,
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
-    payload = _get_watched_items(db, uid, "tv")
-    if hit := etag_response(request, response, payload):
-        return hit
-    return payload
+    return _get_watched_items(db, uid, "tv")
 
 
 @router.get("/movie")
 def watched_movie_info(
-    request: Request,
-    response: Response,
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
-    payload = _get_watched_items(db, uid, "movie")
-    if hit := etag_response(request, response, payload):
-        return hit
-    return payload
+    return _get_watched_items(db, uid, "movie")

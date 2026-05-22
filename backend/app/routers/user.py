@@ -1,8 +1,7 @@
 # app/routers/user.py
 import re
 import random
-from fastapi import APIRouter, Depends, HTTPException, Body, Query, Request, Response
-from app.core.etag import etag_response
+from fastapi import APIRouter, Depends, HTTPException, Body, Query, Request
 from app.core.limiter import limiter
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
@@ -295,16 +294,11 @@ def check_email_banned(
 
 @router.get("/stats")
 def get_stats_route(
-    request: Request,
-    response: Response,
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
     """Return aggregated stats for the current user."""
-    payload = get_user_stats(db, uid)
-    if hit := etag_response(request, response, payload):
-        return hit
-    return payload
+    return get_user_stats(db, uid)
 
 
 @router.get("/watch-time-stats")

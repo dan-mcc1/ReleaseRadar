@@ -1,8 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
-from app.core.etag import etag_response
 from app.db.session import get_db
 from app.models.movie import Movie
 from app.services.media_serializers import _movie_query_options, serialize_movie
@@ -15,8 +14,6 @@ router = APIRouter()
 @router.get("/{id}")
 async def get_movie_info(
     id: int,
-    request: Request,
-    response: Response,
     append: str | None = Query(None, description="Comma-separated TMDB append fields"),
     db: Session = Depends(get_db),
 ):
@@ -24,21 +21,16 @@ async def get_movie_info(
         lambda: db.query(Movie).options(*_movie_query_options()).filter(Movie.id == id).first()
     )
     if movie:
-        payload = serialize_movie(movie)
-    else:
-        payload = await run_in_threadpool(fetch_movie_from_tmdb, id, append)
-        if not payload:
-            raise HTTPException(status_code=404, detail="Show not found")
-    if hit := etag_response(request, response, payload):
-        return hit
+        return serialize_movie(movie)
+    payload = await run_in_threadpool(fetch_movie_from_tmdb, id, append)
+    if not payload:
+        raise HTTPException(status_code=404, detail="Show not found")
     return payload
 
 
 @router.get("/{id}/info")
 async def full_movie_info(
     id: int,
-    request: Request,
-    response: Response,
     db: Session = Depends(get_db),
 ):
     append = ",".join(
@@ -79,6 +71,4 @@ async def full_movie_info(
     if us_providers:
         normalize_tmdb_watch_providers(us_providers)
 
-    if hit := etag_response(request, response, movie_data):
-        return hit
     return movie_data

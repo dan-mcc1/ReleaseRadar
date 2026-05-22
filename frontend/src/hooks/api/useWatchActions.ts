@@ -155,6 +155,10 @@ export function useUpdateWatchStatus() {
       queryClient.invalidateQueries({
         queryKey: ["recommendations", "forYou", user.uid],
       });
+      // Calendar / shelf calendars include watchlist items — refresh so newly tracked
+      // shows and movies appear without a reload.
+      queryClient.invalidateQueries({ queryKey: ["calendar", user.uid] });
+      queryClient.invalidateQueries({ queryKey: ["shelves", user.uid] });
     },
   });
 }
