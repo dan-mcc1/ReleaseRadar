@@ -851,7 +851,7 @@ export default function NavBar() {
           {/* Logo */}
           <a href="/calendar" className="flex items-center gap-2.5 shrink-0">
             <img src="/favicon-1024.png" className="h-7 w-auto" alt="Logo" />
-            <span className="text-white font-semibold text-[16px] tracking-[-0.02em] hidden sm:block">
+            <span className="text-white font-semibold text-[16px] tracking-[-0.02em] truncate max-[350px]:hidden">
               Release Radar
             </span>
           </a>
