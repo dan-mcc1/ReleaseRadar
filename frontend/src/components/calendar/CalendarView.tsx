@@ -223,7 +223,7 @@ export default function CalendarView() {
           <div className="flex items-center gap-2 flex-wrap">
             {/* Month + Year heading */}
             <h1
-              className="text-5xl tracking-tight leading-none mr-1"
+              className="w-full sm:w-auto text-5xl tracking-tight leading-none mr-1"
               style={{ fontFamily: "var(--font-serif)" }}
             >
               {viewMode === "week" ? (
@@ -246,7 +246,10 @@ export default function CalendarView() {
               )}
             </h1>
 
-            <div className="flex-1" />
+            <div className="hidden sm:block flex-1" />
+
+            {/* Controls group: wraps internally but never splits across the month heading */}
+            <div className="flex items-center gap-2 flex-wrap">
 
             {/* ← Today → navigation */}
             <div className="flex items-center gap-1">
@@ -432,6 +435,7 @@ export default function CalendarView() {
                 </div>
               )}
             </div>
+            </div>{/* end controls group */}
           </div>
         </div>
       </div>
