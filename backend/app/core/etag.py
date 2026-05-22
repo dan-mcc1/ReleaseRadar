@@ -24,7 +24,13 @@ def etag_response(request: Request, response: Response, payload) -> Response | N
     raw = orjson.dumps(jsonable_encoder(payload), option=orjson.OPT_SORT_KEYS)
     tag = f'"{hashlib.md5(raw).hexdigest()}"'
     if request.headers.get("if-none-match") == tag:
-        return Response(status_code=304)
+        hit = Response(status_code=304)
+        hit.headers["Vary"] = "Authorization"
+        return hit
     response.headers["ETag"] = tag
     response.headers["Cache-Control"] = _CC
+    # Without Vary: Authorization, the browser will reuse a cached response across
+    # different signed-in users (same URL, different Bearer token) — leaking another
+    # account's data after a sign-out/sign-in until max-age elapses.
+    response.headers["Vary"] = "Authorization"
     return None
