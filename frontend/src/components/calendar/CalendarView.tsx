@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { isPremiumFeature } from "../../config/features";
 import "react-datepicker/dist/react-datepicker.css";
 import CalendarSyncModal from "../CalendarSyncModal";
@@ -9,11 +9,10 @@ import { useCalendarData } from "../../hooks/useCalendarData";
 import { useCurrentlyWatching } from "../../hooks/api/useLists";
 import CalendarMonthGrid from "./CalendarMonthGrid";
 import CalendarTimeline from "./CalendarTimeline";
-import CalendarDayDetail from "./CalendarDayDetail";
 import CalendarSideRail from "./CalendarSideRail";
 import ContinueWatchingStrip from "./ContinueWatchingStrip";
 
-type ViewMode = "month" | "week" | "day";
+type ViewMode = "month" | "week";
 import {
   buildAllItems,
   getItemsForDate,
@@ -49,15 +48,11 @@ export default function CalendarView() {
     userMe?.subscription_tier === "admin";
 
   const today = new Date();
-  const episodeListRef = useRef<HTMLDivElement>(null);
-
   // UI state only
   const [selectedDate, setSelectedDate] = useState<Date>(today);
   const [currentMonth, setCurrentMonth] = useState(today.getMonth());
   const [currentYear, setCurrentYear] = useState(today.getFullYear());
-  const [viewMode, setViewMode] = useState<ViewMode>(() =>
-    typeof window !== "undefined" && window.innerWidth < 640 ? "day" : "month",
-  );
+  const [viewMode, setViewMode] = useState<ViewMode>("month");
   const [filterType, setFilterType] = useState<"all" | "tv" | "movie">("all");
   const [watchFilter, setWatchFilter] = useState<
     "all" | "watched" | "unwatched"
@@ -111,7 +106,7 @@ export default function CalendarView() {
   );
 
   useEffect(() => {
-    const rawItems = viewMode === "month" ? weekDays.flatMap((d) => d.items) : selectedDateItems;
+    const rawItems = viewMode === "week" ? selectedDateItems : weekDays.flatMap((d) => d.items);
     const visibleItems = rawItems.filter((item): item is NonNullable<typeof item> => item != null);
     const urls = new Set<string>();
     for (const item of visibleItems) {
@@ -148,16 +143,9 @@ export default function CalendarView() {
       setCurrentYear(newYear);
       setSelectedDate(new Date(newYear, newMonth, 1));
       maybePrefetch(newYear, newMonth);
-    } else if (viewMode === "week") {
-      const newDate = new Date(selectedDate);
-      newDate.setDate(newDate.getDate() - 7);
-      setCurrentMonth(newDate.getMonth());
-      setCurrentYear(newDate.getFullYear());
-      setSelectedDate(newDate);
-      maybePrefetch(newDate.getFullYear(), newDate.getMonth());
     } else {
       const newDate = new Date(selectedDate);
-      newDate.setDate(newDate.getDate() - 1);
+      newDate.setDate(newDate.getDate() - 7);
       setCurrentMonth(newDate.getMonth());
       setCurrentYear(newDate.getFullYear());
       setSelectedDate(newDate);
@@ -173,16 +161,9 @@ export default function CalendarView() {
       setCurrentYear(newYear);
       setSelectedDate(new Date(newYear, newMonth, 1));
       maybePrefetch(newYear, newMonth);
-    } else if (viewMode === "week") {
-      const newDate = new Date(selectedDate);
-      newDate.setDate(newDate.getDate() + 7);
-      setCurrentMonth(newDate.getMonth());
-      setCurrentYear(newDate.getFullYear());
-      setSelectedDate(newDate);
-      maybePrefetch(newDate.getFullYear(), newDate.getMonth());
     } else {
       const newDate = new Date(selectedDate);
-      newDate.setDate(newDate.getDate() + 1);
+      newDate.setDate(newDate.getDate() + 7);
       setCurrentMonth(newDate.getMonth());
       setCurrentYear(newDate.getFullYear());
       setSelectedDate(newDate);
@@ -200,12 +181,6 @@ export default function CalendarView() {
         return `${monthNames[start.getMonth()]} ${start.getDate()}–${end.getDate()} ${start.getFullYear()}`;
       return `${monthNames[start.getMonth()].slice(0, 3)} ${start.getDate()} – ${monthNames[end.getMonth()].slice(0, 3)} ${end.getDate()} ${end.getFullYear()}`;
     }
-    return selectedDate.toLocaleDateString(undefined, {
-      weekday: "short",
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
   };
 
   const emptyCells = Array(
@@ -329,8 +304,7 @@ export default function CalendarView() {
                   key={mode}
                   onClick={() => setViewMode(mode)}
                   className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                    viewMode === mode ||
-                    (mode === "month" && viewMode === "day")
+                    viewMode === mode
                       ? "bg-neutral-700 text-white"
                       : "text-neutral-400 hover:text-neutral-200"
                   }`}
@@ -494,14 +468,6 @@ export default function CalendarView() {
             />
           )}
 
-          {viewMode === "day" && (
-            <CalendarDayDetail
-              containerRef={episodeListRef}
-              selectedDate={selectedDate}
-              items={selectedDateItems}
-              headingSize="xl"
-            />
-          )}
         </div>
 
         {/* Side rail */}
