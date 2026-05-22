@@ -181,6 +181,7 @@ export default function CalendarView() {
         return `${monthNames[start.getMonth()]} ${start.getDate()}–${end.getDate()} ${start.getFullYear()}`;
       return `${monthNames[start.getMonth()].slice(0, 3)} ${start.getDate()} – ${monthNames[end.getMonth()].slice(0, 3)} ${end.getDate()} ${end.getFullYear()}`;
     }
+    return `${monthNames[currentMonth]} ${selectedDate?.getDate() ?? ""}, ${currentYear}`;
   };
 
   const emptyCells = Array(
