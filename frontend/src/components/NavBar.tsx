@@ -105,9 +105,17 @@ const librarySections: NavSection[] = [
     header: "My Lists",
     links: [
       { name: "Collections", href: "/my-collections" },
-      { name: "Groups", href: "/my-groups" },
       { name: "Shelves", href: "/shelves" },
       { name: "Stats", href: "/stats" },
+    ],
+  },
+];
+
+const socialSections: NavSection[] = [
+  {
+    links: [
+      { name: "Friends", href: "/friends" },
+      { name: "My Groups", href: "/my-groups" },
     ],
   },
 ];
@@ -727,6 +735,7 @@ export default function NavBar() {
   const [user, setUser] = useState(auth.currentUser);
   const [mobileDiscoverOpen, setMobileDiscoverOpen] = useState(false);
   const [mobileLibraryOpen, setMobileLibraryOpen] = useState(false);
+  const [mobileSocialOpen, setMobileSocialOpen] = useState(false);
   const [mobileSearchQuery, setMobileSearchQuery] = useState("");
   const mobileCloseRef = useRef<HTMLButtonElement>(null);
   const esRef = useRef<EventSource | null>(null);
@@ -743,11 +752,12 @@ export default function NavBar() {
   // const showUpgradeCta = user && userMe?.subscription_tier === "free";
   const showUpgradeCta = false;
 
-  // Activity / Friends moved out of My Library — they're already reachable
-  // from the notifications bell (and Friends shows on the profile avatar badge),
-  // so we don't surface badges inside the My Library dropdown anymore.
+  // Friends/My Groups now live in a dedicated Social tab; the pending-request
+  // count surfaces there. Activity stays bell-only.
   void unreadRecs;
-  void pendingRequests;
+  const socialBadges: Record<string, number> = {
+    "/friends": pendingRequests,
+  };
 
   const connectSSE = useCallback(
     async (uid: string) => {
@@ -952,6 +962,15 @@ export default function NavBar() {
               <NavDropdown
                 label="My Library"
                 sections={librarySections}
+                currentPath={location.pathname}
+              />
+            )}
+
+            {user && (
+              <NavDropdown
+                label="Social"
+                sections={socialSections}
+                badges={socialBadges}
                 currentPath={location.pathname}
               />
             )}
@@ -1268,6 +1287,53 @@ export default function NavBar() {
                       ))}
                     </div>
                   ))}
+                </div>
+              )}
+
+              {/* Social accordion */}
+              <button
+                onClick={() => setMobileSocialOpen((o) => !o)}
+                className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-[14px] font-medium text-neutral-400 hover:bg-neutral-900 hover:text-white transition-colors"
+              >
+                <span className="flex items-center gap-1">
+                  Social
+                  {pendingRequests > 0 && <Badge count={pendingRequests} />}
+                </span>
+                <svg
+                  className={`w-4 h-4 opacity-50 transition-transform duration-200 ${mobileSocialOpen ? "rotate-180" : ""}`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2.5}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M19 9l-7 7-7-7"
+                  />
+                </svg>
+              </button>
+              {mobileSocialOpen && (
+                <div className="ml-3 border-l border-neutral-800 pl-3 flex flex-col gap-0.5">
+                  {socialSections.flatMap((s) => s.links).map((item) => {
+                    const badge = socialBadges[item.href] ?? 0;
+                    return (
+                      <DisclosureButton
+                        key={item.name}
+                        as={Link}
+                        to={item.href}
+                        className={classNames(
+                          location.pathname === item.href
+                            ? "bg-neutral-800 text-white"
+                            : "text-neutral-400 hover:bg-neutral-900 hover:text-white",
+                          "flex items-center justify-between rounded-lg px-3 py-2 text-[13px] font-medium transition-colors",
+                        )}
+                      >
+                        <span>{item.name}</span>
+                        {badge > 0 && <Badge count={badge} />}
+                      </DisclosureButton>
+                    );
+                  })}
                 </div>
               )}
             </>
