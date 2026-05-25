@@ -34,6 +34,23 @@ function isChunkLoadError(error: Error): boolean {
   );
 }
 
+// Guard against infinite reload loops: if reload already happened this
+// session and we still see the same chunk error, the chunk is genuinely
+// missing — show the boundary instead of cycling forever.
+const CHUNK_RELOAD_KEY = "rr.chunkReloadAttempted";
+
+function tryReloadOnce(): boolean {
+  try {
+    if (sessionStorage.getItem(CHUNK_RELOAD_KEY)) return false;
+    sessionStorage.setItem(CHUNK_RELOAD_KEY, "1");
+  } catch {
+    // sessionStorage unavailable (private mode, etc.) — fall back to reloading
+    // without a guard; better than not recovering at all.
+  }
+  window.location.reload();
+  return true;
+}
+
 export class ErrorBoundary extends Component<Props, State> {
   state: State = {
     hasError: false,
@@ -52,9 +69,17 @@ export class ErrorBoundary extends Component<Props, State> {
     this.setState({ componentStack: info.componentStack ?? null });
 
     // Chunk-load errors mean the build moved out from under us — full reload
-    // pulls the new manifest. Skip Sentry noise for these; they're operational.
+    // pulls the new manifest. Skip Sentry noise unless the reload itself
+    // didn't fix it (chunk genuinely missing), in which case let the boundary
+    // surface normally so the user isn't stuck in a reload loop.
     if (isChunkLoadError(error)) {
-      window.location.reload();
+      if (tryReloadOnce()) return;
+      // Already reloaded this session and still failing — report it for real.
+      Sentry.withScope((scope) => {
+        if (this.props.scope) scope.setTag("boundary", this.props.scope);
+        scope.setTag("chunkReloadFailed", "true");
+        Sentry.captureException(error);
+      });
       return;
     }
 
