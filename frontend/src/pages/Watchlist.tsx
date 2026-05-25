@@ -800,9 +800,22 @@ export default function Watchlist() {
   const cwCount = cwResults.movies.length + cwResults.shows.length;
   const totalIncludingCW = totalCount + cwOnlyMovies.length + cwOnlyShows.length;
 
-  const tabs: { id: TabType; label: string; count: number }[] = [
+  // shortLabel is what shows on narrow viewports — the only overlong one is
+  // "Currently watching", so we abbreviate to "Watching" on mobile and let CSS
+  // swap between them via responsive utility classes.
+  const tabs: {
+    id: TabType;
+    label: string;
+    shortLabel?: string;
+    count: number;
+  }[] = [
     { id: "up_next", label: "Up next", count: upNextCount },
-    { id: "currently_watching", label: "Currently watching", count: cwCount },
+    {
+      id: "currently_watching",
+      label: "Currently watching",
+      shortLabel: "Watching",
+      count: cwCount,
+    },
     { id: "all", label: "All", count: totalIncludingCW },
     { id: "shows", label: "Shows", count: results.shows.length + cwOnlyShows.length },
     { id: "movies", label: "Movies", count: results.movies.length + cwOnlyMovies.length },
@@ -889,20 +902,30 @@ export default function Watchlist() {
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-0 border-b border-neutral-800 mt-6">
+        {/* Tabs — shrink to fit on mobile, then wrap to a second row if the
+            viewport is still too narrow (e.g. tiny phones or large count
+            badges). Reverts to the roomier desktop sizing at sm+. */}
+        <div className="flex flex-wrap gap-x-0 gap-y-1 border-b border-neutral-800 mt-6">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`px-3.5 py-3 text-sm font-medium inline-flex items-center gap-1.5 border-b-2 -mb-px transition-colors ${
+              className={`px-2 sm:px-3.5 py-3 text-[12.5px] sm:text-sm font-medium inline-flex items-center gap-1 sm:gap-1.5 border-b-2 -mb-px transition-colors whitespace-nowrap ${
                 activeTab === tab.id
                   ? "border-primary-500 text-neutral-100"
                   : "border-transparent text-neutral-500 hover:text-neutral-300"
               }`}
             >
-              {tab.label}
-              <span className="font-mono text-[10.5px] text-neutral-500 leading-none translate-y-px">
+              {/* Long label visible from sm+; short label visible below sm. */}
+              {tab.shortLabel ? (
+                <>
+                  <span className="hidden sm:inline">{tab.label}</span>
+                  <span className="sm:hidden">{tab.shortLabel}</span>
+                </>
+              ) : (
+                tab.label
+              )}
+              <span className="font-mono text-[10px] sm:text-[10.5px] text-neutral-500 leading-none translate-y-px">
                 {tab.count}
               </span>
             </button>

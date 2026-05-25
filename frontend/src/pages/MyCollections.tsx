@@ -218,7 +218,7 @@ export default function MyCollections() {
       {/* Filter pills */}
       {!empty && (
         <div className="px-6 sm:px-10 pb-6">
-          <div className="flex bg-neutral-800 border border-neutral-700 rounded-xl p-1 w-fit">
+          <div className="flex flex-wrap gap-y-1 bg-neutral-800 border border-neutral-700 rounded-xl p-1 w-fit max-w-full">
             {FILTERS.map(({ value, label }) => {
               const count =
                 value === "all"
@@ -235,7 +235,7 @@ export default function MyCollections() {
                 <button
                   key={value}
                   onClick={() => setFilter(value)}
-                  className={`px-4 py-1.5 text-sm font-medium rounded-lg transition-all flex items-center gap-1.5 ${
+                  className={`px-2.5 sm:px-4 py-1.5 text-[12.5px] sm:text-sm font-medium rounded-lg transition-all flex items-center gap-1 sm:gap-1.5 whitespace-nowrap ${
                     active
                       ? "bg-neutral-700 text-neutral-100 shadow-sm"
                       : "text-neutral-400 hover:text-neutral-200"
@@ -243,7 +243,7 @@ export default function MyCollections() {
                 >
                   {label}
                   <span
-                    className={`font-mono text-[11px] ${
+                    className={`font-mono text-[10px] sm:text-[11px] ${
                       active ? "text-neutral-400" : "text-neutral-500"
                     }`}
                   >
