@@ -54,7 +54,6 @@ Live at [releaseradar.co](https://releaseradar.co)
 - **In-app notifications** — Bell icon with unread count for all notification types
 
 ### Other
-- **Pricing / Pro tier** — Premium features available via subscription (billing via Stripe)
 - **Feedback** — Built-in feedback submission form
 - **Admin panel** — Moderation, user management, and feedback review (admin-only)
 
