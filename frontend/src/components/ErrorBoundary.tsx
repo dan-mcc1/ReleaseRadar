@@ -20,9 +20,10 @@ type State = {
 const MAX_SILENT_RETRIES = 1;
 const RETRY_DELAY_MS = 200;
 
-// Vite throws these when a code-split chunk can't be fetched — usually
-// because the manifest moved across a deploy. Reloading the page picks up
-// the new manifest. Match on common substrings across browsers.
+// Vite throws these when a code-split chunk can't be fetched, OR when the
+// CDN serves index.html (HTML mime) where a chunk used to live — both happen
+// after a deploy when the manifest moved. Reloading picks up the new
+// manifest. Match on common substrings across browsers.
 function isChunkLoadError(error: Error): boolean {
   const msg = `${error.name} ${error.message}`.toLowerCase();
   return (
@@ -30,7 +31,14 @@ function isChunkLoadError(error: Error): boolean {
     msg.includes("importing a module script failed") ||
     msg.includes("loading chunk") ||
     msg.includes("loading css chunk") ||
-    msg.includes("chunkloaderror")
+    msg.includes("chunkloaderror") ||
+    // MIME-type mismatch: SPA fallback served index.html where a .js chunk
+    // was expected. Chrome / Firefox / Safari all phrase this slightly
+    // differently, so match the common fragments.
+    msg.includes("is not a valid javascript mime type") ||
+    msg.includes("expected a javascript module script") ||
+    msg.includes('mime type of "text/html"') ||
+    msg.includes("mime type ('text/html')")
   );
 }
 
@@ -131,45 +139,64 @@ export class ErrorBoundary extends Component<Props, State> {
     const { error, componentStack } = this.state;
 
     return (
-      <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4 p-6 text-center">
-        <h2 className="text-xl font-semibold">Something went wrong</h2>
-        <p className="text-sm text-gray-500 max-w-md">
-          This part of the app hit an error. The team has been notified. You can try
-          again or reload the page.
-        </p>
-        {isDev && error && (
-          <details
-            open
-            className="mt-2 max-w-2xl w-full text-left rounded-md border border-red-500/40 bg-red-500/5 p-3 text-xs"
+      <div className="mx-auto max-w-3xl px-4 py-6">
+        <div className="flex items-start gap-3 rounded-xl border border-amber-500/40 bg-amber-500/5 p-4">
+          <svg
+            className="mt-0.5 h-5 w-5 shrink-0 text-amber-400"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
           >
-            <summary className="cursor-pointer text-red-400 font-semibold">
-              {error.name}: {error.message}
-            </summary>
-            {error.stack && (
-              <pre className="mt-2 overflow-auto whitespace-pre-wrap text-red-300/80">
-                {error.stack}
-              </pre>
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"
+            />
+          </svg>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-neutral-100">
+              This section couldn't load
+            </p>
+            <p className="mt-0.5 text-xs text-neutral-400">
+              The rest of the page is still usable. Try again, or reload if it keeps
+              happening.
+            </p>
+            <div className="mt-3 flex gap-2">
+              <button
+                onClick={this.handleReset}
+                className="rounded-md border border-neutral-700 px-3 py-1 text-xs font-medium text-neutral-200 hover:bg-neutral-800"
+              >
+                Try again
+              </button>
+              <button
+                onClick={this.handleReload}
+                className="rounded-md bg-neutral-100 px-3 py-1 text-xs font-medium text-neutral-900 hover:bg-white"
+              >
+                Reload page
+              </button>
+            </div>
+            {isDev && error && (
+              <details
+                open
+                className="mt-3 rounded-md border border-red-500/40 bg-red-500/5 p-3 text-xs"
+              >
+                <summary className="cursor-pointer text-red-400 font-semibold">
+                  {error.name}: {error.message}
+                </summary>
+                {error.stack && (
+                  <pre className="mt-2 overflow-auto whitespace-pre-wrap text-red-300/80">
+                    {error.stack}
+                  </pre>
+                )}
+                {componentStack && (
+                  <pre className="mt-2 overflow-auto whitespace-pre-wrap text-neutral-400">
+                    {componentStack}
+                  </pre>
+                )}
+              </details>
             )}
-            {componentStack && (
-              <pre className="mt-2 overflow-auto whitespace-pre-wrap text-neutral-400">
-                {componentStack}
-              </pre>
-            )}
-          </details>
-        )}
-        <div className="flex gap-2">
-          <button
-            onClick={this.handleReset}
-            className="rounded-md border px-3 py-1.5 text-sm hover:bg-gray-50"
-          >
-            Try again
-          </button>
-          <button
-            onClick={this.handleReload}
-            className="rounded-md bg-black px-3 py-1.5 text-sm text-white hover:bg-gray-800"
-          >
-            Reload page
-          </button>
+          </div>
         </div>
       </div>
     );
