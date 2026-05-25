@@ -9,25 +9,89 @@ type Props = {
 
 type State = {
   hasError: boolean;
+  error: Error | null;
+  componentStack: string | null;
+  retryCount: number;
 };
 
-export class ErrorBoundary extends Component<Props, State> {
-  state: State = { hasError: false };
+// One silent retry is enough to absorb most transient first-render races
+// (query data arriving a tick late, auth state still settling). If the same
+// error throws again on the retry, we treat it as real and show the fallback.
+const MAX_SILENT_RETRIES = 1;
+const RETRY_DELAY_MS = 200;
 
-  static getDerivedStateFromError(): State {
-    return { hasError: true };
+// Vite throws these when a code-split chunk can't be fetched — usually
+// because the manifest moved across a deploy. Reloading the page picks up
+// the new manifest. Match on common substrings across browsers.
+function isChunkLoadError(error: Error): boolean {
+  const msg = `${error.name} ${error.message}`.toLowerCase();
+  return (
+    msg.includes("failed to fetch dynamically imported module") ||
+    msg.includes("importing a module script failed") ||
+    msg.includes("loading chunk") ||
+    msg.includes("loading css chunk") ||
+    msg.includes("chunkloaderror")
+  );
+}
+
+export class ErrorBoundary extends Component<Props, State> {
+  state: State = {
+    hasError: false,
+    error: null,
+    componentStack: null,
+    retryCount: 0,
+  };
+
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+  static getDerivedStateFromError(error: Error): Partial<State> {
+    return { hasError: true, error, componentStack: null };
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
+    this.setState({ componentStack: info.componentStack ?? null });
+
+    // Chunk-load errors mean the build moved out from under us — full reload
+    // pulls the new manifest. Skip Sentry noise for these; they're operational.
+    if (isChunkLoadError(error)) {
+      window.location.reload();
+      return;
+    }
+
+    // Silent first retry — most "fine on reload" boundary hits are transient.
+    // Don't ship the error to Sentry until the retry also fails, so the
+    // dashboard isn't drowning in noise that nobody ever saw.
+    if (this.state.retryCount < MAX_SILENT_RETRIES) {
+      this.retryTimer = setTimeout(() => {
+        this.setState((s) => ({
+          hasError: false,
+          error: null,
+          componentStack: null,
+          retryCount: s.retryCount + 1,
+        }));
+      }, RETRY_DELAY_MS);
+      return;
+    }
+
     Sentry.withScope((scope) => {
       if (this.props.scope) scope.setTag("boundary", this.props.scope);
       scope.setExtra("componentStack", info.componentStack);
+      scope.setExtra("retryCount", this.state.retryCount);
       Sentry.captureException(error);
     });
   }
 
+  componentWillUnmount() {
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+  }
+
   handleReset = () => {
-    this.setState({ hasError: false });
+    this.setState({
+      hasError: false,
+      error: null,
+      componentStack: null,
+      retryCount: 0,
+    });
   };
 
   handleReload = () => {
@@ -38,6 +102,9 @@ export class ErrorBoundary extends Component<Props, State> {
     if (!this.state.hasError) return this.props.children;
     if (this.props.fallback) return this.props.fallback;
 
+    const isDev = import.meta.env.DEV;
+    const { error, componentStack } = this.state;
+
     return (
       <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4 p-6 text-center">
         <h2 className="text-xl font-semibold">Something went wrong</h2>
@@ -45,6 +112,26 @@ export class ErrorBoundary extends Component<Props, State> {
           This part of the app hit an error. The team has been notified. You can try
           again or reload the page.
         </p>
+        {isDev && error && (
+          <details
+            open
+            className="mt-2 max-w-2xl w-full text-left rounded-md border border-red-500/40 bg-red-500/5 p-3 text-xs"
+          >
+            <summary className="cursor-pointer text-red-400 font-semibold">
+              {error.name}: {error.message}
+            </summary>
+            {error.stack && (
+              <pre className="mt-2 overflow-auto whitespace-pre-wrap text-red-300/80">
+                {error.stack}
+              </pre>
+            )}
+            {componentStack && (
+              <pre className="mt-2 overflow-auto whitespace-pre-wrap text-neutral-400">
+                {componentStack}
+              </pre>
+            )}
+          </details>
+        )}
         <div className="flex gap-2">
           <button
             onClick={this.handleReset}
