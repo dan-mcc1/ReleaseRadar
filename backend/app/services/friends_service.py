@@ -1,10 +1,11 @@
 # app/services/friends_service.py
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, and_, func, literal, null, union_all, text
+from sqlalchemy import or_, and_, func, literal, null, union_all, text, update
 from fastapi import HTTPException
 
 from app.models.friendship import Friendship
+from app.models.notification import Notification
 from app.models.user import User
 from app.models.block import Block
 from app.models.watched import Watched
@@ -191,6 +192,19 @@ def respond_to_request(
 
     friendship.status = "accepted" if accept else "declined"
     friendship.updated_at = _utcnow()
+    if accept:
+        # Acted-on: clear the unread inbox row but keep the row as history.
+        # (Decline path doesn't need this — the friendship row is left in
+        # "declined" state; CASCADE only fires on actual deletes. If we want
+        # decline to also drop the notification we'd delete the friendship row.)
+        db.execute(
+            update(Notification)
+            .where(
+                Notification.friendship_id == friendship.id,
+                Notification.read_at.is_(None),
+            )
+            .values(read_at=_utcnow())
+        )
     db.commit()
     db.refresh(friendship)
     return friendship

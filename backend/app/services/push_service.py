@@ -214,6 +214,8 @@ def push_notification(
     season_number: int | None = None,
     episode_id: int | None = None,
     video_key: str | None = None,
+    recommendation_id: int | None = None,
+    friendship_id: int | None = None,
 ) -> Notification:
     """Create an inbox row and deliver an FCM push to all of the user's devices.
 
@@ -232,6 +234,8 @@ def push_notification(
         season_number=season_number,
         episode_id=episode_id,
         video_key=video_key,
+        recommendation_id=recommendation_id,
+        friendship_id=friendship_id,
     )
     db.add(notif)
     db.commit()

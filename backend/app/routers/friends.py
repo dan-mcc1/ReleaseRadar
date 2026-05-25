@@ -102,6 +102,7 @@ def send_request(
                     type="friend_request",
                     title="New friend request",
                     body=push_body,
+                    friendship_id=result.id,
                 )
             except Exception:
                 pass

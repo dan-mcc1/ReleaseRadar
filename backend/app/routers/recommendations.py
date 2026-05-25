@@ -86,6 +86,7 @@ def send(
             body=body.message or f"Check out this {body.content_type}",
             content_type=body.content_type,
             content_id=body.content_id,
+            recommendation_id=result.id,
         )
     except Exception:
         # Email + inbox are the source of truth; never let push wreck the response.

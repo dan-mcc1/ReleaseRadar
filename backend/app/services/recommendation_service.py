@@ -1,8 +1,9 @@
 from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
-from sqlalchemy import or_, and_
+from sqlalchemy import or_, and_, update
 from app.models.recommendation import Recommendation
+from app.models.notification import Notification
 from app.models.user import User
 from app.models.block import Block
 from app.services.friends_service import are_friends
@@ -120,6 +121,15 @@ def mark_read(db: Session, user_id: str, recommendation_id: int):
     if not rec:
         raise HTTPException(status_code=404, detail="Recommendation not found.")
     rec.is_read = True
+    # Keep the matching inbox row in sync so the badge clears across devices.
+    db.execute(
+        update(Notification)
+        .where(
+            Notification.recommendation_id == recommendation_id,
+            Notification.read_at.is_(None),
+        )
+        .values(read_at=datetime.now(timezone.utc))
+    )
     db.commit()
     return {"message": "Marked as read"}
 

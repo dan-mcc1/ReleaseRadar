@@ -299,6 +299,8 @@ def list_inbox(
                 "season_number": n.season_number,
                 "episode_id": n.episode_id,
                 "video_key": n.video_key,
+                "recommendation_id": n.recommendation_id,
+                "friendship_id": n.friendship_id,
                 "read_at": n.read_at.isoformat() if n.read_at else None,
                 "created_at": n.created_at.isoformat(),
             }

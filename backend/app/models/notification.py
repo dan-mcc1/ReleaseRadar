@@ -26,6 +26,19 @@ class Notification(Base):
         nullable=True,
     )
     video_key = Column(String, nullable=True)
+    # Source-row pointers for notifications that mirror a row in another table.
+    # CASCADE so deleting/expiring the source automatically removes the inbox
+    # entry, keeping badge counts and history in sync with no stale rows.
+    recommendation_id = Column(
+        Integer,
+        ForeignKey("recommendation.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    friendship_id = Column(
+        Integer,
+        ForeignKey("friendship.id", ondelete="CASCADE"),
+        nullable=True,
+    )
     read_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(
         DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
