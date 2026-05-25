@@ -14,7 +14,7 @@ from app.services.recommendation_service import (
 from app.services.email_service import send_recommendation_email
 from app.services.nav_counts import notify_counts_changed
 from app.services.for_you_service import get_for_you_recommendations
-from app.services.push_service import push_notification
+from app.services.push_service import push_notification, tmdb_poster_url
 from app.models.user import User
 from app.core.limiter import limiter
 from app.schemas.common import (
@@ -87,6 +87,7 @@ def send(
             content_type=body.content_type,
             content_id=body.content_id,
             recommendation_id=result.id,
+            image_url=tmdb_poster_url(body.content_poster_path),
         )
     except Exception:
         # Email + inbox are the source of truth; never let push wreck the response.

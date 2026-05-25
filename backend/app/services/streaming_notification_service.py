@@ -9,7 +9,7 @@ from app.models.show import Show
 from app.models.user import User
 from app.models.watchlist import Watchlist
 from app.services.email_service import send_streaming_alert_email
-from app.services.push_service import push_notification
+from app.services.push_service import push_notification, tmdb_poster_url
 from app.services.tmdb_movies import fetch_movie_from_tmdb
 from app.services.tmdb_tv import fetch_show_from_tmdb
 from app.db.session import SessionLocal
@@ -259,6 +259,7 @@ def refresh_streaming_providers(db: Session) -> None:
                         body=" — ".join(parts),
                         content_type=alert["content_type"],
                         content_id=alert["content_id"],
+                        image_url=tmdb_poster_url(alert.get("poster_path")),
                     )
                 except Exception as e:
                     print(f"[streaming] Failed to push {user.id}: {e}")

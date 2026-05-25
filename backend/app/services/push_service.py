@@ -28,6 +28,18 @@ logger = logging.getLogger(__name__)
 
 VALID_PLATFORMS = {"ios", "android"}
 
+# TMDb image CDN base. w500 is a good size for push thumbnails — large enough
+# to look sharp on retina displays, small enough that APNs's 10 MB attachment
+# limit is never close.
+_TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w500"
+
+
+def tmdb_poster_url(poster_path: str | None) -> str | None:
+    """Turn a TMDb poster_path ('/abc.jpg') into a full HTTPS URL FCM can use."""
+    if not poster_path:
+        return None
+    return f"{_TMDB_IMAGE_BASE}{poster_path}"
+
 
 # ---------------------------------------------------------------------------
 # Device tokens

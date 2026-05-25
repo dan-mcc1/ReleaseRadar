@@ -11,7 +11,7 @@ from app.models.user import User
 from app.models.watchlist import Watchlist
 from app.db.session import SessionLocal
 from app.services.email_service import send_trailer_alert_email
-from app.services.push_service import push_notification
+from app.services.push_service import push_notification, tmdb_poster_url
 from app.services.tmdb_movies import fetch_movie_from_tmdb
 from app.services.tmdb_tv import fetch_show_from_tmdb
 
@@ -215,6 +215,7 @@ def refresh_trailers(db: Session) -> None:
                         content_type=alert["content_type"],
                         content_id=alert["content_id"],
                         video_key=video.get("key"),
+                        image_url=tmdb_poster_url(alert.get("poster_path")),
                     )
                 except Exception as e:
                     print(f"[trailers] Failed to push {user.id}: {e}")

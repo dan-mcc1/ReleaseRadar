@@ -21,6 +21,7 @@ from app.models.season import Season
 from app.models.episode import Episode
 from app.models.notification import Notification as NotificationModel
 from app.services import push_service
+from app.services.push_service import tmdb_poster_url
 from app.services.email_service import (
     send_notification_email,
     send_season_premiere_email,
@@ -669,6 +670,7 @@ def send_season_premiere_alerts_to_all(db: Session, now_utc: datetime | None = N
                         content_type="tv",
                         content_id=alert["show_id"],
                         season_number=alert["season_number"],
+                        image_url=tmdb_poster_url(alert.get("poster_path")),
                     )
         except Exception:
             logger.exception("Season alert failed for user %s", user.id)

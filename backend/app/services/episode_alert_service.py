@@ -21,7 +21,7 @@ from app.models.sent_episode_alert import SentEpisodeAlert
 from app.models.show import Show
 from app.models.user import User
 from app.models.watchlist import Watchlist
-from app.services.push_service import push_notification
+from app.services.push_service import push_notification, tmdb_poster_url
 
 logger = logging.getLogger(__name__)
 
@@ -196,6 +196,7 @@ def dispatch_due_episode_alerts(db: Session, now_utc: datetime | None = None) ->
                         content_id=show.id,
                         season_number=ep.season_number,
                         episode_id=ep.id,
+                        image_url=tmdb_poster_url(show.poster_path),
                     )
                     sent_count += 1
                 except Exception:
