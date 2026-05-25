@@ -53,7 +53,12 @@ export type ReportReason =
   | "other";
 
 export interface SubmitReportPayload {
-  reported_type: "review" | "user";
+  reported_type:
+    | "review"
+    | "user"
+    | "community"
+    | "community_post"
+    | "community_reply";
   reported_id: string;
   reason: ReportReason;
   message?: string;

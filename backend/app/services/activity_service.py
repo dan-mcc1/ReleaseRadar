@@ -1,6 +1,6 @@
 import logging
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, func
+from sqlalchemy import or_, func, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from datetime import datetime, timedelta, timezone
 from app.models.activity import Activity
@@ -76,7 +76,9 @@ def log_activity(
     )
     stmt = stmt.on_conflict_do_update(
         index_elements=["user_id", "activity_type", "content_type", "content_id"],
-        index_where=Activity.activity_type != "episode_watched",
+        # text() instead of `Activity.activity_type != "..."` so the rendered
+        # WHERE matches the partial index WHERE textually on SQLite.
+        index_where=text("activity_type <> 'episode_watched'"),
         set_=dict(
             content_title=stmt.excluded.content_title,
             content_poster_path=stmt.excluded.content_poster_path,
@@ -88,11 +90,12 @@ def log_activity(
     db.flush()
 
 
-def _serialize_activity(a: Activity, username: str) -> dict:
+def _serialize_activity(a: Activity, username: str, display_name: str | None = None) -> dict:
     return {
         "id": a.id,
         "user_id": a.user_id,
         "username": username,
+        "display_name": display_name,
         "activity_type": a.activity_type,
         "content_type": a.content_type,
         "content_id": a.content_id,
@@ -142,14 +145,14 @@ def _visible_friend_ids(db: Session, user_id: str) -> list[str]:
 def get_my_activity(db: Session, user_id: str, limit: int = 50) -> list:
     """Returns only the current user's own activity, newest first."""
     rows = (
-        db.query(Activity, User.username)
+        db.query(Activity, User.username, User.display_name)
         .join(User, User.id == Activity.user_id)
         .filter(Activity.user_id == user_id)
         .order_by(Activity.created_at.desc())
         .limit(limit)
         .all()
     )
-    return [_serialize_activity(a, username) for a, username in rows]
+    return [_serialize_activity(a, username, display_name) for a, username, display_name in rows]
 
 
 def get_activity_feed(db: Session, user_id: str, limit: int = 50) -> list:
@@ -160,7 +163,7 @@ def get_activity_feed(db: Session, user_id: str, limit: int = 50) -> list:
     visible_ids = [user_id] + friend_ids
 
     rows = (
-        db.query(Activity, User.username)
+        db.query(Activity, User.username, User.display_name)
         .join(User, User.id == Activity.user_id)
         .filter(Activity.user_id.in_(visible_ids))
         .order_by(Activity.created_at.desc())
@@ -168,7 +171,7 @@ def get_activity_feed(db: Session, user_id: str, limit: int = 50) -> list:
         .all()
     )
 
-    return [_serialize_activity(a, username) for a, username in rows]
+    return [_serialize_activity(a, username, display_name) for a, username, display_name in rows]
 
 
 def get_friends_activity(db: Session, user_id: str, limit: int = 30) -> list:
@@ -179,7 +182,7 @@ def get_friends_activity(db: Session, user_id: str, limit: int = 30) -> list:
         return []
 
     rows = (
-        db.query(Activity, User.username)
+        db.query(Activity, User.username, User.display_name)
         .join(User, User.id == Activity.user_id)
         .filter(Activity.user_id.in_(friend_ids))
         .order_by(Activity.created_at.desc())
@@ -187,7 +190,7 @@ def get_friends_activity(db: Session, user_id: str, limit: int = 30) -> list:
         .all()
     )
 
-    return [_serialize_activity(a, username) for a, username in rows]
+    return [_serialize_activity(a, username, display_name) for a, username, display_name in rows]
 
 
 def lift_expired_moderation(db: Session) -> None:

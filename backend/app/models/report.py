@@ -36,4 +36,13 @@ class Report(Base):
     __table_args__ = (
         Index("ix_report_status", "status"),
         Index("ix_report_reporter", "reporter_id"),
+        # Covers the duplicate-report check in moderation.py: same reporter +
+        # same target + status == "pending".
+        Index(
+            "ix_report_reporter_target_status",
+            "reporter_id",
+            "reported_type",
+            "reported_id",
+            "status",
+        ),
     )

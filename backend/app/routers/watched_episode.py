@@ -1,5 +1,6 @@
 # app/routers/episode_watched.py
-from fastapi import APIRouter, Depends, HTTPException, Request, Body
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.services.watched_episode_service import (
@@ -19,15 +20,22 @@ from app.services.stats_service import invalidate_stats_cache
 
 router = APIRouter()
 
+EPISODE_NOTES_MAX_LEN = 2000
+
+
+class AnnotateEpisodeBody(BaseModel):
+    rating: float | None = Field(None, ge=0.5, le=5.0)
+    notes: str | None = Field(None, max_length=EPISODE_NOTES_MAX_LEN)
+
 
 # Add an episode as watched
 @router.post("/add")
 @limiter.limit("60/minute")
 def add_episode(
     request: Request,
-    show_id: int,
-    season_number: int,
-    episode_number: int,
+    show_id: int = Query(..., ge=1),
+    season_number: int = Query(..., ge=0),
+    episode_number: int = Query(..., ge=0),
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
@@ -39,9 +47,9 @@ def add_episode(
 # Remove an episode from watched
 @router.delete("/remove")
 def remove_episode(
-    show_id: int,
-    season_number: int,
-    episode_number: int,
+    show_id: int = Query(..., ge=1),
+    season_number: int = Query(..., ge=0),
+    episode_number: int = Query(..., ge=0),
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
@@ -64,8 +72,8 @@ def get_user_watched_episodes(
 @limiter.limit("30/minute")
 def add_season(
     request: Request,
-    show_id: int,
-    season_number: int,
+    show_id: int = Query(..., ge=1),
+    season_number: int = Query(..., ge=0),
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
@@ -75,8 +83,8 @@ def add_season(
 # Remove all episodes in a season from watched
 @router.delete("/season/remove")
 def remove_season(
-    show_id: int,
-    season_number: int,
+    show_id: int = Query(..., ge=1),
+    season_number: int = Query(..., ge=0),
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
@@ -86,7 +94,7 @@ def remove_season(
 # Get next unwatched episode for multiple shows in one request
 @router.get("/next/bulk")
 def get_next_episodes_bulk(
-    show_ids: str,
+    show_ids: str = Query(..., min_length=1, max_length=2000),
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
@@ -118,11 +126,10 @@ def get_next_episode(
 # Update rating and/or notes for a watched episode
 @router.patch("/annotate")
 def annotate_episode(
-    show_id: int,
-    season_number: int,
-    episode_number: int,
-    rating: float | None = Body(None),
-    notes: str | None = Body(None),
+    body: AnnotateEpisodeBody,
+    show_id: int = Query(..., ge=1),
+    season_number: int = Query(..., ge=0),
+    episode_number: int = Query(..., ge=0),
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
@@ -138,14 +145,10 @@ def annotate_episode(
     )
     if not row:
         raise HTTPException(status_code=404, detail="Episode not marked as watched.")
-    if rating is not None:
-        if not (0.5 <= rating <= 5.0):
-            raise HTTPException(status_code=422, detail="Rating must be between 0.5 and 5.0.")
-        row.rating = rating
-    if notes is not None:
-        if len(notes) > 2000:
-            raise HTTPException(status_code=422, detail="Notes must be 2000 characters or fewer.")
-        row.notes = notes.strip() or None
+    if body.rating is not None:
+        row.rating = body.rating
+    if body.notes is not None:
+        row.notes = body.notes.strip() or None
     db.commit()
     db.refresh(row)
     return row

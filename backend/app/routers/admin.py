@@ -3,7 +3,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, case
 from firebase_admin import auth
 
 from app.db.session import get_db
@@ -63,18 +63,20 @@ def get_admin_stats(
     month_ago = now - timedelta(days=30)
     two_weeks_ago = now - timedelta(days=14)
 
-    total_users = db.query(func.count(User.id)).scalar()
-    new_users_7d = (
-        db.query(func.count(User.id)).filter(User.created_at >= week_ago).scalar()
-    )
-    new_users_30d = (
-        db.query(func.count(User.id)).filter(User.created_at >= month_ago).scalar()
-    )
-    email_notif_enabled = (
-        db.query(func.count(User.id))
-        .filter(User.email_notifications == True)
-        .scalar()  # noqa: E712
-    )
+    # User aggregates — four counts collapsed into one scan. case+sum is the
+    # portable spelling of COUNT(*) FILTER (WHERE ...).
+    user_row = db.query(
+        func.count(User.id).label("total"),
+        func.sum(case((User.created_at >= week_ago, 1), else_=0)).label("new_7d"),
+        func.sum(case((User.created_at >= month_ago, 1), else_=0)).label("new_30d"),
+        func.sum(case((User.email_notifications == True, 1), else_=0)).label(  # noqa: E712
+            "email_notif_enabled"
+        ),
+    ).one()
+    total_users = int(user_row.total or 0)
+    new_users_7d = int(user_row.new_7d or 0)
+    new_users_30d = int(user_row.new_30d or 0)
+    email_notif_enabled = int(user_row.email_notif_enabled or 0)
 
     tier_rows = (
         db.query(User.subscription_tier, func.count(User.id))
@@ -88,17 +90,15 @@ def get_admin_stats(
     total_episodes_watched = db.query(func.count(EpisodeWatched.id)).scalar()
     total_currently_watching = db.query(func.count(CurrentlyWatching.id)).scalar()
 
-    total_activity = db.query(func.count(Activity.id)).scalar()
-    activity_7d = (
-        db.query(func.count(Activity.id))
-        .filter(Activity.created_at >= week_ago)
-        .scalar()
-    )
-    activity_30d = (
-        db.query(func.count(Activity.id))
-        .filter(Activity.created_at >= month_ago)
-        .scalar()
-    )
+    # Activity aggregates — three counts in one scan.
+    activity_row = db.query(
+        func.count(Activity.id).label("total"),
+        func.sum(case((Activity.created_at >= week_ago, 1), else_=0)).label("last_7d"),
+        func.sum(case((Activity.created_at >= month_ago, 1), else_=0)).label("last_30d"),
+    ).one()
+    total_activity = int(activity_row.total or 0)
+    activity_7d = int(activity_row.last_7d or 0)
+    activity_30d = int(activity_row.last_30d or 0)
 
     activity_type_rows = (
         db.query(Activity.activity_type, func.count(Activity.id))
@@ -107,16 +107,13 @@ def get_admin_stats(
     )
     activity_by_type = {t: c for t, c in activity_type_rows}
 
-    total_friendships = (
-        db.query(func.count(Friendship.id))
-        .filter(Friendship.status == "accepted")
-        .scalar()
-    )
-    total_followers = (
-        db.query(func.count(Friendship.id))
-        .filter(Friendship.status == "following")
-        .scalar()
-    )
+    # Friendship aggregates — two filtered counts in one scan.
+    friendship_row = db.query(
+        func.sum(case((Friendship.status == "accepted", 1), else_=0)).label("accepted"),
+        func.sum(case((Friendship.status == "following", 1), else_=0)).label("following"),
+    ).one()
+    total_friendships = int(friendship_row.accepted or 0)
+    total_followers = int(friendship_row.following or 0)
 
     top_shows = (
         db.query(Show.id, Show.name, Show.tracking_count)
@@ -205,9 +202,62 @@ def get_reports(
         .all()
     )
 
+    # ── Batch up all user/review lookups so we don't hit N+1 ──────────────
+    reporter_ids: set[str] = {r.reporter_id for r in reports if r.reporter_id}
+    review_report_ids: list[int] = []
+    user_report_ids: set[str] = set()
+    for r in reports:
+        if r.reported_type == "review":
+            try:
+                review_report_ids.append(int(r.reported_id))
+            except (ValueError, TypeError):
+                pass
+        elif r.reported_type == "user" and r.reported_id:
+            user_report_ids.add(r.reported_id)
+
+    reviews_by_id: dict[int, Review] = {}
+    if review_report_ids:
+        reviews_by_id = {
+            rv.id: rv
+            for rv in db.query(Review).filter(Review.id.in_(review_report_ids)).all()
+        }
+
+    # All users we need: reporters, review authors, and reported users
+    all_user_ids = (
+        reporter_ids
+        | user_report_ids
+        | {rv.user_id for rv in reviews_by_id.values()}
+    )
+    users_by_id: dict[str, User] = {}
+    if all_user_ids:
+        users_by_id = {
+            u.id: u for u in db.query(User).filter(User.id.in_(all_user_ids)).all()
+        }
+
+    # Per-target review/rating samples (kept per-user because each needs its
+    # own LIMIT 20 ORDER BY; deduped across reports about the same user).
+    target_reviews_by_uid: dict[str, list[Review]] = {}
+    target_ratings_by_uid: dict[str, list[Watched]] = {}
+    for tid in user_report_ids:
+        if tid in users_by_id:
+            target_reviews_by_uid[tid] = (
+                db.query(Review)
+                .filter(Review.user_id == tid)
+                .order_by(Review.created_at.desc())
+                .limit(20)
+                .all()
+            )
+            target_ratings_by_uid[tid] = (
+                db.query(Watched)
+                .filter(Watched.user_id == tid, Watched.rating.isnot(None))
+                .order_by(Watched.watched_at.desc())
+                .limit(20)
+                .all()
+            )
+
     result = []
     for r in reports:
-        reporter = db.query(User).filter(User.id == r.reporter_id).first()
+        reporter = users_by_id.get(r.reporter_id) if r.reporter_id else None
         payload = {
             "id": r.id,
             "reporter": reporter.username if reporter else r.reporter_id,
@@ -222,14 +272,13 @@ def get_reports(
         }
 
         if r.reported_type == "review":
+            review = None
             try:
-                review = (
-                    db.query(Review).filter(Review.id == int(r.reported_id)).first()
-                )
+                review = reviews_by_id.get(int(r.reported_id))
             except (ValueError, TypeError):
-                review = None
+                pass
             if review:
-                author = db.query(User).filter(User.id == review.user_id).first()
+                author = users_by_id.get(review.user_id)
                 payload["review"] = {
                     "id": review.id,
                     "author": author.username if author else review.user_id,
@@ -255,22 +304,10 @@ def get_reports(
                 payload["review"] = None
 
         elif r.reported_type == "user":
-            target = db.query(User).filter(User.id == r.reported_id).first()
+            target = users_by_id.get(r.reported_id)
             if target:
-                reviews = (
-                    db.query(Review)
-                    .filter(Review.user_id == target.id)
-                    .order_by(Review.created_at.desc())
-                    .limit(20)
-                    .all()
-                )
-                ratings = (
-                    db.query(Watched)
-                    .filter(Watched.user_id == target.id, Watched.rating.isnot(None))
-                    .order_by(Watched.watched_at.desc())
-                    .limit(20)
-                    .all()
-                )
+                reviews = target_reviews_by_uid.get(target.id, [])
+                ratings = target_ratings_by_uid.get(target.id, [])
                 payload["reported_user"] = {
                     "id": target.id,
                     "username": target.username,
@@ -614,10 +651,18 @@ def list_appeals(
         .limit(limit)
         .all()
     )
+
+    appellant_ids = {a.user_id for a in appeals if a.user_id}
+    appellants_by_id: dict[str, User] = {}
+    if appellant_ids:
+        appellants_by_id = {
+            u.id: u for u in db.query(User).filter(User.id.in_(appellant_ids)).all()
+        }
+
     result = []
+    now = datetime.now(timezone.utc)
     for a in appeals:
-        appellant = db.query(User).filter(User.id == a.user_id).first()
-        now = datetime.now(timezone.utc)
+        appellant = appellants_by_id.get(a.user_id)
         is_silenced = appellant and (
             appellant.is_silenced
             or (appellant.silenced_until is not None and now < appellant.silenced_until)
@@ -734,14 +779,23 @@ def admin_delete_user(
     ):
         tracked.add((row.content_type, row.content_id))
 
-    # Decrement tracking counts
+    # Decrement tracking counts — batch load instead of N queries per item.
+    movie_ids = [cid for ct, cid in tracked if ct == "movie"]
+    show_ids = [cid for ct, cid in tracked if ct == "tv"]
+    movies_by_id = {
+        m.id: m for m in db.query(Movie).filter(Movie.id.in_(movie_ids)).all()
+    } if movie_ids else {}
+    shows_by_id = {
+        s.id: s for s in db.query(Show).filter(Show.id.in_(show_ids)).all()
+    } if show_ids else {}
+
     for content_type, content_id in tracked:
         if content_type == "movie":
-            movie = db.query(Movie).filter_by(id=content_id).first()
+            movie = movies_by_id.get(content_id)
             if movie:
                 movie.tracking_count = max(0, (movie.tracking_count or 1) - 1)
         elif content_type == "tv":
-            show = db.query(Show).filter_by(id=content_id).first()
+            show = shows_by_id.get(content_id)
             if show:
                 show.tracking_count = max(0, (show.tracking_count or 1) - 1)
 
@@ -763,18 +817,33 @@ def admin_delete_user(
         {Report.reporter_id: None}, synchronize_session=False
     )
 
-    # Remove shows/movies no longer tracked by anyone
-    for content_type, content_id in tracked:
-        if content_type == "movie":
-            movie = db.query(Movie).filter_by(id=content_id).first()
-            if movie and movie.tracking_count <= 0:
-                db.delete(movie)
-        elif content_type == "tv":
-            show = db.query(Show).filter_by(id=content_id).first()
-            if show and show.tracking_count <= 0:
-                db.query(EpisodeWatched).filter_by(show_id=content_id).delete()
-                db.query(Episode).filter_by(show_id=content_id).delete()
-                db.delete(show)
+    # Remove shows/movies no longer tracked by anyone. Re-use the maps loaded
+    # above so we don't requery every row. Bulk deletes are all issued before
+    # any show DELETE so the FK from episode -> show isn't violated by an
+    # autoflush mid-cleanup.
+    orphan_movie_ids = [
+        cid for ct, cid in tracked
+        if ct == "movie" and (m := movies_by_id.get(cid)) and m.tracking_count <= 0
+    ]
+    orphan_show_ids = [
+        cid for ct, cid in tracked
+        if ct == "tv" and (s := shows_by_id.get(cid)) and s.tracking_count <= 0
+    ]
+
+    if orphan_show_ids:
+        db.query(EpisodeWatched).filter(
+            EpisodeWatched.show_id.in_(orphan_show_ids)
+        ).delete(synchronize_session=False)
+        db.query(Episode).filter(Episode.show_id.in_(orphan_show_ids)).delete(
+            synchronize_session=False
+        )
+        db.query(Show).filter(Show.id.in_(orphan_show_ids)).delete(
+            synchronize_session=False
+        )
+    if orphan_movie_ids:
+        db.query(Movie).filter(Movie.id.in_(orphan_movie_ids)).delete(
+            synchronize_session=False
+        )
 
     db.delete(target)
     db.commit()

@@ -12,6 +12,7 @@ from app.models.episode import Episode
 from app.models.episode_watched import EpisodeWatched
 from app.models.provider import ShowProvider, MovieProvider
 from app.models.user import User
+from app.models.activity import Activity
 from app.db.session import _is_sqlite
 from app.services.media_serializers import (
     serialize_show_list,
@@ -259,6 +260,15 @@ def remove_from_watchlist(
 
     db.execute(text("DELETE FROM watchlist WHERE id = :id"), {"id": row.watchlist_id})
 
+    # If the user added then removed this title, the "want_to_watch" entry in
+    # the activity feed is now noise — purge it.
+    db.query(Activity).filter(
+        Activity.user_id == user_id,
+        Activity.activity_type == "want_to_watch",
+        Activity.content_type == content_type,
+        Activity.content_id == content_id,
+    ).delete(synchronize_session=False)
+
     if not bool(row.still_tracked):
         if content_type == "tv":
             db.query(EpisodeWatched).filter_by(user_id=user_id, show_id=content_id).delete()
@@ -465,21 +475,19 @@ def get_tv_calendar(
     Return TV shows in the user's watchlist + currently-watching list with episodes
     in the requested date window. Shows with no episodes in the window are omitted.
     """
-    watchlist_ids = {
-        row.content_id
-        for row in db.query(Watchlist.content_id)
-        .filter(Watchlist.user_id == user_id, Watchlist.content_type == "tv")
-        .all()
-    }
-    cw_ids = {
-        row.content_id
-        for row in db.query(CurrentlyWatching.content_id)
-        .filter(
-            CurrentlyWatching.user_id == user_id, CurrentlyWatching.content_type == "tv"
+    # One UNION roundtrip for tracked TV show IDs (was two SELECTs).
+    watchlist_q = (
+        select(Watchlist.content_id)
+        .where(Watchlist.user_id == user_id, Watchlist.content_type == "tv")
+    )
+    cw_q = (
+        select(CurrentlyWatching.content_id)
+        .where(
+            CurrentlyWatching.user_id == user_id,
+            CurrentlyWatching.content_type == "tv",
         )
-        .all()
-    }
-    show_ids = list(watchlist_ids | cw_ids)
+    )
+    show_ids = [row[0] for row in db.execute(watchlist_q.union(cw_q)).all()]
 
     if not show_ids:
         return []

@@ -73,7 +73,7 @@ class TestWatchlistAdd:
             "/watchlist/add",
             json={"content_type": "podcast", "content_id": 550},
         )
-        assert r.status_code == 400
+        assert r.status_code == 422
 
     def test_add_increments_tracking_count(self, client, db, seed_movie):
         from app.models.movie import Movie

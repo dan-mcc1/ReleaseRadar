@@ -34,6 +34,19 @@ class Settings(BaseSettings):
     STRIPE_PREMIUM_MONTHLY_PRICE_ID: str = ""
     STRIPE_PREMIUM_YEARLY_PRICE_ID: str = ""
 
+    SENTRY_DSN: str = ""
+    SENTRY_TRACES_SAMPLE_RATE: float = 0.1
+
+    # Warn if a single request issues more than this many DB queries — useful
+    # for catching N+1 patterns in real traffic. Set to 0 to disable.
+    QUERY_COUNT_WARN_THRESHOLD: int = 25
+
+    # Whether this process should run the background scheduler loops (daily
+    # digest, episode refresh, trailer/streaming notifications, etc.). Set to
+    # false on every replica except one when scaling out horizontally, or the
+    # loops will fire N times in parallel.
+    RUN_SCHEDULERS: bool = True
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

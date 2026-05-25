@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, Body, HTTPException, Query, Request
+from typing import Literal
+from fastapi import APIRouter, Depends, Query, Request
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
@@ -12,6 +14,13 @@ from app.core.limiter import limiter
 
 router = APIRouter()
 
+FavoriteContentType = Literal["movie", "tv", "collection"]
+
+
+class FavoriteRef(BaseModel):
+    content_type: FavoriteContentType
+    content_id: int = Field(..., ge=1)
+
 
 @router.get("")
 def get_user_favorites(
@@ -23,8 +32,8 @@ def get_user_favorites(
 
 @router.get("/status")
 def get_favorite_status(
-    content_type: str = Query(...),
-    content_id: int = Query(...),
+    content_type: FavoriteContentType = Query(...),
+    content_id: int = Query(..., ge=1),
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
@@ -35,23 +44,17 @@ def get_favorite_status(
 @limiter.limit("10/minute")
 def add_favorite(
     request: Request,
-    content_type: str = Body(...),
-    content_id: int = Body(...),
+    body: FavoriteRef,
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
-    if content_type not in ("movie", "tv"):
-        raise HTTPException(
-            status_code=400, detail="content_type must be 'movie' or 'tv'"
-        )
-    return add_to_favorites(db, uid, content_type, content_id)
+    return add_to_favorites(db, uid, body.content_type, body.content_id)
 
 
 @router.delete("/remove")
 def remove_favorite(
-    content_type: str = Body(...),
-    content_id: int = Body(...),
+    body: FavoriteRef,
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
-    return remove_from_favorites(db, uid, content_type, content_id)
+    return remove_from_favorites(db, uid, body.content_type, body.content_id)

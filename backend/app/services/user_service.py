@@ -58,6 +58,18 @@ def update_user_email(db: Session, user_id: str, new_email: str):
     return user
 
 
+def update_display_name(db: Session, user_id: str, new_display_name: str | None):
+    """Set or clear a user's display name. Pass an empty string or None to clear."""
+    user = db.get(User, user_id)
+    if not user:
+        return None
+    cleaned = (new_display_name or "").strip()
+    user.display_name = cleaned or None
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 def update_username(db: Session, user_id: str, new_username: str):
     """
     Set or update the username of a user. Returns None if username is taken.
@@ -167,6 +179,7 @@ def get_profile_preview_data(db: Session, user_id: str, preview_limit: int = 5) 
                 wl.added_at            AS ts,
                 NULL::text             AS friend_id,
                 NULL::text             AS friend_username,
+                NULL::text             AS friend_display_name,
                 NULL::integer          AS friendship_id,
                 ROW_NUMBER() OVER (ORDER BY wl.added_at DESC) AS rn,
                 COUNT(*)    OVER ()                           AS section_total
@@ -179,7 +192,7 @@ def get_profile_preview_data(db: Session, user_id: str, preview_limit: int = 5) 
 
             SELECT
                 'watchlist_show', s.id, s.name, s.poster_path, wl.added_at,
-                NULL, NULL, NULL,
+                NULL, NULL, NULL, NULL,
                 ROW_NUMBER() OVER (ORDER BY wl.added_at DESC),
                 COUNT(*) OVER ()
             FROM show s
@@ -191,7 +204,7 @@ def get_profile_preview_data(db: Session, user_id: str, preview_limit: int = 5) 
 
             SELECT
                 'watched_movie', m.id, m.title, m.poster_path, w.watched_at,
-                NULL, NULL, NULL,
+                NULL, NULL, NULL, NULL,
                 ROW_NUMBER() OVER (ORDER BY w.watched_at DESC),
                 COUNT(*) OVER ()
             FROM movie m
@@ -203,7 +216,7 @@ def get_profile_preview_data(db: Session, user_id: str, preview_limit: int = 5) 
 
             SELECT
                 'watched_show', s.id, s.name, s.poster_path, w.watched_at,
-                NULL, NULL, NULL,
+                NULL, NULL, NULL, NULL,
                 ROW_NUMBER() OVER (ORDER BY w.watched_at DESC),
                 COUNT(*) OVER ()
             FROM show s
@@ -215,7 +228,7 @@ def get_profile_preview_data(db: Session, user_id: str, preview_limit: int = 5) 
 
             SELECT
                 'favorite_movie', m.id, m.title, m.poster_path, NULL,
-                NULL, NULL, NULL, 1, 0
+                NULL, NULL, NULL, NULL, 1, 0
             FROM movie m
             JOIN favorite f ON f.content_id = m.id
                            AND f.content_type = 'movie'
@@ -225,7 +238,7 @@ def get_profile_preview_data(db: Session, user_id: str, preview_limit: int = 5) 
 
             SELECT
                 'favorite_show', s.id, s.name, s.poster_path, NULL,
-                NULL, NULL, NULL, 1, 0
+                NULL, NULL, NULL, NULL, 1, 0
             FROM show s
             JOIN favorite f ON f.content_id = s.id
                            AND f.content_type = 'tv'
@@ -234,8 +247,18 @@ def get_profile_preview_data(db: Session, user_id: str, preview_limit: int = 5) 
             UNION ALL
 
             SELECT
+                'favorite_collection', c.id, c.name, c.poster_path, NULL,
+                NULL, NULL, NULL, NULL, 1, 0
+            FROM collection c
+            JOIN favorite f ON f.content_id = c.id
+                           AND f.content_type = 'collection'
+                           AND f.user_id = :uid
+
+            UNION ALL
+
+            SELECT
                 'friend', NULL, NULL, NULL, NULL,
-                u.id, u.username, fr.id, 1, 0
+                u.id, u.username, u.display_name, fr.id, 1, 0
             FROM friendship fr
             JOIN "user" u ON u.id = fr.addressee_id
             WHERE fr.requester_id = :uid AND fr.status = 'accepted'
@@ -244,7 +267,7 @@ def get_profile_preview_data(db: Session, user_id: str, preview_limit: int = 5) 
 
             SELECT
                 'friend', NULL, NULL, NULL, NULL,
-                u.id, u.username, fr.id, 1, 0
+                u.id, u.username, u.display_name, fr.id, 1, 0
             FROM friendship fr
             JOIN "user" u ON u.id = fr.requester_id
             WHERE fr.addressee_id = :uid AND fr.status = 'accepted'
@@ -252,14 +275,14 @@ def get_profile_preview_data(db: Session, user_id: str, preview_limit: int = 5) 
         SELECT *
         FROM preview
         WHERE rn <= :lim
-           OR section IN ('favorite_movie', 'favorite_show', 'friend')
+           OR section IN ('favorite_movie', 'favorite_show', 'favorite_collection', 'friend')
     """)
 
     rows = db.execute(sql, {"uid": user_id, "lim": preview_limit}).fetchall()
 
     watchlist_movies, watchlist_shows = [], []
     watched_movies, watched_shows = [], []
-    favorite_movies, favorite_shows = [], []
+    favorite_movies, favorite_shows, favorite_collections = [], [], []
     friends = []
     wl_movie_total = wl_show_total = 0
     w_movie_total = w_show_total = 0
@@ -281,8 +304,10 @@ def get_profile_preview_data(db: Session, user_id: str, preview_limit: int = 5) 
             favorite_movies.append({"id": r.content_id, "title": r.display_name, "poster_path": r.poster_path})
         elif r.section == "favorite_show":
             favorite_shows.append({"id": r.content_id, "name": r.display_name, "poster_path": r.poster_path})
+        elif r.section == "favorite_collection":
+            favorite_collections.append({"id": r.content_id, "name": r.display_name, "poster_path": r.poster_path})
         elif r.section == "friend":
-            friends.append({"friendship_id": r.friendship_id, "friend": {"id": r.friend_id, "username": r.friend_username}})
+            friends.append({"friendship_id": r.friendship_id, "friend": {"id": r.friend_id, "username": r.friend_username, "display_name": r.friend_display_name}})
 
     return {
         "watchlist": {
@@ -297,7 +322,11 @@ def get_profile_preview_data(db: Session, user_id: str, preview_limit: int = 5) 
             "total_movies": w_movie_total,
             "total_shows": w_show_total,
         },
-        "favorites": {"movies": favorite_movies, "shows": favorite_shows},
+        "favorites": {
+            "movies": favorite_movies,
+            "shows": favorite_shows,
+            "collections": favorite_collections,
+        },
         "friends": friends,
     }
 
@@ -461,10 +490,14 @@ def search_users_by_username(
     """
     blocked_subquery = db.query(Block.blocked_id).filter(Block.blocker_id == current_user_id)
     blocker_subquery = db.query(Block.blocker_id).filter(Block.blocked_id == current_user_id)
+    pattern = f"%{query}%"
     return (
         db.query(User)
         .filter(
-            User.username.ilike(f"%{query}%"),
+            or_(
+                User.username.ilike(pattern),
+                User.display_name.ilike(pattern),
+            ),
             User.id != current_user_id,
             User.username.isnot(None),
             User.id.notin_(blocked_subquery),

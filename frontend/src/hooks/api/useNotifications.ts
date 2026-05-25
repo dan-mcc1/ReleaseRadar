@@ -12,6 +12,7 @@ export interface NotificationPrefs {
   notify_trailers: boolean;
   digest_hour: number;
   digest_timezone: string;
+  hide_spoilers: boolean;
 }
 
 export function useNotificationPrefs() {

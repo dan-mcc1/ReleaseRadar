@@ -26,6 +26,7 @@ import ListFilterPanel, {
 import { usePageTitle } from "../hooks/usePageTitle";
 import {
   useWatchlist,
+  useCurrentlyWatching,
   useRemoveFromList,
   useReorderWatchlist,
 } from "../hooks/api/useLists";
@@ -35,7 +36,8 @@ import {
 } from "../hooks/api/useBingePlan";
 import { useMyProviderIds } from "../hooks/api/useStreamingServices";
 
-type TabType = "up_next" | "movies" | "shows" | "all";
+type TabType = "up_next" | "currently_watching" | "movies" | "shows" | "all";
+type ListType = "watchlist" | "currently_watching";
 type SortType =
   | "default"
   | "added_desc"
@@ -53,6 +55,7 @@ type SortType =
 
 type CombinedItem = (Movie | Show) & {
   _contentType: "movie" | "tv";
+  _listType: ListType;
   sort_key: number;
   watchlist_id: number;
 };
@@ -133,6 +136,8 @@ function buildCombined(
   movies: Movie[],
   shows: Show[],
   query: string,
+  cwMovieIds: Set<number>,
+  cwShowIds: Set<number>,
 ): CombinedItem[] {
   const q = query.toLowerCase();
   const filteredMovies = movies
@@ -140,6 +145,7 @@ function buildCombined(
     .map((m) => ({
       ...m,
       _contentType: "movie" as const,
+      _listType: (cwMovieIds.has(m.id) ? "currently_watching" : "watchlist") as ListType,
       sort_key: m.sort_key ?? 0,
       watchlist_id: m.watchlist_id!,
     }));
@@ -148,6 +154,7 @@ function buildCombined(
     .map((s) => ({
       ...s,
       _contentType: "tv" as const,
+      _listType: (cwShowIds.has(s.id) ? "currently_watching" : "watchlist") as ListType,
       sort_key: s.sort_key ?? 0,
       watchlist_id: s.watchlist_id!,
     }));
@@ -177,6 +184,20 @@ function getStatusText(
   return `${p.remaining_episodes} ep${p.remaining_episodes === 1 ? "" : "s"} left`;
 }
 
+function WatchingBadge() {
+  return (
+    <div
+      className="absolute top-2 right-2 px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-primary-500 text-neutral-950 flex items-center gap-0.5 leading-none pointer-events-none shadow"
+      title="Currently watching"
+    >
+      <svg className="w-2 h-2" fill="currentColor" viewBox="0 0 24 24">
+        <path d="M8 5v14l11-7z" />
+      </svg>
+      Watching
+    </div>
+  );
+}
+
 const WatchlistCard = memo(function WatchlistCard({
   item,
   bingePlans,
@@ -186,7 +207,7 @@ const WatchlistCard = memo(function WatchlistCard({
   item: CombinedItem;
   bingePlans?: Record<string, ShowProgress>;
   onNavigate: (type: "movie" | "tv", id: number) => void;
-  onRemove: (type: "movie" | "tv", id: number) => void;
+  onRemove: (type: "movie" | "tv", id: number, listType: ListType) => void;
 }) {
   const progress = getProgress(item, bingePlans);
   const statusText = getStatusText(item, bingePlans);
@@ -243,11 +264,14 @@ const WatchlistCard = memo(function WatchlistCard({
           </div>
         )}
 
+        {/* Currently watching badge (only when not caught up) */}
+        {item._listType === "currently_watching" && !isCaughtUp && <WatchingBadge />}
+
         {/* Remove button */}
         <button
           onClick={(e) => {
             e.stopPropagation();
-            onRemove(item._contentType, item.id);
+            onRemove(item._contentType, item.id, item._listType);
           }}
           title="Remove from watchlist"
           className="absolute top-2 left-2 w-6 h-6 rounded-full bg-black/70 text-neutral-400 flex items-center justify-center opacity-0 group-hover/card:opacity-100 transition-opacity hover:text-white hover:bg-black/90"
@@ -315,7 +339,7 @@ const SortableWatchlistCard = memo(function SortableWatchlistCard({
   isLast: boolean;
   isDragDisabled?: boolean;
   onNavigate: (type: "movie" | "tv", id: number) => void;
-  onRemove: (type: "movie" | "tv", id: number) => void;
+  onRemove: (type: "movie" | "tv", id: number, listType: ListType) => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
   onMoveToTop: () => void;
@@ -383,16 +407,19 @@ const SortableWatchlistCard = memo(function SortableWatchlistCard({
           </div>
         )}
 
-        {/* Rank badge */}
-        {!isCaughtUp && (
+        {/* Rank badge — only for watchlist items */}
+        {!isCaughtUp && item._listType === "watchlist" && (
           <div className="absolute top-2 right-2 min-w-[1.5rem] h-5 px-1.5 rounded-full bg-black/60 text-neutral-300 flex items-center justify-center text-[10px] font-bold leading-none pointer-events-none">
             #{rank}
           </div>
         )}
 
+        {/* Currently watching badge */}
+        {!isCaughtUp && item._listType === "currently_watching" && <WatchingBadge />}
+
         {/* Remove button */}
         <button
-          onClick={(e) => { e.stopPropagation(); onRemove(item._contentType, item.id); }}
+          onClick={(e) => { e.stopPropagation(); onRemove(item._contentType, item.id, item._listType); }}
           onPointerDown={(e) => e.stopPropagation()}
           title="Remove from watchlist"
           className="absolute top-2 left-2 w-6 h-6 rounded-full bg-black/70 text-neutral-400 flex items-center justify-center opacity-0 group-hover/card:opacity-100 transition-opacity hover:text-white hover:bg-black/90"
@@ -421,7 +448,8 @@ const SortableWatchlistCard = memo(function SortableWatchlistCard({
             {statusText}
           </p>
         )}
-        {/* Reorder controls */}
+        {/* Reorder controls — only for watchlist items */}
+        {item._listType === "watchlist" && (
         <div
           className="flex items-center gap-1 mt-1.5 opacity-0 group-hover/card:opacity-100 transition-opacity"
           onPointerDown={(e) => e.stopPropagation()}
@@ -457,6 +485,7 @@ const SortableWatchlistCard = memo(function SortableWatchlistCard({
             </svg>
           </button>
         </div>
+        )}
       </div>
     </div>
   );
@@ -466,12 +495,39 @@ export default function Watchlist() {
   usePageTitle("Watchlist");
   const navigate = useNavigate();
   const { data, isPending: loading } = useWatchlist();
+  const { data: cwData } = useCurrentlyWatching();
   const myProviderIds = useMyProviderIds();
   const results = data ?? { movies: [], shows: [] };
+  const cwResults = cwData ?? { movies: [], shows: [] };
+  const cwMovieIds = useMemo(
+    () => new Set(cwResults.movies.map((m) => m.id)),
+    [cwResults.movies],
+  );
+  const cwShowIds = useMemo(
+    () => new Set(cwResults.shows.map((s) => s.id)),
+    [cwResults.shows],
+  );
+  // Currently-watching items that aren't also on the watchlist (avoid duplicates
+  // for shows that auto-promote from watchlist → currently_watching).
+  const cwOnlyMovies = useMemo(
+    () =>
+      cwResults.movies.filter(
+        (m) => !results.movies.some((wm) => wm.id === m.id),
+      ),
+    [cwResults.movies, results.movies],
+  );
+  const cwOnlyShows = useMemo(
+    () =>
+      cwResults.shows.filter((s) => !results.shows.some((ws) => ws.id === s.id)),
+    [cwResults.shows, results.shows],
+  );
   const removeFromList = useRemoveFromList();
   const reorderWatchlist = useReorderWatchlist();
 
-  const tvShowIds = results.shows.map((s) => s.id);
+  const tvShowIds = useMemo(
+    () => [...new Set([...results.shows.map((s) => s.id), ...cwResults.shows.map((s) => s.id)])],
+    [results.shows, cwResults.shows],
+  );
   const { data: bingePlans } = useShowProgressBulk(tvShowIds);
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = (searchParams.get("tab") as TabType) ?? "all";
@@ -506,10 +562,10 @@ export default function Watchlist() {
   );
 
   const onRemove = useCallback(
-    async (type: "tv" | "movie", content_id: number) => {
+    async (type: "tv" | "movie", content_id: number, listType: ListType = "watchlist") => {
       try {
         await removeFromList.mutateAsync({
-          list: "watchlist",
+          list: listType === "currently_watching" ? "currently-watching" : "watchlist",
           contentType: type,
           contentId: content_id,
         });
@@ -629,9 +685,11 @@ export default function Watchlist() {
             applyFilters(results.movies, filters, myProviderIds),
             applyFilters(results.shows, filters, myProviderIds),
             query,
+            cwMovieIds,
+            cwShowIds,
           )
         : [],
-    [isMyOrder, results.movies, results.shows, query, filters, myProviderIds],
+    [isMyOrder, results.movies, results.shows, query, filters, myProviderIds, cwMovieIds, cwShowIds],
   );
   const combinedByType = useMemo(
     () => ({
@@ -641,49 +699,86 @@ export default function Watchlist() {
     [combinedItems],
   );
 
+  // Currently-watching items shaped as CombinedItem (no watchlist_id / sort_key)
+  const cwFilteredMovies = useMemo(
+    () =>
+      applySort(
+        applyFilters(
+          cwOnlyMovies.filter((m) => m.title.toLowerCase().includes(q)),
+          filters,
+          myProviderIds,
+        ),
+        sort,
+        bingePlans,
+      ),
+    [cwOnlyMovies, q, filters, myProviderIds, sort, bingePlans],
+  );
+  const cwFilteredShows = useMemo(
+    () =>
+      applySort(
+        applyFilters(
+          cwOnlyShows.filter((s) => s.name.toLowerCase().includes(q)),
+          filters,
+          myProviderIds,
+        ),
+        sort,
+        bingePlans,
+      ),
+    [cwOnlyShows, q, filters, myProviderIds, sort, bingePlans],
+  );
+
+  function tagCW(items: (Movie | Show)[], type: "movie" | "tv"): CombinedItem[] {
+    return items.map((it) => ({
+      ...(it as Movie | Show),
+      _contentType: type,
+      _listType: "currently_watching" as ListType,
+      sort_key: Number.MAX_SAFE_INTEGER, // sorts after watchlist in my_order
+      watchlist_id: 0,
+    }));
+  }
+
+  function tagWL(items: (Movie | Show)[], type: "movie" | "tv"): CombinedItem[] {
+    return items.map((it) => {
+      const onCW =
+        type === "movie" ? cwMovieIds.has(it.id) : cwShowIds.has(it.id);
+      return {
+        ...(it as Movie | Show),
+        _contentType: type,
+        _listType: (onCW ? "currently_watching" : "watchlist") as ListType,
+        sort_key: it.sort_key ?? 0,
+        watchlist_id: it.watchlist_id!,
+      };
+    });
+  }
+
   // Grid items for non-my-order views, and for up_next regardless of sort
   const gridItems: CombinedItem[] = useMemo(() => {
-    if (isMyOrder && activeTab !== "up_next") return [];
+    if (isMyOrder && activeTab !== "up_next" && activeTab !== "currently_watching") return [];
     switch (activeTab) {
       case "up_next":
-        return upNextShows.map((s) => ({
-          ...s,
-          _contentType: "tv" as const,
-          sort_key: s.sort_key ?? 0,
-          watchlist_id: s.watchlist_id!,
-        }));
+        return tagWL(upNextShows, "tv");
+      case "currently_watching":
+        return [...tagWL(filteredMovies.filter((m) => cwMovieIds.has(m.id)), "movie"),
+                ...tagWL(filteredShows.filter((s) => cwShowIds.has(s.id)), "tv"),
+                ...tagCW(cwFilteredMovies, "movie"),
+                ...tagCW(cwFilteredShows, "tv")];
       case "movies":
-        return filteredMovies.map((m) => ({
-          ...m,
-          _contentType: "movie" as const,
-          sort_key: m.sort_key ?? 0,
-          watchlist_id: m.watchlist_id!,
-        }));
+        return [...tagWL(filteredMovies, "movie"), ...tagCW(cwFilteredMovies, "movie")];
       case "shows":
-        return filteredShows.map((s) => ({
-          ...s,
-          _contentType: "tv" as const,
-          sort_key: s.sort_key ?? 0,
-          watchlist_id: s.watchlist_id!,
-        }));
+        return [...tagWL(filteredShows, "tv"), ...tagCW(cwFilteredShows, "tv")];
       case "all":
       default:
         return [
-          ...filteredMovies.map((m) => ({
-            ...m,
-            _contentType: "movie" as const,
-            sort_key: m.sort_key ?? 0,
-            watchlist_id: m.watchlist_id!,
-          })),
-          ...filteredShows.map((s) => ({
-            ...s,
-            _contentType: "tv" as const,
-            sort_key: s.sort_key ?? 0,
-            watchlist_id: s.watchlist_id!,
-          })),
+          ...tagWL(filteredMovies, "movie"),
+          ...tagWL(filteredShows, "tv"),
+          ...tagCW(cwFilteredMovies, "movie"),
+          ...tagCW(cwFilteredShows, "tv"),
         ];
     }
-  }, [isMyOrder, activeTab, filteredMovies, filteredShows, upNextShows]);
+  }, [
+    isMyOrder, activeTab, filteredMovies, filteredShows, upNextShows,
+    cwFilteredMovies, cwFilteredShows, cwMovieIds, cwShowIds,
+  ]);
 
   // My order filtered items for movies/shows tabs
   const myOrderFilteredItems =
@@ -702,19 +797,24 @@ export default function Watchlist() {
     [results.shows, bingePlans],
   );
 
+  const cwCount = cwResults.movies.length + cwResults.shows.length;
+  const totalIncludingCW = totalCount + cwOnlyMovies.length + cwOnlyShows.length;
+
   const tabs: { id: TabType; label: string; count: number }[] = [
     { id: "up_next", label: "Up next", count: upNextCount },
-    { id: "all", label: "All", count: totalCount },
-    { id: "shows", label: "Shows", count: results.shows.length },
-    { id: "movies", label: "Movies", count: results.movies.length },
+    { id: "currently_watching", label: "Currently watching", count: cwCount },
+    { id: "all", label: "All", count: totalIncludingCW },
+    { id: "shows", label: "Shows", count: results.shows.length + cwOnlyShows.length },
+    { id: "movies", label: "Movies", count: results.movies.length + cwOnlyMovies.length },
   ];
 
   const hasResults = isMyOrder
     ? activeTab === "all"
-      ? combinedItems.length > 0
-      : activeTab === "up_next"
+      ? combinedItems.length > 0 || cwFilteredMovies.length > 0 || cwFilteredShows.length > 0
+      : activeTab === "up_next" || activeTab === "currently_watching"
         ? gridItems.length > 0
-        : myOrderFilteredItems.length > 0
+        : myOrderFilteredItems.length > 0 ||
+          (activeTab === "movies" ? cwFilteredMovies.length : cwFilteredShows.length) > 0
     : gridItems.length > 0;
 
   return (
@@ -722,7 +822,7 @@ export default function Watchlist() {
       {/* Header */}
       <div data-tour="watchlist-header">
         <p className="font-mono text-[11px] tracking-[0.12em] uppercase text-neutral-500">
-          {totalCount} title{totalCount !== 1 ? "s" : ""} tracking
+          {totalIncludingCW} title{totalIncludingCW !== 1 ? "s" : ""} tracking
         </p>
         <div className="flex items-baseline gap-4 mt-2 flex-wrap">
           <h1
@@ -811,7 +911,7 @@ export default function Watchlist() {
       </div>
 
       {/* Search + filter panel */}
-      {!loading && totalCount > 0 && (
+      {!loading && totalIncludingCW > 0 && (
         <div className="mt-4 space-y-3">
           <div className="relative max-w-xs">
             <svg
@@ -880,7 +980,7 @@ export default function Watchlist() {
       )}
 
       {/* Empty watchlist */}
-      {!loading && totalCount === 0 && (
+      {!loading && totalIncludingCW === 0 && (
         <div className="flex flex-col items-center justify-center py-24 text-center mt-8">
           <div className="w-16 h-16 rounded-full bg-neutral-800 border border-neutral-700 flex items-center justify-center mb-4">
             <svg
@@ -913,14 +1013,16 @@ export default function Watchlist() {
       )}
 
       {/* No results */}
-      {!loading && totalCount > 0 && !hasResults && (
+      {!loading && totalIncludingCW > 0 && !hasResults && (
         <div className="flex flex-col items-center justify-center py-24 text-center mt-8">
           <p className="text-neutral-400 font-medium mb-1">
             {activeFilterCount > 0
               ? "No results match your filters"
               : activeTab === "up_next"
                 ? "Nothing in progress yet"
-                : `No results for "${query}"`}
+                : activeTab === "currently_watching"
+                  ? "Nothing in your Currently Watching list"
+                  : `No results for "${query}"`}
           </p>
           {activeFilterCount > 0 ? (
             <button
@@ -932,6 +1034,10 @@ export default function Watchlist() {
           ) : activeTab === "up_next" ? (
             <p className="text-neutral-500 text-sm mt-1">
               Start watching a show to see your progress here
+            </p>
+          ) : activeTab === "currently_watching" ? (
+            <p className="text-neutral-500 text-sm mt-1">
+              Mark a title as "Currently Watching" from its page to see it here
             </p>
           ) : (
             <p className="text-neutral-500 text-sm">
@@ -1010,6 +1116,7 @@ export default function Watchlist() {
         isMyOrder &&
         activeTab !== "all" &&
         activeTab !== "up_next" &&
+        activeTab !== "currently_watching" &&
         myOrderFilteredItems.length > 0 && (
           <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 gap-x-3 gap-y-5 mt-8">
             {myOrderFilteredItems.map((item) => {
@@ -1065,9 +1172,52 @@ export default function Watchlist() {
           </div>
         )}
 
-      {/* ── Poster grid (all non-my-order sorts, and up_next in my-order) ── */}
+      {/* ── My Order: append Currently Watching section below All/Movies/Shows ── */}
       {!loading &&
-        (!isMyOrder || activeTab === "up_next") &&
+        isMyOrder &&
+        (activeTab === "all" || activeTab === "movies" || activeTab === "shows") &&
+        ((activeTab !== "shows" && cwFilteredMovies.length > 0) ||
+          (activeTab !== "movies" && cwFilteredShows.length > 0)) && (
+          <div className="mt-10">
+            <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-neutral-500 mb-3">
+              Currently watching
+            </p>
+            <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 gap-x-3 gap-y-5">
+              {[
+                ...(activeTab !== "shows"
+                  ? cwFilteredMovies.map((m) => ({
+                      ...m,
+                      _contentType: "movie" as const,
+                      _listType: "currently_watching" as ListType,
+                      sort_key: 0,
+                      watchlist_id: 0,
+                    }))
+                  : []),
+                ...(activeTab !== "movies"
+                  ? cwFilteredShows.map((s) => ({
+                      ...s,
+                      _contentType: "tv" as const,
+                      _listType: "currently_watching" as ListType,
+                      sort_key: 0,
+                      watchlist_id: 0,
+                    }))
+                  : []),
+              ].map((item) => (
+                  <WatchlistCard
+                    key={`cw-${item._contentType}-${item.id}`}
+                    item={item}
+                    bingePlans={bingePlans}
+                    onNavigate={onNavigate}
+                    onRemove={onRemove}
+                  />
+                ))}
+            </div>
+          </div>
+        )}
+
+      {/* ── Poster grid (all non-my-order sorts, and up_next/currently_watching in my-order) ── */}
+      {!loading &&
+        (!isMyOrder || activeTab === "up_next" || activeTab === "currently_watching") &&
         gridItems.length > 0 && (
           <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 gap-x-3 gap-y-5 mt-8">
             {gridItems.map((item) => (

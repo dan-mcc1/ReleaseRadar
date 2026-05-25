@@ -8,8 +8,30 @@ from fastapi import FastAPI, Header, HTTPException, Request
 from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
 from app.core.limiter import limiter
-from app.core.logging import setup_logging, request_elapsed_ms
+from app.core.logging import (
+    setup_logging,
+    install_query_counter,
+    request_elapsed_ms,
+    request_query_count,
+)
 from app.config import settings
+
+if settings.SENTRY_DSN:
+    import sentry_sdk
+    from sentry_sdk.integrations.fastapi import FastApiIntegration
+    from sentry_sdk.integrations.starlette import StarletteIntegration
+    from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+
+    sentry_sdk.init(
+        dsn=settings.SENTRY_DSN,
+        environment=settings.ENVIRONMENT,
+        traces_sample_rate=settings.SENTRY_TRACES_SAMPLE_RATE,
+        integrations=[
+            FastApiIntegration(),
+            StarletteIntegration(),
+            SqlalchemyIntegration(),
+        ],
+    )
 from app.routers import (
     tv,
     movies,
@@ -29,6 +51,7 @@ from app.routers import (
     reviews,
     box_office,
     collections,
+    community,
     calendar,
     shelf,
     admin,
@@ -47,7 +70,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from app.db.session import SessionLocal, engine
-from app.db.base import Base
 from app.services.activity_service import delete_old_activity, lift_expired_moderation
 from app.services.recommendation_service import delete_old_recommendations
 from app.routers.notifications import (
@@ -62,7 +84,14 @@ from app.services.episode_service import (
 )
 from app.services.streaming_notification_service import refresh_streaming_providers
 from app.services.trailer_notification_service import refresh_trailers
+from app.services.episode_alert_service import (
+    dispatch_due_episode_alerts,
+    SWEEP_INTERVAL_SECONDS as EPISODE_ALERT_INTERVAL,
+)
 from app.services.stripe_reconciliation_service import reconcile_stripe_subscriptions
+from app.services.collection_ingest_service import (
+    daily_refresh as collections_daily_sync,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -86,10 +115,16 @@ async def _activity_cleanup_loop():
             with _db_session() as db:
                 deleted_activity = delete_old_activity(db)
                 if deleted_activity:
-                    logger.info("activity cleanup: removed %d old activity entries", deleted_activity)
+                    logger.info(
+                        "activity cleanup: removed %d old activity entries",
+                        deleted_activity,
+                    )
                 deleted_recs = delete_old_recommendations(db)
                 if deleted_recs:
-                    logger.info("activity cleanup: removed %d expired recommendations", deleted_recs)
+                    logger.info(
+                        "activity cleanup: removed %d expired recommendations",
+                        deleted_recs,
+                    )
                 lift_expired_moderation(db)
         except Exception as e:
             logger.error("activity cleanup error: %s", e)
@@ -123,16 +158,24 @@ async def _daily_digest_loop():
     while True:
         try:
             now = datetime.now(dt_timezone.utc)
-            next_hour = (now + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
+            next_hour = (now + timedelta(hours=1)).replace(
+                minute=0, second=0, microsecond=0
+            )
             wait_seconds = (next_hour - now).total_seconds()
-            logger.info("daily digest: sleeping %.0fs until top of next hour", wait_seconds)
+            logger.info(
+                "daily digest: sleeping %.0fs until top of next hour", wait_seconds
+            )
             await asyncio.sleep(wait_seconds)
 
             now_utc = datetime.now(dt_timezone.utc)
-            logger.info("daily digest: hourly sweep firing at %s UTC", now_utc.strftime("%H:%M"))
+            logger.info(
+                "daily digest: hourly sweep firing at %s UTC", now_utc.strftime("%H:%M")
+            )
             with _db_session() as db:
                 await asyncio.to_thread(send_daily_digest_to_all, db, now_utc=now_utc)
-                await asyncio.to_thread(send_season_premiere_alerts_to_all, db, now_utc=now_utc)
+                await asyncio.to_thread(
+                    send_season_premiere_alerts_to_all, db, now_utc=now_utc
+                )
             logger.info("daily digest: hourly sweep done")
 
         except Exception as e:
@@ -217,22 +260,69 @@ async def _streaming_refresh_loop():
             await asyncio.sleep(60)
 
 
+async def _episode_alert_loop():
+    """Fire per-episode air-time pushes. Runs every 5 minutes to match the
+    5-minute granularity of the user's lead-time preference."""
+    while True:
+        try:
+            now_utc = datetime.now(dt_timezone.utc)
+            with _db_session() as db:
+                sent = await asyncio.to_thread(dispatch_due_episode_alerts, db, now_utc)
+                if sent:
+                    logger.info("episode alerts: sent %d push(es)", sent)
+        except Exception as e:
+            logger.error("episode alert loop error: %s", e)
+        await asyncio.sleep(EPISODE_ALERT_INTERVAL)
+
+
+async def _collection_sync_loop():
+    """Daily collection mirror sync at 08:00 UTC, right after TMDb publishes
+    the id dump and the day's /movie/changes window closes. Pulls new +
+    changed collections and re-fetches details."""
+    while True:
+        try:
+            now = datetime.now(dt_timezone.utc)
+            next_run = now.replace(hour=8, minute=0, second=0, microsecond=0)
+            if now >= next_run:
+                next_run += timedelta(days=1)
+            await asyncio.sleep((next_run - now).total_seconds())
+            logger.info("collections sync: starting daily mirror sync")
+            with _db_session() as db:
+                await asyncio.to_thread(collections_daily_sync, db)
+            logger.info("collections sync: done")
+        except Exception as e:
+            logger.error("collections sync loop error: %s", e)
+            await asyncio.sleep(60)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Alembic is the single source of truth for the production schema —
+    # `alembic upgrade head` runs on every deploy. We deliberately don't call
+    # Base.metadata.create_all here: it would silently create new tables for
+    # any model added without a matching migration, leaving prod out of sync
+    # with the migration history. Tests still call create_all in conftest.py.
     import app.models  # noqa: F401 — registers all models with Base.metadata
 
-    Base.metadata.create_all(engine)
-    task = asyncio.create_task(_activity_cleanup_loop())
-    digest_task = asyncio.create_task(_daily_digest_loop())
-    vote_task = asyncio.create_task(_episode_update_loop())
-    streaming_task = asyncio.create_task(_streaming_refresh_loop())
-    trailer_task = asyncio.create_task(_trailer_refresh_loop())
-    reconcile_task = asyncio.create_task(_stripe_reconciliation_loop())
+    tasks: list[asyncio.Task] = []
+    if settings.RUN_SCHEDULERS:
+        tasks = [
+            asyncio.create_task(_activity_cleanup_loop()),
+            asyncio.create_task(_daily_digest_loop()),
+            asyncio.create_task(_episode_update_loop()),
+            asyncio.create_task(_streaming_refresh_loop()),
+            asyncio.create_task(_trailer_refresh_loop()),
+            asyncio.create_task(_stripe_reconciliation_loop()),
+            asyncio.create_task(_episode_alert_loop()),
+            asyncio.create_task(_collection_sync_loop()),
+        ]
+    else:
+        logger.info("RUN_SCHEDULERS=false — background loops disabled on this replica")
     yield
-    tasks = [task, digest_task, vote_task, streaming_task, trailer_task, reconcile_task]
     for t in tasks:
         t.cancel()
-    await asyncio.gather(*tasks, return_exceptions=True)
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
 
 
 app = FastAPI(title="ReleaseRadar API", lifespan=lifespan, redirect_slashes=True)
@@ -242,11 +332,52 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 setup_logging()
 
 
+install_query_counter(engine)
+
+
+_IS_PROD = settings.ENVIRONMENT == "production"
+
+
+# Order matters: each @app.middleware("http") prepends to the user middleware
+# stack, so the LAST decorator becomes the OUTERMOST middleware. log_request_time
+# must be outermost — Starlette's BaseHTTPMiddleware runs inner middleware in a
+# separate anyio task, and ContextVar writes (request_elapsed_ms) don't
+# propagate from the inner task back to the outer task where uvicorn fires the
+# access log.
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'none'; frame-ancestors 'none'; base-uri 'none'"
+    )
+    if _IS_PROD:
+        response.headers["Strict-Transport-Security"] = (
+            "max-age=63072000; includeSubDomains; preload"
+        )
+    return response
+
+
 @app.middleware("http")
 async def log_request_time(request: Request, call_next):
     start = time.perf_counter()
+    request_query_count.set(0)
     response = await call_next(request)
-    request_elapsed_ms.set((time.perf_counter() - start) * 1000)
+    elapsed_ms = (time.perf_counter() - start) * 1000
+    queries = request_query_count.get()
+    request_elapsed_ms.set(elapsed_ms)
+
+    threshold = settings.QUERY_COUNT_WARN_THRESHOLD
+    if threshold and queries > threshold:
+        logger.warning(
+            "high query count: %s %s issued %d queries (%.0fms)",
+            request.method,
+            request.url.path,
+            queries,
+            elapsed_ms,
+        )
     return response
 
 
@@ -295,6 +426,7 @@ app.include_router(events.router, prefix="/events", tags=["events"])
 app.include_router(reviews.router, prefix="/reviews", tags=["reviews"])
 app.include_router(box_office.router, prefix="/box-office", tags=["box-office"])
 app.include_router(collections.router, prefix="/collections", tags=["collections"])
+app.include_router(community.router, prefix="/communities", tags=["communities"])
 app.include_router(calendar.router, prefix="/calendar", tags=["calendar"])
 app.include_router(shelf.router, prefix="/shelf", tags=["shelf"])
 app.include_router(admin.router, prefix="/admin", tags=["admin"])

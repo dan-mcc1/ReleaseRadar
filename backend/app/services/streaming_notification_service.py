@@ -9,6 +9,7 @@ from app.models.show import Show
 from app.models.user import User
 from app.models.watchlist import Watchlist
 from app.services.email_service import send_streaming_alert_email
+from app.services.push_service import push_notification
 from app.services.tmdb_movies import fetch_movie_from_tmdb
 from app.services.tmdb_tv import fetch_show_from_tmdb
 from app.db.session import SessionLocal
@@ -218,20 +219,46 @@ def refresh_streaming_providers(db: Session) -> None:
         db.query(User)
         .filter(
             User.id.in_(list(user_alerts.keys())),
-            User.email_notifications == True,  # noqa: E712
             User.notify_streaming_changes == True,  # noqa: E712
-            User.email != None,  # noqa: E711
         )
         .all()
     )
 
     for user in users:
-        try:
-            send_streaming_alert_email(
-                user.email,
-                user.username or "",
-                user_alerts[user.id],
-                uid=user.id,
-            )
-        except Exception as e:
-            print(f"[streaming] Failed to notify {user.email}: {e}")
+        alerts = user_alerts[user.id]
+
+        if user.email_notifications and user.email:
+            try:
+                send_streaming_alert_email(
+                    user.email,
+                    user.username or "",
+                    alerts,
+                    uid=user.id,
+                )
+            except Exception as e:
+                print(f"[streaming] Failed to email {user.email}: {e}")
+
+        if user.push_notifications_enabled and user.push_notify_streaming_changes:
+            for alert in alerts:
+                title_word = alert["title"]
+                added = alert["added"]
+                removed = alert["removed"]
+                parts = []
+                if added:
+                    parts.append("now on " + ", ".join(added))
+                if removed:
+                    parts.append("leaving " + ", ".join(removed))
+                if not parts:
+                    continue
+                try:
+                    push_notification(
+                        db,
+                        user.id,
+                        type="streaming_change",
+                        title=f"Streaming update: {title_word}",
+                        body=" — ".join(parts),
+                        content_type=alert["content_type"],
+                        content_id=alert["content_id"],
+                    )
+                except Exception as e:
+                    print(f"[streaming] Failed to push {user.id}: {e}")

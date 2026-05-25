@@ -7,7 +7,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useAuthUser } from "../../hooks/useAuthUser";
 import { calendarQueryKey } from "../../hooks/useCalendarData";
 import { useToggleEpisode } from "../../hooks/api/useEpisodes";
-import { formatAirTimeToLocal } from "../../utils/calendarUtils";
+import {
+  formatAirTimeToLocal,
+  groupItemsByShow,
+} from "../../utils/calendarUtils";
 import { useFriendsActivity } from "../../hooks/api/useActivity";
 import type { CalendarItem } from "../../utils/calendarUtils";
 import type { Episode, Show } from "../../types/calendar";
@@ -231,6 +234,27 @@ function SideRailItem({ item }: { item: CalendarItem }) {
   );
 }
 
+function ShowGroup({ items }: { items: CalendarItem[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const visible = expanded ? items : items.slice(0, 3);
+  const hiddenCount = items.length - 3;
+
+  return (
+    <>
+      {visible.map((item) => (
+        <SideRailItem key={`${item.type}-${item.id}`} item={item} />
+      ))}
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="self-start text-xs font-mono text-neutral-500 hover:text-primary-400 transition-colors cursor-pointer"
+      >
+        {expanded ? "Show less" : `Show ${hiddenCount} more`}
+      </button>
+    </>
+  );
+}
+
 type ActivityType =
   | "watched"
   | "currently_watching"
@@ -395,16 +419,44 @@ export default function CalendarSideRail({
         {displayItems.length === 0 ? (
           <p className="text-base text-neutral-500">Nothing scheduled.</p>
         ) : (
-          <div className="flex flex-col gap-5">
-            {displayItems.slice(0, 5).map((item) => (
-              <SideRailItem key={`${item.type}-${item.id}`} item={item} />
-            ))}
-            {displayItems.length > 5 && (
-              <p className="text-sm text-neutral-500 font-mono">
-                +{displayItems.length - 5} more
-              </p>
-            )}
-          </div>
+          (() => {
+            const groups = groupItemsByShow(displayItems);
+            const visibleGroups = groups.slice(0, 5);
+            const hiddenGroupItems = groups
+              .slice(5)
+              .reduce(
+                (sum, g) => sum + (g.kind === "single" ? 1 : g.items.length),
+                0,
+              );
+            return (
+              <div className="flex flex-col gap-5">
+                {visibleGroups.map((g) => {
+                  if (g.kind === "single") {
+                    return (
+                      <SideRailItem
+                        key={`${g.item.type}-${g.item.id}`}
+                        item={g.item}
+                      />
+                    );
+                  }
+                  if (g.items.length <= 3) {
+                    return g.items.map((item) => (
+                      <SideRailItem
+                        key={`${item.type}-${item.id}`}
+                        item={item}
+                      />
+                    ));
+                  }
+                  return <ShowGroup key={`group-${g.showId}`} items={g.items} />;
+                })}
+                {hiddenGroupItems > 0 && (
+                  <p className="text-sm text-neutral-500 font-mono">
+                    +{hiddenGroupItems} more
+                  </p>
+                )}
+              </div>
+            );
+          })()
         )}
       </div>
 

@@ -53,6 +53,9 @@ class TestCreateShelf:
             r = _create_shelf(client, f"Shelf {i}")
             assert r.status_code == 200
 
+    @pytest.mark.skip(
+        reason="open beta: is_premium hardcoded True (see subscription.py)"
+    )
     def test_free_user_at_limit_returns_403(self, client, db):
         _seed_user(db)
         for i in range(3):

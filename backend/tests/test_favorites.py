@@ -31,7 +31,7 @@ class TestFavoritesAdd:
         r = client.post(
             "/favorites/add", json={"content_type": "podcast", "content_id": 1}
         )
-        assert r.status_code == 400
+        assert r.status_code == 422
 
     def test_add_idempotent(self, client, seed_movie, seed_users):
         client.post("/favorites/add", json={"content_type": "movie", "content_id": 550})

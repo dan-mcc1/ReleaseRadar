@@ -159,6 +159,9 @@ export function useUpdateWatchStatus() {
       // shows and movies appear without a reload.
       queryClient.invalidateQueries({ queryKey: ["calendar", user.uid] });
       queryClient.invalidateQueries({ queryKey: ["shelves", user.uid] });
+      // My Collections buckets (finished / in_progress) are derived from
+      // the user's watched movies — refresh so the page reflects this change.
+      queryClient.invalidateQueries({ queryKey: queryKeys.myCollections() });
     },
   });
 }

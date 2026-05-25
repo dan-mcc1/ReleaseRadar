@@ -1,17 +1,18 @@
 from fastapi import (
     APIRouter,
     BackgroundTasks,
-    Depends,
     Body,
+    Depends,
     HTTPException,
     Request,
     Query,
 )
 from datetime import date
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import tuple_, union_all, select, literal, null, Float
 from sqlalchemy.orm import Session
 from app.db.session import get_db
+from app.schemas.common import ContentRef, ContentType, ISO_DATE_PATTERN
 from app.services.watchlist_service import (
     add_to_watchlist,
     get_watchlist,
@@ -32,6 +33,7 @@ from app.core.limiter import limiter
 from app.services.episode_service import sync_show_episodes_background
 from app.services.media_upsert import populate_show_bg, populate_movie_bg
 from app.services.streaming_notification_service import ensure_providers_populated_bg
+from app.services.trailer_notification_service import ensure_trailers_populated_bg
 from app.services.binge_planner_service import (
     get_binge_plan,
     get_binge_plans_bulk,
@@ -42,42 +44,50 @@ from app.services.binge_planner_service import (
 router = APIRouter()
 
 
+class WatchlistAdd(ContentRef):
+    notify: bool = True
+
+
+class ReorderBody(ContentRef):
+    before_id: int | None = Field(None, ge=1)
+    after_id: int | None = Field(None, ge=1)
+
+
+class BulkStatusItem(ContentRef):
+    pass
+
+
+BULK_STATUS_MAX = 500
+
+
 @router.post("/add")
 def add_item(
     background_tasks: BackgroundTasks,
-    content_type: str = Body(...),
-    content_id: int = Body(...),
-    notify: bool = Body(True),
+    body: WatchlistAdd,
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
-    if content_type not in ("movie", "tv"):
-        raise HTTPException(
-            status_code=400, detail="content_type must be 'movie' or 'tv'"
-        )
+    content_type = body.content_type
+    content_id = body.content_id
 
-    result = add_to_watchlist(db, uid, content_type, content_id, notify=notify)
+    result = add_to_watchlist(db, uid, content_type, content_id, notify=body.notify)
     if content_type == "tv":
         background_tasks.add_task(populate_show_bg, content_id)
         background_tasks.add_task(sync_show_episodes_background, content_id)
     else:
         background_tasks.add_task(populate_movie_bg, content_id)
     background_tasks.add_task(ensure_providers_populated_bg, content_id, content_type)
+    background_tasks.add_task(ensure_trailers_populated_bg, content_id, content_type)
     return result
 
 
 @router.delete("/remove")
 def remove_item(
-    content_type: str = Body(...),
-    content_id: int = Body(...),
+    body: ContentRef,
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
-    if content_type not in ("movie", "tv"):
-        raise HTTPException(
-            status_code=400, detail="content_type must be 'movie' or 'tv'"
-        )
-    return remove_from_watchlist(db, uid, content_type, content_id)
+    return remove_from_watchlist(db, uid, body.content_type, body.content_id)
 
 
 @router.get("")
@@ -92,20 +102,13 @@ def get_user_watchlist(
 @limiter.limit("60/minute")
 def reorder_item(
     request: Request,
-    content_type: str = Body(...),
-    content_id: int = Body(...),
-    before_id: int | None = Body(None),
-    after_id: int | None = Body(None),
+    body: ReorderBody,
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
-    if content_type not in ("movie", "tv"):
-        raise HTTPException(
-            status_code=400, detail="content_type must be 'movie' or 'tv'"
-        )
     try:
         return reorder_watchlist_item(
-            db, uid, content_type, content_id, before_id, after_id
+            db, uid, body.content_type, body.content_id, body.before_id, body.after_id
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -115,8 +118,8 @@ def reorder_item(
 def watchlist_tv_calendar(
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
-    from_date: str = Query(...),
-    to_date: str = Query(...),
+    from_date: str = Query(..., pattern=ISO_DATE_PATTERN),
+    to_date: str = Query(..., pattern=ISO_DATE_PATTERN),
 ):
     return get_tv_calendar(db, uid, from_date=from_date, to_date=to_date)
 
@@ -141,7 +144,7 @@ def watchlist_movie_info(
 @limiter.limit("60/minute")
 def bulk_status(
     request: Request,
-    items: list[dict] = Body(...),
+    items: list[BulkStatusItem] = Body(..., max_length=BULK_STATUS_MAX),
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
@@ -152,9 +155,7 @@ def bulk_status(
     """
     if not items:
         return {}
-    if len(items) > 500:
-        items = items[:500]
-    pairs = [(i["content_type"], i["content_id"]) for i in items]
+    pairs = [(i.content_type, i.content_id) for i in items]
 
     # Single UNION ALL — one DB round-trip instead of three.
     # Priority (highest wins): Currently Watching > Want To Watch > Watched.
@@ -250,15 +251,13 @@ def get_notify_prefs(
     return result
 
 
-class NotifyPrefUpdate(BaseModel):
-    content_type: str
-    content_id: int
+class NotifyPrefUpdate(ContentRef):
     notify: bool
 
 
 class NotifyAllUpdate(BaseModel):
     notify: bool
-    content_type: str | None = None  # optional filter: "movie" or "tv"
+    content_type: ContentType | None = None  # optional filter: "movie" or "tv"
 
 
 @router.patch("/notify-all")
@@ -304,7 +303,7 @@ def show_progress(
 
 
 class ProgressBulkBody(BaseModel):
-    show_ids: list[int]
+    show_ids: list[int] = Field(..., max_length=500)
 
 
 @router.post("/progress-bulk")

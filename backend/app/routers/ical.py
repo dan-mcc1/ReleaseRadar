@@ -1,12 +1,13 @@
 import base64
 import hashlib
 import hmac
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, date, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 from icalendar import Calendar, Event
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -20,6 +21,13 @@ from app.models.show import Show
 from app.models.user import User
 from app.models.watchlist import Watchlist
 from app.core.limiter import limiter
+
+# Calendar apps choke on multi-thousand-event feeds. The volume problem is
+# back-catalog: tracking a finished show like Friends (236 episodes) shouldn't
+# put a decade of entries in your calendar. We drop anything older than this
+# window. Future content is kept unbounded — long-announced releases (e.g. a
+# sequel three years out) are legitimately in the user's calendar.
+ICAL_PAST_DAYS = 30
 
 router = APIRouter()
 
@@ -99,42 +107,27 @@ def get_ical_feed(request: Request, token: str, db: Session = Depends(get_db)):
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid or expired calendar token")
 
+    today = datetime.now(timezone.utc).date()
+    window_start: date = today - timedelta(days=ICAL_PAST_DAYS)
+
     client_etag = request.headers.get("If-None-Match", "")
 
-    # ── Collect tracked show IDs ──────────────────────────────────────────────
-    watchlist_show_ids = {
-        r.content_id
-        for r in db.query(Watchlist.content_id)
-        .filter(Watchlist.user_id == user_id, Watchlist.content_type == "tv")
-        .all()
-    }
-    cw_show_ids = {
-        r.content_id
-        for r in db.query(CurrentlyWatching.content_id)
-        .filter(
-            CurrentlyWatching.user_id == user_id, CurrentlyWatching.content_type == "tv"
+    # ── Collect tracked content IDs (one UNION roundtrip for TV + movies) ────
+    tracked_q = (
+        select(Watchlist.content_type, Watchlist.content_id)
+        .where(Watchlist.user_id == user_id)
+        .union(
+            select(CurrentlyWatching.content_type, CurrentlyWatching.content_id)
+            .where(CurrentlyWatching.user_id == user_id)
         )
-        .all()
-    }
-    show_ids = list(watchlist_show_ids | cw_show_ids)
-
-    # ── Collect tracked movie IDs ─────────────────────────────────────────────
-    watchlist_movie_ids = {
-        r.content_id
-        for r in db.query(Watchlist.content_id)
-        .filter(Watchlist.user_id == user_id, Watchlist.content_type == "movie")
-        .all()
-    }
-    cw_movie_ids = {
-        r.content_id
-        for r in db.query(CurrentlyWatching.content_id)
-        .filter(
-            CurrentlyWatching.user_id == user_id,
-            CurrentlyWatching.content_type == "movie",
-        )
-        .all()
-    }
-    movie_ids = list(watchlist_movie_ids | cw_movie_ids)
+    )
+    show_ids: list[int] = []
+    movie_ids: list[int] = []
+    for content_type, content_id in db.execute(tracked_q).all():
+        if content_type == "tv":
+            show_ids.append(content_id)
+        elif content_type == "movie":
+            movie_ids.append(content_id)
 
     # ── Build the iCalendar object ────────────────────────────────────────────
     cal = Calendar()
@@ -177,7 +170,11 @@ def get_ical_feed(request: Request, token: str, db: Session = Depends(get_db)):
 
         episodes = (
             db.query(Episode)
-            .filter(Episode.show_id.in_(show_ids), Episode.air_date.isnot(None))
+            .filter(
+                Episode.show_id.in_(show_ids),
+                Episode.air_date.isnot(None),
+                Episode.air_date >= window_start,
+            )
             .all()
         )
 
@@ -241,7 +238,11 @@ def get_ical_feed(request: Request, token: str, db: Session = Depends(get_db)):
     if movie_ids:
         movies = (
             db.query(Movie)
-            .filter(Movie.id.in_(movie_ids), Movie.release_date.isnot(None))
+            .filter(
+                Movie.id.in_(movie_ids),
+                Movie.release_date.isnot(None),
+                Movie.release_date >= window_start,
+            )
             .all()
         )
 

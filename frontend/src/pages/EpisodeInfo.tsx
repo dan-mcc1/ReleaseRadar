@@ -10,6 +10,8 @@ import {
   useToggleEpisode,
   useAnnotateEpisode,
 } from "../hooks/api/useEpisodes";
+import { useNotificationPrefs } from "../hooks/api/useNotifications";
+import { useAuthUser } from "../hooks/useAuthUser";
 
 interface CastMember {
   id: number;
@@ -146,6 +148,41 @@ export default function EpisodeInfo() {
         e.episode_number === Number(episode),
     ) ?? null;
   const isWatched = watchedEntry !== null;
+
+  // Spoiler veil for synopsis: hide if logged-in user has watched at least one
+  // episode of this show, this episode is unwatched, and falls strictly after
+  // their last-watched position.
+  const user = useAuthUser();
+  const { data: prefs } = useNotificationPrefs();
+  const hideSpoilers = prefs?.hide_spoilers ?? true;
+  const lastWatched = (watchedEpisodesQuery.data ?? []).reduce<
+    { s: number; e: number } | null
+  >((acc, ep) => {
+    if (
+      !acc ||
+      ep.season_number > acc.s ||
+      (ep.season_number === acc.s && ep.episode_number > acc.e)
+    ) {
+      return { s: ep.season_number, e: ep.episode_number };
+    }
+    return acc;
+  }, null);
+  const epSeason = Number(season);
+  const epNumber = Number(episode);
+  const isFutureEpisode =
+    !!lastWatched &&
+    (epSeason > lastWatched.s ||
+      (epSeason === lastWatched.s && epNumber > lastWatched.e));
+  // The next episode after lastWatched isn't a spoiler — it's what the user
+  // is about to watch. Covers the in-season case and the season-rollover case
+  // (S(N+1)E1 right after the previous season's finale).
+  const isNextUpEpisode =
+    !!lastWatched &&
+    ((epSeason === lastWatched.s && epNumber === lastWatched.e + 1) ||
+      (epSeason === lastWatched.s + 1 && epNumber === 1));
+  const shouldHideOverview =
+    !!user && hideSpoilers && !isWatched && isFutureEpisode && !isNextUpEpisode;
+  const [overviewRevealed, setOverviewRevealed] = useState(false);
 
   const [notesDraft, setNotesDraft] = useState<string>(() => watchedEntry?.notes ?? "");
   const [notesOpen, setNotesOpen] = useState(false);
@@ -475,9 +512,21 @@ export default function EpisodeInfo() {
                 <div className="font-mono text-[10.5px] tracking-[0.12em] uppercase text-neutral-500">Synopsis</div>
                 <div className="h-px w-full bg-neutral-800 mt-2" />
               </div>
-              <p className="font-sans font-light text-xl md:text-2xl leading-relaxed text-neutral-200 max-w-2xl">
-                {data.overview}
-              </p>
+              {shouldHideOverview && !overviewRevealed ? (
+                <button
+                  onClick={() => setOverviewRevealed(true)}
+                  className="inline-flex items-center gap-2 bg-neutral-900/60 hover:bg-neutral-900 border border-warning-500/30 rounded-lg px-4 py-3 text-sm text-neutral-300 hover:text-neutral-100 transition-colors"
+                >
+                  <svg className="w-4 h-4 text-warning-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                  </svg>
+                  <span className="italic">Synopsis hidden — you haven't reached this episode yet. Click to reveal.</span>
+                </button>
+              ) : (
+                <p className="font-sans font-light text-xl md:text-2xl leading-relaxed text-neutral-200 max-w-2xl">
+                  {data.overview}
+                </p>
+              )}
             </div>
           )}
 

@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, Body, HTTPException, BackgroundTasks, Request
+from typing import Literal
+from fastapi import APIRouter, Depends, BackgroundTasks, Query, Request
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
@@ -10,22 +12,40 @@ from app.services.recommendation_service import (
     delete_recommendation,
 )
 from app.services.email_service import send_recommendation_email
-from app.core.event_bus import publish
-from app.models.friendship import Friendship
+from app.services.nav_counts import notify_counts_changed
 from app.services.for_you_service import get_for_you_recommendations
 from app.core.limiter import limiter
+from app.schemas.common import (
+    ContentType,
+    RECOMMENDATION_MSG_MAX_LEN,
+    RECOMMENDATION_TITLE_MAX_LEN,
+    USERNAME_MAX_LEN,
+    USERNAME_MIN_LEN,
+    USERNAME_PATTERN,
+)
 
 router = APIRouter()
+
+ForYouMode = Literal["recent", "top_rated"]
+
+
+class RecommendationSend(BaseModel):
+    recipient_username: str = Field(
+        ..., min_length=USERNAME_MIN_LEN, max_length=USERNAME_MAX_LEN, pattern=USERNAME_PATTERN
+    )
+    content_type: ContentType
+    content_id: int = Field(..., ge=1)
+    content_title: str = Field(..., min_length=1, max_length=RECOMMENDATION_TITLE_MAX_LEN)
+    content_poster_path: str | None = Field(None, max_length=500)
+    message: str | None = Field(None, max_length=RECOMMENDATION_MSG_MAX_LEN)
 
 
 @router.get("/for-you")
 def for_you(
-    mode: str = "recent",
+    mode: ForYouMode = Query("recent"),
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
-    if mode not in ("recent", "top_rated"):
-        mode = "recent"
     return get_for_you_recommendations(db, uid, mode)
 
 
@@ -34,46 +54,21 @@ def for_you(
 def send(
     request: Request,
     background_tasks: BackgroundTasks,
-    recipient_username: str = Body(...),
-    content_type: str = Body(...),
-    content_id: int = Body(...),
-    content_title: str = Body(...),
-    content_poster_path: str | None = Body(None),
-    message: str | None = Body(None),
+    body: RecommendationSend,
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
-    if content_type not in ("movie", "tv"):
-        raise HTTPException(
-            status_code=400, detail="content_type must be 'movie' or 'tv'"
-        )
     result = send_recommendation(
         db,
         uid,
-        recipient_username,
-        content_type,
-        content_id,
-        content_title,
-        content_poster_path,
-        message,
+        body.recipient_username,
+        body.content_type,
+        body.content_id,
+        body.content_title,
+        body.content_poster_path,
+        body.message,
     )
-    pending_count = (
-        db.query(Friendship)
-        .filter(
-            Friendship.addressee_id == result.recipient_id,
-            Friendship.status == "pending",
-        )
-        .count()
-    )
-    unread_count = get_unread_count(db, result.recipient_id)
-    publish(
-        result.recipient_id,
-        {
-            "type": "counts_update",
-            "pending_requests": pending_count,
-            "unread_recs": unread_count,
-        },
-    )
+    notify_counts_changed(db, result.recipient_id)
     if result._email_params:
         background_tasks.add_task(send_recommendation_email, **result._email_params)
     return result
@@ -102,20 +97,7 @@ def read(
     uid: str = Depends(get_current_user),
 ):
     result = mark_read(db, uid, recommendation_id)
-    pending_count = (
-        db.query(Friendship)
-        .filter(Friendship.addressee_id == uid, Friendship.status == "pending")
-        .count()
-    )
-    unread_count = get_unread_count(db, uid)
-    publish(
-        uid,
-        {
-            "type": "counts_update",
-            "pending_requests": pending_count,
-            "unread_recs": unread_count,
-        },
-    )
+    notify_counts_changed(db, uid)
     return result
 
 

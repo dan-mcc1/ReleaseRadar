@@ -21,6 +21,10 @@ os.environ.setdefault("ICAL_SECRET", "test-secret")
 os.environ.setdefault("UNSUBSCRIBE_KEY", "test-unsubscribe")
 os.environ.setdefault("FRONTEND_URL", "http://localhost:5173")
 os.environ.setdefault("ENVIRONMENT", "test")
+# Force-disable Sentry in tests so test runs don't emit events to the dashboard.
+# Use force-set, not setdefault, since pydantic-settings would otherwise read
+# SENTRY_DSN from a local .env file.
+os.environ["SENTRY_DSN"] = ""
 
 import pytest
 from datetime import date
@@ -132,6 +136,7 @@ def make_client(uid: str = "test-uid-1"):
         get_current_user_strict,
         get_token_claims,
         get_token_claims_strict,
+        get_uid_only,
     )
 
     # Read UID from X-Test-UID header so each client carries its own identity
@@ -146,6 +151,7 @@ def make_client(uid: str = "test-uid-1"):
     app.dependency_overrides[get_current_user_strict] = _uid_from_header
     app.dependency_overrides[get_token_claims] = _claims_from_header
     app.dependency_overrides[get_token_claims_strict] = _claims_from_header
+    app.dependency_overrides[get_uid_only] = _uid_from_header
 
     client = TestClient(
         app,
@@ -159,6 +165,38 @@ def make_client(uid: str = "test-uid-1"):
 @pytest.fixture
 def client():
     return make_client("test-uid-1")
+
+
+@pytest.fixture
+def count_queries():
+    """Returns a context manager that counts SQL queries issued inside its block.
+
+    Usage:
+        with count_queries() as q:
+            client.get("/some/endpoint")
+        assert q.value < 10
+    """
+    from contextlib import contextmanager
+    from sqlalchemy import event
+
+    class _Counter:
+        def __init__(self):
+            self.value = 0
+
+    @contextmanager
+    def _ctx():
+        counter = _Counter()
+
+        def _inc(conn, cursor, statement, parameters, context, executemany):
+            counter.value += 1
+
+        event.listen(engine, "before_cursor_execute", _inc)
+        try:
+            yield counter
+        finally:
+            event.remove(engine, "before_cursor_execute", _inc)
+
+    return _ctx
 
 
 @pytest.fixture

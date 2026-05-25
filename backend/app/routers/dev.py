@@ -376,3 +376,56 @@ def test_trailer_email(
         "message": f"Test trailer alert sent to {user.email}",
         "fake_alerts": [{"title": a["title"], "videos": a["videos"]} for a in fake_alerts],
     }
+
+
+@router.post("/refresh-provider-logos")
+def refresh_provider_logos(
+    db: Session = Depends(get_db),
+    uid: str = Depends(require_admin),
+):
+    """
+    Refresh logo_path (and name) on every Provider row by re-fetching TMDb's
+    canonical watch-provider list. Fixes rows whose logo was originally seeded
+    from an "X Amazon Channel"-style variant (e.g. the Max row id=384 ending up
+    with the "HBO Max on Prime Video" branded logo).
+    """
+    from app.models.provider import Provider
+    from app.services.tmdb_client import get as tmdb_get
+
+    tv_list = tmdb_get("/watch/providers/tv", {"watch_region": "US"}) or {}
+    movie_list = tmdb_get("/watch/providers/movie", {"watch_region": "US"}) or {}
+
+    canonical: dict[int, dict] = {}
+    for entry in (tv_list.get("results") or []) + (movie_list.get("results") or []):
+        pid = entry.get("provider_id")
+        if pid is None:
+            continue
+        canonical.setdefault(pid, {
+            "name": entry.get("provider_name") or "",
+            "logo_path": entry.get("logo_path"),
+        })
+
+    existing = {p.id: p for p in db.query(Provider).all()}
+    updated: list[dict] = []
+    for pid, row in existing.items():
+        fresh = canonical.get(pid)
+        if not fresh:
+            continue
+        if row.logo_path != fresh["logo_path"] or (fresh["name"] and row.name != fresh["name"]):
+            updated.append({
+                "id": pid,
+                "name": row.name,
+                "old_logo": row.logo_path,
+                "new_logo": fresh["logo_path"],
+            })
+            row.logo_path = fresh["logo_path"]
+            if fresh["name"]:
+                row.name = fresh["name"]
+
+    db.commit()
+    return {
+        "providers_checked": len(existing),
+        "providers_in_tmdb": len(canonical),
+        "providers_updated": len(updated),
+        "updates": updated,
+    }

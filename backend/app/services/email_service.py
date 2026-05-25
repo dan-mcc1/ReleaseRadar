@@ -121,7 +121,7 @@ def _poster_img(poster_path: str | None, alt: str, content_url: str) -> str:
     src = f"{TMDB_IMAGE_BASE}{poster_path}"
     return (
         f'<a href="{content_url}" style="display:block;flex-shrink:0;">'
-        f'<img src="{src}" alt="{alt}" width="60" height="90"'
+        f'<img src="{src}" alt="{escape(alt)}" width="60" height="90"'
         f' style="border-radius:8px;object-fit:cover;display:block;box-shadow:0 4px 12px rgba(0,0,0,0.5);" /></a>'
     )
 

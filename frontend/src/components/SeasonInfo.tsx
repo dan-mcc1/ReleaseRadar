@@ -9,6 +9,7 @@ import {
   useToggleEpisode,
   useToggleSeason,
 } from "../hooks/api/useEpisodes";
+import { useNotificationPrefs } from "../hooks/api/useNotifications";
 import { useToast } from "./Toast";
 
 type FullSeason = Season & { episodes?: Episode[] };
@@ -67,6 +68,7 @@ interface EpisodeRowProps {
   isWatched: boolean;
   isToggling: boolean;
   isLoggedIn: boolean;
+  hideOverview: boolean;
   onToggle: (seasonNumber: number, episodeNumber: number) => void;
 }
 
@@ -76,8 +78,11 @@ const EpisodeRow = memo(function EpisodeRow({
   isWatched: watched,
   isToggling: toggling,
   isLoggedIn,
+  hideOverview,
   onToggle,
 }: EpisodeRowProps) {
+  const [revealed, setRevealed] = useState(false);
+  const overviewHidden = hideOverview && !revealed && !!ep.overview;
   return (
     <div className="flex gap-3 items-start">
       <Link
@@ -135,7 +140,23 @@ const EpisodeRow = memo(function EpisodeRow({
               "N/A"
             )}
           </p>
-          <p className="text-sm text-neutral-300 mt-1">{ep.overview}</p>
+          {overviewHidden ? (
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setRevealed(true);
+              }}
+              className="mt-1 inline-flex items-center gap-1.5 text-xs font-medium text-warning-400 hover:text-warning-300"
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+              </svg>
+              Hidden — click to reveal
+            </button>
+          ) : (
+            <p className="text-sm text-neutral-300 mt-1">{ep.overview}</p>
+          )}
         </div>
       </Link>
       {isLoggedIn && (
@@ -190,15 +211,38 @@ export default function SeasonInfo({
     (watchedEpisodesData as
       | { season_number: number; episode_number: number }[]
       | undefined) ?? [];
-  const { watchedEpisodes, watchedCountBySeason } = useMemo(() => {
+  const { watchedEpisodes, watchedCountBySeason, lastWatched } = useMemo(() => {
     const set = new Set<string>();
     const countMap = new Map<number, number>();
+    let last: { s: number; e: number } | null = null;
     for (const e of rawEpisodes) {
       set.add(epKey(e.season_number, e.episode_number));
       countMap.set(e.season_number, (countMap.get(e.season_number) ?? 0) + 1);
+      if (
+        !last ||
+        e.season_number > last.s ||
+        (e.season_number === last.s && e.episode_number > last.e)
+      ) {
+        last = { s: e.season_number, e: e.episode_number };
+      }
     }
-    return { watchedEpisodes: set, watchedCountBySeason: countMap };
+    return { watchedEpisodes: set, watchedCountBySeason: countMap, lastWatched: last };
   }, [rawEpisodes]);
+
+  const { data: prefs } = useNotificationPrefs();
+  const hideSpoilers = prefs?.hide_spoilers ?? true;
+
+  // The very next episode after lastWatched is exempt from spoiler hiding —
+  // the user is about to watch it next anyway. Crosses a season boundary
+  // when lastWatched was the finale of its season.
+  const nextUpKey = useMemo<string | null>(() => {
+    if (!lastWatched) return null;
+    const lastSeason = seasons.find((s) => s.season_number === lastWatched.s);
+    if (lastSeason && lastWatched.e < lastSeason.episode_count) {
+      return epKey(lastWatched.s, lastWatched.e + 1);
+    }
+    return epKey(lastWatched.s + 1, 1);
+  }, [lastWatched, seasons]);
 
   const toggleEpisodeMutation = useToggleEpisode();
   const toggleSeasonMutation = useToggleSeason();
@@ -462,6 +506,17 @@ export default function SeasonInfo({
                       <div className="flex flex-col gap-3 mt-2">
                         {expandedSeason.episodes.map((ep) => {
                           const key = epKey(ep.season_number, ep.episode_number);
+                          const isFuture =
+                            !!lastWatched &&
+                            (ep.season_number > lastWatched.s ||
+                              (ep.season_number === lastWatched.s &&
+                                ep.episode_number > lastWatched.e));
+                          const hideOverview =
+                            hideSpoilers &&
+                            isLoggedIn &&
+                            !watchedEpisodes.has(key) &&
+                            isFuture &&
+                            key !== nextUpKey;
                           return (
                             <EpisodeRow
                               key={ep.id}
@@ -470,6 +525,7 @@ export default function SeasonInfo({
                               isWatched={watchedEpisodes.has(key)}
                               isToggling={togglingEpisodes.has(key)}
                               isLoggedIn={isLoggedIn}
+                              hideOverview={hideOverview}
                               onToggle={toggleEpisodeWatched}
                             />
                           );

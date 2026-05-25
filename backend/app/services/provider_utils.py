@@ -61,6 +61,92 @@ CANONICAL_PROVIDER_MAP: dict[int, int] = {
     1794: 43,   # Starz Amazon Channel → Starz
     1855: 43,   # Starz Apple TV Channel → Starz
     634: 43,    # Starz Roku Premium Channel → Starz
+
+    # BritBox
+    197: 151,   # BritBox Amazon Channel → BritBox
+
+    # Carnegie Hall+  (no bare DB row; 2042 is the canonical anchor)
+    2071: 2042, # Carnegie Hall+ Amazon Channel → Carnegie Hall+
+
+    # Cineverse
+    2704: 1957, # Cineverse Amazon Channel → Cineverse
+
+    # CuriosityStream  (no bare DB row; 603 is the canonical anchor)
+    2060: 603,  # CuriosityStream Apple TV Channel → CuriosityStream
+
+    # Fandor
+    199: 25,    # Fandor Amazon Channel → Fandor
+
+    # Film Movement Plus
+    2395: 579,  # Film Movement Plus Amazon Channel → Film Movement Plus
+
+    # Hallmark+  (no bare DB row; 290 is the canonical anchor)
+    2058: 290,  # Hallmark+ Apple TV Channel → Hallmark+
+
+    # Here TV
+    2406: 417,  # Here TV Amazon Channel → Here TV
+
+    # Hi-YAH
+    2403: 503,  # Hi-YAH Amazon Channel → Hi-YAH
+
+    # HiDive
+    2390: 430,  # Hidive Amazon Channel → HiDive
+
+    # History Vault
+    2057: 268,  # HISTORY Vault Apple TV Channel → History Vault
+    2073: 268,  # HISTORY Vault Amazon Channel → History Vault
+
+    # Lifetime Movie Club
+    2055: 284,  # Lifetime Movie Club Apple TV Channel → Lifetime Movie Club
+    2089: 284,  # Lifetime Movie Club Amazon Channel → Lifetime Movie Club
+
+    # Midnight Pulp
+    2367: 1960, # Midnight Pulp Amazon Channel → Midnight Pulp
+
+    # MUBI
+    201: 11,    # MUBI Amazon Channel → MUBI
+
+    # Peacock (extending existing group)
+    2553: 386,  # Peacock Premium Plus Amazon Channel → Peacock
+
+    # Retrocrush
+    295: 446,   # RetroCrush Amazon Channel → Retrocrush
+
+    # Revry
+    2435: 473,  # Revry Amazon Channel → Revry
+
+    # ScreenPix  (no bare DB row; 2050 is the canonical anchor)
+    2069: 2050, # ScreenPix Amazon Channel → ScreenPix
+
+    # Shudder
+    204: 99,    # Shudder Amazon Channel → Shudder
+    2049: 99,   # Shudder Apple TV Channel → Shudder
+
+    # UP Faith & Family  (no bare DB row; 2045 is the canonical anchor)
+    2066: 2045, # UP Faith & Family Amazon Channel → UP Faith & Family
+
+    # VIX
+    1866: 457,  # ViX Premium Amazon Channel → VIX
+
+    # ALLBLK
+    2036: 251,  # ALLBLK Apple TV channel → ALLBLK
+    2064: 251,  # ALLBLK Amazon channel → ALLBLK
+
+    # BET+
+    2040: 343,  # BET+ Apple TV channel → BET+
+
+    # Hallmark — fold the linear-channel-via-Prime entry into Hallmark+
+    1746: 290,  # Hallmark TV Amazon Channel → Hallmark+
+
+    # PBS — collapse the three Prime sub-channels into one PBS entry
+    294: 293,   # PBS Masterpiece Amazon Channel → PBS
+    2430: 293,  # PBS Documentaries Amazon Channel → PBS
+
+    # Shout! Factory
+    600: 439,   # Shout! Factory Amazon Channel → Shout! Factory TV
+
+    # BroadwayHD  (channel-variant name has a stray space: "Broadway HD")
+    2326: 554,  # Broadway HD Amazon Channel → BroadwayHD
 }
 
 # Override display names for canonical providers to ensure clean names are shown
@@ -69,11 +155,20 @@ CANONICAL_PROVIDER_NAMES: dict[int, str] = {
     8: "Netflix",
     9: "Amazon Prime Video",
     289: "Cinemax",
+    290: "Hallmark+",
+    293: "PBS",
+    343: "BET+",
     350: "Apple TV+",
     384: "Max",
     386: "Peacock",
+    439: "Shout! Factory",
+    457: "VIX",
     526: "AMC+",
     538: "Plex",
+    603: "CuriosityStream",
+    2042: "Carnegie Hall+",
+    2045: "UP Faith & Family",
+    2050: "ScreenPix",
     2616: "Paramount+",
 }
 
@@ -109,29 +204,51 @@ def all_ids_for_service(provider_id: int) -> set[int]:
     return {cpid} | _VARIANTS_MAP.get(cpid, set())
 
 
-def normalize_tmdb_watch_providers(raw_providers: dict) -> dict:
+def normalize_tmdb_watch_providers(raw_providers: dict, db=None) -> dict:
     """
     Deduplicate and normalize the 'watch/providers' dict returned directly from TMDB.
     Operates on the US region only. Mutates and returns the dict.
 
     TMDB structure: {"link": "...", "flatrate": [...], "rent": [...], "buy": [...]}
     Each provider entry: {"provider_id": int, "provider_name": str, "logo_path": str, ...}
+
+    When ``db`` is provided, canonical IDs that only appear via a variant (e.g.
+    "HBO Max Amazon Channel") have their logo_path swapped for the canonical
+    Provider row's logo — variants ship branded "X on Prime Video" logos.
     """
+    variant_only_cpids: set[int] = set()
     for section in ("flatrate", "rent", "buy", "free", "ads"):
         entries = raw_providers.get(section)
         if not entries:
             continue
         seen: dict[int, dict] = {}
+        canonical_seen: set[int] = set()
         for entry in entries:
             pid = entry.get("provider_id")
             if pid is None:
                 continue
             cpid = canonical_provider_id(pid)
+            if pid == cpid:
+                canonical_seen.add(cpid)
             if cpid not in seen or pid == cpid:
                 seen[cpid] = {
                     **entry,
                     "provider_id": cpid,
                     "provider_name": CANONICAL_PROVIDER_NAMES.get(cpid, entry.get("provider_name", "")),
                 }
+        for cpid in seen:
+            if cpid not in canonical_seen:
+                variant_only_cpids.add(cpid)
         raw_providers[section] = list(seen.values())
+
+    if db is not None and variant_only_cpids:
+        from app.models.provider import Provider
+        rows = db.query(Provider).filter(Provider.id.in_(variant_only_cpids)).all()
+        logo_overrides = {p.id: p.logo_path for p in rows if p.logo_path}
+        if logo_overrides:
+            for section in ("flatrate", "rent", "buy", "free", "ads"):
+                for entry in raw_providers.get(section) or []:
+                    pid = entry.get("provider_id")
+                    if pid in logo_overrides:
+                        entry["logo_path"] = logo_overrides[pid]
     return raw_providers

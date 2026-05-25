@@ -1,6 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
 import { isPremiumFeature } from "../../config/features";
-import "react-datepicker/dist/react-datepicker.css";
 import CalendarSyncModal from "../CalendarSyncModal";
 import ProUpgradeModal from "../ProUpgradeModal";
 import { useAuthUser } from "../../hooks/useAuthUser";
@@ -106,16 +105,25 @@ export default function CalendarView() {
   );
 
   useEffect(() => {
-    const rawItems = viewMode === "week" ? selectedDateItems : weekDays.flatMap((d) => d.items);
-    const visibleItems = rawItems.filter((item): item is NonNullable<typeof item> => item != null);
+    const rawItems =
+      viewMode === "week"
+        ? selectedDateItems
+        : weekDays.flatMap((d) => d.items);
+    const visibleItems = rawItems.filter(
+      (item): item is NonNullable<typeof item> => item != null,
+    );
     const urls = new Set<string>();
     for (const item of visibleItems) {
       if (item.showData.backdrop_path)
-        urls.add(`https://image.tmdb.org/t/p/w780${item.showData.backdrop_path}`);
+        urls.add(
+          `https://image.tmdb.org/t/p/w780${item.showData.backdrop_path}`,
+        );
       if (item.showData.logo_path)
         urls.add(`https://image.tmdb.org/t/p/w185${item.showData.logo_path}`);
     }
-    urls.forEach((url) => { new Image().src = url; });
+    urls.forEach((url) => {
+      new Image().src = url;
+    });
   }, [viewMode, weekDays, selectedDateItems]);
 
   const upcomingThisMonth = useMemo(
@@ -231,16 +239,21 @@ export default function CalendarView() {
                 <>
                   {weekDays[0].date.getMonth() === weekDays[6].date.getMonth()
                     ? `${monthNames[weekDays[0].date.getMonth()]} ${weekDays[0].date.getDate()}–${weekDays[6].date.getDate()}`
-                    : `${monthNames[weekDays[0].date.getMonth()].slice(0, 3)} ${weekDays[0].date.getDate()} – ${monthNames[weekDays[6].date.getMonth()].slice(0, 3)} ${weekDays[6].date.getDate()}`}
-                  {" "}
-                  <em className="text-primary-400" style={{ fontStyle: "italic" }}>
+                    : `${monthNames[weekDays[0].date.getMonth()].slice(0, 3)} ${weekDays[0].date.getDate()} – ${monthNames[weekDays[6].date.getMonth()].slice(0, 3)} ${weekDays[6].date.getDate()}`}{" "}
+                  <em
+                    className="text-primary-400"
+                    style={{ fontStyle: "italic" }}
+                  >
                     {weekDays[6].date.getFullYear()}
                   </em>
                 </>
               ) : (
                 <>
                   {monthNames[currentMonth]}{" "}
-                  <em className="text-primary-400" style={{ fontStyle: "italic" }}>
+                  <em
+                    className="text-primary-400"
+                    style={{ fontStyle: "italic" }}
+                  >
                     {currentYear}
                   </em>
                 </>
@@ -251,192 +264,192 @@ export default function CalendarView() {
 
             {/* Controls group: wraps internally but never splits across the month heading */}
             <div className="flex items-center gap-2 flex-wrap">
-
-            {/* ← Today → navigation */}
-            <div className="flex items-center gap-1">
-              <button
-                onClick={handlePrev}
-                className="h-8 w-8 flex items-center justify-center rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
-              >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M15 19l-7-7 7-7"
-                  />
-                </svg>
-              </button>
-              <button
-                onClick={goToToday}
-                className="h-8 px-3 text-xs font-semibold rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-200 hover:bg-neutral-800 hover:text-white transition-colors"
-              >
-                Today
-              </button>
-              <button
-                onClick={handleNext}
-                className="h-8 w-8 flex items-center justify-center rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
-              >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M9 5l7 7-7 7"
-                  />
-                </svg>
-              </button>
-            </div>
-
-            {/* View mode toggle: Calendar (grid) | Timeline */}
-            <div className="flex items-center bg-neutral-900 border border-neutral-800 rounded-lg p-0.5">
-              {[
-                { mode: "month" as ViewMode, label: "Calendar" },
-                { mode: "week" as ViewMode, label: "Timeline" },
-              ].map(({ mode, label }) => (
+              {/* ← Today → navigation */}
+              <div className="flex items-center gap-1">
                 <button
-                  key={mode}
-                  onClick={() => setViewMode(mode)}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                    viewMode === mode
-                      ? "bg-neutral-700 text-white"
-                      : "text-neutral-400 hover:text-neutral-200"
+                  onClick={handlePrev}
+                  className="h-8 w-8 flex items-center justify-center rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
+                >
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M15 19l-7-7 7-7"
+                    />
+                  </svg>
+                </button>
+                <button
+                  onClick={goToToday}
+                  className="h-8 px-3 text-xs font-semibold rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-200 hover:bg-neutral-800 hover:text-white transition-colors"
+                >
+                  Today
+                </button>
+                <button
+                  onClick={handleNext}
+                  className="h-8 w-8 flex items-center justify-center rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
+                >
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M9 5l7 7-7 7"
+                    />
+                  </svg>
+                </button>
+              </div>
+
+              {/* View mode toggle: Calendar (grid) | Timeline */}
+              <div className="flex items-center bg-neutral-900 border border-neutral-800 rounded-lg p-0.5">
+                {[
+                  { mode: "month" as ViewMode, label: "Calendar" },
+                  { mode: "week" as ViewMode, label: "Timeline" },
+                ].map(({ mode, label }) => (
+                  <button
+                    key={mode}
+                    onClick={() => setViewMode(mode)}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                      viewMode === mode
+                        ? "bg-neutral-700 text-white"
+                        : "text-neutral-400 hover:text-neutral-200"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Filters dropdown */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowFilters((v) => !v)}
+                  className={`flex items-center gap-1.5 h-8 px-3 text-xs font-medium rounded-lg border transition-colors ${
+                    showFilters || hasActiveFilters
+                      ? "bg-neutral-800 border-neutral-700 text-white"
+                      : "bg-neutral-900 border-neutral-800 text-neutral-400 hover:text-neutral-200 hover:border-neutral-700"
                   }`}
                 >
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            {/* Filters dropdown */}
-            <div className="relative">
-              <button
-                onClick={() => setShowFilters((v) => !v)}
-                className={`flex items-center gap-1.5 h-8 px-3 text-xs font-medium rounded-lg border transition-colors ${
-                  showFilters || hasActiveFilters
-                    ? "bg-neutral-800 border-neutral-700 text-white"
-                    : "bg-neutral-900 border-neutral-800 text-neutral-400 hover:text-neutral-200 hover:border-neutral-700"
-                }`}
-              >
-                <svg
-                  className="w-3.5 h-3.5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M3 4h18M7 8h10M11 12h2"
-                  />
-                </svg>
-                Filters
-                {hasActiveFilters && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-primary-400" />
-                )}
-              </button>
-
-              {showFilters && (
-                <div className="absolute right-0 top-full mt-2 z-20 w-56 rounded-xl border border-neutral-700 bg-neutral-900 shadow-2xl p-3 flex flex-col gap-3">
-                  <div>
-                    <p className="font-mono text-[10px] tracking-widest uppercase text-neutral-500 mb-2">
-                      Type
-                    </p>
-                    <div className="flex rounded-lg border border-neutral-700 overflow-hidden">
-                      {(["all", "movie", "tv"] as const).map(
-                        (value, idx, arr) => (
-                          <button
-                            key={value}
-                            onClick={() => setFilterType(value)}
-                            className={`flex-1 py-1.5 text-xs font-medium transition-colors ${
-                              filterType === value
-                                ? "bg-primary-600 text-white"
-                                : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700"
-                            } ${idx < arr.length - 1 ? "border-r border-neutral-700" : ""}`}
-                          >
-                            {value === "all"
-                              ? "All"
-                              : value === "movie"
-                                ? "Movies"
-                                : "TV"}
-                          </button>
-                        ),
-                      )}
-                    </div>
-                  </div>
-                  <div>
-                    <p className="font-mono text-[10px] tracking-widest uppercase text-neutral-500 mb-2">
-                      Status
-                    </p>
-                    <div className="flex rounded-lg border border-neutral-700 overflow-hidden">
-                      {(["all", "unwatched", "watched"] as const).map(
-                        (value, idx, arr) => (
-                          <button
-                            key={value}
-                            onClick={() => setWatchFilter(value)}
-                            className={`flex-1 py-1.5 text-xs font-medium transition-colors ${
-                              watchFilter === value
-                                ? "bg-primary-600 text-white"
-                                : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700"
-                            } ${idx < arr.length - 1 ? "border-r border-neutral-700" : ""}`}
-                          >
-                            {value === "all"
-                              ? "All"
-                              : value === "watched"
-                                ? "Watched"
-                                : "Unwatched"}
-                          </button>
-                        ),
-                      )}
-                    </div>
-                  </div>
-                  <div>
-                    <p className="font-mono text-[10px] tracking-widest uppercase text-neutral-500 mb-2">
-                      Show
-                    </p>
-                    <button
-                      onClick={() =>
-                        setCurrentlyWatchingFilter(!currentlyWatchingFilter)
-                      }
-                      className={`w-full flex items-center gap-2 py-1.5 px-3 text-xs font-medium rounded-lg border transition-colors ${
-                        currentlyWatchingFilter
-                          ? "bg-highlight-600 border-highlight-500 text-white"
-                          : "bg-neutral-800 border-neutral-700 text-neutral-300 hover:bg-neutral-700"
-                      }`}
-                    >
-                      <span
-                        className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${currentlyWatchingFilter ? "bg-white animate-pulse" : "bg-neutral-500"}`}
-                      />
-                      Currently Watching only
-                    </button>
-                  </div>
+                  <svg
+                    className="w-3.5 h-3.5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M3 4h18M7 8h10M11 12h2"
+                    />
+                  </svg>
+                  Filters
                   {hasActiveFilters && (
-                    <button
-                      onClick={() => {
-                        setFilterType("all");
-                        setWatchFilter("all");
-                        setCurrentlyWatchingFilter(false);
-                      }}
-                      className="text-xs text-neutral-500 hover:text-neutral-200 transition-colors text-left"
-                    >
-                      Clear filters
-                    </button>
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary-400" />
                   )}
-                </div>
-              )}
+                </button>
+
+                {showFilters && (
+                  <div className="absolute right-0 top-full mt-2 z-20 w-56 rounded-xl border border-neutral-700 bg-neutral-900 shadow-2xl p-3 flex flex-col gap-3">
+                    <div>
+                      <p className="font-mono text-[10px] tracking-widest uppercase text-neutral-500 mb-2">
+                        Type
+                      </p>
+                      <div className="flex rounded-lg border border-neutral-700 overflow-hidden">
+                        {(["all", "movie", "tv"] as const).map(
+                          (value, idx, arr) => (
+                            <button
+                              key={value}
+                              onClick={() => setFilterType(value)}
+                              className={`flex-1 py-1.5 text-xs font-medium transition-colors ${
+                                filterType === value
+                                  ? "bg-primary-600 text-white"
+                                  : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700"
+                              } ${idx < arr.length - 1 ? "border-r border-neutral-700" : ""}`}
+                            >
+                              {value === "all"
+                                ? "All"
+                                : value === "movie"
+                                  ? "Movies"
+                                  : "TV"}
+                            </button>
+                          ),
+                        )}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="font-mono text-[10px] tracking-widest uppercase text-neutral-500 mb-2">
+                        Status
+                      </p>
+                      <div className="flex rounded-lg border border-neutral-700 overflow-hidden">
+                        {(["all", "unwatched", "watched"] as const).map(
+                          (value, idx, arr) => (
+                            <button
+                              key={value}
+                              onClick={() => setWatchFilter(value)}
+                              className={`flex-1 py-1.5 text-xs font-medium transition-colors ${
+                                watchFilter === value
+                                  ? "bg-primary-600 text-white"
+                                  : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700"
+                              } ${idx < arr.length - 1 ? "border-r border-neutral-700" : ""}`}
+                            >
+                              {value === "all"
+                                ? "All"
+                                : value === "watched"
+                                  ? "Watched"
+                                  : "Unwatched"}
+                            </button>
+                          ),
+                        )}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="font-mono text-[10px] tracking-widest uppercase text-neutral-500 mb-2">
+                        Show
+                      </p>
+                      <button
+                        onClick={() =>
+                          setCurrentlyWatchingFilter(!currentlyWatchingFilter)
+                        }
+                        className={`w-full flex items-center gap-2 py-1.5 px-3 text-xs font-medium rounded-lg border transition-colors ${
+                          currentlyWatchingFilter
+                            ? "bg-highlight-600 border-highlight-500 text-white"
+                            : "bg-neutral-800 border-neutral-700 text-neutral-300 hover:bg-neutral-700"
+                        }`}
+                      >
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${currentlyWatchingFilter ? "bg-white animate-pulse" : "bg-neutral-500"}`}
+                        />
+                        Currently Watching only
+                      </button>
+                    </div>
+                    {hasActiveFilters && (
+                      <button
+                        onClick={() => {
+                          setFilterType("all");
+                          setWatchFilter("all");
+                          setCurrentlyWatchingFilter(false);
+                        }}
+                        className="text-xs text-neutral-500 hover:text-neutral-200 transition-colors text-left"
+                      >
+                        Clear filters
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
-            </div>{/* end controls group */}
+            {/* end controls group */}
           </div>
         </div>
       </div>
@@ -472,7 +485,6 @@ export default function CalendarView() {
               isLoading={isLoading}
             />
           )}
-
         </div>
 
         {/* Side rail */}

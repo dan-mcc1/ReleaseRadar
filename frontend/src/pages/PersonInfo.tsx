@@ -3,6 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import { BASE_IMAGE_URL } from "../constants";
 import type { Movie, Show } from "../types/calendar";
 import { formatLocalDate } from "../utils/date";
+import { safeHref } from "../utils/safeHref";
 import { usePageTitle } from "../hooks/usePageTitle";
 import { usePersonInfo } from "../hooks/api/usePersonInfo";
 
@@ -31,7 +32,7 @@ type FullPersonData = {
 function ExternalLink({ href, label }: { href: string; label: string }) {
   return (
     <a
-      href={href}
+      href={safeHref(href)}
       target="_blank"
       rel="noopener noreferrer"
       className="inline-flex items-center text-sm text-neutral-400 hover:text-primary-400 bg-neutral-800 border border-neutral-700 hover:border-primary-600/50 px-3 py-1.5 rounded-lg transition-all duration-150"

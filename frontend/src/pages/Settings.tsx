@@ -19,6 +19,7 @@ import {
   useUserMe,
   useCheckUsername,
   useUpdateUsername,
+  useUpdateDisplayName,
   useUpdateBio,
   useUpdateAvatar,
   useDeleteAccount,
@@ -277,6 +278,7 @@ export default function Settings() {
   const { data: shelves } = useShelves();
   const toggleShelfNotify = useToggleShelfNotify();
   const updateUsernameMutation = useUpdateUsername();
+  const updateDisplayNameMutation = useUpdateDisplayName();
   const updateBioMutation = useUpdateBio();
   const updateAvatarMutation = useUpdateAvatar();
   const deleteAccountMutation = useDeleteAccount();
@@ -306,6 +308,12 @@ export default function Settings() {
     if (userMe) setBio(userMe.bio ?? "");
   }, [userMe?.bio]);
 
+  const [displayName, setDisplayName] = useState("");
+  const [displayNameSaved, setDisplayNameSaved] = useState(false);
+  useEffect(() => {
+    if (userMe) setDisplayName(userMe.display_name ?? "");
+  }, [userMe?.display_name]);
+
   const [selectedAvatar, setSelectedAvatar] = useState<
     string | null | undefined
   >(undefined);
@@ -318,6 +326,7 @@ export default function Settings() {
   const emailNotifications = prefs?.email_notifications ?? null;
   const notificationFrequency = prefs?.notification_frequency ?? "daily";
   const profileVisibility = prefs?.profile_visibility ?? "friends_only";
+  const hideSpoilers = prefs?.hide_spoilers ?? true;
   const notifyNewSeasons = prefs?.notify_new_seasons ?? true;
   const notifyStreamingChanges = prefs?.notify_streaming_changes ?? true;
   const notifyTrailers = prefs?.notify_trailers ?? true;
@@ -455,6 +464,12 @@ export default function Settings() {
       const e = err as { detail?: string };
       setUsernameError(e?.detail ?? "Could not save username.");
     }
+  }
+
+  async function saveDisplayName() {
+    await updateDisplayNameMutation.mutateAsync(displayName.trim() || null);
+    setDisplayNameSaved(true);
+    setTimeout(() => setDisplayNameSaved(false), 2000);
   }
 
   async function saveBio() {
@@ -642,10 +657,10 @@ export default function Settings() {
               />
               <div>
                 <p className="text-[16px] font-semibold tracking-tight text-white">
-                  {userMe?.username ? `@${userMe.username}` : user.email}
+                  {userMe?.display_name || (userMe?.username ? `@${userMe.username}` : user.email)}
                 </p>
                 <p className="text-[13px] text-neutral-400 mt-0.5">
-                  {user.email}
+                  {userMe?.display_name && userMe?.username ? `@${userMe.username} · ` : ""}{user.email}
                 </p>
               </div>
             </div>
@@ -791,6 +806,36 @@ export default function Settings() {
               </FieldWrap>
 
               <div className="sm:col-span-2">
+                <FieldWrap label="Display name">
+                  <FieldInput
+                    value={displayName}
+                    onChange={setDisplayName}
+                    placeholder="The name others see on your profile"
+                    maxLength={50}
+                  />
+                </FieldWrap>
+                <div className="flex items-center justify-between mt-1.5">
+                  <span className="text-xs text-neutral-600">
+                    {displayName.length}/50 · Shown on your profile instead of your @handle
+                  </span>
+                  <button
+                    onClick={saveDisplayName}
+                    disabled={
+                      updateDisplayNameMutation.isPending ||
+                      displayName.trim() === (userMe?.display_name ?? "")
+                    }
+                    className="text-sm bg-primary-600 enabled:hover:bg-primary-500 disabled:opacity-40 text-white px-4 py-1.5 rounded-lg transition-colors"
+                  >
+                    {updateDisplayNameMutation.isPending
+                      ? "Saving…"
+                      : displayNameSaved
+                        ? "Saved!"
+                        : "Save name"}
+                  </button>
+                </div>
+              </div>
+
+              <div className="sm:col-span-2">
                 <FieldWrap label="Bio">
                   <FieldInput
                     value={bio}
@@ -819,6 +864,23 @@ export default function Settings() {
                   </button>
                 </div>
               </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-6 mt-6 pt-6 border-t border-neutral-700/40">
+              <div>
+                <p className="text-[14px] font-semibold text-white">
+                  Hide spoilers
+                </p>
+                <p className="text-[12.5px] text-neutral-400 mt-0.5">
+                  Blur reviews marked "contains spoilers" and hide synopses for
+                  episodes you haven't reached yet. Click to reveal.
+                </p>
+              </div>
+              <Toggle
+                on={hideSpoilers}
+                onChange={() => patchPreferences({ hide_spoilers: !hideSpoilers })}
+                disabled={prefSaving}
+              />
             </div>
           </SectionCard>
 
@@ -1743,7 +1805,7 @@ export default function Settings() {
               >
                 <span>Import watch history</span>
                 <span className="text-xs text-neutral-500">
-                  Letterboxd CSV →
+                  Letterboxd or TV Time →
                 </span>
               </Link>
               <button

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from app.dependencies.auth import get_current_user
 from app.dependencies.subscription import is_premium
@@ -7,6 +7,11 @@ from app.db.session import SessionLocal
 from app.models.shelf import Shelf
 from app.services import shelf_service
 from app.services.episode_service import sync_show_episodes_background
+from app.schemas.common import (
+    ContentType,
+    SHELF_DESC_MAX_LEN,
+    SHELF_NAME_MAX_LEN,
+)
 
 FREE_SHELF_LIMIT = 3
 
@@ -23,18 +28,18 @@ router = APIRouter()
 
 
 class ShelfCreate(BaseModel):
-    name: str
-    description: str | None = None
+    name: str = Field(..., min_length=1, max_length=SHELF_NAME_MAX_LEN)
+    description: str | None = Field(None, max_length=SHELF_DESC_MAX_LEN)
 
 
 class ShelfUpdate(BaseModel):
-    name: str | None = None
-    description: str | None = None
+    name: str | None = Field(None, min_length=1, max_length=SHELF_NAME_MAX_LEN)
+    description: str | None = Field(None, max_length=SHELF_DESC_MAX_LEN)
 
 
 class ShelfItemAdd(BaseModel):
-    content_type: str
-    content_id: int
+    content_type: ContentType
+    content_id: int = Field(..., ge=1)
 
 
 class ShelfNotifyUpdate(BaseModel):

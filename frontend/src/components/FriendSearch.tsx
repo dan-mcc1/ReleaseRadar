@@ -5,6 +5,7 @@ import { useFriendSearch, useFriendSuggestions, useSendFriendRequest } from "../
 interface SearchResult {
   id: string;
   username: string;
+  display_name: string | null;
   profile_visibility: "public" | "friends_only" | "private";
   mutual_friends?: number;
   reason?: "mutual_friends" | "popular";
@@ -227,7 +228,7 @@ export default function FriendSearch({ onRequestSent, friendIds }: Props) {
                   className="grid items-center gap-3.5 px-4 py-3.5"
                   style={{ gridTemplateColumns: "auto 1fr auto" }}
                 >
-                  <Avatar name={user.username} size={44} />
+                  <Avatar name={user.display_name || user.username} size={44} />
 
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -235,8 +236,11 @@ export default function FriendSearch({ onRequestSent, friendIds }: Props) {
                         to={`/user/${user.username}`}
                         className="text-[15px] font-semibold text-neutral-100 hover:text-primary-400 transition-colors tracking-tight"
                       >
-                        @{user.username}
+                        {user.display_name || `@${user.username}`}
                       </Link>
+                      {user.display_name && (
+                        <span className="text-[12px] text-neutral-500 font-mono">@{user.username}</span>
+                      )}
                       <span
                         className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-mono font-semibold"
                         style={{

@@ -114,6 +114,39 @@ function PosterGrid({
   );
 }
 
+function CollectionPosterGrid({
+  items,
+}: {
+  items: { id: number; name: string; poster_path: string | null }[];
+}) {
+  return (
+    <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
+      {items.map((c) => (
+        <Link key={c.id} to={`/collection/${c.id}`} className="group block">
+          <div className="rounded-xl overflow-hidden aspect-[2/3] bg-neutral-800">
+            {c.poster_path ? (
+              <img
+                src={`${BASE_IMAGE_URL}/w342${c.poster_path}`}
+                alt={c.name}
+                className="w-full h-full object-cover group-hover:opacity-80 transition-opacity"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center p-2">
+                <span className="text-[10px] text-neutral-500 text-center line-clamp-4">
+                  {c.name}
+                </span>
+              </div>
+            )}
+          </div>
+          <p className="mt-1.5 text-[11.5px] font-medium text-neutral-400 text-center line-clamp-1">
+            {c.name}
+          </p>
+        </Link>
+      ))}
+    </div>
+  );
+}
+
 // Self-contained friends panel — owns its tab + confirm state so switching
 // tabs doesn't re-render the hero, stats, or shelves above it.
 function FriendsWidget() {
@@ -222,9 +255,14 @@ function FriendsWidget() {
                 </div>
                 <Link
                   to={`/user/${friend.username}`}
-                  className="flex-1 text-[13px] font-medium text-neutral-200 hover:text-primary-400 transition-colors truncate"
+                  className="flex-1 min-w-0 hover:text-primary-400 transition-colors"
                 >
-                  @{friend.username}
+                  <div className="text-[13px] font-medium text-neutral-200 truncate">
+                    {friend.display_name || `@${friend.username}`}
+                  </div>
+                  {friend.display_name && (
+                    <div className="text-[11px] text-neutral-500 truncate">@{friend.username}</div>
+                  )}
                 </Link>
                 {confirmRemoveId === friend.id ? (
                   <div className="flex gap-1 items-center">
@@ -273,9 +311,14 @@ function FriendsWidget() {
                 </div>
                 <Link
                   to={`/user/${follower.username}`}
-                  className="flex-1 text-[13px] font-medium text-neutral-200 hover:text-primary-400 transition-colors truncate"
+                  className="flex-1 min-w-0 hover:text-primary-400 transition-colors"
                 >
-                  @{follower.username}
+                  <div className="text-[13px] font-medium text-neutral-200 truncate">
+                    {follower.display_name || `@${follower.username}`}
+                  </div>
+                  {follower.display_name && (
+                    <div className="text-[11px] text-neutral-500 truncate">@{follower.username}</div>
+                  )}
                 </Link>
                 <button
                   onClick={() => addBack(follower)}
@@ -303,7 +346,17 @@ function FriendsWidget() {
                 (r: { friendship_id: number }) => r.friendship_id !== friendshipId,
               ),
               friends: accepted
-                ? [...old.friends, { friendship_id: friendshipId, friend: req.from_user }]
+                ? [
+                    ...old.friends,
+                    {
+                      friendship_id: friendshipId,
+                      friend: {
+                        id: req.from_user.id,
+                        username: req.from_user.username,
+                        display_name: req.from_user.display_name ?? null,
+                      },
+                    },
+                  ]
                 : old.friends,
             }));
           }}
@@ -346,14 +399,15 @@ export default function ProfilePage() {
   const { data: shelves = [] } = useShelves();
 
   const typedDbUser = summary?.user;
-  const favorites = summary?.favorites ?? { movies: [], shows: [] };
+  const favorites = summary?.favorites ?? { movies: [], shows: [], collections: [] };
   const watchlistPreview = summary?.watchlist ?? { movies: [], shows: [], total_movies: 0, total_shows: 0 };
   const watchedPreview = summary?.watched ?? { movies: [], shows: [], total_movies: 0, total_shows: 0 };
   const friends = summary?.friends ?? [];
 
   const totalWatched = watchedPreview.total_movies + watchedPreview.total_shows;
   const totalWatchlist = watchlistPreview.total_movies + watchlistPreview.total_shows;
-  const totalFavorites = favorites.movies.length + favorites.shows.length;
+  const totalFavorites =
+    favorites.movies.length + favorites.shows.length + favorites.collections.length;
   const hue = avatarKeyToHue(typedDbUser?.avatar_key);
   const avatarColor = getAvatarColor(typedDbUser?.avatar_key);
 
@@ -361,8 +415,9 @@ export default function ProfilePage() {
     const username = typedDbUser?.username;
     if (!username) return;
     const url = `${window.location.origin}/user/${username}`;
+    const shareName = typedDbUser?.display_name ?? username;
     if (navigator.share) {
-      await navigator.share({ title: `${username} on ReleaseRadar`, url }).catch(() => {});
+      await navigator.share({ title: `${shareName} on ReleaseRadar`, url }).catch(() => {});
     } else {
       await navigator.clipboard.writeText(url).catch(() => {});
       setShareCopied(true);
@@ -378,7 +433,8 @@ export default function ProfilePage() {
     );
   }
 
-  const initials = (user.displayName ?? typedDbUser?.username ?? "?")
+  const displayName = typedDbUser?.display_name ?? user.displayName ?? typedDbUser?.username ?? "User";
+  const initials = (typedDbUser?.display_name ?? user.displayName ?? typedDbUser?.username ?? "?")
     .split(" ")
     .map((w) => w[0])
     .join("")
@@ -465,7 +521,7 @@ export default function ProfilePage() {
             </div>
             <div className="flex items-baseline gap-4 flex-wrap">
               <h1 className="m-0 font-normal text-[32px] sm:text-[50px] tracking-[-0.025em] leading-none text-neutral-100">
-                {user.displayName ?? "User"}
+                {displayName}
               </h1>
               {typedDbUser?.username && (
                 <span className="font-mono text-[14px] text-neutral-400 tracking-[0.02em]">
@@ -564,7 +620,7 @@ export default function ProfilePage() {
         <div className="flex flex-col gap-10">
 
           {/* Favorites */}
-          {(favorites.movies.length > 0 || favorites.shows.length > 0) && (
+          {totalFavorites > 0 && (
             <section>
               <SectionHead title="Favorites" sub={`${totalFavorites} pinned`} />
               <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 flex flex-col gap-6">
@@ -582,6 +638,14 @@ export default function ProfilePage() {
                       Movies · {favorites.movies.length}
                     </div>
                     <PosterGrid items={favorites.movies} type="movie" cols={8} />
+                  </div>
+                )}
+                {favorites.collections.length > 0 && (
+                  <div>
+                    <div className="font-mono text-[10px] text-neutral-500 tracking-[0.12em] uppercase mb-3">
+                      Collections · {favorites.collections.length}
+                    </div>
+                    <CollectionPosterGrid items={favorites.collections} />
                   </div>
                 )}
               </div>

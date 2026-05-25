@@ -24,6 +24,9 @@ export function useNavCounts() {
     },
     enabled: !!user,
     staleTime: 60_000,
+    // SSE drives live updates, but if the connection dropped while the tab was
+    // backgrounded the badge can go stale — refetch on focus as a cheap backup.
+    refetchOnWindowFocus: true,
   });
 }
 

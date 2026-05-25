@@ -10,6 +10,7 @@ class User(Base):
     id = Column(String, primary_key=True)  # Firebase UID
     email = Column(String, nullable=True)
     username = Column(String, unique=True, nullable=True)
+    display_name = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     email_notifications = Column(
         Boolean, default=False, nullable=False, server_default="false"
@@ -28,6 +29,7 @@ class User(Base):
     notify_trailers = Column(Boolean, default=True, server_default="true", nullable=False)
     digest_hour = Column(Integer, default=9, server_default="9", nullable=False)
     digest_timezone = Column(String, default="America/New_York", server_default="America/New_York", nullable=False)
+    hide_spoilers = Column(Boolean, default=True, server_default="true", nullable=False)
     onboarding_completed = Column(Boolean, default=False, server_default="false", nullable=False)
     letterboxd_prompted = Column(Boolean, default=False, server_default="false", nullable=False)
     is_suspended = Column(Boolean, default=False, server_default="false", nullable=False)
@@ -41,3 +43,24 @@ class User(Base):
     silenced_until = Column(DateTime(timezone=True), nullable=True)
     ical_token_version = Column(Integer, default=1, server_default="1", nullable=False)
     last_digest_sent_at = Column(Date, nullable=True)
+
+    # Push notifications (iOS APNs via FCM)
+    push_notifications_enabled = Column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    push_notify_new_seasons = Column(
+        Boolean, default=True, server_default="true", nullable=False
+    )
+    push_notify_streaming_changes = Column(
+        Boolean, default=True, server_default="true", nullable=False
+    )
+    push_notify_trailers = Column(
+        Boolean, default=True, server_default="true", nullable=False
+    )
+    push_notify_episode_air = Column(
+        Boolean, default=True, server_default="true", nullable=False
+    )
+    # Minutes before air time to send the episode push (0..60, 5-minute increments).
+    episode_alert_lead_minutes = Column(
+        Integer, default=0, server_default="0", nullable=False
+    )

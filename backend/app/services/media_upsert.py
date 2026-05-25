@@ -21,22 +21,32 @@ from app.db.session import SessionLocal
 def _upsert_genres(db: Session, genres_data: list, link_model, **link_kwargs):
     if not genres_data:
         return
-    genre_ids = [g["id"] for g in genres_data]
-    existing_genres = {
-        g.id: g for g in db.query(Genre).filter(Genre.id.in_(genre_ids)).all()
-    }
-    existing_links = {
-        row.genre_id
-        for row in db.query(link_model)
-        .filter_by(**link_kwargs)
-        .filter(link_model.genre_id.in_(genre_ids))
-        .all()
-    }
-    for g in genres_data:
-        if g["id"] not in existing_genres:
-            db.add(Genre(id=g["id"], name=g["name"]))
-        if g["id"] not in existing_links:
-            db.add(link_model(genre_id=g["id"], **link_kwargs))
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    # TMDb occasionally returns the same genre twice on a movie; dedupe by id
+    # so we don't try to insert (movie_id, genre_id) twice in one batch.
+    unique_genres = {g["id"]: g for g in genres_data if g.get("id") is not None}
+    if not unique_genres:
+        return
+
+    # Upsert Genre rows first — handles concurrent references to the same
+    # missing genre across multiple movies in one transaction.
+    db.execute(
+        pg_insert(Genre)
+        .values([{"id": gid, "name": g["name"]} for gid, g in unique_genres.items()])
+        .on_conflict_do_nothing(index_elements=[Genre.id])
+    )
+
+    # Bulk insert the link rows with ON CONFLICT DO NOTHING so the operation
+    # is idempotent: re-ingest of the same movie (or a parallel writer touching
+    # the same link) won't crash on the unique constraint.
+    db.execute(
+        pg_insert(link_model)
+        .values(
+            [{"genre_id": gid, **link_kwargs} for gid in unique_genres]
+        )
+        .on_conflict_do_nothing()
+    )
 
 
 def _upsert_providers(db: Session, us_providers: dict, link_model, **link_kwargs):
@@ -51,22 +61,66 @@ def _upsert_providers(db: Session, us_providers: dict, link_model, **link_kwargs
         for p in us_providers.get(ptype, []):
             raw_pid = p["provider_id"]
             cpid = canonical_provider_id(raw_pid)
-            if cpid not in provider_map:
+            # Variants ship branded "X on Prime Video"-style logos under their
+            # own provider_id. Prefer the canonical TMDb entry's logo/name when
+            # both are present so the stored Provider row reflects the real service.
+            is_canonical_entry = raw_pid == cpid
+            existing = provider_map.get(cpid)
+            if existing is None:
                 provider_map[cpid] = {
                     "name": canonical_provider_name(raw_pid, p["provider_name"]),
                     "logo_path": p.get("logo_path"),
+                    "trusted": is_canonical_entry,
                     "flatrate": False,
                     "rent": False,
                     "buy": False,
                 }
+            elif is_canonical_entry and not existing["trusted"]:
+                existing["name"] = canonical_provider_name(raw_pid, p["provider_name"])
+                existing["logo_path"] = p.get("logo_path")
+                existing["trusted"] = True
             provider_map[cpid][ptype] = True
 
     if not provider_map:
         return
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
     pids = list(provider_map.keys())
-    existing_providers = {
-        p.id for p in db.query(Provider).filter(Provider.id.in_(pids)).all()
-    }
+
+    # Trusted entries (TMDb returned the canonical row itself) overwrite any
+    # existing wrong name/logo — historically a variant-only ingest could have
+    # seeded the canonical row with a branded "via Prime Video" logo.
+    # Untrusted (variant-only) entries only insert if missing, so we never
+    # downgrade a good canonical logo to a variant's branded one.
+    trusted = {pid: d for pid, d in provider_map.items() if d["trusted"]}
+    untrusted = {pid: d for pid, d in provider_map.items() if not d["trusted"]}
+
+    if trusted:
+        stmt = pg_insert(Provider).values(
+            [
+                {"id": pid, "name": data["name"], "logo_path": data["logo_path"]}
+                for pid, data in trusted.items()
+            ]
+        )
+        db.execute(
+            stmt.on_conflict_do_update(
+                index_elements=[Provider.id],
+                set_={"name": stmt.excluded.name, "logo_path": stmt.excluded.logo_path},
+            )
+        )
+
+    if untrusted:
+        db.execute(
+            pg_insert(Provider)
+            .values(
+                [
+                    {"id": pid, "name": data["name"], "logo_path": data["logo_path"]}
+                    for pid, data in untrusted.items()
+                ]
+            )
+            .on_conflict_do_nothing(index_elements=[Provider.id])
+        )
+
     existing_links = {
         row.provider_id: row
         for row in db.query(link_model)
@@ -75,8 +129,6 @@ def _upsert_providers(db: Session, us_providers: dict, link_model, **link_kwargs
         .all()
     }
     for pid, data in provider_map.items():
-        if pid not in existing_providers:
-            db.add(Provider(id=pid, name=data["name"], logo_path=data["logo_path"]))
         link = existing_links.get(pid)
         if not link:
             db.add(
@@ -219,6 +271,63 @@ def ensure_movie_in_db(db: Session, content_id: int, already_tracked: bool) -> M
         updated_at=datetime.now(timezone.utc),
     )
     db.add(movie)
+    db.flush()
+    _upsert_genres(db, movie_data.get("genres", []), MovieGenre, movie_id=movie.id)
+    _upsert_providers(db, us_providers, MovieProvider, movie_id=movie.id)
+    return movie
+
+
+def populate_movie_full(
+    db: Session, movie_id: int, *, force: bool = False
+) -> Movie | None:
+    """Ensure a fully-populated Movie row exists. Returns the Movie, or None
+    if it's adult / TMDb returned nothing. Does NOT bump tracking_count — this
+    is for backfills/imports where the row isn't being "tracked" by a user.
+
+    - Existing fully-populated row (updated_at IS NOT NULL) → returned unchanged,
+      unless ``force=True`` in which case it's re-fetched and overwritten.
+    - Missing row or stub (updated_at IS NULL) → fetches /movie/{id} and fills in.
+    """
+    movie = db.query(Movie).filter_by(id=movie_id).first()
+    if movie and movie.updated_at is not None and not force:
+        return movie
+
+    movie_data = fetch_movie_from_tmdb(movie_id, "watch/providers,release_dates,images")
+    if not movie_data or not movie_data.get("title"):
+        return None
+    if movie_data.get("adult"):
+        return None
+
+    us_providers = (
+        movie_data.get("watch/providers", {}).get("results", {}).get("US", {})
+    )
+    theatrical_release_date = get_theatrical_release_date(movie_data)
+    certification = get_us_movie_certification(movie_data)
+    all_logos = movie_data.get("images", {}).get("logos", [])
+    english_logos = [l for l in all_logos if l.get("iso_639_1") == "en"]
+    logo = english_logos[0]["file_path"] if english_logos else None
+
+    if movie is None:
+        movie = Movie(id=movie_id, tracking_count=0)
+        db.add(movie)
+
+    movie.imdb_id = movie_data.get("imdb_id")
+    movie.backdrop_path = movie_data.get("backdrop_path")
+    movie.logo_path = logo
+    movie.budget = movie_data.get("budget")
+    movie.homepage = movie_data.get("homepage")
+    movie.tagline = movie_data.get("tagline")
+    movie.poster_path = movie_data.get("poster_path")
+    movie.overview = movie_data.get("overview")
+    movie.release_date = theatrical_release_date
+    movie.revenue = movie_data.get("revenue")
+    movie.runtime = movie_data.get("runtime")
+    movie.status = movie_data.get("status")
+    movie.title = movie_data.get("title")
+    movie.vote_average = movie_data.get("vote_average")
+    movie.certification = certification
+    movie.updated_at = datetime.now(timezone.utc)
+
     db.flush()
     _upsert_genres(db, movie_data.get("genres", []), MovieGenre, movie_id=movie.id)
     _upsert_providers(db, us_providers, MovieProvider, movie_id=movie.id)

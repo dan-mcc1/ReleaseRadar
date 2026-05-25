@@ -164,6 +164,9 @@ class TestPublicProfile:
         assert "watchlist" in data
 
 
+@pytest.mark.skip(
+    reason="requires PostgreSQL: dialect-specific SQL (AT TIME ZONE / ::cast)"
+)
 class TestProfileSummary:
     def test_profile_summary_shape(self, client, seed_users):
         r = client.get("/user/profile-summary")

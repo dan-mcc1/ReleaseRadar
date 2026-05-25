@@ -42,6 +42,34 @@ export function buildAllItems(calendarData: CalendarData): CalendarItem[] {
   ];
 }
 
+// Collapse multiple same-show episodes into one group so a binge drop doesn't
+// dominate the side rail or a calendar day cell. Movies and one-off TV items
+// stay as singletons; order of first appearance is preserved.
+export type ItemGroup =
+  | { kind: "single"; item: CalendarItem }
+  | { kind: "show-group"; showId: number; items: CalendarItem[] };
+
+export function groupItemsByShow(items: CalendarItem[]): ItemGroup[] {
+  const groups: ItemGroup[] = [];
+  const tvIndex = new Map<number, number>();
+  for (const item of items) {
+    if (item.type === "tv") {
+      const showId = item.showData.id;
+      const at = tvIndex.get(showId);
+      if (at !== undefined) {
+        const g = groups[at];
+        if (g.kind === "show-group") g.items.push(item);
+      } else {
+        tvIndex.set(showId, groups.length);
+        groups.push({ kind: "show-group", showId, items: [item] });
+      }
+    } else {
+      groups.push({ kind: "single", item });
+    }
+  }
+  return groups;
+}
+
 export function getItemsForDate(
   allItems: CalendarItem[],
   date: Date,

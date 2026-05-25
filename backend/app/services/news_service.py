@@ -3,10 +3,52 @@ import httpx
 from app.config import settings
 
 _cache: dict[str, tuple[float, dict]] = {}
-_cache_version = 2  # bump to invalidate cached TV results after query change
+# Bump to invalidate cached responses after a query change.
+_cache_version = 3
 CACHE_TTL = 3600  # 1 hour — conserves the 100 req/day free tier limit
 
 NEWSAPI_BASE = "https://newsapi.org/v2"
+
+# Entertainment trade press + reputable film/TV outlets. NewsAPI accepts up to
+# 20 comma-separated domains; restricting to this set is the single biggest
+# precision win — it cuts almost all sports/politics/gossip noise on its own.
+_ENTERTAINMENT_DOMAINS = ",".join(
+    [
+        "variety.com",
+        "hollywoodreporter.com",
+        "deadline.com",
+        "indiewire.com",
+        "collider.com",
+        "ew.com",
+        "thewrap.com",
+        "screenrant.com",
+        "vulture.com",
+        "avclub.com",
+        "slashfilm.com",
+        "empireonline.com",
+        "rogerebert.com",
+        "comingsoon.net",
+        "comicbook.com",
+    ]
+)
+
+# Belt-and-suspenders: even if a whitelisted outlet runs a sports/gaming piece,
+# drop the most common sports + gambling outlets explicitly. Used by the
+# fall-through search endpoint where we can't apply a positive whitelist.
+_EXCLUDE_DOMAINS = ",".join(
+    [
+        "espn.com",
+        "bleacherreport.com",
+        "sbnation.com",
+        "cbssports.com",
+        "nbcsports.com",
+        "foxsports.com",
+        "si.com",
+        "theathletic.com",
+        "actionnetwork.com",
+        "draftkings.com",
+    ]
+)
 
 
 def _fetch(cache_key: str, endpoint: str, params: dict) -> dict:
@@ -38,19 +80,38 @@ def _fetch(cache_key: str, endpoint: str, params: dict) -> dict:
 
 
 def get_entertainment_news(page: int = 1, page_size: int = 20) -> dict:
+    # Drop top-headlines/category=entertainment — NewsAPI's entertainment bucket
+    # is too loose (music, gossip, gaming, occasional sports). Pull from the
+    # trade-press whitelist and let category-agnostic title terms match film+TV.
     return _fetch(
-        f"entertainment:{page}:{page_size}",
-        "top-headlines",
-        {"category": "entertainment", "language": "en", "page": page, "pageSize": page_size},
+        f"entertainment:{page}:{page_size}:v{_cache_version}",
+        "everything",
+        {
+            "domains": _ENTERTAINMENT_DOMAINS,
+            "qInTitle": (
+                "movie OR film OR series OR season OR trailer OR showrunner "
+                "OR streaming OR Netflix OR HBO OR Hulu OR Disney OR Paramount"
+            ),
+            "language": "en",
+            "sortBy": "publishedAt",
+            "page": page,
+            "pageSize": page_size,
+        },
     )
 
 
 def get_movie_news(page: int = 1, page_size: int = 20) -> dict:
+    # qInTitle = headline-only matching. Avoids articles that just mention
+    # "film" once in passing.
     return _fetch(
-        f"movies:{page}:{page_size}",
+        f"movies:{page}:{page_size}:v{_cache_version}",
         "everything",
         {
-            "q": "movies OR film OR cinema OR \"box office\"",
+            "domains": _ENTERTAINMENT_DOMAINS,
+            "qInTitle": (
+                "movie OR film OR \"box office\" OR sequel OR remake "
+                "OR director OR Hollywood OR Pixar OR Marvel OR \"A24\""
+            ),
             "language": "en",
             "sortBy": "publishedAt",
             "page": page,
@@ -64,7 +125,12 @@ def get_tv_news(page: int = 1, page_size: int = 20) -> dict:
         f"tv:{page}:{page_size}:v{_cache_version}",
         "everything",
         {
-            "q": "(\"TV show\" OR \"television series\" OR \"streaming series\" OR \"season premiere\" OR \"season finale\" OR \"series cancelled\" OR \"series renewed\" OR \"show cancelled\" OR \"show renewed\" OR \"TV series\") NOT (baseball OR football OR basketball OR soccer OR NFL OR NBA OR MLB OR NCAA OR \"college football\" OR \"college baseball\" OR \"college basketball\" OR hockey OR tennis OR golf OR Olympics OR tournament OR playoff OR standings OR roster OR draft OR trade)",
+            "domains": _ENTERTAINMENT_DOMAINS,
+            "qInTitle": (
+                "series OR \"TV show\" OR season OR episode OR finale "
+                "OR premiere OR showrunner OR renewed OR canceled OR cancelled "
+                "OR Netflix OR HBO OR Hulu OR \"Apple TV\""
+            ),
             "language": "en",
             "sortBy": "publishedAt",
             "page": page,
@@ -74,11 +140,14 @@ def get_tv_news(page: int = 1, page_size: int = 20) -> dict:
 
 
 def search_news(query: str, page: int = 1, page_size: int = 20) -> dict:
+    # User-driven — keep the term broad but drop the obvious sports/gambling
+    # outlets so a search like "Knicks" doesn't bury legit show results.
     return _fetch(
-        f"search:{query}:{page}:{page_size}",
+        f"search:{query}:{page}:{page_size}:v{_cache_version}",
         "everything",
         {
-            "q": query,
+            "qInTitle": query,
+            "excludeDomains": _EXCLUDE_DOMAINS,
             "language": "en",
             "sortBy": "publishedAt",
             "page": page,

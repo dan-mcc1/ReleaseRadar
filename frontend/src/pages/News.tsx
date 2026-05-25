@@ -6,6 +6,7 @@ import {
   type NewsArticle,
 } from "../hooks/api/useNews";
 import { usePageTitle } from "../hooks/usePageTitle";
+import { safeHref } from "../utils/safeHref";
 
 const CATEGORY_TABS: { label: string; value: NewsCategory }[] = [
   { label: "Entertainment", value: "entertainment" },
@@ -88,7 +89,7 @@ function ImageBox({
 function LeadArticle({ article }: { article: NewsArticle }) {
   return (
     <a
-      href={article.url}
+      href={safeHref(article.url)}
       target="_blank"
       rel="noopener noreferrer"
       className="group bg-neutral-800/60 border border-white/8 rounded-2xl overflow-hidden flex flex-col cursor-pointer"
@@ -149,7 +150,7 @@ function SideArticle({
 }) {
   return (
     <a
-      href={article.url}
+      href={safeHref(article.url)}
       target="_blank"
       rel="noopener noreferrer"
       className={`group grid gap-4 cursor-pointer pb-5 ${last ? "" : "border-b border-white/8"}`}
@@ -190,7 +191,7 @@ function SideArticle({
 function GridArticle({ article }: { article: NewsArticle }) {
   return (
     <a
-      href={article.url}
+      href={safeHref(article.url)}
       target="_blank"
       rel="noopener noreferrer"
       className="group bg-neutral-800/60 border border-white/8 rounded-2xl overflow-hidden flex flex-col cursor-pointer hover:border-white/15 transition-colors"

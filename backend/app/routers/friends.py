@@ -1,9 +1,16 @@
 # app/routers/friends.py
-from fastapi import APIRouter, Depends, Body, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from app.core.limiter import limiter
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
+from app.schemas.common import (
+    FRIEND_REQUEST_MSG_MAX_LEN,
+    USERNAME_MAX_LEN,
+    USERNAME_MIN_LEN,
+    USERNAME_PATTERN,
+)
 from app.services import friends_service
 from app.services.friends_service import get_followers, get_suggested_friends
 from app.services.user_service import search_users_by_username
@@ -12,12 +19,22 @@ from app.services.activity_service import (
     get_activity_feed,
     get_my_activity,
 )
-from app.core.event_bus import publish
 from app.models.user import User
-from app.models.friendship import Friendship
-from app.services.recommendation_service import get_unread_count
+from app.services.nav_counts import notify_counts_changed
 
 router = APIRouter()
+
+
+class FriendRequestBody(BaseModel):
+    addressee_username: str = Field(
+        ..., min_length=USERNAME_MIN_LEN, max_length=USERNAME_MAX_LEN, pattern=USERNAME_PATTERN
+    )
+    message: str | None = Field(None, max_length=FRIEND_REQUEST_MSG_MAX_LEN)
+
+
+class FriendRespondBody(BaseModel):
+    friendship_id: int = Field(..., ge=1)
+    accept: bool
 
 
 @router.get("/search")
@@ -34,6 +51,7 @@ def search_users(
         {
             "id": u.id,
             "username": u.username,
+            "display_name": u.display_name,
             "profile_visibility": u.profile_visibility or "friends_only",
         }
         for u in users
@@ -55,57 +73,28 @@ def suggest_friends(
 @limiter.limit("5/minute")
 def send_request(
     request: Request,
-    addressee_username: str = Body(...),
-    message: str | None = Body(None, max_length=200),
+    body: FriendRequestBody,
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
     """Send a friend request to a user by their username."""
-    result = friends_service.send_friend_request(db, uid, addressee_username, message)
+    addressee_username = body.addressee_username
+    result = friends_service.send_friend_request(db, uid, addressee_username, body.message)
     addressee = db.query(User).filter(User.username == addressee_username).first()
     if addressee:
-        pending_count = (
-            db.query(Friendship)
-            .filter(
-                Friendship.addressee_id == addressee.id, Friendship.status == "pending"
-            )
-            .count()
-        )
-        unread_count = get_unread_count(db, addressee.id)
-        publish(
-            addressee.id,
-            {
-                "type": "counts_update",
-                "pending_requests": pending_count,
-                "unread_recs": unread_count,
-            },
-        )
+        notify_counts_changed(db, addressee.id)
     return result
 
 
 @router.patch("/respond")
 def respond_to_request(
-    friendship_id: int = Body(...),
-    accept: bool = Body(...),
+    body: FriendRespondBody,
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
     """Accept or decline an incoming friend request."""
-    result = friends_service.respond_to_request(db, uid, friendship_id, accept)
-    pending_count = (
-        db.query(Friendship)
-        .filter(Friendship.addressee_id == uid, Friendship.status == "pending")
-        .count()
-    )
-    unread_count = get_unread_count(db, uid)
-    publish(
-        uid,
-        {
-            "type": "counts_update",
-            "pending_requests": pending_count,
-            "unread_recs": unread_count,
-        },
-    )
+    result = friends_service.respond_to_request(db, uid, body.friendship_id, body.accept)
+    notify_counts_changed(db, uid)
     return result
 
 

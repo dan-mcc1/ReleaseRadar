@@ -169,6 +169,11 @@ body {
   overflow-x: hidden;
 }
 
-.datepicker-input-wrapper .datepicker-input-icon {
-    display: none !important;
+@keyframes route-progress-slide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
+.route-progress-bar {
+  animation: route-progress-slide 1.1s ease-in-out infinite;
+  will-change: transform;
 }

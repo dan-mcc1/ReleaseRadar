@@ -7,6 +7,7 @@ interface ActivityItem {
   id: number;
   user_id: string;
   username: string | null;
+  display_name?: string | null;
   activity_type: "watched" | "currently_watching" | "want_to_watch";
   content_type: "movie" | "tv";
   content_id: number;
@@ -93,7 +94,7 @@ export default function ActivityFeed() {
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-neutral-300 leading-snug">
                   <span className="font-semibold text-neutral-100">
-                    {item.username ?? "Someone"}
+                    {item.display_name || item.username || "Someone"}
                   </span>{" "}
                   {activityLabel(item.activity_type)}{" "}
                   <Link

@@ -139,6 +139,9 @@ class TestRevokeToken:
 
 
 class TestGetToken:
+    @pytest.mark.skip(
+        reason="open beta: is_premium hardcoded True (see subscription.py)"
+    )
     def test_free_user_returns_403(self, client, db):
         _seed_user(db, tier="free")
         r = client.get("/ical/token")

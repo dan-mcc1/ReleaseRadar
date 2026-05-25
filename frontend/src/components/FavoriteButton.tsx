@@ -2,7 +2,7 @@ import { useAuthUser } from "../hooks/useAuthUser";
 import { useFavoriteStatus, useToggleFavorite } from "../hooks/api/useLists";
 
 interface FavoriteButtonProps {
-  contentType: "movie" | "tv";
+  contentType: "movie" | "tv" | "collection";
   contentId: number;
 }
 

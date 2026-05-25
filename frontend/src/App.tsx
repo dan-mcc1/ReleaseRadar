@@ -5,6 +5,7 @@ import "./App.css";
 import NavBar from "./components/NavBar";
 import InstallBanner from "./components/InstallBanner";
 import ProtectedRoute from "./components/ProtectedRoute";
+import RouteFallback from "./components/RouteFallback";
 import { useAccountStatus } from "./hooks/api/useUser";
 import { setAccountRestricted, onBanDetected } from "./utils/accountState";
 import LandingPage from "./pages/LandingPage";
@@ -17,6 +18,7 @@ import SpotlightTour from "./components/SpotlightTour";
 import WarningModal from "./components/WarningModal";
 import SuspensionBanModal from "./components/SuspensionBanModal";
 import { ToastProvider } from "./components/Toast";
+import ErrorBoundary from "./components/ErrorBoundary";
 
 const Search = lazy(() => import("./pages/Search"));
 const Settings = lazy(() => import("./pages/Settings"));
@@ -33,6 +35,11 @@ const FriendsPage = lazy(() => import("./pages/FriendsPage"));
 const EpisodeInfo = lazy(() => import("./pages/EpisodeInfo"));
 const BoxOffice = lazy(() => import("./pages/BoxOffice"));
 const CollectionInfo = lazy(() => import("./pages/CollectionInfo"));
+const BrowseCollections = lazy(() => import("./pages/BrowseCollections"));
+const MyCollections = lazy(() => import("./pages/MyCollections"));
+const BrowseGroups = lazy(() => import("./pages/BrowseGroups"));
+const MyGroups = lazy(() => import("./pages/MyGroups"));
+const GroupDetail = lazy(() => import("./pages/GroupDetail"));
 const ForYou = lazy(() => import("./pages/ForYou"));
 const Unsubscribe = lazy(() => import("./pages/Unsubscribe"));
 const ShelvesPage = lazy(() => import("./pages/ShelvesPage"));
@@ -88,6 +95,15 @@ function BanGate({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+function RouteErrorBoundary({ children }: { children: ReactNode }) {
+  const { pathname } = useLocation();
+  return (
+    <ErrorBoundary key={pathname} scope="route">
+      {children}
+    </ErrorBoundary>
+  );
+}
+
 function AppShell({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
   const isSignIn = pathname === "/signIn";
@@ -114,7 +130,8 @@ function App() {
         <SpotlightTour />
         <WarningModal />
         <BanGate>
-        <Suspense fallback={null}>
+        <Suspense fallback={<RouteFallback />}>
+        <RouteErrorBoundary>
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route
@@ -154,7 +171,26 @@ function App() {
               </ProtectedRoute>
             }
           />
+          <Route path="/collections" element={<BrowseCollections />} />
+          <Route
+            path="/my-collections"
+            element={
+              <ProtectedRoute>
+                <MyCollections />
+              </ProtectedRoute>
+            }
+          />
           <Route path="/collection/:id" element={<CollectionInfo />} />
+          <Route path="/groups" element={<BrowseGroups />} />
+          <Route
+            path="/my-groups"
+            element={
+              <ProtectedRoute>
+                <MyGroups />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/groups/:slug" element={<GroupDetail />} />
           <Route path="/for-you" element={<ForYou />} />
           <Route path="/unsubscribe" element={<Unsubscribe />} />
           <Route path="/community-guidelines" element={<CommunityGuidelines />} />
@@ -218,6 +254,7 @@ function App() {
             }
           />
         </Routes>
+        </RouteErrorBoundary>
         </Suspense>
         </BanGate>
         </AppShell>

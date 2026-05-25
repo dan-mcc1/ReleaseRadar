@@ -82,7 +82,7 @@ class TestRecommendationSend:
                 "content_title": "Test",
             },
         )
-        assert r.status_code == 400
+        assert r.status_code == 422
 
     def test_send_with_message(self, client, db, seed_movie):
         _make_friends(db)

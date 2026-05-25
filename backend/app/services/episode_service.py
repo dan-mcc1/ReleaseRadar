@@ -44,11 +44,12 @@ def ensure_show_in_db(db: Session, show_id: int) -> bool:
     if db.query(Show).filter_by(id=show_id).first():
         return True
 
-    # Release the DB connection before the blocking TMDB HTTP call so the
-    # pool isn't held for up to 10 s per show. db.close() expunges the
-    # identity map but leaves the session reusable.
-    db.close()
-
+    # NOTE: previously this called db.close() before the TMDB fetch to release
+    # the pool connection, then reused the closed session for db.query/add/commit.
+    # SQLAlchemy will resurrect the session, but it's implicit behavior we
+    # shouldn't rely on. We hold the connection across the HTTP call instead;
+    # if pool exhaustion becomes a problem, refactor callers to do the TMDB
+    # fetch outside the request session.
     try:
         show_data = get(f"/tv/{show_id}")
     except Exception:

@@ -17,6 +17,15 @@ export const queryKeys = {
   // Media detail
   person: (id: string) => ["person", id] as const,
   collection: (id: string) => ["collection", id] as const,
+  collectionStats: (id: string) => ["collection", id, "stats"] as const,
+  collectionRanking: (uid: string, id: string) =>
+    ["collection", id, "ranking", uid] as const,
+  myCollections: () => ["collections", "mine"] as const,
+  collectionGenres: () => ["collections", "genres"] as const,
+  collectionsBrowse: (page: number, pageSize: number, filterKey: string) =>
+    ["collections", "browse", page, pageSize, filterKey] as const,
+  collectionsSearch: (query: string, limit: number) =>
+    ["collections", "search", query, limit] as const,
   mediaDetail: (type: "movie" | "tv", id: string) => ["media", type, id] as const,
   mediaDetailFull: (type: "movie" | "tv", id: string) => ["media", type, id, "full"] as const,
   aggregateRating: (type: string, id: string) => ["reviews", "aggregate", type, id] as const,
@@ -100,6 +109,15 @@ export const queryKeys = {
   shelfCalendar: (uid: string, shelfId: number) => ["shelves", uid, shelfId, "calendar"] as const,
   itemShelves: (uid: string, contentType: string, contentId: number) =>
     ["shelves", "item", uid, contentType, contentId] as const,
+
+  // Communities (Groups)
+  communities: (q: string, offset: number) => ["communities", q, offset] as const,
+  myCommunities: (uid: string) => ["communities", "mine", uid] as const,
+  community: (slug: string) => ["communities", "detail", slug] as const,
+  communityMembers: (id: number) => ["communities", id, "members"] as const,
+  communityMedia: (id: number) => ["communities", id, "media"] as const,
+  communityPosts: (id: number) => ["communities", id, "posts"] as const,
+  communityPost: (postId: number) => ["communities", "post", postId] as const,
 
   // News
   news: (category: string, page: number, q: string) =>

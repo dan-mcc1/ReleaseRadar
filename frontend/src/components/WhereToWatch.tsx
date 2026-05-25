@@ -1,6 +1,7 @@
 import { Provider, WatchProvider } from "../types/calendar";
 import { BASE_IMAGE_URL } from "../constants";
 import { getProviderUrl, getProviderDedupeKey } from "../utils/providerUrls";
+import { safeHref } from "../utils/safeHref";
 import { useMyProviderIds } from "../hooks/api/useStreamingServices";
 import { useAuthUser } from "../hooks/useAuthUser";
 
@@ -60,7 +61,7 @@ function ProviderCard({
 
   if (url) {
     return (
-      <a href={url} target="_blank" rel="noopener noreferrer" key={providerId}>
+      <a href={safeHref(url)} target="_blank" rel="noopener noreferrer" key={providerId}>
         {content}
       </a>
     );

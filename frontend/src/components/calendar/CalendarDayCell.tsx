@@ -1,7 +1,8 @@
 // frontend/src/components/calendar/CalendarDayCell.tsx
+import { useState } from "react";
 import { BASE_IMAGE_URL } from "../../constants";
 import { toLocalISODate } from "../../utils/date";
-import { formatAirTimeToLocal } from "../../utils/calendarUtils";
+import { formatAirTimeToLocal, groupItemsByShow } from "../../utils/calendarUtils";
 import type { CalendarItem, DayItem } from "../../utils/calendarUtils";
 
 interface Props {
@@ -11,6 +12,74 @@ interface Props {
   isToday: boolean;
   isLoading: boolean;
   onSelect: (date: Date) => void;
+}
+
+function CellItem({ item }: { item: CalendarItem }) {
+  const title =
+    "episode_number" in item
+      ? `${item.showData.name} - ${item.name}`
+      : item.title;
+  return (
+    <div className="relative mt-1.5 h-10 sm:h-20 rounded-md overflow-hidden group">
+      {item.showData.backdrop_path && (
+        <img
+          src={`${BASE_IMAGE_URL}/w780${item.showData.backdrop_path}`}
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+      )}
+      <div className="absolute inset-0 bg-black/55" />
+      <div className="relative z-10 flex h-full items-center justify-center px-1.5">
+        {item.showData.logo_path ? (
+          <img
+            src={`${BASE_IMAGE_URL}/w300${item.showData.logo_path}`}
+            alt={title}
+            className="max-h-5 sm:max-h-10 object-contain drop-shadow-md"
+          />
+        ) : (
+          <span className="text-white text-[10px] sm:text-xs font-semibold text-center line-clamp-2 drop-shadow leading-tight">
+            {title}
+          </span>
+        )}
+      </div>
+      {item.type === "tv" &&
+        formatAirTimeToLocal(
+          item.showData.air_time,
+          item.showData.air_timezone,
+        ) && (
+          <div className="absolute bottom-0.5 right-1 z-10 hidden sm:block text-white/60 text-[7px] font-mono drop-shadow">
+            {formatAirTimeToLocal(
+              item.showData.air_time,
+              item.showData.air_timezone,
+            )}
+          </div>
+        )}
+    </div>
+  );
+}
+
+function CellShowGroup({ items }: { items: CalendarItem[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const visible = expanded ? items : items.slice(0, 3);
+  const hiddenCount = items.length - 3;
+
+  return (
+    <>
+      {visible.map((item) => (
+        <CellItem key={`${item.type}-${item.id}`} item={item} />
+      ))}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setExpanded((v) => !v);
+        }}
+        className="mt-1.5 w-full text-[10px] sm:text-xs font-mono text-neutral-400 hover:text-primary-400 bg-neutral-800/60 hover:bg-neutral-800 rounded-md py-1 cursor-pointer transition-colors"
+      >
+        {expanded ? "Show less" : `+${hiddenCount} more`}
+      </button>
+    </>
+  );
 }
 
 export default function CalendarDayCell({
@@ -59,50 +128,19 @@ export default function CalendarDayCell({
               />
             ),
           )
-        : cellItems.map((item, idx) => {
-            const title =
-              "episode_number" in item
-                ? `${item.showData.name} - ${item.name}`
-                : item.title;
+        : groupItemsByShow(cellItems).map((g) => {
+            if (g.kind === "single") {
+              return (
+                <CellItem key={`${g.item.type}-${g.item.id}`} item={g.item} />
+              );
+            }
+            if (g.items.length <= 3) {
+              return g.items.map((item) => (
+                <CellItem key={`${item.type}-${item.id}`} item={item} />
+              ));
+            }
             return (
-              <div
-                key={idx}
-                className="relative mt-1.5 h-10 sm:h-20 rounded-md overflow-hidden group"
-              >
-                {item.showData.backdrop_path && (
-                  <img
-                    src={`${BASE_IMAGE_URL}/w780${item.showData.backdrop_path}`}
-                    alt=""
-                    className="absolute inset-0 h-full w-full object-cover"
-                  />
-                )}
-                <div className="absolute inset-0 bg-black/55" />
-                <div className="relative z-10 flex h-full items-center justify-center px-1.5">
-                  {item.showData.logo_path ? (
-                    <img
-                      src={`${BASE_IMAGE_URL}/w300${item.showData.logo_path}`}
-                      alt={title}
-                      className="max-h-5 sm:max-h-10 object-contain drop-shadow-md"
-                    />
-                  ) : (
-                    <span className="text-white text-[10px] sm:text-xs font-semibold text-center line-clamp-2 drop-shadow leading-tight">
-                      {title}
-                    </span>
-                  )}
-                </div>
-                {item.type === "tv" &&
-                  formatAirTimeToLocal(
-                    item.showData.air_time,
-                    item.showData.air_timezone,
-                  ) && (
-                    <div className="absolute bottom-0.5 right-1 z-10 hidden sm:block text-white/60 text-[7px] font-mono drop-shadow">
-                      {formatAirTimeToLocal(
-                        item.showData.air_time,
-                        item.showData.air_timezone,
-                      )}
-                    </div>
-                  )}
-              </div>
+              <CellShowGroup key={`group-${g.showId}`} items={g.items} />
             );
           })}
     </div>

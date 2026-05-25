@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, literal
+from app.models.collection import Collection
 from app.models.favorite import Favorite
 from app.models.movie import Movie
 from app.models.show import Show
@@ -98,9 +99,31 @@ def get_favorites(db: Session, user_id: str):
         )
         .all()
     )
+    collections = (
+        db.query(Collection)
+        .select_from(Favorite)
+        .join(
+            Collection,
+            and_(
+                Favorite.content_id == Collection.id,
+                Favorite.content_type == "collection",
+                Favorite.user_id == user_id,
+            ),
+        )
+        .all()
+    )
     return {
         "movies": [serialize_movie_list(m) for m in movies],
         "shows": [serialize_show_list(s) for s in shows],
+        "collections": [
+            {
+                "id": c.id,
+                "name": c.name,
+                "poster_path": c.poster_path,
+                "backdrop_path": c.backdrop_path,
+            }
+            for c in collections
+        ],
     }
 
 

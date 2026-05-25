@@ -1,9 +1,10 @@
-from typing import Optional
-from fastapi import APIRouter, Depends, Body, HTTPException, Query, Request
+from typing import Literal, Optional
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from pydantic import BaseModel, Field
 from app.core.limiter import limiter
 from sqlalchemy.orm import Session
-from sqlalchemy import func, select
+from sqlalchemy import func, case
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user, require_not_silenced
 from app.core.firebase import verify_token
@@ -13,6 +14,22 @@ from app.models.user import User
 from app.models.watched import Watched
 from app.models.block import Block
 from app.services.omdb_service import get_omdb_scores
+from app.schemas.common import ContentType, REVIEW_TEXT_MAX_LEN
+
+
+class ReviewUpsert(BaseModel):
+    content_type: ContentType
+    content_id: int = Field(..., ge=1)
+    review_text: str = Field(..., min_length=1, max_length=REVIEW_TEXT_MAX_LEN)
+    is_spoiler: bool = False
+
+
+class ReviewDelete(BaseModel):
+    content_type: ContentType
+    content_id: int = Field(..., ge=1)
+
+
+SortOrder = Literal["newest", "top"]
 
 _bearer = HTTPBearer(auto_error=False)
 
@@ -32,36 +49,31 @@ router = APIRouter()
 @limiter.limit("60/minute")
 def get_reviews(
     request: Request,
-    content_type: str = Query(...),
-    content_id: int = Query(...),
-    sort: str = Query("newest"),
+    content_type: ContentType = Query(...),
+    content_id: int = Query(..., ge=1),
+    sort: SortOrder = Query("newest"),
     db: Session = Depends(get_db),
     uid: Optional[str] = Depends(_optional_user),
 ):
     """Get reviews for a piece of content, sorted by newest or top (most liked)."""
     like_uid = uid or ""
 
-    like_count_sq = (
-        select(func.count())
-        .where(ReviewLike.review_id == Review.id)
-        .correlate(Review)
-        .scalar_subquery()
-    )
-
-    user_liked_sq = (
-        select(func.count())
-        .where(ReviewLike.review_id == Review.id, ReviewLike.user_id == like_uid)
-        .correlate(Review)
-        .scalar_subquery()
-    )
+    # One LEFT JOIN against ReviewLike with GROUP BY replaces two per-row
+    # correlated subqueries. case() + sum() is the portable equivalent of
+    # COUNT(*) FILTER (WHERE user_id = :uid) — SQLite (tests) and Postgres
+    # (prod) both compile it down to the same plan.
+    like_count_col = func.count(ReviewLike.id).label("like_count")
+    user_liked_col = func.coalesce(
+        func.sum(case((ReviewLike.user_id == like_uid, 1), else_=0)), 0
+    ).label("user_has_liked")
 
     query = (
         db.query(
             Review,
             User.username,
             Watched.rating,
-            like_count_sq.label("like_count"),
-            user_liked_sq.label("user_has_liked"),
+            like_count_col,
+            user_liked_col,
         )
         .join(User, Review.user_id == User.id)
         .outerjoin(
@@ -70,7 +82,9 @@ def get_reviews(
             & (Watched.content_type == Review.content_type)
             & (Watched.content_id == Review.content_id),
         )
+        .outerjoin(ReviewLike, ReviewLike.review_id == Review.id)
         .filter(Review.content_type == content_type, Review.content_id == content_id)
+        .group_by(Review.id, User.username, Watched.rating)
     )
 
     if uid:
@@ -82,7 +96,7 @@ def get_reviews(
             query = query.filter(Review.user_id.notin_(blocked_ids))
 
     if sort == "top":
-        query = query.order_by(like_count_sq.desc(), Review.created_at.desc())
+        query = query.order_by(like_count_col.desc(), Review.created_at.desc())
     else:
         query = query.order_by(Review.created_at.desc())
 
@@ -93,6 +107,7 @@ def get_reviews(
             "user_id": row.Review.user_id,
             "username": row.username,
             "review_text": row.Review.review_text,
+            "is_spoiler": row.Review.is_spoiler,
             "rating": row.rating,
             "created_at": row.Review.created_at,
             "updated_at": row.Review.updated_at,
@@ -107,8 +122,8 @@ def get_reviews(
 @limiter.limit("60/minute")
 def get_aggregate_ratings(
     request: Request,
-    content_type: str = Query(...),
-    content_id: int = Query(...),
+    content_type: ContentType = Query(...),
+    content_id: int = Query(..., ge=1),
     db: Session = Depends(get_db),
 ):
     """Get aggregate ratings from app users for a piece of content."""
@@ -132,7 +147,7 @@ def get_aggregate_ratings(
 @limiter.limit("30/minute")
 def get_external_scores(
     request: Request,
-    imdb_id: str = Query(...),
+    imdb_id: str = Query(..., min_length=1, max_length=20, pattern=r"^tt\d+$"),
     uid: str = Depends(get_current_user),
 ):
     """Fetch RT, Metacritic, and IMDb scores from OMDB."""
@@ -168,20 +183,17 @@ def toggle_like(
 
 @router.post("")
 def add_or_update_review(
-    content_type: str = Body(...),
-    content_id: int = Body(...),
-    review_text: str = Body(...),
+    body: ReviewUpsert,
     db: Session = Depends(get_db),
     uid: str = Depends(require_not_silenced),
 ):
     """Add or update the current user's review."""
-    review_text = review_text.strip()
+    content_type = body.content_type
+    content_id = body.content_id
+    is_spoiler = body.is_spoiler
+    review_text = body.review_text.strip()
     if not review_text:
         raise HTTPException(status_code=422, detail="Review text cannot be empty.")
-    if len(review_text) > 2000:
-        raise HTTPException(
-            status_code=422, detail="Review must be 2000 characters or less."
-        )
 
     existing = (
         db.query(Review)
@@ -201,6 +213,7 @@ def add_or_update_review(
             "user_id": r.user_id,
             "username": u.username if u else "",
             "review_text": r.review_text,
+            "is_spoiler": r.is_spoiler,
             "rating": watched.rating if watched else None,
             "created_at": r.created_at,
             "updated_at": r.updated_at,
@@ -210,6 +223,7 @@ def add_or_update_review(
 
     if existing:
         existing.review_text = review_text
+        existing.is_spoiler = is_spoiler
         db.commit()
         db.refresh(existing)
         user_obj = db.query(User).filter_by(id=uid).first()
@@ -220,6 +234,7 @@ def add_or_update_review(
         content_type=content_type,
         content_id=content_id,
         review_text=review_text,
+        is_spoiler=is_spoiler,
     )
     db.add(review)
     db.commit()
@@ -230,15 +245,14 @@ def add_or_update_review(
 
 @router.delete("")
 def delete_review(
-    content_type: str = Body(...),
-    content_id: int = Body(...),
+    body: ReviewDelete,
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
     """Delete the current user's review."""
     review = (
         db.query(Review)
-        .filter_by(user_id=uid, content_type=content_type, content_id=content_id)
+        .filter_by(user_id=uid, content_type=body.content_type, content_id=body.content_id)
         .first()
     )
     if not review:

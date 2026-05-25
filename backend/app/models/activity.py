@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Text, Float, Index
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Text, Float, Index, text
 from sqlalchemy.sql import func
 from app.db.base import Base
 
@@ -22,4 +22,14 @@ class Activity(Base):
     __table_args__ = (
         Index("ix_activity_user_created_at", "user_id", "created_at"),
         Index("ix_activity_created_at", "created_at"),
+        # Partial unique index — episode_watched rows allow many per user/episode.
+        # Declared on both dialects so test SQLite mirrors prod Postgres; the
+        # log_activity upsert's ON CONFLICT clause targets this index.
+        Index(
+            "uq_activity_user_type_content",
+            "user_id", "activity_type", "content_type", "content_id",
+            unique=True,
+            postgresql_where=text("activity_type <> 'episode_watched'"),
+            sqlite_where=text("activity_type <> 'episode_watched'"),
+        ),
     )

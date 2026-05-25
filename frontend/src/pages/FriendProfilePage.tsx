@@ -29,11 +29,13 @@ interface MediaItem {
 interface FriendUser {
   id: string;
   username: string;
+  display_name: string | null;
 }
 
 interface PublicProfile {
   id: string;
   username: string;
+  display_name: string | null;
   bio: string | null;
   is_friend: boolean;
   profile_visibility: "public" | "friends_only" | "private";
@@ -103,7 +105,7 @@ function PosterThumb({ item, type }: { item: MediaItem; type: "movie" | "tv" }) 
     <Link to={href} className="group block">
       <div className="rounded-xl overflow-hidden aspect-[2/3] bg-neutral-800">
         <img
-          src={item.poster_path ? `${BASE_IMAGE_URL}/w185${item.poster_path}` : fallback}
+          src={item.poster_path ? `${BASE_IMAGE_URL}/w342${item.poster_path}` : fallback}
           alt={label}
           className="w-full h-full object-cover group-hover:opacity-80 transition-opacity"
         />
@@ -135,7 +137,7 @@ function PosterSection({
       </div>
       <div
         className="grid gap-3"
-        style={{ gridTemplateColumns: `repeat(${Math.min(preview.length, cols)}, 1fr)` }}
+        style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}
       >
         {preview.map((item) => (
           <PosterThumb key={item.id} item={item} type={type} />
@@ -326,7 +328,8 @@ export default function FriendProfilePage() {
   }
 
   const hue = usernameToHue(profile.username);
-  const initials = profile.username[0].toUpperCase();
+  const heroName = profile.display_name || profile.username;
+  const initials = (profile.display_name?.trim()?.[0] ?? profile.username[0]).toUpperCase();
   const favorites = profile.favorites;
   const watchlist = profile.watchlist;
   const watched = profile.watched;
@@ -397,7 +400,7 @@ export default function FriendProfilePage() {
             </div>
             <div className="flex items-baseline gap-4 flex-wrap">
               <h1 className="m-0 font-light italic text-[48px] tracking-[-0.025em] leading-none text-neutral-100">
-                {profile.username}
+                {heroName}
               </h1>
               <span className="font-mono text-[13px] text-neutral-500 tracking-[0.02em]">
                 @{profile.username}
@@ -518,7 +521,7 @@ export default function FriendProfilePage() {
             </div>
             <div className="min-w-0">
               <h1 className="m-0 font-light italic text-[32px] tracking-[-0.025em] leading-none text-neutral-100">
-                {profile.username}
+                {heroName}
               </h1>
               <span className="font-mono text-[12px] text-neutral-500">@{profile.username}</span>
             </div>
@@ -583,8 +586,8 @@ export default function FriendProfilePage() {
                     count={(favorites.movies.length ?? 0) + (favorites.shows.length ?? 0)}
                   />
                   <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5 space-y-6">
-                    <PosterSection label="TV Shows" items={favorites.shows} type="tv" cols={5} />
-                    <PosterSection label="Movies" items={favorites.movies} type="movie" cols={5} />
+                    <PosterSection label="TV Shows" items={favorites.shows} type="tv" cols={8} />
+                    <PosterSection label="Movies" items={favorites.movies} type="movie" cols={8} />
                   </div>
                 </section>
               )}
@@ -645,10 +648,10 @@ export default function FriendProfilePage() {
                         className="flex items-center gap-2.5 group"
                       >
                         <div className="w-7 h-7 rounded-full bg-neutral-700 flex items-center justify-center text-[11px] font-bold text-neutral-300 flex-shrink-0 group-hover:bg-neutral-600 transition-colors">
-                          {friend.username[0].toUpperCase()}
+                          {(friend.display_name?.[0] ?? friend.username[0]).toUpperCase()}
                         </div>
-                        <span className="text-[13px] text-neutral-300 group-hover:text-neutral-100 transition-colors font-medium">
-                          @{friend.username}
+                        <span className="text-[13px] text-neutral-300 group-hover:text-neutral-100 transition-colors font-medium truncate">
+                          {friend.display_name || `@${friend.username}`}
                         </span>
                       </Link>
                     ))}

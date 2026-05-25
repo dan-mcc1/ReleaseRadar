@@ -15,6 +15,7 @@ from app.services.currently_watching_service import (
 )
 from app.services.media_upsert import populate_show_bg, populate_movie_bg
 from app.services.streaming_notification_service import ensure_providers_populated_bg
+from app.services.trailer_notification_service import ensure_trailers_populated_bg
 
 router = APIRouter()
 
@@ -49,6 +50,7 @@ def set_watch_status(
         else:
             background_tasks.add_task(populate_movie_bg, content_id)
         background_tasks.add_task(ensure_providers_populated_bg, content_id, content_type)
+        background_tasks.add_task(ensure_trailers_populated_bg, content_id, content_type)
     elif target == "Currently Watching":
         add_to_currently_watching(db, uid, content_type, content_id)
         if content_type == "tv":
@@ -56,6 +58,7 @@ def set_watch_status(
         else:
             background_tasks.add_task(populate_movie_bg, content_id)
         background_tasks.add_task(ensure_providers_populated_bg, content_id, content_type)
+        background_tasks.add_task(ensure_trailers_populated_bg, content_id, content_type)
     elif target == "Watched":
         add_to_watched(db, uid, content_type, content_id)
         if content_type == "tv":

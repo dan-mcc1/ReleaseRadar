@@ -72,12 +72,49 @@ function timeAgo(isoString: string) {
   });
 }
 
-const discoverLinks = [
-  { name: "Trending & Upcoming", href: "/trending" },
-  { name: "Browse", href: "/browse-genres" },
-  { name: "Box Office", href: "/box-office" },
-  { name: "News", href: "/news" },
+type NavLink = { name: string; href: string };
+type NavSection = { header?: string; links: NavLink[] };
+
+const discoverSections: NavSection[] = [
+  {
+    links: [
+      { name: "Trending & Upcoming", href: "/trending" },
+      { name: "Box Office", href: "/box-office" },
+      { name: "News", href: "/news" },
+    ],
+  },
+  {
+    header: "Browse",
+    links: [
+      { name: "Genres", href: "/browse-genres" },
+      { name: "Collections", href: "/collections" },
+      { name: "Groups", href: "/groups" },
+    ],
+  },
 ];
+
+const librarySections: NavSection[] = [
+  {
+    links: [
+      { name: "Watchlist", href: "/watchlist" },
+      { name: "Watched", href: "/watched" },
+      { name: "For You", href: "/for-you" },
+    ],
+  },
+  {
+    header: "My Lists",
+    links: [
+      { name: "Collections", href: "/my-collections" },
+      { name: "Groups", href: "/my-groups" },
+      { name: "Shelves", href: "/shelves" },
+      { name: "Stats", href: "/stats" },
+    ],
+  },
+];
+
+function flatLinks(sections: NavSection[]): NavLink[] {
+  return sections.flatMap((s) => s.links);
+}
 
 function classNames(...classes: string[]) {
   return classes.filter(Boolean).join(" ");
@@ -94,16 +131,17 @@ function Badge({ count }: { count: number }) {
 
 function NavDropdown({
   label,
-  links,
+  sections,
   badges,
   currentPath,
 }: {
   label: string;
-  links: { name: string; href: string }[];
+  sections: NavSection[];
   badges?: Record<string, number>;
   currentPath: string;
 }) {
-  const isActive = links.some((l) => l.href === currentPath);
+  const allLinks = flatLinks(sections);
+  const isActive = allLinks.some((l) => l.href === currentPath);
   const totalBadge = badges
     ? Object.values(badges).reduce((a, b) => a + b, 0)
     : 0;
@@ -139,23 +177,37 @@ function NavDropdown({
         transition
         className="absolute left-0 z-20 mt-1 w-48 origin-top-left rounded-xl bg-neutral-900 border border-neutral-700/70 py-1 shadow-2xl shadow-black/40 transition data-closed:scale-95 data-closed:transform data-closed:opacity-0 data-enter:duration-100 data-enter:ease-out data-leave:duration-75 data-leave:ease-in"
       >
-        {links.map((item) => {
-          const badge = badges?.[item.href] ?? 0;
-          return (
-            <MenuItem key={item.name}>
-              <Link
-                to={item.href}
+        {sections.map((section, sIdx) => (
+          <div key={section.header ?? `s-${sIdx}`}>
+            {section.header && (
+              <div
                 className={classNames(
-                  item.href === currentPath ? "bg-white/5" : "",
-                  "flex items-center justify-between px-3 py-2 text-[13px] font-medium text-neutral-300 data-focus:bg-white/5 data-focus:outline-hidden hover:bg-white/5 transition-colors",
+                  sIdx > 0 ? "mt-1 border-t border-neutral-800/80 pt-1.5" : "",
+                  "px-3 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-neutral-500",
                 )}
               >
-                {item.name}
-                {badge > 0 && <Badge count={badge} />}
-              </Link>
-            </MenuItem>
-          );
-        })}
+                {section.header}
+              </div>
+            )}
+            {section.links.map((item) => {
+              const badge = badges?.[item.href] ?? 0;
+              return (
+                <MenuItem key={item.name}>
+                  <Link
+                    to={item.href}
+                    className={classNames(
+                      item.href === currentPath ? "bg-white/5" : "",
+                      "flex items-center justify-between px-3 py-2 text-[13px] font-medium text-neutral-300 data-focus:bg-white/5 data-focus:outline-hidden hover:bg-white/5 transition-colors",
+                    )}
+                  >
+                    {item.name}
+                    {badge > 0 && <Badge count={badge} />}
+                  </Link>
+                </MenuItem>
+              );
+            })}
+          </div>
+        ))}
       </MenuItems>
     </Menu>
   );
@@ -679,30 +731,23 @@ export default function NavBar() {
   const mobileCloseRef = useRef<HTMLButtonElement>(null);
   const esRef = useRef<EventSource | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectAttemptsRef = useRef(0);
   const connectedUidRef = useRef<string | null>(null);
 
   const { data: navCounts } = useNavCounts();
   const { data: avatarKey } = useNavAvatar();
   const { data: userMe } = useUserMe();
+  const avatarColor = getAvatarColor(avatarKey);
   const pendingRequests = navCounts?.pendingRequests ?? 0;
   const unreadRecs = navCounts?.unreadRecs ?? 0;
   // const showUpgradeCta = user && userMe?.subscription_tier === "free";
   const showUpgradeCta = false;
 
-  const libraryBadges: Record<string, number> = {
-    "/activity": unreadRecs,
-    "/friends": pendingRequests,
-  };
-
-  const libraryLinks = [
-    { name: "Watchlist", href: "/watchlist" },
-    { name: "Watched", href: "/watched" },
-    { name: "Shelves", href: "/shelves" },
-    { name: "Stats", href: "/stats" },
-    { name: "For You", href: "/for-you" },
-    { name: "Activity", href: "/activity" },
-    { name: "Friends", href: "/friends" },
-  ];
+  // Activity / Friends moved out of My Library — they're already reachable
+  // from the notifications bell (and Friends shows on the profile avatar badge),
+  // so we don't surface badges inside the My Library dropdown anymore.
+  void unreadRecs;
+  void pendingRequests;
 
   const connectSSE = useCallback(
     async (uid: string) => {
@@ -719,6 +764,12 @@ export default function NavBar() {
         `${API_URL}/events/stream?token=${encodeURIComponent(session_token)}`,
       );
       esRef.current = es;
+
+      es.onopen = () => {
+        // A successful (re)connect resets the backoff so the next disconnect
+        // doesn't inherit a long delay from previous failures.
+        reconnectAttemptsRef.current = 0;
+      };
 
       es.onmessage = (e) => {
         try {
@@ -758,10 +809,16 @@ export default function NavBar() {
 
         queryClient.invalidateQueries({ queryKey: queryKeys.navCounts(uid) });
 
+        // Exponential backoff with jitter, capped at 30s. Prevents a hammering
+        // reconnect loop if the server (or /events/token) is down.
+        const attempt = reconnectAttemptsRef.current++;
+        const base = Math.min(2000 * 2 ** attempt, 30_000);
+        const delay = base / 2 + Math.random() * (base / 2);
+
         reconnectTimerRef.current = setTimeout(() => {
           reconnectTimerRef.current = null;
           connectSSE(uid);
-        }, 2000);
+        }, delay);
       };
     },
     [queryClient],
@@ -857,12 +914,19 @@ export default function NavBar() {
           </div>
 
           {/* Logo */}
-          <a href="/calendar" className="flex items-center gap-2.5 shrink-0">
-            <img src="/favicon-1024.png" className="h-7 w-auto" alt="Logo" />
+          <Link to="/calendar" className="flex items-center gap-2.5 shrink-0">
+            <img
+              src="/favicon-64.png"
+              width={28}
+              height={28}
+              alt="Release Radar"
+              fetchPriority="high"
+              className="h-7 w-7"
+            />
             <span className="text-white font-semibold text-[16px] tracking-[-0.02em] truncate max-[350px]:hidden">
               Release Radar
             </span>
-          </a>
+          </Link>
 
           {/* Desktop nav */}
           <nav className="hidden lg:flex items-center gap-1">
@@ -880,15 +944,14 @@ export default function NavBar() {
 
             <NavDropdown
               label="Discover"
-              links={discoverLinks}
+              sections={discoverSections}
               currentPath={location.pathname}
             />
 
             {user && (
               <NavDropdown
                 label="My Library"
-                links={libraryLinks}
-                badges={libraryBadges}
+                sections={librarySections}
                 currentPath={location.pathname}
               />
             )}
@@ -928,9 +991,9 @@ export default function NavBar() {
                   <span className="absolute -inset-1.5" />
                   <span className="sr-only">Open user menu</span>
                   <div className="relative">
-                    {getAvatarColor(avatarKey) ? (
+                    {avatarColor ? (
                       <div
-                        style={{ backgroundColor: getAvatarColor(avatarKey) }}
+                        style={{ backgroundColor: avatarColor }}
                         className="size-8 rounded-full flex items-center justify-center ring-1 ring-white/10"
                       >
                         <svg
@@ -962,21 +1025,21 @@ export default function NavBar() {
                   className="absolute right-0 z-20 mt-2 w-48 origin-top-right rounded-xl bg-neutral-900 border border-neutral-700/70 py-1 shadow-2xl shadow-black/40 transition data-closed:scale-95 data-closed:transform data-closed:opacity-0 data-enter:duration-100 data-enter:ease-out data-leave:duration-75 data-leave:ease-in"
                 >
                   <MenuItem>
-                    <a
-                      href="/profile"
+                    <Link
+                      to="/profile"
                       className="flex items-center justify-between px-3 py-2 text-[13px] font-medium text-neutral-300 data-focus:bg-white/5 data-focus:outline-hidden hover:bg-white/5 transition-colors"
                     >
                       Your profile
                       {pendingRequests > 0 && <Badge count={pendingRequests} />}
-                    </a>
+                    </Link>
                   </MenuItem>
                   <MenuItem>
-                    <a
-                      href="/settings"
+                    <Link
+                      to="/settings"
                       className="block px-3 py-2 text-[13px] font-medium text-neutral-300 data-focus:bg-white/5 data-focus:outline-hidden hover:bg-white/5 transition-colors"
                     >
                       Settings
-                    </a>
+                    </Link>
                   </MenuItem>
                   {/* <MenuItem>
                     <a
@@ -993,15 +1056,15 @@ export default function NavBar() {
                   </MenuItem> */}
                   {userMe?.subscription_tier === "admin" && (
                     <MenuItem>
-                      <a
-                        href="/admin"
+                      <Link
+                        to="/admin"
                         className="flex items-center gap-2 px-3 py-2 text-[13px] font-medium text-red-400 data-focus:bg-white/5 data-focus:outline-hidden hover:bg-white/5 transition-colors"
                       >
                         Admin
                         <span className="text-[9px] font-bold uppercase tracking-wider bg-red-500/15 text-red-400 border border-red-500/30 rounded-full px-1.5 py-0.5">
                           Admin
                         </span>
-                      </a>
+                      </Link>
                     </MenuItem>
                   )}
                   <div className="my-1 border-t border-neutral-800" />
@@ -1086,8 +1149,8 @@ export default function NavBar() {
 
           {/* Calendar */}
           <DisclosureButton
-            as="a"
-            href="/calendar"
+            as={Link}
+            to="/calendar"
             className={classNames(
               location.pathname === "/calendar"
                 ? "bg-neutral-800 text-white"
@@ -1120,20 +1183,34 @@ export default function NavBar() {
           </button>
           {mobileDiscoverOpen && (
             <div className="ml-3 border-l border-neutral-800 pl-3 flex flex-col gap-0.5">
-              {discoverLinks.map((item) => (
-                <DisclosureButton
-                  key={item.name}
-                  as={Link}
-                  to={item.href}
-                  className={classNames(
-                    location.pathname === item.href
-                      ? "bg-neutral-800 text-white"
-                      : "text-neutral-400 hover:bg-neutral-900 hover:text-white",
-                    "block rounded-lg px-3 py-2 text-[13px] font-medium transition-colors",
+              {discoverSections.map((section, sIdx) => (
+                <div key={section.header ?? `s-${sIdx}`}>
+                  {section.header && (
+                    <div
+                      className={classNames(
+                        sIdx > 0 ? "mt-1.5" : "",
+                        "px-3 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-neutral-500",
+                      )}
+                    >
+                      {section.header}
+                    </div>
                   )}
-                >
-                  {item.name}
-                </DisclosureButton>
+                  {section.links.map((item) => (
+                    <DisclosureButton
+                      key={item.name}
+                      as={Link}
+                      to={item.href}
+                      className={classNames(
+                        location.pathname === item.href
+                          ? "bg-neutral-800 text-white"
+                          : "text-neutral-400 hover:bg-neutral-900 hover:text-white",
+                        "block rounded-lg px-3 py-2 text-[13px] font-medium transition-colors",
+                      )}
+                    >
+                      {item.name}
+                    </DisclosureButton>
+                  ))}
+                </div>
               ))}
             </div>
           )}
@@ -1145,21 +1222,7 @@ export default function NavBar() {
                 onClick={() => setMobileLibraryOpen((o) => !o)}
                 className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-[14px] font-medium text-neutral-400 hover:bg-neutral-900 hover:text-white transition-colors"
               >
-                <span className="flex items-center gap-1">
-                  My Library
-                  {Object.values(libraryBadges).reduce((a, b) => a + b, 0) +
-                    pendingRequests >
-                    0 && (
-                    <Badge
-                      count={
-                        Object.values(libraryBadges).reduce(
-                          (a, b) => a + b,
-                          0,
-                        ) + pendingRequests
-                      }
-                    />
-                  )}
-                </span>
+                My Library
                 <svg
                   className={`w-4 h-4 opacity-50 transition-transform duration-200 ${mobileLibraryOpen ? "rotate-180" : ""}`}
                   fill="none"
@@ -1176,25 +1239,35 @@ export default function NavBar() {
               </button>
               {mobileLibraryOpen && (
                 <div className="ml-3 border-l border-neutral-800 pl-3 flex flex-col gap-0.5">
-                  {libraryLinks.map((item) => {
-                    const badge = libraryBadges[item.href] ?? 0;
-                    return (
-                      <DisclosureButton
-                        key={item.name}
-                        as={Link}
-                        to={item.href}
-                        className={classNames(
-                          location.pathname === item.href
-                            ? "bg-neutral-800 text-white"
-                            : "text-neutral-400 hover:bg-neutral-900 hover:text-white",
-                          "flex items-center justify-between rounded-lg px-3 py-2 text-[13px] font-medium transition-colors",
-                        )}
-                      >
-                        {item.name}
-                        {badge > 0 && <Badge count={badge} />}
-                      </DisclosureButton>
-                    );
-                  })}
+                  {librarySections.map((section, sIdx) => (
+                    <div key={section.header ?? `s-${sIdx}`}>
+                      {section.header && (
+                        <div
+                          className={classNames(
+                            sIdx > 0 ? "mt-1.5" : "",
+                            "px-3 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-neutral-500",
+                          )}
+                        >
+                          {section.header}
+                        </div>
+                      )}
+                      {section.links.map((item) => (
+                        <DisclosureButton
+                          key={item.name}
+                          as={Link}
+                          to={item.href}
+                          className={classNames(
+                            location.pathname === item.href
+                              ? "bg-neutral-800 text-white"
+                              : "text-neutral-400 hover:bg-neutral-900 hover:text-white",
+                            "block rounded-lg px-3 py-2 text-[13px] font-medium transition-colors",
+                          )}
+                        >
+                          {item.name}
+                        </DisclosureButton>
+                      ))}
+                    </div>
+                  ))}
                 </div>
               )}
             </>

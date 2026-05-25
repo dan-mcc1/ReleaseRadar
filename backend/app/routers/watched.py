@@ -1,6 +1,8 @@
-from fastapi import APIRouter, Depends, Body, BackgroundTasks, HTTPException, Request
+from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException, Request
+from pydantic import Field
 from sqlalchemy.orm import Session
 from app.db.session import get_db
+from app.schemas.common import ContentRef
 from app.services.watched_service import (
     add_to_watched,
     mark_existing_episodes_watched,
@@ -18,20 +20,21 @@ from app.services.media_upsert import populate_show_bg, populate_movie_bg
 router = APIRouter()
 
 
+class RateWatchedBody(ContentRef):
+    rating: float | None = Field(None, ge=0.5, le=5.0)
+
+
 @router.post("/add")
 @limiter.limit("30/minute")
 def add_item(
     request: Request,
     background_tasks: BackgroundTasks,
-    content_type: str = Body(...),
-    content_id: int = Body(...),
+    body: ContentRef,
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
-    if content_type not in ("movie", "tv"):
-        raise HTTPException(
-            status_code=400, detail="content_type must be 'movie' or 'tv'"
-        )
+    content_type = body.content_type
+    content_id = body.content_id
     result = add_to_watched(db, uid, content_type, content_id)
     if content_type == "tv":
         background_tasks.add_task(populate_show_bg, content_id)
@@ -45,15 +48,11 @@ def add_item(
 
 @router.patch("/rate")
 def rate_item(
-    content_type: str = Body(...),
-    content_id: int = Body(...),
-    rating: float = Body(None),
+    body: RateWatchedBody,
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
-    if rating is not None and (not (0.5 <= rating <= 5.0) or rating != rating):
-        raise HTTPException(status_code=422, detail="Rating must be between 0.5 and 5.0")
-    result = update_watched_rating(db, uid, content_type, content_id, rating)
+    result = update_watched_rating(db, uid, body.content_type, body.content_id, body.rating)
     if result is None:
         raise HTTPException(status_code=404, detail="Item not in watched list")
     invalidate_stats_cache(uid)
@@ -62,16 +61,11 @@ def rate_item(
 
 @router.delete("/remove")
 def remove_item(
-    content_type: str = Body(...),
-    content_id: int = Body(...),
+    body: ContentRef,
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
-    if content_type not in ("movie", "tv"):
-        raise HTTPException(
-            status_code=400, detail="content_type must be 'movie' or 'tv'"
-        )
-    result = remove_from_watched(db, uid, content_type, content_id)
+    result = remove_from_watched(db, uid, body.content_type, body.content_id)
     invalidate_stats_cache(uid)
     return result
 

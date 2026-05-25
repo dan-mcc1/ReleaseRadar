@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Body, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.limiter import limiter
@@ -10,17 +11,21 @@ from app.models.block import Block
 from app.models.report import Report
 from app.models.user import User
 from app.models.review import Review
+from app.models.community import Community, CommunityPost, CommunityReply
+from app.schemas.common import (
+    REPORT_MESSAGE_MAX_LEN,
+    ReportReason,
+    ReportTargetType,
+)
 
 router = APIRouter()
 
-VALID_REPORT_REASONS = [
-    "spam",
-    "harassment",
-    "hate_speech",
-    "inappropriate_content",
-    "misinformation",
-    "other",
-]
+
+class ReportBody(BaseModel):
+    reported_type: ReportTargetType
+    reported_id: str = Field(..., min_length=1, max_length=128)
+    reason: ReportReason
+    message: str | None = Field(None, max_length=REPORT_MESSAGE_MAX_LEN)
 
 
 # ── Block endpoints ────────────────────────────────────────────────────────────
@@ -99,19 +104,14 @@ def get_my_blocks(
 @limiter.limit("10/minute")
 def submit_report(
     request: Request,
-    reported_type: str = Body(...),
-    reported_id: str = Body(...),
-    reason: str = Body(...),
-    message: str | None = Body(None),
+    body: ReportBody,
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
-    if reported_type not in ("review", "user"):
-        raise HTTPException(
-            status_code=400, detail="reported_type must be 'review' or 'user'."
-        )
-    if reason not in VALID_REPORT_REASONS:
-        raise HTTPException(status_code=400, detail="Invalid reason.")
+    reported_type = body.reported_type
+    reported_id = body.reported_id
+    reason = body.reason
+    message = body.message
 
     review_snapshot_kwargs = {}
 
@@ -148,6 +148,40 @@ def submit_report(
             "snapshot_user_email": target.email,
             "snapshot_user_created_at": target.created_at,
         }
+
+    if reported_type == "community":
+        try:
+            cid = int(reported_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid group ID.")
+        if not db.query(Community.id).filter(Community.id == cid).first():
+            raise HTTPException(status_code=404, detail="Group not found.")
+
+    if reported_type == "community_post":
+        try:
+            pid = int(reported_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid post ID.")
+        post = db.query(CommunityPost).filter(CommunityPost.id == pid).first()
+        if not post:
+            raise HTTPException(status_code=404, detail="Post not found.")
+        if post.user_id == uid:
+            raise HTTPException(
+                status_code=400, detail="You cannot report your own post."
+            )
+
+    if reported_type == "community_reply":
+        try:
+            rid = int(reported_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid reply ID.")
+        reply = db.query(CommunityReply).filter(CommunityReply.id == rid).first()
+        if not reply:
+            raise HTTPException(status_code=404, detail="Reply not found.")
+        if reply.user_id == uid:
+            raise HTTPException(
+                status_code=400, detail="You cannot report your own reply."
+            )
 
     # Prevent duplicate pending reports from the same reporter
     existing = (

@@ -9,6 +9,7 @@ interface DBUser {
   id: string;
   email: string;
   username: string;
+  display_name: string | null;
   avatar_key: string | null;
   bio: string | null;
   profile_visibility: string;
@@ -43,6 +44,10 @@ export function useAccountStatus() {
     // Only poll when the account is actually restricted so we can detect when
     // a ban/suspension is lifted. Normal users get zero background polling.
     refetchInterval: isAccountRestricted() ? 5 * 60_000 : false,
+    // Catch bans/suspensions applied in another tab or while this tab was
+    // backgrounded — without this, a moderated user might keep using a stale
+    // session until they navigate.
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -135,29 +140,33 @@ interface ListPreview {
 
 interface FriendEntry {
   friendship_id: number;
-  friend: { id: string; username: string };
+  friend: { id: string; username: string; display_name: string | null };
 }
 
 interface IncomingRequest {
   friendship_id: number;
-  from_user: { id: string; username: string };
+  from_user: { id: string; username: string; display_name: string | null };
   created_at: string;
 }
 
 interface OutgoingRequest {
   friendship_id: number;
-  to_user: { id: string; username: string };
+  to_user: { id: string; username: string; display_name: string | null };
   created_at: string;
 }
 
 interface FollowerEntry {
   friendship_id: number;
-  follower: { id: string; username: string };
+  follower: { id: string; username: string; display_name: string | null };
 }
 
 export interface ProfileSummary {
   user: DBUser;
-  favorites: { movies: ListPreviewItem[]; shows: ListPreviewItem[] };
+  favorites: {
+    movies: ListPreviewItem[];
+    shows: ListPreviewItem[];
+    collections: { id: number; name: string; poster_path: string | null }[];
+  };
   watchlist: ListPreview;
   watched: ListPreview;
   friends: FriendEntry[];
@@ -218,6 +227,24 @@ export function useUpdateUsername() {
       }),
     onSuccess: () => {
       if (user) queryClient.invalidateQueries({ queryKey: queryKeys.userMe(user.uid) });
+    },
+  });
+}
+
+export function useUpdateDisplayName() {
+  const user = useAuthUser();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (displayName: string | null) =>
+      checkedFetch("/user/update-display-name", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ display_name: displayName }),
+      }),
+    onSuccess: () => {
+      if (!user) return;
+      queryClient.invalidateQueries({ queryKey: queryKeys.userMe(user.uid) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.profileSummary(user.uid) });
     },
   });
 }

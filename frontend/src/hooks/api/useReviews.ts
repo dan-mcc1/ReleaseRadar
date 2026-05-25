@@ -10,6 +10,7 @@ interface Review {
   user_id: string;
   username: string;
   review_text: string;
+  is_spoiler: boolean;
   rating: number | null;
   created_at: string;
   updated_at: string;
@@ -60,10 +61,12 @@ export function useSubmitReview() {
       contentType,
       contentId,
       reviewText,
+      isSpoiler,
     }: {
       contentType: string;
       contentId: number;
       reviewText: string;
+      isSpoiler?: boolean;
     }) => {
       const res = await apiFetch("/reviews", {
         method: "POST",
@@ -72,6 +75,7 @@ export function useSubmitReview() {
           content_type: contentType,
           content_id: contentId,
           review_text: reviewText,
+          is_spoiler: !!isSpoiler,
         }),
       });
       if (!res.ok) {

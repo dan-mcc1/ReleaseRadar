@@ -12,11 +12,14 @@ from app.services.tmdb_tv import fetch_show_from_tmdb
 from app.services.tmdb_search import get_tv_search_results
 from app.services.media_upsert import ensure_movie_in_db, ensure_show_in_db
 from app.services.watchlist_service import add_to_watchlist
-from app.services.episode_service import maybe_sync_show_episodes
+from app.services.episode_service import maybe_sync_show_episodes, sync_season_episodes
+from app.services.watched_episode_service import maybe_auto_complete_show
 from app.models.watched import Watched
 from app.models.watchlist import Watchlist
 from app.models.movie import Movie
 from app.models.show import Show
+from app.models.episode import Episode
+from app.models.episode_watched import EpisodeWatched
 from datetime import datetime, timezone
 
 router = APIRouter()
@@ -378,4 +381,410 @@ async def import_letterboxd(
             "failed": failed,
         },
         "results": results,
+    }
+
+
+# ─── TV Time import ──────────────────────────────────────────────────────────
+#
+# TV Time delivers a "Personal Data" zip via email with several CSVs. Filenames
+# and column names have drifted over the years, so we look for *any* CSV whose
+# basename hints at what it contains and pick columns by alias rather than by
+# exact header.
+
+_TVTIME_MAX_EPISODE_ROWS = 50_000  # a heavy user can have years of episodes
+_TVTIME_MAX_FOLLOW_ROWS = 5_000
+
+_TVTIME_EPISODE_NAME_HINTS = ("seen_episode", "tracking-prod-records", "episode")
+_TVTIME_FOLLOW_NAME_HINTS = ("followed_tv_show", "follow", "tv_show", "tracking-prod-records")
+_TVTIME_RATING_NAME_HINTS = ("tv_show_rating", "rating")
+
+# Column aliases — TV Time has used slightly different headers across exports.
+_SHOW_NAME_KEYS = ("tv_show_name", "show_name", "title", "name", "series_name")
+_SEASON_KEYS = ("season_number", "season", "season_num")
+_EPISODE_NUM_KEYS = ("episode_number", "episode", "episode_num", "number")
+_WATCHED_AT_KEYS = ("updated_at", "created_at", "watched_at", "date", "seen_at")
+_FOLLOW_STATUS_KEYS = ("status", "follow_status", "type")
+_RATING_KEYS = ("rating", "stars", "score")
+
+
+def _first(row: dict, keys: tuple[str, ...]) -> str:
+    """Return the first non-empty value from row across the candidate keys (case-insensitive)."""
+    lowered = {k.lower(): v for k, v in row.items()}
+    for k in keys:
+        v = lowered.get(k.lower())
+        if v is not None and str(v).strip():
+            return str(v).strip()
+    return ""
+
+
+def _parse_tvtime_date(raw: str) -> datetime:
+    raw = raw.strip()
+    if not raw:
+        return datetime.now(timezone.utc)
+    # ISO with or without timezone; fall back to a couple of fixed formats
+    try:
+        dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    except ValueError:
+        pass
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%m/%d/%Y"):
+        try:
+            return datetime.strptime(raw, fmt).replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+    return datetime.now(timezone.utc)
+
+
+def _parse_int(raw: str) -> int | None:
+    raw = (raw or "").strip()
+    if not raw:
+        return None
+    try:
+        return int(float(raw))
+    except ValueError:
+        return None
+
+
+def _parse_tvtime_rating(raw: str) -> float | None:
+    """TV Time ratings are 0–10 (heart-out-of-ten). Convert to your 0.5–5.0 half-star scale."""
+    raw = (raw or "").strip()
+    if not raw:
+        return None
+    try:
+        val = float(raw)
+    except ValueError:
+        return None
+    # Some exports use 0–10, others 0–5. Detect: if value > 5 assume out-of-ten.
+    if val > 5:
+        val = val / 2.0
+    val = round(val * 2) / 2
+    if 0.5 <= val <= 5.0:
+        return val
+    return None
+
+
+def _find_tv_show_id(name: str, year: int | None = None) -> int | None:
+    """Search TMDB for a TV show by name; prefer year-exact, else top popularity."""
+    if not name:
+        return None
+    results = get_tv_search_results(query=name) or []
+    if year:
+        ys = str(year)
+        for r in results:
+            if (r.get("first_air_date") or "")[:4] == ys:
+                return r["id"]
+    return results[0]["id"] if results else None
+
+
+def _classify_tvtime_csv(name: str, headers: list[str]) -> str | None:
+    """
+    Return 'episodes' / 'follows' / 'ratings' / None based on the filename hint
+    + header heuristics. tracking-prod-records.csv is ambiguous and split here.
+    """
+    lower = name.lower()
+    headers_lower = [h.lower() for h in headers]
+    has_episode = any(h in headers_lower for h in _EPISODE_NUM_KEYS)
+    has_season = any(h in headers_lower for h in _SEASON_KEYS)
+    has_show = any(h in headers_lower for h in _SHOW_NAME_KEYS)
+    has_rating = any(h in headers_lower for h in _RATING_KEYS)
+    has_status = any(h in headers_lower for h in _FOLLOW_STATUS_KEYS)
+
+    if not has_show:
+        return None
+    if has_episode and has_season:
+        return "episodes"
+    if has_rating and not has_episode:
+        return "ratings"
+    if has_status and not has_episode:
+        return "follows"
+    if any(h in lower for h in _TVTIME_EPISODE_NAME_HINTS) and has_episode:
+        return "episodes"
+    if any(h in lower for h in _TVTIME_FOLLOW_NAME_HINTS):
+        return "follows"
+    if any(h in lower for h in _TVTIME_RATING_NAME_HINTS):
+        return "ratings"
+    return None
+
+
+@router.post("/tvtime")
+async def import_tvtime(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    """
+    Accept a TV Time Personal Data zip (or a single CSV) and import:
+      - watched episodes -> EpisodeWatched (and auto-complete to Watched if all seen)
+      - followed shows  -> Watchlist (unless already watched / watch-listed)
+      - per-show ratings -> Watched.rating when the show ends up Watched
+    """
+    filename = (file.filename or "").lower()
+    if not (filename.endswith(".csv") or filename.endswith(".zip")):
+        raise HTTPException(status_code=422, detail="Please upload a .csv or .zip file.")
+
+    raw_bytes = await file.read()
+    if len(raw_bytes) > _MAX_FILE_BYTES:
+        raise HTTPException(status_code=413, detail="File too large (max 20 MB).")
+
+    # Build {basename: text} just like the Letterboxd path.
+    if filename.endswith(".zip"):
+        csv_map = _extract_csvs_from_zip(raw_bytes)
+        if not csv_map:
+            raise HTTPException(status_code=422, detail="No CSV files found in zip.")
+    else:
+        csv_map = {filename: raw_bytes.decode("utf-8-sig", errors="replace")}
+
+    # ── Classify CSVs and collect rows ──────────────────────────────────────
+    episode_rows: list[dict] = []
+    follow_rows: list[dict] = []
+    rating_rows: list[dict] = []
+
+    for basename, text in csv_map.items():
+        reader = csv.DictReader(io.StringIO(text))
+        headers = reader.fieldnames or []
+        kind = _classify_tvtime_csv(basename, headers)
+        if kind == "episodes":
+            for row in reader:
+                if len(episode_rows) >= _TVTIME_MAX_EPISODE_ROWS:
+                    break
+                name = _first(row, _SHOW_NAME_KEYS)
+                season = _parse_int(_first(row, _SEASON_KEYS))
+                ep_num = _parse_int(_first(row, _EPISODE_NUM_KEYS))
+                if not name or season is None or ep_num is None:
+                    continue
+                episode_rows.append({
+                    "name": name,
+                    "season": season,
+                    "episode": ep_num,
+                    "watched_at": _parse_tvtime_date(_first(row, _WATCHED_AT_KEYS)),
+                })
+        elif kind == "follows":
+            for row in reader:
+                if len(follow_rows) >= _TVTIME_MAX_FOLLOW_ROWS:
+                    break
+                name = _first(row, _SHOW_NAME_KEYS)
+                if not name:
+                    continue
+                follow_rows.append({"name": name, "status": _first(row, _FOLLOW_STATUS_KEYS).lower()})
+        elif kind == "ratings":
+            for row in reader:
+                name = _first(row, _SHOW_NAME_KEYS)
+                rating = _parse_tvtime_rating(_first(row, _RATING_KEYS))
+                if name and rating is not None:
+                    rating_rows.append({"name": name, "rating": rating})
+
+    if not (episode_rows or follow_rows):
+        raise HTTPException(
+            status_code=422,
+            detail="No TV Time episode or follow data found in upload.",
+        )
+
+    # ── Resolve each unique show name to a TMDB id, concurrently ────────────
+    all_names = {r["name"] for r in episode_rows} | {r["name"] for r in follow_rows}
+    sem = asyncio.Semaphore(_CONCURRENCY)
+
+    async def resolve(name: str) -> tuple[str, int | None, str | None]:
+        async with sem:
+            try:
+                return name, await asyncio.to_thread(_find_tv_show_id, name, None), None
+            except Exception as e:
+                return name, None, str(e)[:80]
+
+    resolved_list = await asyncio.gather(*[resolve(n) for n in all_names])
+    name_to_show: dict[str, int | None] = {n: sid for n, sid, _ in resolved_list}
+    name_to_error: dict[str, str | None] = {n: err for n, _, err in resolved_list}
+
+    # ── Prefetch show details for ones not yet in the DB ────────────────────
+    needed_ids = {sid for sid in name_to_show.values() if sid}
+    existing_ids = (
+        {sid for (sid,) in db.query(Show.id).filter(Show.id.in_(needed_ids)).all()}
+        if needed_ids else set()
+    )
+    missing_ids = needed_ids - existing_ids
+
+    async def prefetch(show_id: int) -> None:
+        async with sem:
+            try:
+                await asyncio.to_thread(fetch_show_from_tmdb, show_id, _SHOW_APPEND)
+            except Exception:
+                pass
+
+    await asyncio.gather(*[prefetch(sid) for sid in missing_ids])
+
+    # ── Episodes: group by (show_id, season) so we sync each season once ────
+    episodes_by_show: dict[int, list[dict]] = {}
+    unresolved_shows: dict[str, str | None] = {}  # name -> error reason
+
+    for row in episode_rows:
+        sid = name_to_show.get(row["name"])
+        if not sid:
+            unresolved_shows[row["name"]] = name_to_error.get(row["name"])
+            continue
+        episodes_by_show.setdefault(sid, []).append(row)
+
+    # Sync the seasons we'll need (one TMDB call per show+season, not per episode)
+    seasons_needed: set[tuple[int, int]] = {
+        (sid, ep["season"])
+        for sid, eps in episodes_by_show.items()
+        for ep in eps
+    }
+
+    async def sync_one(sid: int, season: int) -> None:
+        async with sem:
+            try:
+                await asyncio.to_thread(sync_season_episodes, db, sid, season)
+            except Exception:
+                pass
+
+    await asyncio.gather(*[sync_one(sid, season) for sid, season in seasons_needed])
+
+    # ── Write phase ─────────────────────────────────────────────────────────
+    episodes_imported = 0
+    episodes_skipped = 0
+    shows_watchlisted = 0
+    shows_skipped = 0
+    failed = 0
+    per_show: dict[int, dict] = {}  # show_id -> {title, episodes_added, ...}
+    failures: list[dict] = []
+
+    rating_by_name = {r["name"]: r["rating"] for r in rating_rows}
+
+    for sid, eps in episodes_by_show.items():
+        show = db.query(Show).filter_by(id=sid).first()
+        if not show:
+            failed += len(eps)
+            failures.append({"show": str(sid), "reason": "show not in DB after fetch"})
+            continue
+
+        # Existing watched-episode keys for this user+show
+        already = {
+            (s, e)
+            for (s, e) in db.query(EpisodeWatched.season_number, EpisodeWatched.episode_number)
+            .filter_by(user_id=uid, show_id=sid)
+            .all()
+        }
+
+        # Map episodes in this season+number to their TMDB episode_id for FK
+        ep_ids = {
+            (s, e): eid
+            for (s, e, eid) in db.query(
+                Episode.season_number, Episode.episode_number, Episode.id
+            )
+            .filter(Episode.show_id == sid)
+            .all()
+        }
+
+        added_here = 0
+        for row in eps:
+            key = (row["season"], row["episode"])
+            if key in already:
+                episodes_skipped += 1
+                continue
+            already.add(key)
+            db.add(
+                EpisodeWatched(
+                    user_id=uid,
+                    show_id=sid,
+                    episode_id=ep_ids.get(key),
+                    season_number=row["season"],
+                    episode_number=row["episode"],
+                    watched_at=row["watched_at"],
+                )
+            )
+            added_here += 1
+            episodes_imported += 1
+
+        if added_here:
+            try:
+                db.commit()
+            except Exception as e:
+                db.rollback()
+                failed += added_here
+                episodes_imported -= added_here
+                failures.append({"show": show.name, "reason": f"DB error: {str(e)[:80]}"})
+                continue
+
+            # Auto-complete to Watched if the user followed this on TV Time as
+            # "watched"/"finished" or every aired episode is now marked seen.
+            try:
+                maybe_auto_complete_show(db, uid, sid)
+            except Exception:
+                db.rollback()
+
+        per_show[sid] = {"title": show.name, "episodes_added": added_here}
+
+    # ── Followed shows that didn't appear in watched episodes -> Watchlist ──
+    watched_or_progress = set(episodes_by_show.keys())
+    for follow in follow_rows:
+        sid = name_to_show.get(follow["name"])
+        if not sid:
+            unresolved_shows.setdefault(follow["name"], name_to_error.get(follow["name"]))
+            continue
+        if sid in watched_or_progress:
+            continue
+        on_watched = db.query(Watched).filter_by(
+            user_id=uid, content_type="tv", content_id=sid
+        ).first()
+        if on_watched:
+            shows_skipped += 1
+            continue
+        on_wl = db.query(Watchlist).filter_by(
+            user_id=uid, content_type="tv", content_id=sid
+        ).first()
+        if on_wl:
+            shows_skipped += 1
+            continue
+        try:
+            ensure_show_in_db(db, sid, db.query(Show).filter_by(id=sid).first() is not None)
+            add_to_watchlist(db, uid, "tv", sid)
+            shows_watchlisted += 1
+        except Exception as e:
+            db.rollback()
+            failures.append({"show": follow["name"], "reason": str(e)[:120]})
+            failed += 1
+
+    # ── Apply ratings on Watched rows that now exist ────────────────────────
+    ratings_applied = 0
+    for name, rating in rating_by_name.items():
+        sid = name_to_show.get(name)
+        if not sid:
+            continue
+        w = db.query(Watched).filter_by(user_id=uid, content_type="tv", content_id=sid).first()
+        if w and w.rating is None:
+            w.rating = rating
+            ratings_applied += 1
+    if ratings_applied:
+        db.commit()
+
+    # ── Build response ──────────────────────────────────────────────────────
+    results = [
+        {
+            "title": info["title"],
+            "tmdb_id": sid,
+            "media_type": "tv",
+            "status": "imported",
+            "episodes_added": info["episodes_added"],
+        }
+        for sid, info in per_show.items()
+    ]
+    for name, err in unresolved_shows.items():
+        results.append({
+            "title": name,
+            "status": "failed",
+            "reason": f"TMDB search error: {err}" if err else "not found on TMDB",
+        })
+        failed += 1
+
+    return {
+        "summary": {
+            "total": episodes_imported + episodes_skipped + shows_watchlisted + shows_skipped + failed,
+            "imported": episodes_imported,
+            "watchlisted": shows_watchlisted,
+            "skipped": episodes_skipped + shows_skipped,
+            "failed": failed,
+            "ratings_applied": ratings_applied,
+            "shows_with_episodes": len(per_show),
+        },
+        "results": results,
+        "failures": failures,
     }

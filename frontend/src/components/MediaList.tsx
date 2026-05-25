@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import { Movie, Show, Person, CollectionResult } from "../types/calendar";
 import ContentRatingBadge from "./media/ContentRatingBadge";
 import { parseLocalDate } from "../utils/date";
+import { tmdbSrcSet } from "../utils/tmdbImage";
+import StarIcon from "./icons/StarIcon";
 import { useState, useMemo } from "react";
 import { useAuthUser } from "../hooks/useAuthUser";
 import WatchButton, { WatchStatus } from "./WatchButton";
@@ -84,13 +86,21 @@ function MediaRow({
         {item.backdrop_path ? (
           <img
             src={`${BASE_IMAGE_URL}/w780${item.backdrop_path}`}
+            srcSet={tmdbSrcSet(item.backdrop_path, "backdrop")}
+            sizes="(min-width: 640px) 176px, 144px"
             alt=""
+            loading="lazy"
+            decoding="async"
             className="h-full w-full object-cover"
           />
         ) : item.poster_path ? (
           <img
             src={`${BASE_IMAGE_URL}/w342${item.poster_path}`}
+            srcSet={tmdbSrcSet(item.poster_path, "poster")}
+            sizes="(min-width: 640px) 176px, 144px"
             alt=""
+            loading="lazy"
+            decoding="async"
             className="h-full w-full object-cover object-top"
           />
         ) : (
@@ -153,13 +163,7 @@ function MediaRow({
               {item.vote_average != null && item.vote_average > 0 && (
                 <span className="flex items-center gap-1 text-xs text-warning-400 font-medium">
                   <span className="text-neutral-700">·</span>
-                  <svg
-                    className="w-3 h-3"
-                    viewBox="0 0 24 24"
-                    fill="currentColor"
-                  >
-                    <path d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
-                  </svg>
+                  <StarIcon filled className="w-3 h-3" />
                   {item.vote_average.toFixed(1)}
                 </span>
               )}
@@ -206,6 +210,8 @@ function PersonRow({ person }: { person: Person }) {
           <img
             src={`${BASE_IMAGE_URL}/w185${person.profile_path}`}
             alt={person.name}
+            loading="lazy"
+            decoding="async"
             className="h-full w-full object-cover object-top"
           />
         ) : (
@@ -253,13 +259,21 @@ function CollectionRow({ collection }: { collection: CollectionResult }) {
         {collection.backdrop_path ? (
           <img
             src={`${BASE_IMAGE_URL}/w780${collection.backdrop_path}`}
+            srcSet={tmdbSrcSet(collection.backdrop_path, "backdrop")}
+            sizes="(min-width: 640px) 176px, 144px"
             alt=""
+            loading="lazy"
+            decoding="async"
             className="h-full w-full object-cover"
           />
         ) : collection.poster_path ? (
           <img
             src={`${BASE_IMAGE_URL}/w342${collection.poster_path}`}
+            srcSet={tmdbSrcSet(collection.poster_path, "poster")}
+            sizes="(min-width: 640px) 176px, 144px"
             alt=""
+            loading="lazy"
+            decoding="async"
             className="h-full w-full object-cover object-top"
           />
         ) : (

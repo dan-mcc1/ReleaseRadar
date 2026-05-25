@@ -1,17 +1,26 @@
 # app/routers/user.py
-import re
 import random
-from fastapi import APIRouter, Depends, HTTPException, Body, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from app.core.limiter import limiter
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_
 from app.db.session import get_db
+from app.schemas.common import (
+    APPEAL_MAX_LEN,
+    AvatarKey,
+    BIO_MAX_LEN,
+    DISPLAY_NAME_MAX_LEN,
+    USERNAME_MAX_LEN,
+    USERNAME_MIN_LEN,
+    USERNAME_PATTERN,
+)
 from app.services.user_service import (
     create_user,
     get_user,
     update_user_email,
     update_username,
+    update_display_name,
     update_avatar_key,
     is_username_available,
     get_profile_watchlist,
@@ -47,33 +56,55 @@ from firebase_admin import auth as firebase_auth
 
 router = APIRouter()
 
-USERNAME_RE = re.compile(r"^[a-zA-Z0-9_]{3,30}$")
+
+_USERNAME_FIELD = Field(
+    ..., min_length=USERNAME_MIN_LEN, max_length=USERNAME_MAX_LEN, pattern=USERNAME_PATTERN
+)
 
 
 class UpdateEmailBody(BaseModel):
     new_email: EmailStr
 
 
-def _validate_username(username: str):
-    if not USERNAME_RE.match(username):
-        raise HTTPException(
-            status_code=422,
-            detail="Username must be 3–30 characters and contain only letters, numbers, or underscores.",
-        )
+class CreateUserBody(BaseModel):
+    username: str | None = Field(
+        None, min_length=USERNAME_MIN_LEN, max_length=USERNAME_MAX_LEN, pattern=USERNAME_PATTERN
+    )
+
+
+class UpdateUsernameBody(BaseModel):
+    new_username: str = _USERNAME_FIELD
+
+
+class UpdateAvatarBody(BaseModel):
+    avatar_key: AvatarKey | None = None
+
+
+class UpdateDisplayNameBody(BaseModel):
+    display_name: str | None = Field(None, max_length=DISPLAY_NAME_MAX_LEN)
+
+
+class UpdateBioBody(BaseModel):
+    bio: str | None = Field(None, max_length=BIO_MAX_LEN)
+
+
+class AppealBody(BaseModel):
+    message: str = Field(..., min_length=1, max_length=APPEAL_MAX_LEN)
+    request_unsilence: bool = False
 
 
 @router.post("/create")
 @limiter.limit("60/minute")
 def create_user_route(
     request: Request,
+    body: CreateUserBody,
     db: Session = Depends(get_db),
     claims: dict = Depends(get_token_claims),
-    username: str | None = Body(None, embed=True),
 ):
     uid = claims["uid"]
     email = claims.get("email")  # always use the Firebase-verified email
+    username = body.username
     if username is not None:
-        _validate_username(username)
         if not is_username_available(db, username):
             raise HTTPException(status_code=409, detail="Username already taken.")
     avatar = random.choice(VALID_AVATAR_KEYS) if username is not None else None
@@ -134,18 +165,14 @@ def get_account_status(
 
 @router.post("/appeal")
 def submit_appeal(
-    message: str = Body(...),
-    request_unsilence: bool = Body(False),
+    body: AppealBody,
     uid: str = Depends(get_uid_only),
     db: Session = Depends(get_db),
 ):
     """Submit an appeal for a suspension or ban. Accessible without suspension/ban checks."""
-    if not message or not message.strip():
+    message = body.message.strip()
+    if not message:
         raise HTTPException(status_code=422, detail="Appeal message cannot be empty.")
-    if len(message.strip()) > 2000:
-        raise HTTPException(
-            status_code=422, detail="Appeal must be 2000 characters or less."
-        )
 
     user = db.query(User).filter(User.id == uid).first()
     if not user:
@@ -174,8 +201,8 @@ def submit_appeal(
     appeal = Appeal(
         user_id=uid,
         appeal_type=appeal_type,
-        message=message.strip(),
-        request_unsilence=request_unsilence and is_silenced,
+        message=message,
+        request_unsilence=body.request_unsilence and is_silenced,
     )
     db.add(appeal)
     db.commit()
@@ -207,12 +234,11 @@ def update_email_route(
 
 @router.put("/update-username")
 def update_username_route(
-    new_username: str = Body(..., embed=True),
+    body: UpdateUsernameBody,
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
-    _validate_username(new_username)
-    user = update_username(db, uid, new_username)
+    user = update_username(db, uid, body.new_username)
     if user is None:
         raise HTTPException(status_code=409, detail="Username already taken.")
     return user
@@ -232,13 +258,23 @@ VALID_AVATAR_KEYS = [
 
 @router.put("/update-avatar")
 def update_avatar_route(
-    avatar_key: str | None = Body(None, embed=True),
+    body: UpdateAvatarBody,
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
-    if avatar_key is not None and avatar_key not in VALID_AVATAR_KEYS:
-        raise HTTPException(status_code=422, detail="Invalid avatar key.")
-    user = update_avatar_key(db, uid, avatar_key)
+    user = update_avatar_key(db, uid, body.avatar_key)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found.")
+    return user
+
+
+@router.put("/update-display-name")
+def update_display_name_route(
+    body: UpdateDisplayNameBody,
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    user = update_display_name(db, uid, body.display_name)
     if user is None:
         raise HTTPException(status_code=404, detail="User not found.")
     return user
@@ -246,18 +282,14 @@ def update_avatar_route(
 
 @router.put("/update-bio")
 def update_bio_route(
-    bio: str | None = Body(None, embed=True),
+    body: UpdateBioBody,
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
-    if bio is not None and len(bio) > 300:
-        raise HTTPException(
-            status_code=422, detail="Bio must be 300 characters or fewer."
-        )
     user = db.query(User).filter_by(id=uid).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found.")
-    user.bio = bio.strip() if bio else None
+    user.bio = body.bio.strip() if body.bio else None
     db.commit()
     db.refresh(user)
     return user
@@ -267,11 +299,12 @@ def update_bio_route(
 @limiter.limit("30/minute")
 def check_username_route(
     request: Request,
-    username: str = Query(...),
+    username: str = Query(
+        ..., min_length=USERNAME_MIN_LEN, max_length=USERNAME_MAX_LEN, pattern=USERNAME_PATTERN
+    ),
     db: Session = Depends(get_db),
 ):
     """Public endpoint — returns whether a username is available."""
-    _validate_username(username)
     return {"available": is_username_available(db, username)}
 
 
@@ -325,6 +358,7 @@ def get_profile_summary(
         "id": user.id,
         "email": user.email,
         "username": user.username,
+        "display_name": user.display_name,
         "avatar_key": user.avatar_key,
         "bio": user.bio,
         "profile_visibility": user.profile_visibility,
@@ -383,6 +417,7 @@ def get_public_profile(
         return {
             "id": target.id,
             "username": target.username,
+            "display_name": target.display_name,
             "blocked_by_viewer": True,
         }
 
@@ -449,6 +484,7 @@ def get_public_profile(
     profile = {
         "id": target.id,
         "username": target.username,
+        "display_name": target.display_name,
         "bio": target.bio,
         "is_friend": is_friend,
         "profile_visibility": visibility,

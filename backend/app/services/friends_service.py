@@ -22,7 +22,7 @@ def _utcnow():
 
 
 def _serialize_user(user: User) -> dict:
-    return {"id": user.id, "username": user.username}
+    return {"id": user.id, "username": user.username, "display_name": user.display_name}
 
 
 def _get_friendship(db: Session, user_a: str, user_b: str) -> Friendship | None:
@@ -213,18 +213,18 @@ def get_friends(db: Session, user_id: str) -> list[dict]:
     Return all accepted friends with their user info.
     """
     requester_side = (
-        db.query(Friendship.id.label("friendship_id"), User.id.label("friend_id"), User.username.label("friend_username"))
+        db.query(Friendship.id.label("friendship_id"), User.id.label("friend_id"), User.username.label("friend_username"), User.display_name.label("friend_display_name"))
         .join(User, User.id == Friendship.addressee_id)
         .filter(Friendship.requester_id == user_id, Friendship.status == "accepted")
     )
     addressee_side = (
-        db.query(Friendship.id.label("friendship_id"), User.id.label("friend_id"), User.username.label("friend_username"))
+        db.query(Friendship.id.label("friendship_id"), User.id.label("friend_id"), User.username.label("friend_username"), User.display_name.label("friend_display_name"))
         .join(User, User.id == Friendship.requester_id)
         .filter(Friendship.addressee_id == user_id, Friendship.status == "accepted")
     )
     rows = requester_side.order_by(None).union_all(addressee_side.order_by(None)).all()
     return [
-        {"friendship_id": r.friendship_id, "friend": {"id": r.friend_id, "username": r.friend_username}}
+        {"friendship_id": r.friendship_id, "friend": {"id": r.friend_id, "username": r.friend_username, "display_name": r.friend_display_name}}
         for r in rows
     ]
 
@@ -239,6 +239,7 @@ def get_social_preview(db: Session, user_id: str) -> dict:
             Friendship.message,
             User.id.label("user_id"),
             User.username,
+            User.display_name,
         )
         .join(User, User.id == Friendship.requester_id)
         .filter(Friendship.addressee_id == user_id, Friendship.status == "pending")
@@ -251,6 +252,7 @@ def get_social_preview(db: Session, user_id: str) -> dict:
             null().label("message"),
             User.id.label("user_id"),
             User.username,
+            User.display_name,
         )
         .join(User, User.id == Friendship.addressee_id)
         .filter(Friendship.requester_id == user_id, Friendship.status == "pending")
@@ -263,6 +265,7 @@ def get_social_preview(db: Session, user_id: str) -> dict:
             null().label("message"),
             User.id.label("user_id"),
             User.username,
+            User.display_name,
         )
         .join(User, User.id == Friendship.requester_id)
         .filter(Friendship.addressee_id == user_id, Friendship.status == "following")
@@ -281,20 +284,20 @@ def get_social_preview(db: Session, user_id: str) -> dict:
         if r.kind == "incoming":
             incoming.append({
                 "friendship_id": r.friendship_id,
-                "from_user": {"id": r.user_id, "username": r.username},
+                "from_user": {"id": r.user_id, "username": r.username, "display_name": r.display_name},
                 "created_at": r.created_at,
                 "message": r.message,
             })
         elif r.kind == "outgoing":
             outgoing.append({
                 "friendship_id": r.friendship_id,
-                "to_user": {"id": r.user_id, "username": r.username},
+                "to_user": {"id": r.user_id, "username": r.username, "display_name": r.display_name},
                 "created_at": r.created_at,
             })
         else:
             followers.append({
                 "friendship_id": r.friendship_id,
-                "follower": {"id": r.user_id, "username": r.username},
+                "follower": {"id": r.user_id, "username": r.username, "display_name": r.display_name},
             })
     return {"incoming_requests": incoming, "outgoing_requests": outgoing, "followers": followers}
 
@@ -310,6 +313,7 @@ def get_incoming_requests(db: Session, user_id: str) -> list[dict]:
             Friendship.message,
             User.id.label("user_id"),
             User.username,
+            User.display_name,
         )
         .join(User, User.id == Friendship.requester_id)
         .filter(Friendship.addressee_id == user_id, Friendship.status == "pending")
@@ -319,7 +323,7 @@ def get_incoming_requests(db: Session, user_id: str) -> list[dict]:
     return [
         {
             "friendship_id": r.id,
-            "from_user": {"id": r.user_id, "username": r.username},
+            "from_user": {"id": r.user_id, "username": r.username, "display_name": r.display_name},
             "created_at": r.created_at,
             "message": r.message,
         }
@@ -346,6 +350,7 @@ def get_outgoing_requests(db: Session, user_id: str) -> list[dict]:
             Friendship.created_at,
             User.id.label("user_id"),
             User.username,
+            User.display_name,
         )
         .join(User, User.id == Friendship.addressee_id)
         .filter(Friendship.requester_id == user_id, Friendship.status == "pending")
@@ -355,7 +360,7 @@ def get_outgoing_requests(db: Session, user_id: str) -> list[dict]:
     return [
         {
             "friendship_id": r.id,
-            "to_user": {"id": r.user_id, "username": r.username},
+            "to_user": {"id": r.user_id, "username": r.username, "display_name": r.display_name},
             "created_at": r.created_at,
         }
         for r in rows
@@ -456,6 +461,7 @@ def get_suggested_friends(db: Session, user_id: str, limit: int = 10) -> list[di
         SELECT
             u.id,
             u.username,
+            u.display_name,
             COALESCE(u.profile_visibility, 'friends_only') AS profile_visibility,
             COALESCE(fof.mutual_count, 0)                  AS mutual_friends,
             CASE WHEN fof.candidate IS NOT NULL
@@ -477,6 +483,7 @@ def get_suggested_friends(db: Session, user_id: str, limit: int = 10) -> list[di
         {
             "id": row.id,
             "username": row.username,
+            "display_name": row.display_name,
             "profile_visibility": row.profile_visibility,
             "mutual_friends": row.mutual_friends,
             "reason": row.reason,
@@ -494,6 +501,7 @@ def get_followers(db: Session, user_id: str) -> list[dict]:
             Friendship.id,
             User.id.label("user_id"),
             User.username,
+            User.display_name,
         )
         .join(User, User.id == Friendship.requester_id)
         .filter(Friendship.addressee_id == user_id, Friendship.status == "following")
@@ -501,7 +509,7 @@ def get_followers(db: Session, user_id: str) -> list[dict]:
         .all()
     )
     return [
-        {"friendship_id": r.id, "follower": {"id": r.user_id, "username": r.username}}
+        {"friendship_id": r.id, "follower": {"id": r.user_id, "username": r.username, "display_name": r.display_name}}
         for r in rows
     ]
 

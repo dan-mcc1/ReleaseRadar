@@ -19,11 +19,14 @@ from app.models.movie import Movie
 from app.models.show import Show
 from app.models.season import Season
 from app.models.episode import Episode
+from app.models.notification import Notification as NotificationModel
+from app.services import push_service
 from app.services.email_service import (
     send_notification_email,
     send_season_premiere_email,
     format_air_time,
 )
+from app.services.push_service import push_notification
 from app.config import settings
 from app.core.limiter import limiter
 
@@ -44,6 +47,27 @@ class PreferencesUpdate(BaseModel):
     notify_trailers: bool | None = None
     digest_hour: int | None = None
     digest_timezone: str | None = None
+    hide_spoilers: bool | None = None
+    push_notifications_enabled: bool | None = None
+    push_notify_new_seasons: bool | None = None
+    push_notify_streaming_changes: bool | None = None
+    push_notify_trailers: bool | None = None
+    push_notify_episode_air: bool | None = None
+    episode_alert_lead_minutes: int | None = None
+
+
+class DeviceRegister(BaseModel):
+    token: str
+    platform: str  # 'ios' | 'android'
+    app_version: str | None = None
+
+
+class DeviceUnregister(BaseModel):
+    token: str
+
+
+class MarkReadBody(BaseModel):
+    ids: list[int] | None = None  # null = mark all
 
 
 @router.get("/preferences")
@@ -63,6 +87,13 @@ def get_notification_preferences(
         "notify_trailers": user.notify_trailers,
         "digest_hour": user.digest_hour if user.digest_hour is not None else 9,
         "digest_timezone": user.digest_timezone or "America/New_York",
+        "hide_spoilers": user.hide_spoilers,
+        "push_notifications_enabled": user.push_notifications_enabled,
+        "push_notify_new_seasons": user.push_notify_new_seasons,
+        "push_notify_streaming_changes": user.push_notify_streaming_changes,
+        "push_notify_trailers": user.push_notify_trailers,
+        "push_notify_episode_air": user.push_notify_episode_air,
+        "episode_alert_lead_minutes": user.episode_alert_lead_minutes,
     }
 
 
@@ -136,6 +167,48 @@ def update_notification_preferences(
             raise HTTPException(status_code=422, detail="Invalid timezone")
         user.digest_timezone = body.digest_timezone
 
+    if body.hide_spoilers is not None:
+        user.hide_spoilers = body.hide_spoilers
+
+    if body.push_notifications_enabled is not None:
+        user.push_notifications_enabled = body.push_notifications_enabled
+
+    if body.push_notify_new_seasons is not None:
+        if body.push_notify_new_seasons and not is_premium(uid, db):
+            raise HTTPException(
+                status_code=403,
+                detail={"error": "premium_required", "message": "This feature requires a Premium subscription."},
+            )
+        user.push_notify_new_seasons = body.push_notify_new_seasons
+
+    if body.push_notify_streaming_changes is not None:
+        if body.push_notify_streaming_changes and not is_premium(uid, db):
+            raise HTTPException(
+                status_code=403,
+                detail={"error": "premium_required", "message": "This feature requires a Premium subscription."},
+            )
+        user.push_notify_streaming_changes = body.push_notify_streaming_changes
+
+    if body.push_notify_trailers is not None:
+        if body.push_notify_trailers and not is_premium(uid, db):
+            raise HTTPException(
+                status_code=403,
+                detail={"error": "premium_required", "message": "This feature requires a Premium subscription."},
+            )
+        user.push_notify_trailers = body.push_notify_trailers
+
+    if body.push_notify_episode_air is not None:
+        user.push_notify_episode_air = body.push_notify_episode_air
+
+    if body.episode_alert_lead_minutes is not None:
+        lead = body.episode_alert_lead_minutes
+        if lead < 0 or lead > 60 or lead % 5 != 0:
+            raise HTTPException(
+                status_code=422,
+                detail="episode_alert_lead_minutes must be 0–60 in 5-minute increments",
+            )
+        user.episode_alert_lead_minutes = lead
+
     db.commit()
     return {
         "email_notifications": user.email_notifications,
@@ -146,7 +219,116 @@ def update_notification_preferences(
         "notify_trailers": user.notify_trailers,
         "digest_hour": user.digest_hour,
         "digest_timezone": user.digest_timezone,
+        "hide_spoilers": user.hide_spoilers,
+        "push_notifications_enabled": user.push_notifications_enabled,
+        "push_notify_new_seasons": user.push_notify_new_seasons,
+        "push_notify_streaming_changes": user.push_notify_streaming_changes,
+        "push_notify_trailers": user.push_notify_trailers,
+        "push_notify_episode_air": user.push_notify_episode_air,
+        "episode_alert_lead_minutes": user.episode_alert_lead_minutes,
     }
+
+
+# ---------------------------------------------------------------------------
+# Device tokens (iOS APNs via FCM)
+# ---------------------------------------------------------------------------
+
+@router.post("/devices/register")
+def register_device(
+    body: DeviceRegister,
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    """Register an FCM token for the current user. Idempotent on `token`."""
+    platform = body.platform.lower()
+    if platform not in {"ios", "android"}:
+        raise HTTPException(status_code=422, detail="platform must be 'ios' or 'android'")
+    if not body.token or len(body.token) > 4096:
+        raise HTTPException(status_code=422, detail="invalid token")
+
+    push_service.register_device(
+        db, uid, body.token, platform, app_version=body.app_version
+    )
+    # Auto-enable push the first time a device shows up — explicit toggle is
+    # available in /preferences if the user wants to turn it back off.
+    user = db.get(User, uid)
+    if user and not user.push_notifications_enabled:
+        user.push_notifications_enabled = True
+        db.commit()
+    return {"ok": True, "badge": push_service.unread_count(db, uid)}
+
+
+@router.post("/devices/unregister")
+def unregister_device(
+    body: DeviceUnregister,
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),  # noqa: ARG001 — auth gate only
+):
+    push_service.unregister_device(db, body.token)
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# In-app inbox + badge
+# ---------------------------------------------------------------------------
+
+@router.get("/inbox")
+def list_inbox(
+    limit: int = Query(50, ge=1, le=100),
+    before_id: int | None = Query(None),
+    unread_only: bool = Query(False),
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    q = db.query(NotificationModel).filter(NotificationModel.user_id == uid)
+    if unread_only:
+        q = q.filter(NotificationModel.read_at.is_(None))
+    if before_id is not None:
+        q = q.filter(NotificationModel.id < before_id)
+    rows = q.order_by(NotificationModel.id.desc()).limit(limit).all()
+    return {
+        "items": [
+            {
+                "id": n.id,
+                "type": n.type,
+                "title": n.title,
+                "body": n.body,
+                "content_type": n.content_type,
+                "content_id": n.content_id,
+                "image_url": n.image_url,
+                "season_number": n.season_number,
+                "episode_id": n.episode_id,
+                "video_key": n.video_key,
+                "read_at": n.read_at.isoformat() if n.read_at else None,
+                "created_at": n.created_at.isoformat(),
+            }
+            for n in rows
+        ],
+        "badge": push_service.unread_count(db, uid),
+    }
+
+
+@router.get("/badge")
+def get_badge(
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    return {"badge": push_service.unread_count(db, uid)}
+
+
+@router.post("/inbox/read")
+def mark_inbox_read(
+    body: MarkReadBody,
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    new_badge = push_service.mark_read(db, uid, body.ids)
+    # Best-effort silent push so the user's other devices update their badge.
+    try:
+        push_service.refresh_badge(db, uid)
+    except Exception:
+        logger.exception("badge refresh push failed for %s", uid)
+    return {"badge": new_badge}
 
 
 def _build_items_for_window(db: Session, user_id: str, days: int) -> list:
@@ -432,15 +614,15 @@ def send_season_premiere_alerts_to_all(db: Session, now_utc: datetime | None = N
     for user_id, content_id in watched_rows:
         user_tracked[user_id].add(content_id)
 
-    # Find all opted-in users who track at least one affected show
+    # Find all opted-in users who track at least one affected show.
+    # We pull anyone opted in to *either* email or push for this event type;
+    # the per-channel checks below decide what actually gets sent.
     relevant_user_ids = list(user_tracked.keys())
     users = (
         db.query(User)
         .filter(
             User.id.in_(relevant_user_ids),
-            User.email_notifications == True,
-            User.notify_new_seasons == True,
-            User.email != None,
+            User.notify_new_seasons == True,  # noqa: E712
             User.subscription_tier.in_(["premium", "admin"]),
         )
         .all()
@@ -459,10 +641,33 @@ def send_season_premiere_alerts_to_all(db: Session, now_utc: datetime | None = N
                 if show_id in tracked
                 for alert in show_alerts[show_id]
             ]
-            if alerts:
+            if not alerts:
+                continue
+
+            if user.email_notifications and user.email:
                 send_season_premiere_email(
                     user.email, user.username or "", alerts, uid=user.id
                 )
+
+            if user.push_notifications_enabled and user.push_notify_new_seasons:
+                for alert in alerts:
+                    days = alert["days_away"]
+                    when = "today" if days == 0 else f"in {days} days"
+                    title = f"New season of {alert['show_name']} {when}"
+                    season_label = (
+                        alert.get("season_name") or f"Season {alert['season_number']}"
+                    )
+                    body = f"{season_label} airs {alert['air_date']}"
+                    push_notification(
+                        db,
+                        user.id,
+                        type="season_premiere",
+                        title=title,
+                        body=body,
+                        content_type="tv",
+                        content_id=alert["show_id"],
+                        season_number=alert["season_number"],
+                    )
         except Exception:
             logger.exception("Season alert failed for user %s", user.id)
 

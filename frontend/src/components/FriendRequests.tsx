@@ -8,6 +8,7 @@ import {
 interface RequestUser {
   id: string;
   username: string;
+  display_name?: string | null;
   email?: string;
 }
 
@@ -91,7 +92,14 @@ export default function FriendRequests({
                     to={`/user/${req.from_user.username}`}
                     className="text-neutral-100 font-medium hover:text-primary-400 transition-colors"
                   >
-                    <span>@{req.from_user.username}</span>
+                    {req.from_user.display_name ? (
+                      <span>
+                        {req.from_user.display_name}{" "}
+                        <span className="text-xs text-neutral-400 font-normal">@{req.from_user.username}</span>
+                      </span>
+                    ) : (
+                      <span>@{req.from_user.username}</span>
+                    )}
                   </Link>
                   <div className="flex gap-2">
                     <button
@@ -136,7 +144,14 @@ export default function FriendRequests({
                   to={`/user/${req.to_user.username}`}
                   className="text-neutral-100 font-medium hover:text-primary-400 transition-colors"
                 >
-                  <span>@{req.to_user.username}</span>
+                  {req.to_user.display_name ? (
+                    <span>
+                      {req.to_user.display_name}{" "}
+                      <span className="text-xs text-neutral-400 font-normal">@{req.to_user.username}</span>
+                    </span>
+                  ) : (
+                    <span>@{req.to_user.username}</span>
+                  )}
                 </Link>
                 <button
                   onClick={() => cancel(req.friendship_id)}
