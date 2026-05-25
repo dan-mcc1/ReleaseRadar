@@ -14,6 +14,8 @@ from app.services.recommendation_service import (
 from app.services.email_service import send_recommendation_email
 from app.services.nav_counts import notify_counts_changed
 from app.services.for_you_service import get_for_you_recommendations
+from app.services.push_service import push_notification
+from app.models.user import User
 from app.core.limiter import limiter
 from app.schemas.common import (
     ContentType,
@@ -71,6 +73,23 @@ def send(
     notify_counts_changed(db, result.recipient_id)
     if result._email_params:
         background_tasks.add_task(send_recommendation_email, **result._email_params)
+
+    sender = db.query(User).filter_by(id=uid).first()
+    sender_name = (sender.username if sender else None) or "Someone"
+    title = body.content_title or "something"
+    try:
+        push_notification(
+            db,
+            result.recipient_id,
+            type="friend_rec",
+            title=f"{sender_name} recommended {title}",
+            body=body.message or f"Check out this {body.content_type}",
+            content_type=body.content_type,
+            content_id=body.content_id,
+        )
+    except Exception:
+        # Email + inbox are the source of truth; never let push wreck the response.
+        pass
     return result
 
 

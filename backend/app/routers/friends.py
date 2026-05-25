@@ -21,6 +21,7 @@ from app.services.activity_service import (
 )
 from app.models.user import User
 from app.services.nav_counts import notify_counts_changed
+from app.services.push_service import push_notification
 
 router = APIRouter()
 
@@ -83,6 +84,27 @@ def send_request(
     addressee = db.query(User).filter(User.username == addressee_username).first()
     if addressee:
         notify_counts_changed(db, addressee.id)
+
+        # Only push when the result is actually awaiting action ("pending"). Public
+        # profiles auto-follow ("following") and the auto-accept path returns
+        # "accepted" — neither needs a "you've got a request" banner.
+        if result.status == "pending":
+            requester = db.query(User).filter_by(id=uid).first()
+            requester_name = (requester.username if requester else None) or "Someone"
+            push_body = (
+                f"{requester_name} wants to be friends"
+                + (f": \"{body.message}\"" if body.message else "")
+            )
+            try:
+                push_notification(
+                    db,
+                    addressee.id,
+                    type="friend_request",
+                    title="New friend request",
+                    body=push_body,
+                )
+            except Exception:
+                pass
     return result
 
 
