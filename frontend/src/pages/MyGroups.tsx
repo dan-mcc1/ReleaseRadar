@@ -1,6 +1,10 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { useMyCommunities } from "../hooks/api/useCommunities";
+import {
+  useMyCommunities,
+  useMyCommunityInvitations,
+  useRespondToCommunityInvitation,
+} from "../hooks/api/useCommunities";
 import { usePageTitle } from "../hooks/usePageTitle";
 import GroupCard from "../components/GroupCard";
 import CreateGroupModal from "../components/CreateGroupModal";
@@ -8,6 +12,8 @@ import CreateGroupModal from "../components/CreateGroupModal";
 export default function MyGroups() {
   usePageTitle("My Groups");
   const { data: groups = [], isLoading } = useMyCommunities();
+  const { data: invitations = [] } = useMyCommunityInvitations();
+  const respond = useRespondToCommunityInvitation();
   const [showCreate, setShowCreate] = useState(false);
 
   return (
@@ -36,6 +42,69 @@ export default function MyGroups() {
           </button>
         </div>
       </div>
+
+      {invitations.length > 0 && (
+        <div className="px-6 lg:px-10 mt-6">
+          <p className="font-mono text-[10px] tracking-[0.14em] text-neutral-500 uppercase mb-3">
+            Pending invitations ({invitations.length})
+          </p>
+          <div className="flex flex-col gap-2">
+            {invitations.map((inv) => {
+              const isResponding =
+                respond.isPending && respond.variables?.invitationId === inv.id;
+              return (
+                <div
+                  key={inv.id}
+                  className="flex flex-col sm:flex-row sm:items-center gap-3 bg-neutral-900 border border-neutral-800 rounded-2xl p-4"
+                >
+                  <div className="flex-1 min-w-0">
+                    <Link
+                      to={`/groups/${inv.community.slug}`}
+                      className="text-[15px] font-semibold text-white hover:text-primary-300"
+                    >
+                      {inv.community.name}
+                    </Link>
+                    <p className="text-[12px] text-neutral-500 mt-0.5">
+                      Invited by{" "}
+                      <span className="text-neutral-300">
+                        @{inv.invited_by?.username ?? "someone"}
+                      </span>
+                      {" • "}
+                      {inv.community.member_count}{" "}
+                      {inv.community.member_count === 1 ? "member" : "members"}
+                    </p>
+                    {inv.community.description && (
+                      <p className="text-[12.5px] text-neutral-400 mt-1.5 line-clamp-2">
+                        {inv.community.description}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex gap-2 shrink-0">
+                    <button
+                      onClick={() =>
+                        respond.mutate({ invitationId: inv.id, accept: true })
+                      }
+                      disabled={isResponding}
+                      className="text-[13px] font-semibold bg-primary-600 hover:bg-primary-500 disabled:opacity-50 text-white px-4 py-2 rounded-xl"
+                    >
+                      Accept
+                    </button>
+                    <button
+                      onClick={() =>
+                        respond.mutate({ invitationId: inv.id, accept: false })
+                      }
+                      disabled={isResponding}
+                      className="text-[13px] font-medium text-neutral-300 border border-neutral-700 hover:border-neutral-600 hover:text-white disabled:opacity-50 px-4 py-2 rounded-xl"
+                    >
+                      Decline
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="px-6 lg:px-10 mt-6">
         {isLoading ? (

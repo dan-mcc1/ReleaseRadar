@@ -516,6 +516,45 @@ def send_recommendation_email(
     )
 
 
+def send_community_invite_email(
+    to_email: str,
+    to_username: str,
+    from_username: str,
+    group_name: str,
+    group_slug: str,
+    uid: str = "",
+):
+    group_url = f"{settings.FRONTEND_URL}/groups/{group_slug}"
+    body = f"""
+<h2 style="margin:0 0 6px;color:#f5f5f5;font-size:22px;font-weight:700;letter-spacing:-0.3px;">
+  Hi {escape(to_username) or 'there'} 👋
+</h2>
+<p style="margin:0 0 18px;color:#737373;font-size:14px;line-height:1.6;">
+  <strong style="color:#10b981;">@{escape(from_username)}</strong> invited you to join the group:
+</p>
+<div style="background:#1a1a1a;border:1px solid #262626;border-radius:12px;padding:18px;margin-bottom:24px;">
+  <p style="margin:0;color:#f5f5f5;font-size:18px;font-weight:700;line-height:1.3;">
+    {escape(group_name)}
+  </p>
+</div>
+<p style="margin:0 0 24px;color:#737373;font-size:14px;line-height:1.6;">
+  Head into the app to accept or decline.
+</p>
+<div style="text-align:center;margin-top:28px;">
+  <a href="{group_url}"
+     style="display:inline-block;background:linear-gradient(135deg,#10b981,#059669);
+            color:#ffffff;font-weight:600;font-size:14px;padding:13px 32px;
+            border-radius:99px;text-decoration:none;letter-spacing:0.2px;">
+    View invitation
+  </a>
+</div>"""
+    send_email(
+        to_email,
+        f'@{escape(from_username)} invited you to {escape(group_name)}',
+        _email_wrapper(body, uid),
+    )
+
+
 def send_streaming_alert_email(
     to_email: str,
     username: str,
@@ -631,6 +670,11 @@ def send_trailer_alert_email(
     Notify a user about new official trailers/teasers for their tracked content.
     Each alert dict has: title, content_type, content_id, poster_path,
     videos (list of {key, name, type}).
+
+    Layout uses tables (not flex) so the poster sits beside the title and the
+    YouTube thumbnail sits beside the trailer name across every major email
+    client. The previous flex layout + absolute-positioned play-button overlay
+    was broken in Outlook, Yahoo, and Gmail mobile.
     """
     if not alerts:
         return
@@ -645,26 +689,35 @@ def send_trailer_alert_email(
             thumb = YOUTUBE_THUMB.format(key=key)
             yt_url = f"https://www.youtube.com/watch?v={key}"
             rows += f"""
-<a href="{yt_url}" style="display:flex;align-items:center;gap:12px;
-   background:#1f1f1f;border:1px solid #262626;border-radius:10px;
-   padding:10px 12px;margin-top:8px;text-decoration:none;">
-  <div style="flex-shrink:0;position:relative;">
-    <img src="{thumb}" width="88" height="50"
-         style="border-radius:6px;object-fit:cover;display:block;" />
-    <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;">
-      <div style="width:24px;height:24px;background:rgba(0,0,0,0.6);border-radius:50%;
-                  display:flex;align-items:center;justify-content:center;">
-        <div style="width:0;height:0;border-style:solid;border-width:5px 0 5px 9px;
-                    border-color:transparent transparent transparent #ffffff;margin-left:2px;"></div>
-      </div>
-    </div>
-  </div>
-  <div style="flex:1;min-width:0;">
-    <p style="margin:0 0 2px;color:#f5f5f5;font-size:13px;font-weight:600;
-       white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{name}</p>
-    <p style="margin:0;color:#525252;font-size:11px;font-weight:500;">YouTube · Official</p>
-  </div>
-</a>"""
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+       style="background:#1f1f1f;border:1px solid #262626;border-radius:10px;
+              border-collapse:separate;margin-top:8px;">
+  <tr>
+    <td style="padding:10px 12px;">
+      <a href="{yt_url}" style="text-decoration:none;display:block;">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+               style="border-collapse:collapse;">
+          <tr>
+            <td valign="middle" width="88" style="width:88px;padding-right:12px;">
+              <img src="{thumb}" width="88" height="50" alt="Trailer thumbnail"
+                   style="border-radius:6px;display:block;border:0;outline:none;
+                          text-decoration:none;-ms-interpolation-mode:bicubic;" />
+            </td>
+            <td valign="middle" style="vertical-align:middle;">
+              <div style="color:#f5f5f5;font-size:13px;font-weight:600;line-height:1.3;
+                          margin-bottom:2px;">
+                <span style="color:#ef4444;margin-right:6px;">&#9654;</span>{name}
+              </div>
+              <div style="color:#737373;font-size:11px;font-weight:500;">
+                YouTube &middot; Official
+              </div>
+            </td>
+          </tr>
+        </table>
+      </a>
+    </td>
+  </tr>
+</table>"""
         return rows
 
     def _alert_card(a: dict) -> str:
@@ -676,25 +729,46 @@ def send_trailer_alert_email(
             else settings.FRONTEND_URL
         )
         has_poster = bool(a.get("poster_path"))
-        poster = (
-            f'<a href="{content_url}" style="display:inline-block;flex-shrink:0;margin-right:14px;">'
-            f'<img src="{TMDB_IMAGE_BASE}{a["poster_path"]}" alt="{escape(a["title"])}" width="60" height="90"'
-            f' style="border-radius:8px;object-fit:cover;display:block;box-shadow:0 4px 12px rgba(0,0,0,0.5);" /></a>'
-            if has_poster
-            else ""
+
+        title_html = (
+            f'<a href="{content_url}" style="color:#f5f5f5;font-size:16px;'
+            f'font-weight:600;text-decoration:none;line-height:1.3;">'
+            f'{escape(a["title"])}</a>'
         )
-        layout_style = "display:flex;align-items:flex-start;" if has_poster else ""
         videos_html = _video_rows(a.get("videos", []))
+
+        if has_poster:
+            poster_cell = (
+                f'<td valign="top" width="76" style="width:76px;padding:0 14px 0 0;">'
+                f'<a href="{content_url}" style="text-decoration:none;display:block;">'
+                f'<img src="{TMDB_IMAGE_BASE}{a["poster_path"]}"'
+                f' alt="{escape(a["title"])}" width="62" height="93"'
+                f' style="border-radius:8px;display:block;border:0;outline:none;'
+                f'text-decoration:none;-ms-interpolation-mode:bicubic;" />'
+                f'</a></td>'
+            )
+        else:
+            poster_cell = ""
+
         return f"""
-<div style="{layout_style}background:#1a1a1a;border:1px solid #262626;
-            border-radius:12px;padding:16px;margin-bottom:8px;">
-  {poster}
-  <div style="flex:1;min-width:0;">
-    <a href="{content_url}" style="color:#f5f5f5;font-size:15px;font-weight:600;
-       text-decoration:none;display:block;margin-bottom:4px;line-height:1.3;">{escape(a["title"])}</a>
-    {videos_html}
-  </div>
-</div>"""
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+       style="background:#1a1a1a;border:1px solid #262626;border-radius:12px;
+              border-collapse:separate;margin-bottom:10px;">
+  <tr>
+    <td style="padding:16px;">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+             style="border-collapse:collapse;">
+        <tr>
+          {poster_cell}
+          <td valign="top" style="vertical-align:top;">
+            {title_html}
+            {videos_html}
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>"""
 
     count = len(alerts)
     if count == 1:
@@ -702,13 +776,18 @@ def send_trailer_alert_email(
     else:
         subject = f"New trailers for {count} titles you're tracking — Release Radar"
 
+    if count == 1:
+        lead_in = "A new trailer just dropped for a title you're tracking:"
+    else:
+        lead_in = f"New trailers just dropped for {count} titles you're tracking:"
+
     cards = "".join(_alert_card(a) for a in alerts)
     body = f"""
 <h2 style="margin:0 0 6px;color:#f5f5f5;font-size:22px;font-weight:700;letter-spacing:-0.3px;">
   Hi {escape(username) or 'there'} 👋
 </h2>
 <p style="margin:0 0 24px;color:#737373;font-size:14px;line-height:1.6;">
-  New trailer{'s are' if count > 1 else ' is'} out for {'titles' if count > 1 else 'a title'} you're tracking:
+  {lead_in}
 </p>
 {cards}
 <div style="text-align:center;margin-top:28px;">

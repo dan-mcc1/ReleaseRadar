@@ -123,6 +123,30 @@ class CommunityPostLike(Base):
     __table_args__ = (Index("ix_community_post_like_user", "user_id"),)
 
 
+class CommunityInvitation(Base):
+    """Pending invite from an owner/admin to a prospective member. Lives only
+    while pending — accepting deletes the row and creates a CommunityMember,
+    declining just deletes it. Re-invites work because there's no history kept."""
+
+    __tablename__ = "community_invitation"
+
+    id = Column(Integer, primary_key=True)
+    community_id = Column(
+        Integer, ForeignKey("community.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id = Column(
+        String, ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    invited_by = Column(
+        String, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("community_id", "user_id", name="uq_community_invitation"),
+    )
+
+
 class CommunityReplyLike(Base):
     __tablename__ = "community_reply_like"
 

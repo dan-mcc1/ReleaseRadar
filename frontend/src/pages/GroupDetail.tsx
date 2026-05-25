@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { BASE_IMAGE_URL } from "../constants";
 import { usePageTitle } from "../hooks/usePageTitle";
@@ -25,13 +25,23 @@ import {
   useRemoveMedia,
   useUpdateCommunity,
   useDeleteCommunity,
+  useGroupPendingInvitations,
+  useRevokeGroupInvitation,
   type Community,
   type CommunityMember,
   type CommunityMediaItem,
   type CommunityPost as CommunityPostT,
   type CommunityReply as CommunityReplyT,
 } from "../hooks/api/useCommunities";
+import { useFriendSearch } from "../hooks/api/useFriends";
 import ReportModal from "../components/ReportModal";
+
+interface UserSearchResult {
+  id: string;
+  username: string;
+  display_name: string | null;
+  profile_visibility: "public" | "friends_only" | "private";
+}
 
 type Tab = "discussion" | "titles" | "members" | "settings";
 
@@ -818,14 +828,39 @@ function MembersTab({
   const remove = useRemoveMember(group.id);
   const setRole = useSetMemberRole(group.id);
   const invite = useInviteMember(group.id);
-  const [inviteUsername, setInviteUsername] = useState("");
-  const [inviteError, setInviteError] = useState<string | null>(null);
+  const { data: pendingInvites = [] } = useGroupPendingInvitations(
+    isAdmin && group.visibility === "private" ? group.id : undefined,
+  );
+  const revokeInvite = useRevokeGroupInvitation(group.id);
 
-  async function submitInvite() {
+  const [inviteQuery, setInviteQuery] = useState("");
+  const [debouncedInviteQuery, setDebouncedInviteQuery] = useState("");
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [invitedUsernames, setInvitedUsernames] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedInviteQuery(inviteQuery.trim()), 300);
+    return () => clearTimeout(t);
+  }, [inviteQuery]);
+
+  const { data: searchResultsRaw = [] } = useFriendSearch(debouncedInviteQuery);
+  const searchResults = searchResultsRaw as UserSearchResult[];
+
+  // Pre-compute membership + pending sets to grey out already-handled users.
+  const memberIds = useMemo(
+    () => new Set(members.map((m: CommunityMember) => m.user.id)),
+    [members],
+  );
+  const pendingIds = useMemo(
+    () => new Set(pendingInvites.map((p) => p.user.id)),
+    [pendingInvites],
+  );
+
+  async function sendInvite(username: string) {
     setInviteError(null);
     try {
-      await invite.mutateAsync(inviteUsername.trim());
-      setInviteUsername("");
+      await invite.mutateAsync(username);
+      setInvitedUsernames((prev) => new Set(prev).add(username));
     } catch (e) {
       setInviteError(e instanceof Error ? e.message : "Failed.");
     }
@@ -838,24 +873,103 @@ function MembersTab({
       {isAdmin && group.visibility === "private" && (
         <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4">
           <p className="text-[12px] font-medium text-neutral-300 mb-2">
-            Invite a member by @username
+            Invite people to this group
           </p>
-          <div className="flex gap-2">
-            <input
-              value={inviteUsername}
-              onChange={(e) => setInviteUsername(e.target.value)}
-              placeholder="username"
-              className="flex-1 bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm text-white placeholder-neutral-600 outline-none focus:border-neutral-600"
-            />
-            <button
-              onClick={submitInvite}
-              disabled={invite.isPending || !inviteUsername.trim()}
-              className="text-sm font-semibold bg-primary-600 hover:bg-primary-500 disabled:opacity-50 text-white px-4 rounded-xl"
-            >
-              Invite
-            </button>
-          </div>
+          <input
+            value={inviteQuery}
+            onChange={(e) => {
+              setInviteQuery(e.target.value);
+              setInviteError(null);
+            }}
+            placeholder="Search by username or display name…"
+            // text-base on mobile (>=16px) prevents iOS Safari from auto-zooming on focus
+            className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2.5 text-base sm:text-sm text-white placeholder-neutral-600 outline-none focus:border-neutral-600"
+          />
+          {debouncedInviteQuery && searchResults.length === 0 && (
+            <p className="text-neutral-500 text-xs mt-3">No matching users.</p>
+          )}
+          {searchResults.length > 0 && (
+            <div className="mt-3 flex flex-col gap-1.5">
+              {searchResults.map((u) => {
+                const isMember = memberIds.has(u.id);
+                const isPending = pendingIds.has(u.id) || invitedUsernames.has(u.username);
+                const isSending =
+                  invite.isPending && invite.variables === u.username;
+                return (
+                  <div
+                    key={u.id}
+                    className="flex items-center gap-3 bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2"
+                  >
+                    <div className="w-8 h-8 rounded-full bg-neutral-700 flex items-center justify-center text-[12px] font-semibold text-neutral-200 shrink-0">
+                      {(u.display_name?.[0] ?? u.username[0]).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[13.5px] font-medium text-white truncate">
+                        {u.display_name || `@${u.username}`}
+                      </div>
+                      {u.display_name && (
+                        <div className="text-[11.5px] text-neutral-500 truncate">
+                          @{u.username}
+                        </div>
+                      )}
+                    </div>
+                    {isMember ? (
+                      <span className="text-[11px] font-medium text-primary-400 shrink-0">
+                        Member
+                      </span>
+                    ) : isPending ? (
+                      <span className="text-[11px] font-medium text-warning-400 shrink-0">
+                        Invited
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => sendInvite(u.username)}
+                        disabled={isSending}
+                        className="text-[12px] font-semibold bg-primary-600 hover:bg-primary-500 disabled:opacity-50 text-white px-3 py-1 rounded-lg shrink-0"
+                      >
+                        {isSending ? "…" : "Invite"}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
           {inviteError && <p className="text-error-400 text-xs mt-2">{inviteError}</p>}
+
+          {pendingInvites.length > 0 && (
+            <div className="mt-4 pt-4 border-t border-neutral-800">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-neutral-500 mb-2">
+                Pending invitations ({pendingInvites.length})
+              </p>
+              <div className="flex flex-col gap-1.5">
+                {pendingInvites.map((p) => (
+                  <div
+                    key={p.id}
+                    className="flex items-center gap-3 px-2 py-1.5"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[13px] text-neutral-200 truncate">
+                        {p.user.display_name || `@${p.user.username}`}
+                      </div>
+                      {p.user.display_name && (
+                        <div className="text-[11px] text-neutral-500 truncate">
+                          @{p.user.username}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => revokeInvite.mutate(p.id)}
+                      disabled={revokeInvite.isPending}
+                      className="text-[11px] text-neutral-400 hover:text-error-400 disabled:opacity-50"
+                    >
+                      Revoke
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
       <div className="bg-neutral-900 border border-neutral-800 rounded-2xl divide-y divide-neutral-800">

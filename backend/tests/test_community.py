@@ -166,9 +166,13 @@ class TestBrowse:
         self, client, client2, three_users
     ):
         cid = _create_group(client, name="Secret", visibility="private").json()["id"]
-        # Owner invites bob
-        client.post(f"/communities/{cid}/members/invite",
-                    json={"username": "bob"})
+        # Owner invites bob, bob accepts → bob is now a member
+        inv = client.post(
+            f"/communities/{cid}/members/invite", json={"username": "bob"}
+        ).json()
+        client2.post(
+            f"/communities/invitations/{inv['id']}/respond", json={"accept": True}
+        )
         r = client2.get("/communities")
         assert "Secret" in {c["name"] for c in r.json()}
 
@@ -229,12 +233,56 @@ class TestJoinLeave:
 
 
 class TestInviteRemove:
-    def test_owner_invites_member(self, client, three_users):
+    def test_owner_invites_creates_pending_invitation(self, client, three_users):
         cid = _create_group(client, visibility="private").json()["id"]
         r = client.post(f"/communities/{cid}/members/invite",
                         json={"username": "bob"})
         assert r.status_code == 200
-        assert r.json()["role"] == "member"
+        body = r.json()
+        # New shape: returns invitation, not member row.
+        assert body["community_id"] == cid
+        assert "id" in body
+        # No "role" key — bob isn't a member yet.
+        assert "role" not in body
+
+    def test_invitee_accepts_and_becomes_member(self, client, client2, three_users):
+        cid = _create_group(client, visibility="private").json()["id"]
+        inv = client.post(
+            f"/communities/{cid}/members/invite", json={"username": "bob"}
+        ).json()
+        r = client2.post(
+            f"/communities/invitations/{inv['id']}/respond", json={"accept": True}
+        )
+        assert r.status_code == 200
+        assert r.json()["accepted"] is True
+        # bob now sees the group via /mine
+        mine = client2.get("/communities/mine").json()
+        assert cid in {c["id"] for c in mine}
+
+    def test_invitee_declines_and_invitation_disappears(
+        self, client, client2, three_users
+    ):
+        cid = _create_group(client, visibility="private").json()["id"]
+        inv = client.post(
+            f"/communities/{cid}/members/invite", json={"username": "bob"}
+        ).json()
+        r = client2.post(
+            f"/communities/invitations/{inv['id']}/respond", json={"accept": False}
+        )
+        assert r.status_code == 200
+        # bob never joined
+        mine = client2.get("/communities/mine").json()
+        assert cid not in {c["id"] for c in mine}
+        # Invitation is gone from bob's pending list
+        assert client2.get("/communities/invitations/mine").json() == []
+
+    def test_pending_invitations_lists_for_invitee(self, client, client2, three_users):
+        cid = _create_group(client, name="Secret", visibility="private").json()["id"]
+        client.post(f"/communities/{cid}/members/invite", json={"username": "bob"})
+        items = client2.get("/communities/invitations/mine").json()
+        assert len(items) == 1
+        assert items[0]["community"]["name"] == "Secret"
+        assert items[0]["invited_by"]["username"] == "alice"
 
     def test_invite_unknown_username_404(self, client, three_users):
         cid = _create_group(client).json()["id"]
@@ -250,12 +298,37 @@ class TestInviteRemove:
                         json={"username": "bob"})
         assert r.status_code == 409
 
+    def test_cannot_invite_existing_member(self, client, client2, three_users):
+        cid = _create_group(client).json()["id"]
+        client2.post(f"/communities/{cid}/join")
+        r = client.post(f"/communities/{cid}/members/invite",
+                        json={"username": "bob"})
+        assert r.status_code == 409
+
     def test_non_owner_cannot_invite(self, client, client2, three_users):
         cid = _create_group(client).json()["id"]
         client2.post(f"/communities/{cid}/join")
         r = client2.post(f"/communities/{cid}/members/invite",
                         json={"username": "carol"})
         assert r.status_code == 403
+
+    def test_admin_can_see_pending_invitations_for_group(self, client, three_users):
+        cid = _create_group(client, visibility="private").json()["id"]
+        client.post(f"/communities/{cid}/members/invite", json={"username": "bob"})
+        r = client.get(f"/communities/{cid}/invitations")
+        assert r.status_code == 200
+        assert len(r.json()) == 1
+        assert r.json()[0]["user"]["username"] == "bob"
+
+    def test_admin_can_revoke_invitation(self, client, client2, three_users):
+        cid = _create_group(client, visibility="private").json()["id"]
+        inv = client.post(
+            f"/communities/{cid}/members/invite", json={"username": "bob"}
+        ).json()
+        r = client.delete(f"/communities/{cid}/invitations/{inv['id']}")
+        assert r.status_code == 200
+        # Bob no longer has it pending
+        assert client2.get("/communities/invitations/mine").json() == []
 
     def test_owner_removes_member(self, client, client2, three_users):
         cid = _create_group(client).json()["id"]

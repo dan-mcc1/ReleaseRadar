@@ -233,6 +233,27 @@ export function useLeaveCommunity() {
   });
 }
 
+export interface CommunityInvitation {
+  id: number;
+  created_at: string | null;
+  community: {
+    id: number;
+    slug: string;
+    name: string;
+    description: string | null;
+    banner_color: string | null;
+    visibility: "public" | "private";
+    member_count: number;
+  };
+  invited_by: { id: string; username: string; display_name: string | null } | null;
+}
+
+export interface GroupPendingInvitation {
+  id: number;
+  created_at: string | null;
+  user: { id: string; username: string; display_name: string | null };
+}
+
 export function useInviteMember(communityId: number) {
   const qc = useQueryClient();
   return useMutation({
@@ -242,7 +263,62 @@ export function useInviteMember(communityId: number) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username }),
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.communityMembers(communityId) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.communityMembers(communityId) });
+      qc.invalidateQueries({ queryKey: queryKeys.communityGroupInvitations(communityId) });
+    },
+  });
+}
+
+export function useMyCommunityInvitations() {
+  const user = useAuthUser();
+  return useQuery<CommunityInvitation[]>({
+    queryKey: user ? queryKeys.communityMyInvitations(user.uid) : ["communities", "invitations", "mine", "anon"],
+    queryFn: () => queryFetch<CommunityInvitation[]>(`/communities/invitations/mine`),
+    enabled: !!user,
+  });
+}
+
+export function useRespondToCommunityInvitation() {
+  const qc = useQueryClient();
+  const user = useAuthUser();
+  return useMutation({
+    mutationFn: ({ invitationId, accept }: { invitationId: number; accept: boolean }) =>
+      jsonFetch(`/communities/invitations/${invitationId}/respond`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accept }),
+      }),
+    onSuccess: () => {
+      if (user) {
+        qc.invalidateQueries({ queryKey: queryKeys.communityMyInvitations(user.uid) });
+        qc.invalidateQueries({ queryKey: queryKeys.myCommunities(user.uid) });
+      }
+    },
+  });
+}
+
+export function useGroupPendingInvitations(communityId: number | undefined) {
+  return useQuery<GroupPendingInvitation[]>({
+    queryKey: communityId
+      ? queryKeys.communityGroupInvitations(communityId)
+      : ["communities", "invitations", "group", "noop"],
+    queryFn: () =>
+      queryFetch<GroupPendingInvitation[]>(`/communities/${communityId}/invitations`),
+    enabled: communityId !== undefined,
+  });
+}
+
+export function useRevokeGroupInvitation(communityId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (invitationId: number) =>
+      jsonFetch(`/communities/${communityId}/invitations/${invitationId}`, {
+        method: "DELETE",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.communityGroupInvitations(communityId) });
+    },
   });
 }
 

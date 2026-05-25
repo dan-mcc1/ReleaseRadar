@@ -11,6 +11,7 @@ from app.models.community import (  # noqa: F401
     CommunityReply,
     CommunityPostLike,
     CommunityReplyLike,
+    CommunityInvitation,
 )
 from app.models.currently_watching import CurrentlyWatching  # noqa: F401
 from app.models.device_token import DeviceToken  # noqa: F401

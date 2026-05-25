@@ -44,7 +44,9 @@ export default function BrowseGroups() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search groups…"
-            className="flex-1 bg-transparent text-neutral-100 placeholder-neutral-500 outline-none text-sm"
+            // text-base on mobile (>=16px) prevents iOS Safari from auto-zooming
+            // when the input gets focus; shrink back to text-sm on sm+.
+            className="flex-1 bg-transparent text-neutral-100 placeholder-neutral-500 outline-none text-base sm:text-sm"
           />
         </div>
         {user && (

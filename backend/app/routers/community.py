@@ -1,11 +1,15 @@
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.limiter import limiter
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
+from app.models.community import Community
+from app.models.user import User
 from app.services import community_service as svc
+from app.services.email_service import send_community_invite_email
+from app.services.push_service import push_notification
 from app.schemas.common import (
     COMMUNITY_DESC_MAX_LEN,
     COMMUNITY_NAME_MAX_LEN,
@@ -62,6 +66,10 @@ class InviteMemberBody(BaseModel):
 
 class SetRoleBody(BaseModel):
     role: CommunityRole
+
+
+class InvitationRespondBody(BaseModel):
+    accept: bool
 
 
 class BrowseQuery(BaseModel):
@@ -182,10 +190,89 @@ def members(
 def invite(
     community_id: int,
     body: InviteMemberBody,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
-    return svc.invite_member(db, uid, community_id, body.username)
+    inv = svc.invite_member(db, uid, community_id, body.username)
+
+    # Email + push the invitee. Failures don't roll back the invitation.
+    community = db.query(Community).filter(Community.id == inv.community_id).first()
+    invitee = db.query(User).filter(User.id == inv.user_id).first()
+    inviter = db.query(User).filter(User.id == uid).first()
+    inviter_name = (inviter.username if inviter else None) or "Someone"
+
+    if community and invitee:
+        if invitee.email and invitee.email_notifications:
+            background_tasks.add_task(
+                send_community_invite_email,
+                to_email=invitee.email,
+                to_username=invitee.username or "",
+                from_username=inviter_name,
+                group_name=community.name,
+                group_slug=community.slug,
+                uid=invitee.id,
+            )
+        try:
+            push_notification(
+                db,
+                invitee.id,
+                type="community_invite",
+                title=f"Invitation to {community.name}",
+                body=f"{inviter_name} invited you to join {community.name}",
+                community_invitation_id=inv.id,
+            )
+        except Exception:
+            pass
+
+    return {
+        "id": inv.id,
+        "community_id": inv.community_id,
+        "user_id": inv.user_id,
+        "created_at": inv.created_at.isoformat() if inv.created_at else None,
+    }
+
+
+# ─── Invitations (invitee side) ────────────────────────────────────────────
+
+@router.get("/invitations/mine")
+def my_invitations(
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    """Pending invitations for the current user."""
+    return svc.list_my_invitations(db, uid)
+
+
+@router.post("/invitations/{invitation_id}/respond")
+def respond_to_invitation(
+    invitation_id: int,
+    body: InvitationRespondBody,
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    return svc.respond_to_invitation(db, uid, invitation_id, body.accept)
+
+
+@router.get("/{community_id}/invitations")
+def group_invitations(
+    community_id: int,
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    """Pending invitations issued by/for a group — admin-only."""
+    return svc.list_group_invitations(db, uid, community_id)
+
+
+@router.delete("/{community_id}/invitations/{invitation_id}")
+def revoke_invitation(
+    community_id: int,
+    invitation_id: int,
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    svc.revoke_invitation(db, uid, community_id, invitation_id)
+    return {"revoked": True}
 
 
 @router.delete("/{community_id}/members/{user_id}")

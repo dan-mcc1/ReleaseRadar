@@ -39,6 +39,11 @@ class Notification(Base):
         ForeignKey("friendship.id", ondelete="CASCADE"),
         nullable=True,
     )
+    community_invitation_id = Column(
+        Integer,
+        ForeignKey("community_invitation.id", ondelete="CASCADE"),
+        nullable=True,
+    )
     read_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(
         DateTime(timezone=True), server_default=func.now(), nullable=False, index=True

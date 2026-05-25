@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.models.community import (
     Community,
+    CommunityInvitation,
     CommunityMember,
     CommunityMedia,
     CommunityPost,
@@ -328,18 +329,167 @@ def list_members(db: Session, community_id: int, viewer_id: str) -> list[dict]:
 
 def invite_member(
     db: Session, inviter_id: str, community_id: int, username: str
-) -> dict:
-    """For private groups, owner/admin adds a user directly by username."""
+) -> CommunityInvitation:
+    """Owner/admin sends an invitation. The invitee must accept before becoming
+    a member — this function creates a pending CommunityInvitation row.
+
+    Returns the invitation object. The router fires email + push on the way
+    out so notifications can stamp the invitation_id correctly.
+    """
     c, _ = _require_role(db, community_id, inviter_id, ("owner", "admin"))
     target = db.query(User).filter(User.username == username).first()
     if not target:
         raise HTTPException(status_code=404, detail="User not found.")
+    if target.id == inviter_id:
+        raise HTTPException(status_code=400, detail="You can't invite yourself.")
     if _viewer_role(db, community_id, target.id):
         raise HTTPException(status_code=409, detail="That user is already a member.")
-    db.add(CommunityMember(community_id=community_id, user_id=target.id, role="member"))
-    c.member_count = (c.member_count or 0) + 1
+
+    existing = (
+        db.query(CommunityInvitation)
+        .filter(
+            CommunityInvitation.community_id == community_id,
+            CommunityInvitation.user_id == target.id,
+        )
+        .first()
+    )
+    if existing:
+        raise HTTPException(
+            status_code=409, detail="That user already has a pending invitation."
+        )
+
+    inv = CommunityInvitation(
+        community_id=community_id,
+        user_id=target.id,
+        invited_by=inviter_id,
+    )
+    db.add(inv)
     db.commit()
-    return {"user_id": target.id, "role": "member"}
+    db.refresh(inv)
+    return inv
+
+
+def respond_to_invitation(
+    db: Session, user_id: str, invitation_id: int, accept: bool
+) -> dict:
+    """Invitee accepts (becomes a member) or declines (invitation dropped).
+    Either path deletes the invitation row, which cascades to clean up the
+    matching notification inbox entry."""
+    inv = (
+        db.query(CommunityInvitation)
+        .filter(
+            CommunityInvitation.id == invitation_id,
+            CommunityInvitation.user_id == user_id,
+        )
+        .first()
+    )
+    if not inv:
+        raise HTTPException(status_code=404, detail="Invitation not found.")
+
+    community_id = inv.community_id
+
+    if accept:
+        c = db.query(Community).filter(Community.id == community_id).first()
+        if not c:
+            # Community was deleted between invite and accept.
+            db.delete(inv)
+            db.commit()
+            raise HTTPException(status_code=404, detail="Group no longer exists.")
+        # In the unlikely case a parallel join already created the member row,
+        # don't double-insert; just clear the invite.
+        if _viewer_role(db, community_id, user_id) is None:
+            db.add(
+                CommunityMember(
+                    community_id=community_id, user_id=user_id, role="member"
+                )
+            )
+            c.member_count = (c.member_count or 0) + 1
+
+    db.delete(inv)
+    db.commit()
+    return {"community_id": community_id, "accepted": accept}
+
+
+def list_my_invitations(db: Session, user_id: str) -> list[dict]:
+    """Pending invitations for the current user, newest first. Includes
+    community + inviter info so the inbox UI can render without extra calls."""
+    rows = (
+        db.query(CommunityInvitation, Community, User)
+        .join(Community, Community.id == CommunityInvitation.community_id)
+        .outerjoin(User, User.id == CommunityInvitation.invited_by)
+        .filter(CommunityInvitation.user_id == user_id)
+        .order_by(CommunityInvitation.created_at.desc())
+        .all()
+    )
+    return [
+        {
+            "id": inv.id,
+            "created_at": inv.created_at.isoformat() if inv.created_at else None,
+            "community": {
+                "id": c.id,
+                "slug": c.slug,
+                "name": c.name,
+                "description": c.description,
+                "banner_color": c.banner_color,
+                "visibility": c.visibility,
+                "member_count": c.member_count or 0,
+            },
+            "invited_by": (
+                {
+                    "id": inviter.id,
+                    "username": inviter.username,
+                    "display_name": inviter.display_name,
+                }
+                if inviter
+                else None
+            ),
+        }
+        for inv, c, inviter in rows
+    ]
+
+
+def list_group_invitations(db: Session, viewer_id: str, community_id: int) -> list[dict]:
+    """Pending invitations for a group — visible to owner/admin only.
+    Lets admins see who's been invited but hasn't responded yet."""
+    _require_role(db, community_id, viewer_id, ("owner", "admin"))
+    rows = (
+        db.query(CommunityInvitation, User)
+        .join(User, User.id == CommunityInvitation.user_id)
+        .filter(CommunityInvitation.community_id == community_id)
+        .order_by(CommunityInvitation.created_at.desc())
+        .all()
+    )
+    return [
+        {
+            "id": inv.id,
+            "created_at": inv.created_at.isoformat() if inv.created_at else None,
+            "user": {
+                "id": u.id,
+                "username": u.username,
+                "display_name": u.display_name,
+            },
+        }
+        for inv, u in rows
+    ]
+
+
+def revoke_invitation(
+    db: Session, actor_id: str, community_id: int, invitation_id: int
+) -> None:
+    """Owner/admin cancels a pending invitation before it's responded to."""
+    _require_role(db, community_id, actor_id, ("owner", "admin"))
+    inv = (
+        db.query(CommunityInvitation)
+        .filter(
+            CommunityInvitation.id == invitation_id,
+            CommunityInvitation.community_id == community_id,
+        )
+        .first()
+    )
+    if not inv:
+        raise HTTPException(status_code=404, detail="Invitation not found.")
+    db.delete(inv)
+    db.commit()
 
 
 def remove_member(
