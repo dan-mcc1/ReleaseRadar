@@ -132,6 +132,18 @@ def _build_message(
     # FCM requires data values to be strings.
     str_data = {k: str(v) for k, v in (data or {}).items() if v is not None}
 
+    # Belt-and-suspenders for rich-push image discovery on the iOS extension:
+    #   - notification.image  → standard FCM field; Firebase's iOS SDK
+    #     populates the APNs attachment automatically when you use
+    #     Messaging.serviceExtension().populateNotificationContent(...).
+    #   - data.image_url      → mirror under the conventional data key so a
+    #     hand-rolled NotificationServiceExtension finds it without depending
+    #     on the Firebase helper.
+    # APS "mutable-content: 1" is only set when there's actually an image —
+    # otherwise the extension would run for no reason on every push.
+    if image_url:
+        str_data["image_url"] = image_url
+
     return messaging.Message(
         token=token,
         notification=messaging.Notification(
@@ -153,6 +165,7 @@ def _build_message(
             notification=messaging.AndroidNotification(
                 sound="default",
                 notification_count=badge,
+                image=image_url,
             ),
         ),
     )
