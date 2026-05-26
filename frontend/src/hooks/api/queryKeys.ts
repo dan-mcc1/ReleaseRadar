@@ -126,6 +126,8 @@ export const queryKeys = {
   communityPost: (postId: number) => ["communities", "post", postId] as const,
   communityMyInvitations: (uid: string) => ["communities", "invitations", "mine", uid] as const,
   communityGroupInvitations: (id: number) => ["communities", id, "invitations"] as const,
+  itemGroupMembership: (uid: string, contentType: string, contentId: number) =>
+    ["communities", "itemMembership", uid, contentType, contentId] as const,
 
   // News
   news: (category: string, page: number, q: string) =>

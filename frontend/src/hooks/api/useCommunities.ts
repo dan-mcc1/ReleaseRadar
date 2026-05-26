@@ -38,6 +38,7 @@ export interface CommunityMediaItem {
   title?: string;
   name?: string;
   poster_path: string | null;
+  vote_average?: number | null;
   added_by: string | null;
   added_at: string;
 }
@@ -360,25 +361,209 @@ export function useSetMemberRole(communityId: number) {
   });
 }
 
+export interface ItemGroupMembershipEntry {
+  community_id: number;
+  media_id: number;
+}
+
+export function useItemGroupMembership(
+  contentType: "movie" | "tv",
+  contentId: number,
+) {
+  const user = useAuthUser();
+  return useQuery({
+    queryKey: queryKeys.itemGroupMembership(user?.uid ?? "", contentType, contentId),
+    queryFn: ({ signal }) =>
+      queryFetch<ItemGroupMembershipEntry[]>(
+        `/communities/media/membership?content_type=${contentType}&content_id=${contentId}`,
+        { signal },
+      ),
+    enabled: !!user && contentId > 0,
+  });
+}
+
+export interface AddMediaVars {
+  content_type: "movie" | "tv";
+  content_id: number;
+  // Optional display fields used for an optimistic insert into the group's
+  // media grid so the tile pops in immediately. When omitted, the grid waits
+  // for the success-triggered refetch instead.
+  title?: string;
+  poster_path?: string | null;
+}
+
 export function useAddMedia(communityId: number) {
   const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (body: { content_type: "movie" | "tv"; content_id: number }) =>
-      jsonFetch(`/communities/${communityId}/media`, {
+  const user = useAuthUser();
+  return useMutation<
+    { id: number },
+    Error,
+    AddMediaVars,
+    {
+      membership: {
+        previous: ItemGroupMembershipEntry[] | undefined;
+        key: readonly unknown[];
+      };
+      media: {
+        previous: CommunityMedia | undefined;
+        key: readonly unknown[];
+        injected: boolean;
+      };
+    }
+  >({
+    mutationFn: ({ content_type, content_id }) =>
+      jsonFetch<{ id: number }>(`/communities/${communityId}/media`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ content_type, content_id }),
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.communityMedia(communityId) }),
+    onMutate: async ({ content_type, content_id, title, poster_path }) => {
+      const membershipKey = queryKeys.itemGroupMembership(
+        user?.uid ?? "",
+        content_type,
+        content_id,
+      );
+      const mediaKey = queryKeys.communityMedia(communityId);
+
+      await Promise.all([
+        qc.cancelQueries({ queryKey: membershipKey }),
+        qc.cancelQueries({ queryKey: mediaKey }),
+      ]);
+
+      const previousMembership =
+        qc.getQueryData<ItemGroupMembershipEntry[]>(membershipKey);
+      // Use a placeholder media_id; the server response replaces it below.
+      // -1 is a safe sentinel because real ids are auto-increment positive.
+      qc.setQueryData<ItemGroupMembershipEntry[]>(membershipKey, (old) => {
+        const next = (old ?? []).filter((e) => e.community_id !== communityId);
+        next.push({ community_id: communityId, media_id: -1 });
+        return next;
+      });
+
+      const previousMedia = qc.getQueryData<CommunityMedia>(mediaKey);
+      const shouldInject =
+        title !== undefined &&
+        previousMedia !== undefined &&
+        !(
+          (content_type === "movie"
+            ? previousMedia.movies
+            : previousMedia.shows
+          ).some((m) => m.content_id === content_id)
+        );
+
+      if (shouldInject) {
+        const placeholder: CommunityMediaItem = {
+          id: -1,
+          content_id,
+          poster_path: poster_path ?? null,
+          added_by: user?.uid ?? null,
+          added_at: new Date().toISOString(),
+          ...(content_type === "movie" ? { title } : { name: title }),
+        };
+        qc.setQueryData<CommunityMedia>(mediaKey, (old) =>
+          old
+            ? content_type === "movie"
+              ? { ...old, movies: [placeholder, ...old.movies] }
+              : { ...old, shows: [placeholder, ...old.shows] }
+            : old,
+        );
+      }
+
+      return {
+        membership: { previous: previousMembership, key: membershipKey },
+        media: { previous: previousMedia, key: mediaKey, injected: shouldInject },
+      };
+    },
+    onError: (_e, _vars, ctx) => {
+      if (!ctx) return;
+      qc.setQueryData(ctx.membership.key, ctx.membership.previous);
+      qc.setQueryData(ctx.media.key, ctx.media.previous);
+    },
+    onSuccess: (data, vars, ctx) => {
+      if (!ctx) return;
+      qc.setQueryData<ItemGroupMembershipEntry[]>(ctx.membership.key, (old) =>
+        (old ?? []).map((e) =>
+          e.community_id === communityId && e.media_id === -1
+            ? { community_id: communityId, media_id: data.id }
+            : e,
+        ),
+      );
+      // Patch the placeholder grid row with the real media_id so an immediate
+      // remove click finds something to delete instead of 404ing.
+      if (ctx.media.injected) {
+        qc.setQueryData<CommunityMedia>(ctx.media.key, (old) => {
+          if (!old) return old;
+          const swap = (item: CommunityMediaItem) =>
+            item.id === -1 && item.content_id === vars.content_id
+              ? { ...item, id: data.id }
+              : item;
+          return {
+            movies: old.movies.map(swap),
+            shows: old.shows.map(swap),
+          };
+        });
+      }
+      qc.invalidateQueries({ queryKey: queryKeys.communityMedia(communityId) });
+    },
   });
 }
 
 export function useRemoveMedia(communityId: number) {
   const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (mediaId: number) =>
+  const user = useAuthUser();
+  return useMutation<
+    unknown,
+    Error,
+    { mediaId: number; contentType: "movie" | "tv"; contentId: number },
+    {
+      membership: { previous: ItemGroupMembershipEntry[] | undefined; key: readonly unknown[] };
+      media: { previous: CommunityMedia | undefined; key: readonly unknown[] };
+    }
+  >({
+    mutationFn: ({ mediaId }) =>
       jsonFetch(`/communities/${communityId}/media/${mediaId}`, { method: "DELETE" }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.communityMedia(communityId) }),
+    onMutate: async ({ mediaId, contentType, contentId }) => {
+      const membershipKey = queryKeys.itemGroupMembership(
+        user?.uid ?? "",
+        contentType,
+        contentId,
+      );
+      const mediaKey = queryKeys.communityMedia(communityId);
+
+      await Promise.all([
+        qc.cancelQueries({ queryKey: membershipKey }),
+        qc.cancelQueries({ queryKey: mediaKey }),
+      ]);
+
+      const previousMembership =
+        qc.getQueryData<ItemGroupMembershipEntry[]>(membershipKey);
+      qc.setQueryData<ItemGroupMembershipEntry[]>(membershipKey, (old) =>
+        (old ?? []).filter((e) => e.community_id !== communityId),
+      );
+
+      const previousMedia = qc.getQueryData<CommunityMedia>(mediaKey);
+      qc.setQueryData<CommunityMedia>(mediaKey, (old) =>
+        old
+          ? {
+              movies: old.movies.filter((m) => m.id !== mediaId),
+              shows: old.shows.filter((s) => s.id !== mediaId),
+            }
+          : old,
+      );
+
+      return {
+        membership: { previous: previousMembership, key: membershipKey },
+        media: { previous: previousMedia, key: mediaKey },
+      };
+    },
+    onError: (_e, _vars, ctx) => {
+      if (!ctx) return;
+      qc.setQueryData(ctx.membership.key, ctx.membership.previous);
+      qc.setQueryData(ctx.media.key, ctx.media.previous);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.communityMedia(communityId) });
+    },
   });
 }
 

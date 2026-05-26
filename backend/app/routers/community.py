@@ -300,6 +300,17 @@ def set_role(
 
 # ─── Media ─────────────────────────────────────────────────────────────────
 
+@router.get("/media/membership")
+def media_membership(
+    content_type: ContentType = Query(...),
+    content_id: int = Query(..., ge=1),
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    """For a given movie/show, list the user's groups that already contain it."""
+    return svc.list_item_group_membership(db, uid, content_type, content_id)
+
+
 @router.get("/{community_id}/media")
 def media(
     community_id: int,

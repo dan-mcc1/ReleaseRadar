@@ -626,6 +626,33 @@ def add_media(
     return {"id": m.id}
 
 
+def list_item_group_membership(
+    db: Session, user_id: str, content_type: str, content_id: int
+) -> list[dict]:
+    """Return the groups the user belongs to that already contain this item.
+
+    Used by the "Add to group" UI on movie/show pages to show which groups
+    already have the title and to let the user remove it. Returns the media_id
+    so the client can issue a targeted DELETE without an extra round-trip.
+    """
+    if content_type not in ("movie", "tv"):
+        raise HTTPException(status_code=422, detail="content_type must be movie or tv.")
+    rows = (
+        db.query(CommunityMedia.community_id, CommunityMedia.id)
+        .join(
+            CommunityMember,
+            CommunityMember.community_id == CommunityMedia.community_id,
+        )
+        .filter(
+            CommunityMember.user_id == user_id,
+            CommunityMedia.content_type == content_type,
+            CommunityMedia.content_id == content_id,
+        )
+        .all()
+    )
+    return [{"community_id": cid, "media_id": mid} for cid, mid in rows]
+
+
 def remove_media(db: Session, user_id: str, community_id: int, media_id: int) -> None:
     m = (
         db.query(CommunityMedia)
@@ -727,6 +754,7 @@ def list_media(db: Session, community_id: int, viewer_id: str) -> dict:
                     "content_id": m.id,
                     "title": m.title,
                     "poster_path": m.poster_path,
+                    "vote_average": m.vote_average,
                     "added_by": r.added_by,
                     "added_at": r.added_at,
                 }
@@ -741,6 +769,7 @@ def list_media(db: Session, community_id: int, viewer_id: str) -> dict:
                     "content_id": s.id,
                     "name": s.name,
                     "poster_path": s.poster_path,
+                    "vote_average": s.vote_average,
                     "added_by": r.added_by,
                     "added_at": r.added_at,
                 }

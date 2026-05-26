@@ -239,20 +239,30 @@ function SearchBar() {
 
   const dropdownResults: SearchResult[] = (() => {
     if (!searchData) return [];
-    const shows = (searchData.shows ?? [])
-      .slice(0, 3)
+    // Lead with whichever media type's top result has higher popularity; the
+    // leading type gets the extra slot (3 vs 2). Ties keep TV first.
+    const rawShows = searchData.shows ?? [];
+    const rawMovies = searchData.movies ?? [];
+    const moviesLead =
+      (rawMovies[0]?.popularity ?? 0) > (rawShows[0]?.popularity ?? 0);
+    const leadCount = 3;
+    const followCount = 2;
+    const shows = rawShows
+      .slice(0, moviesLead ? followCount : leadCount)
       .map((r) => ({ ...r, media_type: "tv" as const }));
-    const movies = (searchData.movies ?? [])
-      .slice(0, 2)
+    const movies = rawMovies
+      .slice(0, moviesLead ? leadCount : followCount)
       .map((r) => ({ ...r, media_type: "movie" as const }));
     const people = (searchData.people ?? [])
       .slice(0, 1)
       .map((r) => ({ ...r, media_type: "person" as const }));
+    const lead = moviesLead ? movies : shows;
+    const follow = moviesLead ? shows : movies;
     const combined: SearchResult[] = [];
-    const maxLen = Math.max(shows.length, movies.length, people.length);
+    const maxLen = Math.max(lead.length, follow.length, people.length);
     for (let i = 0; i < maxLen; i++) {
-      if (shows[i]) combined.push(shows[i]);
-      if (movies[i]) combined.push(movies[i]);
+      if (lead[i]) combined.push(lead[i]);
+      if (follow[i]) combined.push(follow[i]);
       if (people[i]) combined.push(people[i]);
     }
     return combined.slice(0, 6);

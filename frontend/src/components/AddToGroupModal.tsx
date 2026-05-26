@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import {
   useMyCommunities,
   useAddMedia,
+  useRemoveMedia,
+  useItemGroupMembership,
   type Community,
 } from "../hooks/api/useCommunities";
 
@@ -13,12 +15,23 @@ interface Props {
   onClose: () => void;
 }
 
-export default function AddToGroupModal({ contentType, contentId, title, onClose }: Props) {
-  const { data: groups = [], isLoading } = useMyCommunities();
+export default function AddToGroupModal({
+  contentType,
+  contentId,
+  title,
+  onClose,
+}: Props) {
+  const { data: groups = [], isLoading: groupsLoading } = useMyCommunities();
+  const { data: membership = [], isLoading: membershipLoading } =
+    useItemGroupMembership(contentType, contentId);
   const [query, setQuery] = useState("");
-  const [pendingId, setPendingId] = useState<number | null>(null);
-  const [added, setAdded] = useState<Set<number>>(new Set());
   const [error, setError] = useState<string | null>(null);
+
+  const memberOf = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const m of membership) map.set(m.community_id, m.media_id);
+    return map;
+  }, [membership]);
 
   // Only groups where the viewer is allowed to add titles. By default that's
   // owner/admin only — members are eligible when the group has enabled
@@ -32,6 +45,8 @@ export default function AddToGroupModal({ contentType, contentId, title, onClose
       ),
     [groups, query],
   );
+
+  const isLoading = groupsLoading || membershipLoading;
 
   return (
     <div
@@ -81,48 +96,32 @@ export default function AddToGroupModal({ contentType, contentId, title, onClose
             </div>
           ) : (
             <ul className="space-y-1.5">
-              {eligible.map((g: Community) => {
-                const isAdded = added.has(g.id);
-                const isPending = pendingId === g.id;
-                return (
-                  <li
-                    key={g.id}
-                    className="flex items-center gap-3 p-2.5 rounded-xl border border-neutral-800 hover:border-neutral-700 transition-colors"
-                  >
-                    <div
-                      className="w-9 h-9 rounded-lg shrink-0"
-                      style={{
-                        background: `linear-gradient(135deg, ${g.banner_color || "#3b82f6"}, ${g.banner_color || "#3b82f6"}88)`,
-                      }}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[14px] font-medium text-white truncate">{g.name}</p>
-                      <p className="text-[11px] text-neutral-500 font-mono">
-                        {g.member_count} member{g.member_count === 1 ? "" : "s"}
-                      </p>
-                    </div>
-                    <AddBtn
-                      groupId={g.id}
-                      contentType={contentType}
-                      contentId={contentId}
-                      isAdded={isAdded}
-                      isPending={isPending}
-                      onStart={() => {
-                        setPendingId(g.id);
-                        setError(null);
-                      }}
-                      onDone={() => {
-                        setAdded((s) => new Set(s).add(g.id));
-                        setPendingId(null);
-                      }}
-                      onError={(msg) => {
-                        setError(msg);
-                        setPendingId(null);
-                      }}
-                    />
-                  </li>
-                );
-              })}
+              {eligible.map((g: Community) => (
+                <li
+                  key={g.id}
+                  className="flex items-center gap-3 p-2.5 rounded-xl border border-neutral-800 hover:border-neutral-700 transition-colors"
+                >
+                  <div
+                    className="w-9 h-9 rounded-lg shrink-0"
+                    style={{
+                      background: `linear-gradient(135deg, ${g.banner_color || "#3b82f6"}, ${g.banner_color || "#3b82f6"}88)`,
+                    }}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[14px] font-medium text-white truncate">{g.name}</p>
+                    <p className="text-[11px] text-neutral-500 font-mono">
+                      {g.member_count} member{g.member_count === 1 ? "" : "s"}
+                    </p>
+                  </div>
+                  <ToggleBtn
+                    groupId={g.id}
+                    contentType={contentType}
+                    contentId={contentId}
+                    mediaId={memberOf.get(g.id) ?? null}
+                    onError={setError}
+                  />
+                </li>
+              ))}
             </ul>
           )}
         </div>
@@ -140,32 +139,39 @@ export default function AddToGroupModal({ contentType, contentId, title, onClose
   );
 }
 
-function AddBtn({
+function ToggleBtn({
   groupId,
   contentType,
   contentId,
-  isAdded,
-  isPending,
-  onStart,
-  onDone,
+  mediaId,
   onError,
 }: {
   groupId: number;
   contentType: "movie" | "tv";
   contentId: number;
-  isAdded: boolean;
-  isPending: boolean;
-  onStart: () => void;
-  onDone: () => void;
-  onError: (msg: string) => void;
+  mediaId: number | null;
+  onError: (msg: string | null) => void;
 }) {
   const add = useAddMedia(groupId);
+  const remove = useRemoveMedia(groupId);
+  const isAdded = mediaId !== null;
+  const isPending = add.isPending || remove.isPending;
 
   async function handle() {
-    onStart();
+    onError(null);
     try {
-      await add.mutateAsync({ content_type: contentType, content_id: contentId });
-      onDone();
+      if (isAdded) {
+        // The optimistic add sets media_id to -1 until the POST resolves.
+        // Clicking remove during that window would 404 — guard against it.
+        if (mediaId === -1) return;
+        await remove.mutateAsync({
+          mediaId: mediaId as number,
+          contentType,
+          contentId,
+        });
+      } else {
+        await add.mutateAsync({ content_type: contentType, content_id: contentId });
+      }
     } catch (e) {
       onError(e instanceof Error ? e.message : "Failed.");
     }
@@ -173,9 +179,39 @@ function AddBtn({
 
   if (isAdded) {
     return (
-      <span className="text-[11px] text-primary-400 font-mono uppercase tracking-wider">
-        ✓ Added
-      </span>
+      <button
+        onClick={handle}
+        disabled={isPending}
+        title="Remove from this group"
+        className="group/btn flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-primary-400 hover:text-error-400 border border-primary-500/40 hover:border-error-500/40 bg-primary-500/10 hover:bg-error-500/10 px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+      >
+        {isPending ? (
+          <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+        ) : (
+          <>
+            <svg
+              className="w-3 h-3 group-hover/btn:hidden"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={3}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+            <svg
+              className="w-3 h-3 hidden group-hover/btn:inline"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={3}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+            <span className="group-hover/btn:hidden">Added</span>
+            <span className="hidden group-hover/btn:inline">Remove</span>
+          </>
+        )}
+      </button>
     );
   }
   return (

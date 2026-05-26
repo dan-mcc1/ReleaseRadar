@@ -491,37 +491,51 @@ export default function Search() {
             />
           )}
 
-          {/* TV Shows */}
-          {previewShows.length > 0 && (
-            <div className="mb-8">
-              <SectionHeader
-                title="TV Shows"
-                count={shows.length}
-                onSeeAll={shows.length > 8 ? () => setActiveTab("tv") : undefined}
-              />
-              <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-3">
-                {previewShows.map((s) => (
-                  <PosterCard key={s.id} item={s} type="tv" />
-                ))}
+          {(() => {
+            const showsBlock = previewShows.length > 0 && (
+              <div className="mb-8" key="shows">
+                <SectionHeader
+                  title="TV Shows"
+                  count={shows.length}
+                  onSeeAll={shows.length > 8 ? () => setActiveTab("tv") : undefined}
+                />
+                <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-3">
+                  {previewShows.map((s) => (
+                    <PosterCard key={s.id} item={s} type="tv" />
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
-
-          {/* Movies */}
-          {previewMovies.length > 0 && (
-            <div className="mb-8">
-              <SectionHeader
-                title="Movies"
-                count={movies.length}
-                onSeeAll={movies.length > 8 ? () => setActiveTab("movies") : undefined}
-              />
-              <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-3">
-                {previewMovies.map((m) => (
-                  <PosterCard key={m.id} item={m} type="movie" />
-                ))}
+            );
+            const moviesBlock = previewMovies.length > 0 && (
+              <div className="mb-8" key="movies">
+                <SectionHeader
+                  title="Movies"
+                  count={movies.length}
+                  onSeeAll={movies.length > 8 ? () => setActiveTab("movies") : undefined}
+                />
+                <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-3">
+                  {previewMovies.map((m) => (
+                    <PosterCard key={m.id} item={m} type="movie" />
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            );
+            // Order the two sections by the popularity of each list's top
+            // result — whichever type's #1 is hotter shows first.
+            const moviesFirst =
+              (movies[0]?.popularity ?? 0) > (shows[0]?.popularity ?? 0);
+            return moviesFirst ? (
+              <>
+                {moviesBlock}
+                {showsBlock}
+              </>
+            ) : (
+              <>
+                {showsBlock}
+                {moviesBlock}
+              </>
+            );
+          })()}
 
           {/* People + Collections side by side */}
           {(people.length > 0 || collections.length > 0) && (
