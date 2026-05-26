@@ -33,6 +33,7 @@ from app.models.review import Review  # noqa: F401
 from app.models.review_like import ReviewLike  # noqa: F401
 from app.models.rewatch import Rewatch  # noqa: F401
 from app.models.season import Season  # noqa: F401
+from app.models.season_rating import SeasonRating  # noqa: F401
 from app.models.sent_episode_alert import SentEpisodeAlert  # noqa: F401
 from app.models.shelf import Shelf  # noqa: F401
 from app.models.shelf_item import ShelfItem  # noqa: F401

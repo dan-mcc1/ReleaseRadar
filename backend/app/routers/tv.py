@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.db.session import get_db
 from app.models.episode import Episode
+from app.models.season import Season
 from app.models.show import Show
 from app.services.media_serializers import _show_query_options, serialize_show
 from app.services.provider_utils import normalize_tmdb_watch_providers
@@ -64,6 +65,18 @@ async def get_full_show_info(
             show_data["poster_path"] = db_show.poster_path
         if db_show.logo_path:
             show_data["logo_path"] = db_show.logo_path
+
+    # Merge cached season end_dates into the TMDB seasons array. TMDB doesn't
+    # expose this; we compute it from stored episodes during nightly sync.
+    db_seasons = await run_in_threadpool(
+        lambda: db.query(Season.id, Season.end_date).filter(Season.show_id == id).all()
+    )
+    end_date_by_id = {sid: end for sid, end in db_seasons if end is not None}
+    if end_date_by_id:
+        for s in show_data.get("seasons", []):
+            end = end_date_by_id.get(s.get("id"))
+            if end is not None:
+                s["end_date"] = str(end)
 
     if not show_data.get("logo_path"):
         logos = show_data.get("images", {}).get("logos", [])

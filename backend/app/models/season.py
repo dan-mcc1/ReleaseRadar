@@ -14,6 +14,7 @@ class Season(Base):
     name = Column(String)
     overview = Column(Text)
     air_date = Column(Date, nullable=True)
+    end_date = Column(Date, nullable=True)
     episode_count = Column(Integer)
     poster_path = Column(String)
     vote_average = Column(Float)

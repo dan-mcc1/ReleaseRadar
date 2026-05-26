@@ -42,6 +42,7 @@ export type Show = {
 
 export type Season = {
   air_date: string;
+  end_date?: string | null;
   episode_count: number;
   id: number;
   name: string;

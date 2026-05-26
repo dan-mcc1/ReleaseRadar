@@ -6,6 +6,7 @@ from datetime import date, datetime, timedelta, timezone
 from sqlalchemy import and_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from app.models.episode import Episode
 from app.models.episode_watched import EpisodeWatched
 from app.models.movie import Movie
@@ -19,6 +20,29 @@ from app.services.email_service import send_new_season_available_email
 from app.services.tmdb_client import get
 
 logger = logging.getLogger(__name__)
+
+
+def _update_season_end_date(db: Session, show_id: int, season_number: int) -> None:
+    """Recompute and persist season.end_date as MAX(episode.air_date) for the season.
+    Caller is responsible for committing."""
+    season = (
+        db.query(Season)
+        .filter(Season.show_id == show_id, Season.season_number == season_number)
+        .first()
+    )
+    if not season:
+        return
+    max_air = (
+        db.query(func.max(Episode.air_date))
+        .filter(
+            Episode.show_id == show_id,
+            Episode.season_number == season_number,
+            Episode.air_date.isnot(None),
+        )
+        .scalar()
+    )
+    if season.end_date != max_air:
+        season.end_date = max_air
 
 
 def _compute_episode_type(
@@ -133,6 +157,8 @@ def sync_season_episodes(db: Session, show_id: int, season_number: int):
             )
         )
 
+    db.flush()
+    _update_season_end_date(db, show_id, season_number)
     db.commit()
 
 
@@ -202,6 +228,9 @@ def sync_show_episodes(db: Session, show_id: int):
             db.add(episode)
             existing_ids.add(ep_id)
 
+    db.flush()
+    for sn in season_numbers:
+        _update_season_end_date(db, show_id, sn)
     db.commit()
 
 
@@ -301,6 +330,8 @@ def get_or_create_episode(
     )
     db.add(episode)
     try:
+        db.flush()
+        _update_season_end_date(db, show_id, season_number)
         db.commit()
         db.refresh(episode)
     except IntegrityError:
@@ -508,6 +539,9 @@ def refresh_episodes_for_show(db: Session, show_id: int):
                 changed = True
 
     if changed:
+        db.flush()
+        for sn in seasons_to_refresh:
+            _update_season_end_date(db, show_id, sn)
         db.commit()
 
 

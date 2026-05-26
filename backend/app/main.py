@@ -49,6 +49,7 @@ from app.routers import (
     recommendations,
     events,
     reviews,
+    season_rating,
     box_office,
     collections,
     community,
@@ -424,6 +425,7 @@ app.include_router(
 )
 app.include_router(events.router, prefix="/events", tags=["events"])
 app.include_router(reviews.router, prefix="/reviews", tags=["reviews"])
+app.include_router(season_rating.router, prefix="/season-rating", tags=["season-rating"])
 app.include_router(box_office.router, prefix="/box-office", tags=["box-office"])
 app.include_router(collections.router, prefix="/collections", tags=["collections"])
 app.include_router(community.router, prefix="/communities", tags=["communities"])

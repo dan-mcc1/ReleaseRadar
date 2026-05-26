@@ -210,7 +210,7 @@ export default function ShowInfo() {
 
       <div className="px-6 sm:px-10 mt-5">
         {/* Tabs */}
-        <div className="mt-6 border-b border-neutral-700 overflow-x-auto scrollbar-none">
+        <div className="mt-6 border-b border-neutral-700 overflow-x-auto overflow-y-hidden scrollbar-none">
           <nav className="flex gap-0 min-w-max">
             {TABS.map((tab) => (
               <button

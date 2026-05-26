@@ -33,6 +33,7 @@ const FriendProfilePage = lazy(() => import("./pages/FriendProfilePage"));
 const ActivityFeedPage = lazy(() => import("./pages/ActivityFeedPage"));
 const FriendsPage = lazy(() => import("./pages/FriendsPage"));
 const EpisodeInfo = lazy(() => import("./pages/EpisodeInfo"));
+const SeasonInfoPage = lazy(() => import("./pages/SeasonInfoPage"));
 const BoxOffice = lazy(() => import("./pages/BoxOffice"));
 const CollectionInfo = lazy(() => import("./pages/CollectionInfo"));
 const BrowseCollections = lazy(() => import("./pages/BrowseCollections"));
@@ -157,6 +158,10 @@ function App() {
           <Route path="/friends" element={<FriendsPage />} />
           <Route path="/user/:username" element={<FriendProfilePage />} />
           <Route path="/activity" element={<ActivityFeedPage />} />
+          <Route
+            path="/tv/:showId/season/:seasonNumber"
+            element={<SeasonInfoPage />}
+          />
           <Route
             path="/tv/:showId/episode/:season/:episode"
             element={<EpisodeInfo />}

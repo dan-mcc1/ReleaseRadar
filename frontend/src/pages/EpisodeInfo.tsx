@@ -285,7 +285,10 @@ export default function EpisodeInfo() {
             <span className="text-neutral-700">/</span>
           </>
         )}
-        <Link to={`/tv/${showId}`} className="text-neutral-500 hover:text-neutral-300 transition-colors">
+        <Link
+          to={`/tv/${showId}/season/${data.season_number}`}
+          className="text-neutral-500 hover:text-neutral-300 transition-colors"
+        >
           Season {data.season_number}
         </Link>
         <span className="text-neutral-700">/</span>

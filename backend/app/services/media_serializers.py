@@ -38,6 +38,7 @@ def serialize_season(s):
         "name": s.name,
         "overview": s.overview,
         "air_date": str(s.air_date) if s.air_date else None,
+        "end_date": str(s.end_date) if s.end_date else None,
         "episode_count": s.episode_count,
         "poster_path": s.poster_path,
         "vote_average": s.vote_average,

@@ -70,6 +70,12 @@ export const queryKeys = {
   // Reviews
   reviews: (type: string, id: number) => ["reviews", type, id] as const,
 
+  // Season ratings
+  seasonRating: (uid: string, showId: number, seasonNumber: number) =>
+    ["seasonRating", uid, showId, seasonNumber] as const,
+  seasonRatingAggregate: (showId: number, seasonNumber: number) =>
+    ["seasonRating", "aggregate", showId, seasonNumber] as const,
+
   // Episodes
   episodeDetail: (showId: string, season: string, episode: string) =>
     ["episode", showId, season, episode] as const,
