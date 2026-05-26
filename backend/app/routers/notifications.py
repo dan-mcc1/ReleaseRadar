@@ -71,6 +71,10 @@ class MarkReadBody(BaseModel):
     ids: list[int] | None = None  # null = mark all
 
 
+class DeleteInboxBody(BaseModel):
+    ids: list[int] | None = None  # null = delete all
+
+
 @router.get("/preferences")
 def get_notification_preferences(
     db: Session = Depends(get_db),
@@ -332,6 +336,33 @@ def mark_inbox_read(
     except Exception:
         logger.exception("badge refresh push failed for %s", uid)
     return {"badge": new_badge}
+
+
+@router.post("/inbox/delete")
+def delete_inbox(
+    body: DeleteInboxBody,
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    """Permanently remove inbox entries. Only deletes rows belonging to the
+    current user. Does NOT touch the underlying recommendation / friendship /
+    invitation row — those have their own dedicated actions; this is just
+    'clear it from my inbox'."""
+    q = db.query(NotificationModel).filter(NotificationModel.user_id == uid)
+    if body.ids is not None:
+        if not body.ids:
+            return {"badge": push_service.unread_count(db, uid), "deleted": 0}
+        q = q.filter(NotificationModel.id.in_(body.ids))
+    deleted = q.delete(synchronize_session=False)
+    db.commit()
+
+    new_badge = push_service.unread_count(db, uid)
+    # Best-effort silent push so other devices update their badge.
+    try:
+        push_service.refresh_badge(db, uid)
+    except Exception:
+        logger.exception("badge refresh push failed for %s", uid)
+    return {"badge": new_badge, "deleted": deleted}
 
 
 def _build_items_for_window(db: Session, user_id: str, days: int) -> list:
