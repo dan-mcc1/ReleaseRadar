@@ -20,6 +20,7 @@ from app.models.community import (
 )
 from app.models.movie import Movie
 from app.models.show import Show
+from app.services.media_upsert import populate_movie_full, ensure_show_in_db
 from app.models.user import User
 
 
@@ -558,6 +559,33 @@ def add_media(
             status_code=403,
             detail="Only owners and admins can add titles to this group.",
         )
+
+    # Ensure the underlying Movie/Show row exists locally so list_media can
+    # join against it. Without this step, the CommunityMedia row gets created
+    # but the read endpoint silently drops it (the join finds nothing) — which
+    # is exactly the "add succeeds, title doesn't show up" bug iOS was hitting.
+    #
+    # Short-circuit when a row with display data already exists: that's the
+    # common case (someone else already tracks the title) and saves a TMDb call.
+    if content_type == "movie":
+        existing_movie = db.query(Movie).filter_by(id=content_id).first()
+        if not (existing_movie and existing_movie.title):
+            if populate_movie_full(db, content_id) is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Could not find that movie on TMDb.",
+                )
+    else:
+        existing_show = db.query(Show).filter_by(id=content_id).first()
+        if not (existing_show and existing_show.name):
+            try:
+                ensure_show_in_db(db, content_id, already_tracked=True)
+            except ValueError:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Could not find that show on TMDb.",
+                )
+
     existing = (
         db.query(CommunityMedia)
         .filter(
@@ -576,7 +604,24 @@ def add_media(
         added_by=user_id,
     )
     db.add(m)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # Race: another request added the same title between our check and
+        # commit. Return the existing row so the client still gets a 200.
+        db.rollback()
+        existing = (
+            db.query(CommunityMedia)
+            .filter(
+                CommunityMedia.community_id == community_id,
+                CommunityMedia.content_type == content_type,
+                CommunityMedia.content_id == content_id,
+            )
+            .first()
+        )
+        if existing:
+            return {"id": existing.id}
+        raise
     db.refresh(m)
     return {"id": m.id}
 
