@@ -172,8 +172,24 @@ export function useCreateCommunity() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       }),
-    onSuccess: () => {
-      if (user) qc.invalidateQueries({ queryKey: queryKeys.myCommunities(user.uid) });
+    onSuccess: (newCommunity) => {
+      if (!user) return;
+      // Optimistically prepend into /my-groups cache so the new group shows
+      // up instantly — without waiting for a background refetch to finish.
+      // The 5min staleTime would otherwise let the stale list render first.
+      qc.setQueryData<Community[]>(
+        queryKeys.myCommunities(user.uid),
+        (old) => {
+          if (!old) return [newCommunity];
+          if (old.some((c) => c.id === newCommunity.id)) return old;
+          return [newCommunity, ...old];
+        },
+      );
+      // Invalidate the whole "communities" namespace so the browse list and
+      // any other cached community queries refetch on next visit (active
+      // observers refetch immediately). Cheap — most users only have a
+      // handful of community pages cached.
+      qc.invalidateQueries({ queryKey: ["communities"] });
     },
   });
 }

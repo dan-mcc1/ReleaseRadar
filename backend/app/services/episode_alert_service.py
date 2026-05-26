@@ -156,35 +156,51 @@ def dispatch_due_episode_alerts(db: Session, now_utc: datetime | None = None) ->
         tracker_ids = show_to_users[show_id] & users_by_id.keys()
         if not tracker_ids:
             continue
-        for ep, show, air_dt in entries:
-            for uid in tracker_ids:
+
+        for uid in tracker_ids:
+            user = users_by_id[uid]
+            lead = max(0, min(60, user.episode_alert_lead_minutes or 0))
+
+            # Group this user's not-yet-sent, due episodes for this show by
+            # air_dt. Same air_dt → one combined push (e.g., Netflix drops 8
+            # episodes at midnight → one banner, not eight).
+            buckets: dict[datetime, list[tuple[Episode, Show]]] = defaultdict(list)
+            for ep, show, air_dt in entries:
                 if (uid, ep.id) in already_sent:
                     continue
-                user = users_by_id[uid]
-                lead = max(0, min(60, user.episode_alert_lead_minutes or 0))
                 send_at = air_dt - timedelta(minutes=lead)
                 if not (window_start <= send_at <= now_utc):
                     continue
+                buckets[air_dt].append((ep, show))
 
-                # Record idempotency *before* the push so a retry can't double-fire.
-                marker = SentEpisodeAlert(user_id=uid, episode_id=ep.id)
-                db.add(marker)
-                try:
-                    db.commit()
-                except IntegrityError:
-                    db.rollback()
-                    continue  # another worker beat us
-
-                ep_label = f"S{ep.season_number:02d}E{ep.episode_number:02d}"
-                if lead == 0:
-                    title = f"{show.name} is on now"
-                elif lead < 60:
-                    title = f"{show.name} airs in {lead} minutes"
-                else:
-                    title = f"{show.name} airs in 1 hour"
-                body = (
-                    f"{ep_label}" + (f" — {ep.name}" if ep.name else "")
+            for items in buckets.values():
+                # Sort by (season, episode) so the body reads in order.
+                items.sort(
+                    key=lambda pair: (
+                        pair[0].season_number or 0,
+                        pair[0].episode_number or 0,
+                    )
                 )
+                episodes_to_send = []
+                show = items[0][1]
+
+                # Claim each episode in the group. Per-episode commits so a
+                # race on one episode doesn't lose the whole batch.
+                for ep, _ in items:
+                    db.add(SentEpisodeAlert(user_id=uid, episode_id=ep.id))
+                    try:
+                        db.commit()
+                        episodes_to_send.append(ep)
+                    except IntegrityError:
+                        db.rollback()
+                        # Another worker beat us to this episode; the rest of
+                        # the batch is still ours.
+
+                if not episodes_to_send:
+                    continue
+
+                title, body = _build_push_text(show, episodes_to_send, lead)
+                first_ep = episodes_to_send[0]
                 try:
                     push_notification(
                         db,
@@ -194,14 +210,72 @@ def dispatch_due_episode_alerts(db: Session, now_utc: datetime | None = None) ->
                         body=body,
                         content_type="tv",
                         content_id=show.id,
-                        season_number=ep.season_number,
-                        episode_id=ep.id,
+                        season_number=first_ep.season_number,
+                        episode_id=first_ep.id,
                         image_url=tmdb_poster_url(show.poster_path),
                     )
                     sent_count += 1
                 except Exception:
                     logger.exception(
-                        "episode-alert: push failed for user=%s episode=%s", uid, ep.id
+                        "episode-alert: push failed for user=%s show=%s eps=%s",
+                        uid, show.id, [e.id for e in episodes_to_send],
                     )
 
     return sent_count
+
+
+def _build_push_text(
+    show: Show, episodes: list[Episode], lead: int
+) -> tuple[str, str]:
+    """Compose the title/body for one push covering 1+ episodes of the same show.
+
+    Multi-episode groups read as "S01E03 - S01E05" when contiguous within a
+    season, "S01E03, S01E05, S01E07" otherwise. Single episodes keep the
+    original "S01E03 - Episode Name" format.
+    """
+    count = len(episodes)
+    if count == 1:
+        ep = episodes[0]
+        if lead == 0:
+            title = f"{show.name} is on now"
+        elif lead < 60:
+            title = f"{show.name} airs in {lead} minutes"
+        else:
+            title = f"{show.name} airs in 1 hour"
+        ep_label = f"S{ep.season_number:02d}E{ep.episode_number:02d}"
+        body = ep_label + (f" — {ep.name}" if ep.name else "")
+        return title, body
+
+    # Multi-episode group
+    if lead == 0:
+        title = f"{count} new episodes of {show.name}"
+    elif lead < 60:
+        title = f"{count} new episodes of {show.name} in {lead} min"
+    else:
+        title = f"{count} new episodes of {show.name} in 1 hour"
+
+    same_season = all(
+        e.season_number == episodes[0].season_number for e in episodes
+    )
+    ep_nums = [e.episode_number for e in episodes if e.episode_number is not None]
+    contiguous = (
+        same_season
+        and len(ep_nums) == count
+        and ep_nums == list(range(ep_nums[0], ep_nums[0] + count))
+    )
+
+    if contiguous:
+        s = episodes[0].season_number
+        body = (
+            f"S{s:02d}E{ep_nums[0]:02d} – S{s:02d}E{ep_nums[-1]:02d}"
+        )
+    else:
+        labels = [
+            f"S{e.season_number:02d}E{e.episode_number:02d}" for e in episodes
+        ]
+        # Cap visible labels so the iOS preview doesn't truncate awkwardly.
+        if len(labels) > 4:
+            body = ", ".join(labels[:3]) + f" +{len(labels) - 3} more"
+        else:
+            body = ", ".join(labels)
+    return title, body
