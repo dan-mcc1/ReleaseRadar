@@ -26,11 +26,18 @@ class Community(Base):
     visibility = Column(
         String, nullable=False, server_default="public"
     )
-    is_featured = Column(Boolean, nullable=False, server_default="false")
+    # Python `default=False` paired with the existing server_default is needed
+    # because SQLite stores `server_default="false"` as the literal string
+    # "false", and SQLAlchemy reads any non-empty string as truthy → True.
+    # Postgres handles it correctly either way; this keeps test (SQLite) and
+    # prod (Postgres) behavior identical.
+    is_featured = Column(
+        Boolean, default=False, nullable=False, server_default="false"
+    )
     # When False (default), only owner/admin can add or remove titles.
     # When True, any member can.
     members_can_edit_media = Column(
-        Boolean, nullable=False, server_default="false"
+        Boolean, default=False, nullable=False, server_default="false"
     )
     member_count = Column(Integer, nullable=False, server_default="0")
     created_by = Column(String, ForeignKey("user.id", ondelete="SET NULL"), nullable=True)

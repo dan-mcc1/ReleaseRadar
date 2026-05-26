@@ -207,10 +207,10 @@ def update_notification_preferences(
 
     if body.episode_alert_lead_minutes is not None:
         lead = body.episode_alert_lead_minutes
-        if lead < 0 or lead > 60 or lead % 5 != 0:
+        if lead < 0 or lead > 60 or lead % 15 != 0:
             raise HTTPException(
                 status_code=422,
-                detail="episode_alert_lead_minutes must be 0–60 in 5-minute increments",
+                detail="episode_alert_lead_minutes must be 0, 15, 30, 45, or 60",
             )
         user.episode_alert_lead_minutes = lead
 
