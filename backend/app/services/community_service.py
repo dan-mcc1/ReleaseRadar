@@ -677,11 +677,49 @@ def list_media(db: Session, community_id: int, viewer_id: str) -> dict:
         if show_ids
         else {}
     )
+
+    # Self-heal: any CommunityMedia row pointing at a missing-or-stub Movie/Show
+    # gets backfilled from TMDb on this read. This fixes orphans left over from
+    # the period when add_media didn't ensure the underlying row existed —
+    # otherwise those titles would silently never appear in the list.
+    missing_movies = [
+        mid for mid in movie_ids if mid not in movies or not movies[mid].title
+    ]
+    missing_shows = [
+        sid for sid in show_ids if sid not in shows or not shows[sid].name
+    ]
+    if missing_movies or missing_shows:
+        import logging
+        _logger = logging.getLogger(__name__)
+        healed = False
+        for mid in missing_movies:
+            try:
+                m = populate_movie_full(db, mid)
+                if m and m.title:
+                    movies[mid] = m
+                    healed = True
+            except Exception:
+                _logger.exception("list_media: heal failed for movie %d", mid)
+        for sid in missing_shows:
+            try:
+                s = ensure_show_in_db(db, sid, already_tracked=True)
+                if s and s.name:
+                    shows[sid] = s
+                    healed = True
+            except Exception:
+                _logger.exception("list_media: heal failed for show %d", sid)
+        if healed:
+            try:
+                db.commit()
+            except Exception:
+                db.rollback()
+                _logger.exception("list_media: heal commit failed")
+
     out_movies, out_shows = [], []
     for r in rows:
         if r.content_type == "movie":
             m = movies.get(r.content_id)
-            if not m:
+            if not m or not m.title:
                 continue
             out_movies.append(
                 {
@@ -695,7 +733,7 @@ def list_media(db: Session, community_id: int, viewer_id: str) -> dict:
             )
         else:
             s = shows.get(r.content_id)
-            if not s:
+            if not s or not s.name:
                 continue
             out_shows.append(
                 {
