@@ -124,6 +124,23 @@ def sync_season_episodes(db: Session, show_id: int, season_number: int):
     show = db.query(Show).filter_by(id=show_id).first()
     in_production = show.in_production if show else None
 
+    # Fast path: if the Season row's episode_count matches the Episode rows we
+    # already have cached, the season is fully synced — skip the TMDB call.
+    # Big win for repeat imports where we'd otherwise re-fetch every season.
+    season_row = (
+        db.query(Season)
+        .filter(Season.show_id == show_id, Season.season_number == season_number)
+        .first()
+    )
+    if season_row and season_row.episode_count:
+        cached_count = (
+            db.query(func.count(Episode.id))
+            .filter(Episode.show_id == show_id, Episode.season_number == season_number)
+            .scalar()
+        )
+        if cached_count >= season_row.episode_count:
+            return
+
     try:
         season_data = get(f"/tv/{show_id}/season/{season_number}")
     except Exception:

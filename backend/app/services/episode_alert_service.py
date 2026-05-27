@@ -244,6 +244,8 @@ def _build_push_text(
             title = f"{show.name} airs in 1 hour"
         ep_label = f"S{ep.season_number:02d}E{ep.episode_number:02d}"
         body = ep_label + (f" — {ep.name}" if ep.name else "")
+        if ep.runtime:
+            body += f" • {ep.runtime} min"
         return title, body
 
     # Multi-episode group

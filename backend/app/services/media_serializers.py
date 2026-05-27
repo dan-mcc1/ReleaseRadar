@@ -121,8 +121,6 @@ def serialize_movie_calendar(movie):
         "logo_path": movie.logo_path,
         "release_date": movie.release_date,
         "runtime": movie.runtime,
-        "status": movie.status,
-        "vote_average": movie.vote_average,
     }
 
 

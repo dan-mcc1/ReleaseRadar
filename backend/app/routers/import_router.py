@@ -2,11 +2,13 @@
 import asyncio
 import csv
 import io
+import json
 import zipfile
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
-from app.db.session import get_db
+from app.db.session import get_db, SessionLocal
 from app.dependencies.auth import get_current_user
+from app.services.tmdb_client import get as tmdb_get
 from app.services.tmdb_movies import search_movies, fetch_movie_from_tmdb
 from app.services.tmdb_tv import fetch_show_from_tmdb
 from app.services.tmdb_search import get_tv_search_results
@@ -16,6 +18,7 @@ from app.services.episode_service import maybe_sync_show_episodes, sync_season_e
 from app.services.watched_episode_service import maybe_auto_complete_show
 from app.models.watched import Watched
 from app.models.watchlist import Watchlist
+from app.models.currently_watching import CurrentlyWatching
 from app.models.movie import Movie
 from app.models.show import Show
 from app.models.episode import Episode
@@ -506,6 +509,285 @@ def _classify_tvtime_csv(name: str, headers: list[str]) -> str | None:
     return None
 
 
+# ── "TV Time Out" Chrome extension format ───────────────────────────────────
+#
+# The official TV Time data export was shut down, so users now run a community
+# Chrome extension ("TV Time Out") that scrapes their library into JSON or CSV.
+# Those exports use a different shape from the original email zip:
+#
+#   tvtime-movies-*.json/.csv         — per-movie rows with IMDb + TVDB ids
+#   tvtime-series-*.json              — nested shows → seasons → episodes
+#   tvtime-series-*.csv               — series metadata only (no episodes)
+#   tvtime-series-episodes-*.csv      — per-episode rows flattened
+#
+# IMDb/TVDB ids let us bypass the name-search guesswork by hitting
+# TMDB's `/find/{external_id}` endpoint directly.
+
+
+def _tmdb_find_by_external(ext_id: str, source: str) -> tuple[int, str] | None:
+    """
+    Resolve an IMDb/TVDB id to a TMDB (id, media_type).
+    `source` is one of "imdb_id", "tvdb_id".
+    Returns None if nothing found or on error.
+    """
+    if not ext_id:
+        return None
+    try:
+        data = tmdb_get(f"/find/{ext_id}", params={"external_source": source}) or {}
+    except Exception:
+        return None
+    if data.get("movie_results"):
+        return data["movie_results"][0]["id"], "movie"
+    if data.get("tv_results"):
+        return data["tv_results"][0]["id"], "tv"
+    return None
+
+
+def _resolve_ext_movie(imdb_id: str | None, tvdb_id: int | None, title: str, year: int | None) -> tuple[int, str] | None:
+    """External id first (best accuracy), name search as fallback."""
+    if imdb_id:
+        hit = _tmdb_find_by_external(imdb_id, "imdb_id")
+        if hit:
+            return hit
+    if tvdb_id:
+        hit = _tmdb_find_by_external(str(tvdb_id), "tvdb_id")
+        if hit:
+            return hit
+    if title:
+        return _find_tmdb_result(title, year)
+    return None
+
+
+def _resolve_ext_show(tvdb_id: int | None, imdb_id: str | None, title: str) -> int | None:
+    if tvdb_id:
+        hit = _tmdb_find_by_external(str(tvdb_id), "tvdb_id")
+        if hit and hit[1] == "tv":
+            return hit[0]
+    if imdb_id:
+        hit = _tmdb_find_by_external(imdb_id, "imdb_id")
+        if hit and hit[1] == "tv":
+            return hit[0]
+    if title:
+        return _find_tv_show_id(title, None)
+    return None
+
+
+def _detect_ext_format(basename: str, content: str) -> str | None:
+    """
+    Returns one of:
+      'ext_movies_json' / 'ext_series_json'
+      'ext_movies_csv' / 'ext_series_csv' / 'ext_episodes_csv'
+      None — let the old TV Time classifier handle it.
+    """
+    lower = basename.lower()
+    if lower.endswith(".json") or content.lstrip()[:1] in ("[", "{"):
+        try:
+            data = json.loads(content)
+        except (json.JSONDecodeError, ValueError):
+            return None
+        if not isinstance(data, list) or not data:
+            return None
+        sample = next((s for s in data if isinstance(s, dict)), None)
+        if not sample:
+            return None
+        if "seasons" in sample:
+            return "ext_series_json"
+        # Movies file has top-level year + id.imdb keys
+        if "year" in sample or (isinstance(sample.get("id"), dict) and "imdb" in sample["id"]):
+            return "ext_movies_json"
+        return None
+
+    # CSV — inspect header line. Only the new format has tvdb_id/imdb_id columns.
+    first_line = (content.splitlines() or [""])[0].lower()
+    headers = {h.strip() for h in first_line.split(",")}
+    if {"series_tvdb_id", "season", "episode"}.issubset(headers):
+        return "ext_episodes_csv"
+    if "tvdb_id" in headers and "imdb_id" in headers and "year" in headers:
+        return "ext_movies_csv"
+    if "tvdb_id" in headers and "imdb_id" in headers and "status" in headers:
+        return "ext_series_csv"
+    return None
+
+
+def _parse_ext_movies_json(text: str) -> list[dict]:
+    try:
+        data = json.loads(text)
+    except (json.JSONDecodeError, ValueError):
+        return []
+    if not isinstance(data, list):
+        return []
+    rows: list[dict] = []
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        ids = item.get("id") or {}
+        title = (item.get("title") or "").strip()
+        if not title:
+            continue
+        imdb = (ids.get("imdb") or "").strip() or None if isinstance(ids.get("imdb"), str) else None
+        tvdb = ids.get("tvdb") if isinstance(ids.get("tvdb"), int) else None
+        year = item.get("year") if isinstance(item.get("year"), int) else None
+        is_watched = bool(item.get("is_watched"))
+        watched_at_raw = item.get("watched_at") or item.get("created_at") or ""
+        rows.append({
+            "imdb_id": imdb,
+            "tvdb_id": tvdb,
+            "title": title,
+            "year": year,
+            "is_watched": is_watched,
+            "watched_at": _parse_tvtime_date(str(watched_at_raw)) if watched_at_raw else datetime.now(timezone.utc),
+        })
+    return rows
+
+
+def _parse_ext_movies_csv(text: str) -> list[dict]:
+    rows: list[dict] = []
+    for row in csv.DictReader(io.StringIO(text)):
+        title = (row.get("title") or "").strip()
+        if not title:
+            continue
+        imdb = (row.get("imdb_id") or "").strip() or None
+        tvdb_raw = (row.get("tvdb_id") or "").strip()
+        tvdb = int(tvdb_raw) if tvdb_raw.isdigit() else None
+        year_raw = (row.get("year") or "").strip()
+        year = int(year_raw) if year_raw.isdigit() else None
+        is_watched = (row.get("is_watched") or "").strip().lower() == "true"
+        watched_at_raw = (row.get("watched_at") or row.get("created_at") or "").strip()
+        rows.append({
+            "imdb_id": imdb,
+            "tvdb_id": tvdb,
+            "title": title,
+            "year": year,
+            "is_watched": is_watched,
+            "watched_at": _parse_tvtime_date(watched_at_raw) if watched_at_raw else datetime.now(timezone.utc),
+        })
+    return rows
+
+
+def _parse_ext_series_json(text: str) -> tuple[list[dict], list[dict]]:
+    """
+    Returns (shows, episodes).
+      shows:    [{tvdb_id, imdb_id, title, status}]
+      episodes: [{series_tvdb_id, series_imdb_id, title, season, episode, watched_at}]
+                only entries with is_watched=true and non-special are included
+    """
+    try:
+        data = json.loads(text)
+    except (json.JSONDecodeError, ValueError):
+        return [], []
+    if not isinstance(data, list):
+        return [], []
+    shows: list[dict] = []
+    eps: list[dict] = []
+    for show in data:
+        if not isinstance(show, dict):
+            continue
+        ids = show.get("id") or {}
+        title = (show.get("title") or "").strip()
+        if not title:
+            continue
+        tvdb = ids.get("tvdb") if isinstance(ids.get("tvdb"), int) else None
+        imdb_raw = ids.get("imdb")
+        imdb = imdb_raw.strip() if isinstance(imdb_raw, str) and imdb_raw.strip() else None
+        shows.append({
+            "tvdb_id": tvdb,
+            "imdb_id": imdb,
+            "title": title,
+            "status": (show.get("status") or "").strip().lower() or None,
+        })
+        for season in show.get("seasons") or []:
+            if not isinstance(season, dict) or season.get("is_specials"):
+                continue
+            season_num = season.get("number")
+            if not isinstance(season_num, int) or season_num <= 0:
+                continue
+            for ep in season.get("episodes") or []:
+                if not isinstance(ep, dict) or ep.get("special") or not ep.get("is_watched"):
+                    continue
+                ep_num = ep.get("number")
+                if not isinstance(ep_num, int):
+                    continue
+                watched_at_raw = ep.get("watched_at") or ""
+                eps.append({
+                    "series_tvdb_id": tvdb,
+                    "series_imdb_id": imdb,
+                    "title": title,
+                    "season": season_num,
+                    "episode": ep_num,
+                    "watched_at": _parse_tvtime_date(str(watched_at_raw)) if watched_at_raw else datetime.now(timezone.utc),
+                })
+    return shows, eps
+
+
+def _parse_ext_series_csv(text: str) -> list[dict]:
+    shows: list[dict] = []
+    for row in csv.DictReader(io.StringIO(text)):
+        title = (row.get("title") or "").strip()
+        if not title:
+            continue
+        tvdb_raw = (row.get("tvdb_id") or "").strip()
+        tvdb = int(tvdb_raw) if tvdb_raw.isdigit() else None
+        imdb = (row.get("imdb_id") or "").strip() or None
+        shows.append({
+            "tvdb_id": tvdb,
+            "imdb_id": imdb,
+            "title": title,
+            "status": (row.get("status") or "").strip().lower() or None,
+        })
+    return shows
+
+
+def _parse_ext_episodes_csv(text: str) -> list[dict]:
+    eps: list[dict] = []
+    for row in csv.DictReader(io.StringIO(text)):
+        if (row.get("is_watched") or "").strip().lower() != "true":
+            continue
+        if (row.get("special") or "").strip().lower() == "true":
+            continue
+        title = (row.get("title") or "").strip()
+        season_raw = (row.get("season") or "").strip()
+        ep_raw = (row.get("episode") or "").strip()
+        if not (title and season_raw.isdigit() and ep_raw.isdigit()):
+            continue
+        season = int(season_raw)
+        if season <= 0:
+            continue
+        series_tvdb_raw = (row.get("series_tvdb_id") or "").strip()
+        series_tvdb = int(series_tvdb_raw) if series_tvdb_raw.isdigit() else None
+        series_imdb = (row.get("series_imdb_id") or "").strip() or None
+        watched_at_raw = (row.get("watched_at") or "").strip()
+        eps.append({
+            "series_tvdb_id": series_tvdb,
+            "series_imdb_id": series_imdb,
+            "title": title,
+            "season": season,
+            "episode": int(ep_raw),
+            "watched_at": _parse_tvtime_date(watched_at_raw) if watched_at_raw else datetime.now(timezone.utc),
+        })
+    return eps
+
+
+def _extract_tvtime_files_from_zip(raw_bytes: bytes) -> dict[str, str]:
+    """Like _extract_csvs_from_zip but accepts .json files too."""
+    try:
+        with zipfile.ZipFile(io.BytesIO(raw_bytes)) as zf:
+            out: dict[str, str] = {}
+            total = 0
+            for info in zf.infolist():
+                basename = info.filename.split("/")[-1].lower()
+                if not (basename.endswith(".csv") or basename.endswith(".json")):
+                    continue
+                if info.file_size > _MAX_CSV_BYTES:
+                    raise HTTPException(status_code=422, detail=f"File '{basename}' exceeds 50 MB limit.")
+                total += info.file_size
+                if total > _MAX_TOTAL_BYTES:
+                    raise HTTPException(status_code=422, detail="Total uncompressed size exceeds 100 MB limit.")
+                out[basename] = zf.read(info.filename).decode("utf-8-sig", errors="replace")
+            return out
+    except zipfile.BadZipFile:
+        raise HTTPException(status_code=422, detail="Invalid zip file.")
+
+
 @router.post("/tvtime")
 async def import_tvtime(
     file: UploadFile = File(...),
@@ -513,33 +795,65 @@ async def import_tvtime(
     uid: str = Depends(get_current_user),
 ):
     """
-    Accept a TV Time Personal Data zip (or a single CSV) and import:
-      - watched episodes -> EpisodeWatched (and auto-complete to Watched if all seen)
-      - followed shows  -> Watchlist (unless already watched / watch-listed)
-      - per-show ratings -> Watched.rating when the show ends up Watched
+    Accept TV Time data and import it. Supports:
+      - The original TV Time "Personal Data" email zip / CSV
+      - The "TV Time Out" Chrome extension export (JSON or CSV, single file or zipped)
+
+    Routing per item:
+      - watched movies        → Watched
+      - unwatched movies      → Watchlist
+      - watched episodes      → EpisodeWatched (auto-completes to Watched if all seen)
+      - followed/listed shows → Watchlist (unless already watched / watch-listed)
+      - per-show ratings      → Watched.rating when the show ends up Watched
     """
     filename = (file.filename or "").lower()
-    if not (filename.endswith(".csv") or filename.endswith(".zip")):
-        raise HTTPException(status_code=422, detail="Please upload a .csv or .zip file.")
+    if not (filename.endswith(".csv") or filename.endswith(".zip") or filename.endswith(".json")):
+        raise HTTPException(status_code=422, detail="Please upload a .csv, .json, or .zip file.")
 
     raw_bytes = await file.read()
     if len(raw_bytes) > _MAX_FILE_BYTES:
         raise HTTPException(status_code=413, detail="File too large (max 20 MB).")
 
-    # Build {basename: text} just like the Letterboxd path.
     if filename.endswith(".zip"):
-        csv_map = _extract_csvs_from_zip(raw_bytes)
+        csv_map = _extract_tvtime_files_from_zip(raw_bytes)
         if not csv_map:
-            raise HTTPException(status_code=422, detail="No CSV files found in zip.")
+            raise HTTPException(status_code=422, detail="No CSV or JSON files found in zip.")
     else:
         csv_map = {filename: raw_bytes.decode("utf-8-sig", errors="replace")}
 
-    # ── Classify CSVs and collect rows ──────────────────────────────────────
+    # ── Parse: detect each file's format, route to the right parser ─────────
+    # Old TV Time email format:
     episode_rows: list[dict] = []
     follow_rows: list[dict] = []
     rating_rows: list[dict] = []
+    # New Chrome extension format:
+    ext_movie_rows: list[dict] = []
+    ext_show_rows: list[dict] = []
+    ext_episode_rows: list[dict] = []
 
     for basename, text in csv_map.items():
+        fmt = _detect_ext_format(basename, text)
+        if fmt == "ext_movies_json":
+            ext_movie_rows.extend(_parse_ext_movies_json(text))
+            continue
+        if fmt == "ext_movies_csv":
+            ext_movie_rows.extend(_parse_ext_movies_csv(text))
+            continue
+        if fmt == "ext_series_json":
+            shows, eps = _parse_ext_series_json(text)
+            ext_show_rows.extend(shows)
+            ext_episode_rows.extend(eps)
+            continue
+        if fmt == "ext_series_csv":
+            ext_show_rows.extend(_parse_ext_series_csv(text))
+            continue
+        if fmt == "ext_episodes_csv":
+            ext_episode_rows.extend(_parse_ext_episodes_csv(text))
+            continue
+
+        # Fall back to the original TV Time email-zip classifier
+        if not basename.endswith(".csv"):
+            continue
         reader = csv.DictReader(io.StringIO(text))
         headers = reader.fieldnames or []
         kind = _classify_tvtime_csv(basename, headers)
@@ -573,43 +887,151 @@ async def import_tvtime(
                 if name and rating is not None:
                     rating_rows.append({"name": name, "rating": rating})
 
-    if not (episode_rows or follow_rows):
+    if not (
+        episode_rows or follow_rows
+        or ext_movie_rows or ext_show_rows or ext_episode_rows
+    ):
         raise HTTPException(
             status_code=422,
-            detail="No TV Time episode or follow data found in upload.",
+            detail="No TV Time data found in upload.",
         )
 
-    # ── Resolve each unique show name to a TMDB id, concurrently ────────────
-    all_names = {r["name"] for r in episode_rows} | {r["name"] for r in follow_rows}
+    # Fold ext-format show/episode rows into the shared `follow_rows` and
+    # `episode_rows` shapes so the rest of the pipeline doesn't branch on
+    # format. The `_tvdb_id`/`_imdb_id` hints unlock external-id resolution.
+    for ep in ext_episode_rows:
+        episode_rows.append({
+            "name": ep["title"],
+            "season": ep["season"],
+            "episode": ep["episode"],
+            "watched_at": ep["watched_at"],
+            "_tvdb_id": ep["series_tvdb_id"],
+            "_imdb_id": ep["series_imdb_id"],
+        })
+    for show in ext_show_rows:
+        # Treat each ext-format show row as a "follow": watchlist target unless
+        # we end up writing watched episodes for it.
+        follow_rows.append({
+            "name": show["title"],
+            "status": show.get("status") or "",
+            "_tvdb_id": show.get("tvdb_id"),
+            "_imdb_id": show.get("imdb_id"),
+        })
+
+    # ── Resolve shows + movies in TMDB concurrently ─────────────────────────
+    # For each unique show name, collect the best external ids we know about.
+    show_ids: dict[str, dict] = {}
+    for r in episode_rows + follow_rows:
+        cur = show_ids.setdefault(r["name"], {"tvdb_id": None, "imdb_id": None})
+        cur["tvdb_id"] = cur["tvdb_id"] or r.get("_tvdb_id")
+        cur["imdb_id"] = cur["imdb_id"] or r.get("_imdb_id")
+
+    all_names = list(show_ids.keys())
     sem = asyncio.Semaphore(_CONCURRENCY)
 
-    async def resolve(name: str) -> tuple[str, int | None, str | None]:
+    async def resolve_show(name: str) -> tuple[str, int | None, str | None]:
+        ids = show_ids.get(name, {})
         async with sem:
             try:
-                return name, await asyncio.to_thread(_find_tv_show_id, name, None), None
+                return name, await asyncio.to_thread(
+                    _resolve_ext_show, ids.get("tvdb_id"), ids.get("imdb_id"), name
+                ), None
             except Exception as e:
                 return name, None, str(e)[:80]
 
-    resolved_list = await asyncio.gather(*[resolve(n) for n in all_names])
-    name_to_show: dict[str, int | None] = {n: sid for n, sid, _ in resolved_list}
-    name_to_error: dict[str, str | None] = {n: err for n, _, err in resolved_list}
+    async def resolve_movie(idx: int, row: dict) -> tuple[int, tuple[int, str] | None, str | None]:
+        async with sem:
+            try:
+                hit = await asyncio.to_thread(
+                    _resolve_ext_movie,
+                    row.get("imdb_id"), row.get("tvdb_id"),
+                    row.get("title"), row.get("year"),
+                )
+                return idx, hit, None
+            except Exception as e:
+                return idx, None, str(e)[:80]
 
-    # ── Prefetch show details for ones not yet in the DB ────────────────────
-    needed_ids = {sid for sid in name_to_show.values() if sid}
-    existing_ids = (
-        {sid for (sid,) in db.query(Show.id).filter(Show.id.in_(needed_ids)).all()}
-        if needed_ids else set()
+    show_tasks = [resolve_show(n) for n in all_names]
+    movie_tasks = [resolve_movie(i, m) for i, m in enumerate(ext_movie_rows)]
+    combined = await asyncio.gather(*show_tasks, *movie_tasks)
+    show_results = combined[:len(show_tasks)]
+    movie_results = combined[len(show_tasks):]
+
+    name_to_show: dict[str, int | None] = {n: sid for n, sid, _ in show_results}
+    name_to_error: dict[str, str | None] = {n: err for n, _, err in show_results}
+
+    for idx, hit, err in movie_results:
+        row = ext_movie_rows[idx]
+        row["_tmdb_id"] = hit[0] if hit else None
+        row["_media_type"] = hit[1] if hit else None
+        row["_tmdb_error"] = err
+
+    # ── Prefetch show + movie details for ones not yet in the DB ────────────
+    needed_show_ids = {sid for sid in name_to_show.values() if sid}
+    # Some "movies" may resolve as TV (e.g. mini-series IMDb ids).
+    needed_show_ids |= {
+        r["_tmdb_id"] for r in ext_movie_rows
+        if r.get("_tmdb_id") and r.get("_media_type") == "tv"
+    }
+    needed_movie_ids = {
+        r["_tmdb_id"] for r in ext_movie_rows
+        if r.get("_tmdb_id") and r.get("_media_type") == "movie"
+    }
+
+    existing_show_ids = (
+        {sid for (sid,) in db.query(Show.id).filter(Show.id.in_(needed_show_ids)).all()}
+        if needed_show_ids else set()
     )
-    missing_ids = needed_ids - existing_ids
+    existing_movie_ids = (
+        {mid for (mid,) in db.query(Movie.id).filter(Movie.id.in_(needed_movie_ids)).all()}
+        if needed_movie_ids else set()
+    )
+    missing_show_ids = needed_show_ids - existing_show_ids
+    missing_movie_ids = needed_movie_ids - existing_movie_ids
 
-    async def prefetch(show_id: int) -> None:
+    async def prefetch_show(show_id: int) -> None:
         async with sem:
             try:
                 await asyncio.to_thread(fetch_show_from_tmdb, show_id, _SHOW_APPEND)
             except Exception:
                 pass
 
-    await asyncio.gather(*[prefetch(sid) for sid in missing_ids])
+    async def prefetch_movie(movie_id: int) -> None:
+        async with sem:
+            try:
+                await asyncio.to_thread(fetch_movie_from_tmdb, movie_id, _MOVIE_APPEND)
+            except Exception:
+                pass
+
+    await asyncio.gather(
+        *[prefetch_show(sid) for sid in missing_show_ids],
+        *[prefetch_movie(mid) for mid in missing_movie_ids],
+    )
+
+    # ── Sequentially upsert Show/Movie rows we'll need ──────────────────────
+    # Both ensure_*_in_db helpers fast-path when the row already exists, so
+    # this is effectively a no-op for items the user already has tracked
+    # (the user's stated goal: "skip things already in the database").
+    # Doing it here, serially, also closes the race where two parallel season
+    # syncs would both try to insert the same Show row and poison the session.
+    for sid in needed_show_ids:
+        try:
+            ensure_show_in_db(
+                db, sid, db.query(Show).filter_by(id=sid).first() is not None
+            )
+        except Exception:
+            db.rollback()
+    for mid in needed_movie_ids:
+        try:
+            ensure_movie_in_db(
+                db, mid, db.query(Movie).filter_by(id=mid).first() is not None
+            )
+        except Exception:
+            db.rollback()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
 
     # ── Episodes: group by (show_id, season) so we sync each season once ────
     episodes_by_show: dict[int, list[dict]] = {}
@@ -629,10 +1051,20 @@ async def import_tvtime(
         for ep in eps
     }
 
+    def _sync_in_thread(sid: int, season: int) -> None:
+        # SQLAlchemy Sessions are not thread-safe; the request `db` cannot be
+        # shared across the concurrent worker threads asyncio.to_thread spawns.
+        # Each worker gets its own session and closes it before returning.
+        thread_db = SessionLocal()
+        try:
+            sync_season_episodes(thread_db, sid, season)
+        finally:
+            thread_db.close()
+
     async def sync_one(sid: int, season: int) -> None:
         async with sem:
             try:
-                await asyncio.to_thread(sync_season_episodes, db, sid, season)
+                await asyncio.to_thread(_sync_in_thread, sid, season)
             except Exception:
                 pass
 
@@ -649,11 +1081,25 @@ async def import_tvtime(
 
     rating_by_name = {r["name"]: r["rating"] for r in rating_rows}
 
+    # Items the user is already actively tracking — re-adding them produces
+    # noise (duplicate activity events, list churn). We skip these entirely.
+    currently_watching: set[tuple[str, int]] = {
+        (ct, cid)
+        for (ct, cid) in db.query(
+            CurrentlyWatching.content_type, CurrentlyWatching.content_id
+        ).filter_by(user_id=uid).all()
+    }
+
     for sid, eps in episodes_by_show.items():
         show = db.query(Show).filter_by(id=sid).first()
         if not show:
             failed += len(eps)
             failures.append({"show": str(sid), "reason": "show not in DB after fetch"})
+            continue
+
+        if ("tv", sid) in currently_watching:
+            episodes_skipped += len(eps)
+            per_show[sid] = {"title": show.name, "episodes_added": 0}
             continue
 
         # Existing watched-episode keys for this user+show
@@ -722,6 +1168,9 @@ async def import_tvtime(
             continue
         if sid in watched_or_progress:
             continue
+        if ("tv", sid) in currently_watching:
+            shows_skipped += 1
+            continue
         on_watched = db.query(Watched).filter_by(
             user_id=uid, content_type="tv", content_id=sid
         ).first()
@@ -742,6 +1191,138 @@ async def import_tvtime(
             db.rollback()
             failures.append({"show": follow["name"], "reason": str(e)[:120]})
             failed += 1
+
+    # ── Movies (ext format only) ────────────────────────────────────────────
+    movies_imported = 0
+    movies_watchlisted = 0
+    movies_skipped = 0
+    movie_results_out: list[dict] = []
+    seen_movie_pairs: set[tuple[int, str]] = set()
+
+    for row in ext_movie_rows:
+        title = row["title"]
+        tmdb_id = row.get("_tmdb_id")
+        media_type = row.get("_media_type") or "movie"
+        err = row.get("_tmdb_error")
+
+        if err:
+            failed += 1
+            movie_results_out.append({
+                "title": title, "status": "failed",
+                "reason": f"TMDB search error: {err}",
+            })
+            continue
+        if not tmdb_id:
+            failed += 1
+            movie_results_out.append({
+                "title": title, "status": "failed", "reason": "not found on TMDB",
+            })
+            continue
+
+        pair = (tmdb_id, media_type)
+        if pair in seen_movie_pairs:
+            movies_skipped += 1
+            movie_results_out.append({
+                "title": title, "tmdb_id": tmdb_id, "media_type": media_type,
+                "status": "skipped", "reason": "duplicate in import",
+            })
+            continue
+        seen_movie_pairs.add(pair)
+
+        # Already in CurrentlyWatching → leave it alone (no Watched/Watchlist
+        # write, no activity event).
+        if (media_type, tmdb_id) in currently_watching:
+            movies_skipped += 1
+            movie_results_out.append({
+                "title": title, "tmdb_id": tmdb_id, "media_type": media_type,
+                "status": "skipped", "reason": "already currently watching",
+            })
+            continue
+
+        try:
+            if media_type == "movie":
+                already_tracked = db.query(Movie).filter_by(id=tmdb_id).first() is not None
+                media = ensure_movie_in_db(db, tmdb_id, already_tracked)
+                resolved_title = media.title
+            else:
+                already_tracked = db.query(Show).filter_by(id=tmdb_id).first() is not None
+                media = ensure_show_in_db(db, tmdb_id, already_tracked)
+                resolved_title = media.name
+        except Exception as e:
+            db.rollback()
+            failed += 1
+            movie_results_out.append({
+                "title": title, "status": "failed",
+                "reason": f"DB error: {str(e)[:80]}",
+            })
+            continue
+
+        if row["is_watched"]:
+            existing = db.query(Watched).filter_by(
+                user_id=uid, content_type=media_type, content_id=tmdb_id
+            ).first()
+            if existing:
+                movies_skipped += 1
+                movie_results_out.append({
+                    "title": resolved_title, "tmdb_id": tmdb_id, "media_type": media_type,
+                    "status": "skipped", "reason": "already in watched",
+                })
+                continue
+            try:
+                watched_at = row["watched_at"]
+                db.add(Watched(
+                    user_id=uid, content_type=media_type, content_id=tmdb_id,
+                    watched_at=watched_at,
+                ))
+                db.commit()
+                movies_imported += 1
+                movie_results_out.append({
+                    "title": resolved_title, "tmdb_id": tmdb_id, "media_type": media_type,
+                    "status": "imported",
+                    "watched_at": watched_at.strftime("%Y-%m-%d") if watched_at else None,
+                })
+            except Exception as e:
+                db.rollback()
+                failed += 1
+                movie_results_out.append({
+                    "title": title, "status": "failed", "reason": str(e)[:120],
+                })
+        else:
+            # "Want to watch" → watchlist (skip if already watched / watch-listed)
+            on_watched = db.query(Watched).filter_by(
+                user_id=uid, content_type=media_type, content_id=tmdb_id
+            ).first()
+            if on_watched:
+                movies_skipped += 1
+                movie_results_out.append({
+                    "title": resolved_title, "tmdb_id": tmdb_id, "media_type": media_type,
+                    "status": "skipped", "reason": "already in watched",
+                })
+                continue
+            on_wl = db.query(Watchlist).filter_by(
+                user_id=uid, content_type=media_type, content_id=tmdb_id
+            ).first()
+            if on_wl:
+                movies_skipped += 1
+                movie_results_out.append({
+                    "title": resolved_title, "tmdb_id": tmdb_id, "media_type": media_type,
+                    "status": "skipped", "reason": "already in watchlist",
+                })
+                continue
+            try:
+                add_to_watchlist(db, uid, media_type, tmdb_id)
+                db.commit()
+                movies_watchlisted += 1
+                movie_results_out.append({
+                    "title": resolved_title, "tmdb_id": tmdb_id, "media_type": media_type,
+                    "status": "watchlisted",
+                })
+            except Exception as e:
+                db.rollback()
+                failed += 1
+                movie_results_out.append({
+                    "title": title, "status": "failed", "reason": str(e)[:120],
+                })
 
     # ── Apply ratings on Watched rows that now exist ────────────────────────
     ratings_applied = 0
@@ -774,16 +1355,23 @@ async def import_tvtime(
             "reason": f"TMDB search error: {err}" if err else "not found on TMDB",
         })
         failed += 1
+    results.extend(movie_results_out)
+
+    imported_total = episodes_imported + movies_imported
+    watchlisted_total = shows_watchlisted + movies_watchlisted
+    skipped_total = episodes_skipped + shows_skipped + movies_skipped
 
     return {
         "summary": {
-            "total": episodes_imported + episodes_skipped + shows_watchlisted + shows_skipped + failed,
-            "imported": episodes_imported,
-            "watchlisted": shows_watchlisted,
-            "skipped": episodes_skipped + shows_skipped,
+            "total": imported_total + watchlisted_total + skipped_total + failed,
+            "imported": imported_total,
+            "watchlisted": watchlisted_total,
+            "skipped": skipped_total,
             "failed": failed,
             "ratings_applied": ratings_applied,
             "shows_with_episodes": len(per_show),
+            "movies_imported": movies_imported,
+            "movies_watchlisted": movies_watchlisted,
         },
         "results": results,
         "failures": failures,

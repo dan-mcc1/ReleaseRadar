@@ -1,5 +1,6 @@
 # backend/app/services/calendar_service.py
 from collections import defaultdict
+from typing import Literal
 from sqlalchemy import select, union_all, literal
 from sqlalchemy.orm import Session, aliased
 
@@ -10,7 +11,12 @@ from app.models.currently_watching import CurrentlyWatching
 from app.models.watched import Watched
 from app.models.show import Show
 from app.models.movie import Movie
-from app.services.media_serializers import serialize_show_calendar, serialize_movie_calendar
+from app.services.media_serializers import (
+    serialize_show_calendar,
+    serialize_movie_calendar,
+)
+
+WatchedFilter = Literal["all", "watched", "unwatched"]
 
 
 def get_calendar(
@@ -18,6 +24,7 @@ def get_calendar(
     user_id: str,
     from_date: str | None = None,
     to_date: str | None = None,
+    watched_filter: WatchedFilter = "all",
 ) -> dict:
     # ── Single UNION ALL replaces 3 separate list queries ────────────────────
     all_rows = db.execute(
@@ -44,24 +51,56 @@ def get_calendar(
     ).all()
 
     show_ids = list({r.content_id for r in all_rows if r.content_type == "tv"})
-    wl_movie_ids = {r.content_id for r in all_rows if r.content_type == "movie" and r.source == "watchlist"}
-    cw_movie_ids = {r.content_id for r in all_rows if r.content_type == "movie" and r.source == "cw"}
-    watched_movie_ids = {r.content_id for r in all_rows if r.source == "watched"}
-    all_movie_ids = list(wl_movie_ids | cw_movie_ids | watched_movie_ids)
+    watched_movie_ids: set[int] = set()
+    all_movie_ids_set: set[int] = set()
+    for r in all_rows:
+        if r.content_type == "movie":
+            all_movie_ids_set.add(r.content_id)
+            if r.source == "watched":
+                watched_movie_ids.add(r.content_id)
 
     tv_result = []
     if show_ids:
-        # Project only the columns serialize_show_calendar needs — avoids full ORM hydration
-        shows = db.query(
-            Show.id, Show.name, Show.poster_path,
-            Show.backdrop_path, Show.logo_path,
-            Show.air_time, Show.air_timezone,
-        ).filter(Show.id.in_(show_ids)).all()
+        date_filtering = bool(from_date or to_date)
+        watch_filtering = watched_filter != "all"
 
-        # LEFT JOIN EpisodeWatched so is_watched is computed in Postgres, not Python
-        ew = aliased(EpisodeWatched)
-        eps_q = (
-            db.query(
+        # Only fetch shows that actually have an episode in the date/watch window.
+        shows_q = db.query(
+            Show.id,
+            Show.name,
+            Show.poster_path,
+            Show.backdrop_path,
+            Show.logo_path,
+            Show.air_time,
+            Show.air_timezone,
+        ).filter(Show.id.in_(show_ids))
+
+        if date_filtering or watch_filtering:
+            ep_exists = select(Episode.id).where(Episode.show_id == Show.id)
+            if from_date:
+                ep_exists = ep_exists.where(Episode.air_date >= from_date)
+            if to_date:
+                ep_exists = ep_exists.where(Episode.air_date <= to_date)
+            if watch_filtering:
+                ew_corr = select(EpisodeWatched.id).where(
+                    EpisodeWatched.user_id == user_id,
+                    EpisodeWatched.show_id == Episode.show_id,
+                    EpisodeWatched.season_number == Episode.season_number,
+                    EpisodeWatched.episode_number == Episode.episode_number,
+                )
+                if watched_filter == "watched":
+                    ep_exists = ep_exists.where(ew_corr.exists())
+                else:  # "unwatched"
+                    ep_exists = ep_exists.where(~ew_corr.exists())
+            shows_q = shows_q.filter(ep_exists.exists())
+
+        shows = shows_q.all()
+
+        # When filtering, every episode in the response shares the same is_watched
+        # value, so we can skip the LEFT JOIN entirely.
+        if watch_filtering:
+            is_w_value = watched_filter == "watched"
+            eps_q = db.query(
                 Episode.id,
                 Episode.show_id,
                 Episode.season_number,
@@ -72,17 +111,46 @@ def get_calendar(
                 Episode.still_path,
                 Episode.overview,
                 Episode.episode_type,
-                ew.id.isnot(None).label("is_watched"),
+                literal(is_w_value).label("is_watched"),
+            ).filter(Episode.show_id.in_([s.id for s in shows]))
+
+            ew_corr = select(EpisodeWatched.id).where(
+                EpisodeWatched.user_id == user_id,
+                EpisodeWatched.show_id == Episode.show_id,
+                EpisodeWatched.season_number == Episode.season_number,
+                EpisodeWatched.episode_number == Episode.episode_number,
             )
-            .outerjoin(
-                ew,
-                (ew.show_id == Episode.show_id)
-                & (ew.season_number == Episode.season_number)
-                & (ew.episode_number == Episode.episode_number)
-                & (ew.user_id == user_id),
+            if watched_filter == "watched":
+                eps_q = eps_q.filter(ew_corr.exists())
+            else:  # "unwatched"
+                eps_q = eps_q.filter(~ew_corr.exists())
+        else:
+            # LEFT JOIN EpisodeWatched so is_watched is computed in Postgres
+            ew = aliased(EpisodeWatched)
+            eps_q = (
+                db.query(
+                    Episode.id,
+                    Episode.show_id,
+                    Episode.season_number,
+                    Episode.episode_number,
+                    Episode.name,
+                    Episode.air_date,
+                    Episode.runtime,
+                    Episode.still_path,
+                    Episode.overview,
+                    Episode.episode_type,
+                    ew.id.isnot(None).label("is_watched"),
+                )
+                .outerjoin(
+                    ew,
+                    (ew.show_id == Episode.show_id)
+                    & (ew.season_number == Episode.season_number)
+                    & (ew.episode_number == Episode.episode_number)
+                    & (ew.user_id == user_id),
+                )
+                .filter(Episode.show_id.in_([s.id for s in shows]))
             )
-            .filter(Episode.show_id.in_(show_ids))
-        )
+
         if from_date:
             eps_q = eps_q.filter(Episode.air_date >= from_date)
         if to_date:
@@ -109,24 +177,45 @@ def get_calendar(
                 }
             )
 
-        filtering = bool(from_date or to_date)
         tv_result = [
-            {"show": serialize_show_calendar(show), "episodes": eps_by_show[show.id]}
+            {
+                "show": serialize_show_calendar(show),
+                "episodes": eps_by_show.get(show.id, []),
+            }
             for show in shows
-            if not filtering or eps_by_show[show.id]
         ]
 
-    # ── Movies: project only columns serialize_movie_calendar needs ───────────
+    # ── Movies: filter the ID set by watched state before hitting the DB ─────
     movies_result = []
-    if all_movie_ids:
-        movies = db.query(
-            Movie.id, Movie.title, Movie.overview, Movie.poster_path,
-            Movie.backdrop_path, Movie.logo_path, Movie.release_date,
-            Movie.runtime, Movie.status, Movie.vote_average,
-        ).filter(Movie.id.in_(all_movie_ids)).all()
+    if watched_filter == "watched":
+        movie_ids_to_fetch = watched_movie_ids
+    elif watched_filter == "unwatched":
+        movie_ids_to_fetch = all_movie_ids_set - watched_movie_ids
+    else:
+        movie_ids_to_fetch = all_movie_ids_set
+
+    if movie_ids_to_fetch:
+        movies_q = db.query(
+            Movie.id,
+            Movie.title,
+            Movie.overview,
+            Movie.poster_path,
+            Movie.backdrop_path,
+            Movie.logo_path,
+            Movie.release_date,
+            Movie.runtime,
+        ).filter(Movie.id.in_(movie_ids_to_fetch))
+        if from_date:
+            movies_q = movies_q.filter(Movie.release_date >= from_date)
+        if to_date:
+            movies_q = movies_q.filter(Movie.release_date <= to_date)
+        movies = movies_q.all()
         for movie in movies:
             serialized = serialize_movie_calendar(movie)
-            serialized["is_watched"] = movie.id in watched_movie_ids
+            if watched_filter == "all":
+                serialized["is_watched"] = movie.id in watched_movie_ids
+            else:
+                serialized["is_watched"] = watched_filter == "watched"
             movies_result.append(serialized)
 
     return {"shows": tv_result, "movies": movies_result}

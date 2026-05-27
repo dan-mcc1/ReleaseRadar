@@ -557,3 +557,392 @@ class TestTvTimeEndpoint:
         db.expire_all()
         w = db.query(Watched).filter_by(user_id="test-uid-1", content_id=1396).first()
         assert w.rating == 4.5
+
+
+# ── TV Time "Out" Chrome extension format ─────────────────────────────────
+
+
+class TestExtFormatHelpers:
+    def test_detect_movies_json(self):
+        text = '[{"id": {"tvdb": 1, "imdb": "tt0001"}, "title": "X", "year": 2000, "is_watched": true}]'
+        assert ir._detect_ext_format("tvtime-movies.json", text) == "ext_movies_json"
+
+    def test_detect_series_json(self):
+        text = '[{"id": {"tvdb": 1, "imdb": null}, "title": "X", "seasons": []}]'
+        assert ir._detect_ext_format("tvtime-series.json", text) == "ext_series_json"
+
+    def test_detect_movies_csv(self):
+        text = "uuid,tvdb_id,imdb_id,title,year,is_watched\nu,1,tt0001,X,2000,true\n"
+        assert ir._detect_ext_format("tvtime-movies.csv", text) == "ext_movies_csv"
+
+    def test_detect_series_csv(self):
+        text = "uuid,tvdb_id,imdb_id,title,status,created_at\nu,1,,X,up_to_date,2026-01-01\n"
+        assert ir._detect_ext_format("tvtime-series.csv", text) == "ext_series_csv"
+
+    def test_detect_episodes_csv(self):
+        text = "series_tvdb_id,series_imdb_id,series_uuid,title,season,episode,tvdb_id,is_watched\n1,,u,X,1,1,2,true\n"
+        assert ir._detect_ext_format("tvtime-series-episodes.csv", text) == "ext_episodes_csv"
+
+    def test_detect_unrecognized_returns_none(self):
+        # Old TV Time format must NOT match ext format
+        assert ir._detect_ext_format("seen_episode.csv", "show_name,season_number,episode_number\nFoo,1,1\n") is None
+
+    def test_parse_ext_movies_json_filters_blank_titles(self):
+        text = '[{"id": {"imdb": "tt001"}, "title": "Good", "year": 2000, "is_watched": true},' \
+               ' {"id": {"imdb": "tt002"}, "title": "", "year": 2001, "is_watched": true}]'
+        rows = ir._parse_ext_movies_json(text)
+        assert len(rows) == 1
+        assert rows[0]["title"] == "Good"
+        assert rows[0]["imdb_id"] == "tt001"
+        assert rows[0]["is_watched"] is True
+
+    def test_parse_ext_movies_json_unwatched_movie(self):
+        text = '[{"id": {"imdb": "tt010"}, "title": "Want", "year": 2020, "is_watched": false, "watched_at": null}]'
+        rows = ir._parse_ext_movies_json(text)
+        assert rows[0]["is_watched"] is False
+
+    def test_parse_ext_series_json_collects_watched_episodes_only(self):
+        text = (
+            '[{"id": {"tvdb": 1, "imdb": null}, "title": "X", "status": "continuing", "seasons": [' \
+            '{"number": 0, "is_specials": true, "episodes": [{"id": {}, "number": 1, "special": true, "is_watched": true}]},' \
+            '{"number": 1, "is_specials": false, "episodes": [' \
+            '{"id": {}, "number": 1, "special": false, "is_watched": true, "watched_at": "2025-06-01T00:00:00Z"},' \
+            '{"id": {}, "number": 2, "special": false, "is_watched": false},' \
+            '{"id": {}, "number": 3, "special": true, "is_watched": true}' \
+            ']}' \
+            ']}]'
+        )
+        shows, eps = ir._parse_ext_series_json(text)
+        assert len(shows) == 1
+        assert shows[0]["tvdb_id"] == 1
+        assert shows[0]["status"] == "continuing"
+        # Only the season-1 ep1 should be collected (specials and is_watched=false skipped)
+        assert len(eps) == 1
+        assert eps[0]["season"] == 1 and eps[0]["episode"] == 1
+        assert eps[0]["series_tvdb_id"] == 1
+
+    def test_parse_ext_episodes_csv_filters_unwatched_and_specials(self):
+        text = (
+            "series_tvdb_id,series_imdb_id,series_uuid,title,season,episode,tvdb_id,is_watched,watched_at,rewatch_count,special\n"
+            "10,,u,Show,1,1,100,true,2025-01-01,0,false\n"
+            "10,,u,Show,1,2,101,false,,0,false\n"
+            "10,,u,Show,0,1,102,true,2025-01-02,0,true\n"
+        )
+        eps = ir._parse_ext_episodes_csv(text)
+        assert len(eps) == 1
+        assert eps[0]["episode"] == 1
+
+
+class TestResolveExtHelpers:
+    def test_resolve_movie_prefers_imdb_id(self):
+        with patch.object(ir, "_tmdb_find_by_external") as find:
+            find.return_value = (123, "movie")
+            result = ir._resolve_ext_movie("tt0001", 99, "X", 2000)
+            assert result == (123, "movie")
+            find.assert_called_once_with("tt0001", "imdb_id")
+
+    def test_resolve_movie_falls_back_to_tvdb(self):
+        # IMDb miss, TVDB hit
+        def fake_find(ext_id, source):
+            return (456, "movie") if source == "tvdb_id" else None
+        with patch.object(ir, "_tmdb_find_by_external", side_effect=fake_find):
+            result = ir._resolve_ext_movie("tt0001", 99, "X", 2000)
+            assert result == (456, "movie")
+
+    def test_resolve_movie_falls_back_to_name_search(self):
+        with patch.object(ir, "_tmdb_find_by_external", return_value=None), \
+             patch.object(ir, "_find_tmdb_result", return_value=(789, "movie")) as name_search:
+            result = ir._resolve_ext_movie(None, None, "X", 2000)
+            assert result == (789, "movie")
+            name_search.assert_called_once_with("X", 2000)
+
+    def test_resolve_show_ignores_movie_match(self):
+        # If /find returns a movie when we asked for a show, fall through.
+        with patch.object(ir, "_tmdb_find_by_external", return_value=(11, "movie")), \
+             patch.object(ir, "_find_tv_show_id", return_value=22):
+            assert ir._resolve_ext_show(99, "tt0001", "X") == 22
+
+
+@pytest.fixture
+def mock_ext_tvtime():
+    """Mock TMDB seams for the new ext format."""
+    config = {
+        # (ext_id, source) -> (tmdb_id, media_type)
+        "ext": {},
+        # name -> tmdb_id for show name-fallback
+        "shows": {},
+        # name -> (tmdb_id, media_type) for movie name-fallback
+        "movies": {},
+    }
+
+    def fake_find_ext(ext_id, source):
+        return config["ext"].get((ext_id, source))
+
+    def fake_find_show(name, year):
+        return config["shows"].get(name)
+
+    def fake_find_movie(name, year):
+        return config["movies"].get(name)
+
+    with patch.object(ir, "_tmdb_find_by_external", side_effect=fake_find_ext), \
+         patch.object(ir, "_find_tv_show_id", side_effect=fake_find_show), \
+         patch.object(ir, "_find_tmdb_result", side_effect=fake_find_movie), \
+         patch.object(ir, "fetch_show_from_tmdb", return_value=None), \
+         patch.object(ir, "fetch_movie_from_tmdb", return_value=None), \
+         patch.object(ir, "sync_season_episodes", return_value=None), \
+         patch.object(ir, "maybe_auto_complete_show", return_value=False):
+        yield config
+
+
+def _ext_upload(client, files: dict[str, str], filename: str = "tvtime-out.zip"):
+    """Upload one or more ext-format files as a zip to /import/tvtime."""
+    return client.post(
+        "/import/tvtime",
+        files={"file": (filename, _tvtime_zip(files), "application/zip")},
+    )
+
+
+def _ext_upload_single(client, content: str, filename: str):
+    """Upload a single ext-format file (JSON or CSV) to /import/tvtime."""
+    mime = "application/json" if filename.endswith(".json") else "text/csv"
+    return client.post(
+        "/import/tvtime",
+        files={"file": (filename, content.encode("utf-8"), mime)},
+    )
+
+
+class TestExtFormatEndpoint:
+    def test_rejects_unsupported_extension(self, client, seed_users):
+        r = client.post(
+            "/import/tvtime",
+            files={"file": ("notes.txt", b"hello", "text/plain")},
+        )
+        assert r.status_code == 422
+
+    def test_movies_json_watched_and_unwatched(
+        self, client, seed_users, mock_ext_tvtime, db
+    ):
+        from app.models.movie import Movie
+        from app.models.watched import Watched
+        from app.models.watchlist import Watchlist as WL
+
+        # Pre-seed both movies so ensure_movie_in_db is a no-op
+        db.add_all([
+            Movie(id=550, title="Fight Club", status="Released", tracking_count=0, vote_average=7.0),
+            Movie(id=438631, title="Dune", status="Released", tracking_count=0, vote_average=8.0),
+        ])
+        db.commit()
+        # IMDb-id resolution
+        mock_ext_tvtime["ext"][("tt0137523", "imdb_id")] = (550, "movie")
+        mock_ext_tvtime["ext"][("tt1160419", "imdb_id")] = (438631, "movie")
+
+        content = (
+            '[{"id":{"tvdb":1,"imdb":"tt0137523"},"title":"Fight Club","year":1999,'
+            '"is_watched":true,"watched_at":"2025-01-15T00:00:00Z"},'
+            '{"id":{"tvdb":2,"imdb":"tt1160419"},"title":"Dune","year":2021,'
+            '"is_watched":false,"watched_at":null}]'
+        )
+        r = _ext_upload_single(client, content, "tvtime-movies.json")
+        assert r.status_code == 200, r.json()
+        data = r.json()
+        assert data["summary"]["movies_imported"] == 1
+        assert data["summary"]["movies_watchlisted"] == 1
+
+        # Fight Club ended up in Watched, Dune in Watchlist
+        assert db.query(Watched).filter_by(
+            user_id="test-uid-1", content_type="movie", content_id=550
+        ).first() is not None
+        assert db.query(WL).filter_by(
+            user_id="test-uid-1", content_type="movie", content_id=438631
+        ).first() is not None
+
+    def test_movies_json_falls_back_to_name_when_no_ids_resolve(
+        self, client, seed_users, mock_ext_tvtime, db
+    ):
+        from app.models.movie import Movie
+        # External-id lookup yields nothing; name search is the fallback
+        mock_ext_tvtime["movies"]["Fight Club"] = (550, "movie")
+        db.add(Movie(id=550, title="Fight Club", status="Released", tracking_count=0, vote_average=7.0))
+        db.commit()
+
+        content = '[{"id":{},"title":"Fight Club","year":1999,"is_watched":true}]'
+        r = _ext_upload_single(client, content, "tvtime-movies.json")
+        assert r.json()["summary"]["movies_imported"] == 1
+
+    def test_movies_csv_format(self, client, seed_users, mock_ext_tvtime, db):
+        from app.models.movie import Movie
+        db.add(Movie(id=550, title="Fight Club", status="Released", tracking_count=0, vote_average=7.0))
+        db.commit()
+        mock_ext_tvtime["ext"][("tt0137523", "imdb_id")] = (550, "movie")
+
+        content = (
+            "uuid,tvdb_id,imdb_id,title,year,created_at,watched_at,is_watched,rewatch_count\n"
+            "u,1,tt0137523,Fight Club,1999,2025-01-15,2025-01-15,true,0\n"
+        )
+        r = _ext_upload_single(client, content, "tvtime-movies.csv")
+        assert r.status_code == 200, r.json()
+        assert r.json()["summary"]["movies_imported"] == 1
+
+    def test_series_json_imports_watched_episodes(
+        self, client, seed_users, mock_ext_tvtime, seed_show, db
+    ):
+        from app.models.episode_watched import EpisodeWatched
+
+        # Show resolves via TVDB id, not name
+        mock_ext_tvtime["ext"][("81189", "tvdb_id")] = (1396, "tv")
+
+        content = (
+            '[{"id":{"tvdb":81189,"imdb":null},"title":"Breaking Bad","status":"continuing","seasons":[' \
+            '{"number":1,"is_specials":false,"episodes":[' \
+            '{"id":{"tvdb":11},"number":1,"special":false,"is_watched":true,"watched_at":"2025-01-15T00:00:00Z"},' \
+            '{"id":{"tvdb":12},"number":2,"special":false,"is_watched":true,"watched_at":"2025-01-16T00:00:00Z"}' \
+            ']}]}]'
+        )
+        r = _ext_upload_single(client, content, "tvtime-series.json")
+        assert r.status_code == 200, r.json()
+        data = r.json()
+        assert data["summary"]["imported"] == 2
+        rows = db.query(EpisodeWatched).filter_by(user_id="test-uid-1", show_id=1396).all()
+        assert {(r.season_number, r.episode_number) for r in rows} == {(1, 1), (1, 2)}
+
+    def test_series_json_show_with_no_watched_episodes_goes_to_watchlist(
+        self, client, seed_users, mock_ext_tvtime, seed_show, db
+    ):
+        from app.models.watchlist import Watchlist as WL
+        mock_ext_tvtime["ext"][("81189", "tvdb_id")] = (1396, "tv")
+
+        content = (
+            '[{"id":{"tvdb":81189,"imdb":null},"title":"Breaking Bad","status":"not_started_yet","seasons":[' \
+            '{"number":1,"is_specials":false,"episodes":[' \
+            '{"id":{"tvdb":11},"number":1,"special":false,"is_watched":false}' \
+            ']}]}]'
+        )
+        r = _ext_upload_single(client, content, "tvtime-series.json")
+        assert r.status_code == 200, r.json()
+        assert r.json()["summary"]["watchlisted"] == 1
+        assert db.query(WL).filter_by(
+            user_id="test-uid-1", content_type="tv", content_id=1396
+        ).first() is not None
+
+    def test_episodes_csv_imports_via_series_tvdb_id(
+        self, client, seed_users, mock_ext_tvtime, seed_show, db
+    ):
+        from app.models.episode_watched import EpisodeWatched
+        mock_ext_tvtime["ext"][("81189", "tvdb_id")] = (1396, "tv")
+
+        content = (
+            "series_tvdb_id,series_imdb_id,series_uuid,title,season,episode,tvdb_id,is_watched,watched_at,rewatch_count,special\n"
+            "81189,,u,Breaking Bad,1,1,11,true,2025-01-15,0,false\n"
+            "81189,,u,Breaking Bad,1,2,12,true,2025-01-16,0,false\n"
+        )
+        r = _ext_upload_single(client, content, "tvtime-series-episodes.csv")
+        assert r.status_code == 200, r.json()
+        rows = db.query(EpisodeWatched).filter_by(user_id="test-uid-1", show_id=1396).all()
+        assert len(rows) == 2
+
+    def test_zip_with_movies_and_series_json(
+        self, client, seed_users, mock_ext_tvtime, seed_show, db
+    ):
+        from app.models.movie import Movie
+        db.add(Movie(id=550, title="Fight Club", status="Released", tracking_count=0, vote_average=7.0))
+        db.commit()
+        mock_ext_tvtime["ext"][("tt0137523", "imdb_id")] = (550, "movie")
+        mock_ext_tvtime["ext"][("81189", "tvdb_id")] = (1396, "tv")
+
+        r = _ext_upload(client, {
+            "tvtime-movies-2026.json":
+                '[{"id":{"imdb":"tt0137523"},"title":"Fight Club","year":1999,"is_watched":true}]',
+            "tvtime-series-2026.json":
+                '[{"id":{"tvdb":81189},"title":"Breaking Bad","status":"continuing","seasons":[' \
+                '{"number":1,"is_specials":false,"episodes":[' \
+                '{"id":{"tvdb":11},"number":1,"special":false,"is_watched":true}]}]}]',
+        })
+        assert r.status_code == 200, r.json()
+        data = r.json()
+        assert data["summary"]["movies_imported"] == 1
+        assert data["summary"]["imported"] >= 1  # episodes_imported + movies_imported
+
+    def test_movie_not_resolved_marked_failed(
+        self, client, seed_users, mock_ext_tvtime, db
+    ):
+        content = '[{"id":{"imdb":"tt9999999"},"title":"Nothing","year":2099,"is_watched":true}]'
+        r = _ext_upload_single(client, content, "tvtime-movies.json")
+        assert r.status_code == 200
+        assert r.json()["summary"]["failed"] == 1
+
+    def test_currently_watching_movie_is_skipped(
+        self, client, seed_users, mock_ext_tvtime, db
+    ):
+        """A movie the user is currently watching shouldn't be re-added to
+        Watched/Watchlist — that would generate redundant activity events."""
+        from app.models.movie import Movie
+        from app.models.watched import Watched
+        from app.models.currently_watching import CurrentlyWatching
+
+        db.add(Movie(id=550, title="Fight Club", status="Released", tracking_count=1, vote_average=7.0))
+        db.add(CurrentlyWatching(user_id="test-uid-1", content_type="movie", content_id=550))
+        db.commit()
+        mock_ext_tvtime["ext"][("tt0137523", "imdb_id")] = (550, "movie")
+
+        content = (
+            '[{"id":{"imdb":"tt0137523"},"title":"Fight Club","year":1999,'
+            '"is_watched":true,"watched_at":"2025-01-15T00:00:00Z"}]'
+        )
+        r = _ext_upload_single(client, content, "tvtime-movies.json")
+        assert r.status_code == 200, r.json()
+        data = r.json()
+        assert data["summary"]["movies_imported"] == 0
+        assert data["summary"]["skipped"] >= 1
+        # Confirm no Watched row was written
+        assert db.query(Watched).filter_by(
+            user_id="test-uid-1", content_type="movie", content_id=550
+        ).first() is None
+
+    def test_currently_watching_show_skips_episode_writes(
+        self, client, seed_users, mock_ext_tvtime, seed_show, db
+    ):
+        """A show the user is currently watching shouldn't have its episodes
+        re-imported (no auto-complete + 'watched' activity)."""
+        from app.models.episode_watched import EpisodeWatched
+        from app.models.currently_watching import CurrentlyWatching
+
+        db.add(CurrentlyWatching(user_id="test-uid-1", content_type="tv", content_id=1396))
+        db.commit()
+        mock_ext_tvtime["ext"][("81189", "tvdb_id")] = (1396, "tv")
+
+        content = (
+            '[{"id":{"tvdb":81189,"imdb":null},"title":"Breaking Bad","status":"continuing","seasons":[' \
+            '{"number":1,"is_specials":false,"episodes":[' \
+            '{"id":{"tvdb":11},"number":1,"special":false,"is_watched":true,"watched_at":"2025-01-15T00:00:00Z"}' \
+            ']}]}]'
+        )
+        r = _ext_upload_single(client, content, "tvtime-series.json")
+        assert r.status_code == 200, r.json()
+        assert r.json()["summary"]["imported"] == 0
+        # No EpisodeWatched rows were added
+        assert db.query(EpisodeWatched).filter_by(user_id="test-uid-1", show_id=1396).count() == 0
+
+    def test_currently_watching_show_skips_watchlist_add(
+        self, client, seed_users, mock_ext_tvtime, seed_show, db
+    ):
+        """If a show has no watched episodes but is in CurrentlyWatching, it
+        shouldn't be added to the watchlist on import."""
+        from app.models.watchlist import Watchlist as WL
+        from app.models.currently_watching import CurrentlyWatching
+
+        db.add(CurrentlyWatching(user_id="test-uid-1", content_type="tv", content_id=1396))
+        db.commit()
+        mock_ext_tvtime["ext"][("81189", "tvdb_id")] = (1396, "tv")
+
+        content = (
+            '[{"id":{"tvdb":81189,"imdb":null},"title":"Breaking Bad","status":"not_started_yet","seasons":[' \
+            '{"number":1,"is_specials":false,"episodes":[' \
+            '{"id":{"tvdb":11},"number":1,"special":false,"is_watched":false}' \
+            ']}]}]'
+        )
+        r = _ext_upload_single(client, content, "tvtime-series.json")
+        assert r.status_code == 200, r.json()
+        assert r.json()["summary"]["watchlisted"] == 0
+        assert db.query(WL).filter_by(
+            user_id="test-uid-1", content_type="tv", content_id=1396
+        ).first() is None

@@ -686,12 +686,19 @@ def send_season_premiere_alerts_to_all(db: Session, now_utc: datetime | None = N
             if user.push_notifications_enabled and user.push_notify_new_seasons:
                 for alert in alerts:
                     days = alert["days_away"]
-                    when = "today" if days == 0 else f"in {days} days"
-                    title = f"New season of {alert['show_name']} {when}"
+                    if days == 0:
+                        when = "today"
+                    elif days == 1:
+                        when = "in 1 day"
+                    else:
+                        when = f"in {days} days"
+                    title = f"A new season of {alert['show_name']} airs {when}"
                     season_label = (
                         alert.get("season_name") or f"Season {alert['season_number']}"
                     )
-                    body = f"{season_label} airs {alert['air_date']}"
+                    air_dt = date.fromisoformat(alert["air_date"])
+                    pretty_date = f"{air_dt.strftime('%B')} {air_dt.day}, {air_dt.year}"
+                    body = f"{season_label} releases on {pretty_date}"
                     push_notification(
                         db,
                         user.id,

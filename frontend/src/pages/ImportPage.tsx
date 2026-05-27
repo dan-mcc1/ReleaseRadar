@@ -24,6 +24,8 @@ interface ImportSummary {
   failed: number;
   ratings_applied?: number;
   shows_with_episodes?: number;
+  movies_imported?: number;
+  movies_watchlisted?: number;
 }
 
 type Phase = "idle" | "uploading" | "done" | "error";
@@ -45,7 +47,8 @@ const SOURCES: {
     label: "Letterboxd",
     endpoint: "/import/letterboxd",
     importedLabel: "Watched",
-    importingHint: "Matching each film to TMDB — this may take a minute for large lists.",
+    importingHint:
+      "Matching each film to TMDB — this may take a minute for large lists.",
     instructions: {
       title: "How to export from Letterboxd",
       steps: [
@@ -64,20 +67,22 @@ const SOURCES: {
     id: "tvtime",
     label: "TV Time",
     endpoint: "/import/tvtime",
-    importedLabel: "Shows",
-    importingHint: "Matching each show to TMDB and importing every episode you've marked seen.",
+    importedLabel: "Items",
+    importingHint:
+      "Matching each title to TMDB and importing your watched movies, episodes, and watchlist.",
     instructions: {
       title: "How to export from TV Time",
       steps: [
-        "Open the TV Time app → Profile → Settings",
-        "Tap Personal Data → Request your data",
-        "TV Time emails you a download link (can take a few hours)",
-        "Upload the zip directly — no need to unzip",
+        'Install the "TV Time Out" Chrome extension and open it while signed in to tvtime.com',
+        "Click Export — it'll download a zip file for you",
+        "Upload the zip file, or unzip it and upload the individual files",
+        'You can also still upload the original TV Time "Personal Data" email zip by contacting TVTime',
       ],
       notes: [
-        "seen_episode.csv → each marked-watched episode",
-        "Followed shows → added to your watchlist",
-        "TV Time star ratings are preserved on shows you've finished.",
+        "Watched movies → added to your watched list",
+        "Unwatched movies → added to your watchlist",
+        "Watched episodes → tracked per-episode, with shows auto-completed when finished",
+        "Shows with no watched episodes → added to your watchlist",
       ],
     },
   },
@@ -102,8 +107,13 @@ export default function ImportPage() {
 
   function pickFile(f: File) {
     const lower = f.name.toLowerCase();
-    if (!lower.endsWith(".csv") && !lower.endsWith(".zip")) {
-      setErrorMsg("Please select a .csv or .zip file.");
+    const jsonOk = source === "tvtime" && lower.endsWith(".json");
+    if (!lower.endsWith(".csv") && !lower.endsWith(".zip") && !jsonOk) {
+      setErrorMsg(
+        source === "tvtime"
+          ? "Please select a .csv, .json, or .zip file."
+          : "Please select a .csv or .zip file.",
+      );
       return;
     }
     setFile(f);
@@ -231,7 +241,7 @@ export default function ImportPage() {
             <input
               ref={inputRef}
               type="file"
-              accept=".csv,.zip"
+              accept={source === "tvtime" ? ".csv,.json,.zip" : ".csv,.zip"}
               className="hidden"
               onChange={(e) => {
                 const f = e.target.files?.[0];
@@ -272,7 +282,9 @@ export default function ImportPage() {
                     <span className="text-primary-400">browse</span>
                   </p>
                   <p className="text-xs text-neutral-600 mt-0.5">
-                    .zip export or individual .csv, max 20 MB
+                    {source === "tvtime"
+                      ? ".zip export, .json, or .csv — max 20 MB"
+                      : ".zip export or individual .csv, max 20 MB"}
                   </p>
                 </div>
               )}
@@ -351,7 +363,9 @@ export default function ImportPage() {
 
           {/* Filter tabs */}
           <div className="flex gap-1 border-b border-neutral-700 overflow-x-auto">
-            {(["all", "imported", "watchlisted", "skipped", "failed"] as const).map((f) => (
+            {(
+              ["all", "imported", "watchlisted", "skipped", "failed"] as const
+            ).map((f) => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}
@@ -362,7 +376,9 @@ export default function ImportPage() {
                 }`}
               >
                 {f === "imported" ? active.importedLabel : f}{" "}
-                {f !== "all" && summary && `(${f === "imported" ? summary.imported : f === "watchlisted" ? summary.watchlisted : summary[f]})`}
+                {f !== "all" &&
+                  summary &&
+                  `(${f === "imported" ? summary.imported : f === "watchlisted" ? summary.watchlisted : summary[f]})`}
               </button>
             ))}
           </div>
@@ -402,7 +418,9 @@ export default function ImportPage() {
                   </span>
                 )}
                 {r.status === "watchlisted" && (
-                  <span className="text-xs text-primary-400 flex-shrink-0">watchlist</span>
+                  <span className="text-xs text-primary-400 flex-shrink-0">
+                    watchlist
+                  </span>
                 )}
                 {r.rating != null && (
                   <span className="text-xs text-amber-400 flex-shrink-0">

@@ -114,6 +114,7 @@ const librarySections: NavSection[] = [
 const socialSections: NavSection[] = [
   {
     links: [
+      { name: "Activity", href: "/activity" },
       { name: "Friends", href: "/friends" },
       { name: "My Groups", href: "/my-groups" },
     ],
@@ -762,8 +763,6 @@ export default function NavBar() {
   // const showUpgradeCta = user && userMe?.subscription_tier === "free";
   const showUpgradeCta = false;
 
-  // Friends/My Groups now live in a dedicated Social tab; the pending-request
-  // count surfaces there. Activity stays bell-only.
   void unreadRecs;
   const socialBadges: Record<string, number> = {
     "/friends": pendingRequests,

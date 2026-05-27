@@ -40,7 +40,10 @@ const monthNames = [
 export default function CalendarView() {
   const user = useAuthUser();
   const { data: userMe } = useUserMe();
-  const { shows, movies, isLoading, maybePrefetch } = useCalendarData();
+  const [watchFilter, setWatchFilter] = useState<
+    "all" | "watched" | "unwatched"
+  >("all");
+  const { shows, movies, isLoading, maybePrefetch } = useCalendarData(watchFilter);
   const { data: cwData } = useCurrentlyWatching();
   const isPremium =
     userMe?.subscription_tier === "premium" ||
@@ -53,9 +56,6 @@ export default function CalendarView() {
   const [currentYear, setCurrentYear] = useState(today.getFullYear());
   const [viewMode, setViewMode] = useState<ViewMode>("month");
   const [filterType, setFilterType] = useState<"all" | "tv" | "movie">("all");
-  const [watchFilter, setWatchFilter] = useState<
-    "all" | "watched" | "unwatched"
-  >("all");
   const [currentlyWatchingFilter, setCurrentlyWatchingFilter] = useState(false);
   const [showSyncModal, setShowSyncModal] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);

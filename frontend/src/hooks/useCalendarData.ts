@@ -6,7 +6,13 @@ import { useAuthUser } from "./useAuthUser";
 import { apiFetch } from "../utils/apiFetch";
 
 const CHUNK_MONTHS = 6;
-const PREFETCH_THRESHOLD = CHUNK_MONTHS;
+const PREFETCH_THRESHOLD = 3;
+// Smaller first paint: load ~6 months around today, prefetch fills in as the
+// user navigates. CHUNK_MONTHS is the size of each background prefetch.
+const INITIAL_PAST_MONTHS = 3;
+const INITIAL_FUTURE_MONTHS = 3;
+
+export type WatchedFilter = "all" | "watched" | "unwatched";
 
 interface CalendarResponse {
   shows: ShowWithCalendar[];
@@ -75,8 +81,24 @@ function mergeMovies(existing: Movie[], incoming: Movie[]): Movie[] {
   return Array.from(map.values());
 }
 
+// Prefix key used by invalidation callers. React Query prefix-matches, so this
+// invalidates every per-filter variant of the calendar cache.
 export function calendarQueryKey(uid: string) {
   return ["calendar", uid] as const;
+}
+
+function calendarQueryKeyForFilter(uid: string, watchedFilter: WatchedFilter) {
+  return ["calendar", uid, watchedFilter] as const;
+}
+
+function buildCalendarUrl(
+  from: string,
+  to: string,
+  watchedFilter: WatchedFilter,
+): string {
+  const params = new URLSearchParams({ from_date: from, to_date: to });
+  if (watchedFilter !== "all") params.set("watched_filter", watchedFilter);
+  return `/calendar?${params.toString()}`;
 }
 
 // Compute the initial load range (deterministic, based on today)
@@ -84,12 +106,12 @@ function initialLoadRange() {
   const today = new Date();
   const yr = today.getFullYear();
   const mo = today.getMonth();
-  const start = addMonths(yr, mo, -Math.floor(CHUNK_MONTHS * 1.5));
-  const end = addMonths(yr, mo, Math.ceil(CHUNK_MONTHS * 1.5) - 1);
+  const start = addMonths(yr, mo, -INITIAL_PAST_MONTHS);
+  const end = addMonths(yr, mo, INITIAL_FUTURE_MONTHS - 1);
   return { start, end };
 }
 
-export function useCalendarData() {
+export function useCalendarData(watchedFilter: WatchedFilter = "all") {
   const user = useAuthUser();
   const queryClient = useQueryClient();
   const loadedFrom = useRef<string>("");
@@ -97,22 +119,23 @@ export function useCalendarData() {
   const fetchingForward = useRef(false);
   const fetchingBackward = useRef(false);
 
-  // Reset boundary tracking when the user changes (prevents stale ranges across accounts)
+  // Reset boundary tracking when the user or filter changes — each filter has
+  // its own cached chunks, so old boundaries don't apply.
   useEffect(() => {
     loadedFrom.current = "";
     loadedTo.current = "";
     fetchingForward.current = false;
     fetchingBackward.current = false;
-  }, [user?.uid]);
+  }, [user?.uid, watchedFilter]);
 
   const { data, isPending, isPlaceholderData } = useQuery<CalendarResponse>({
-    queryKey: calendarQueryKey(user?.uid ?? ""),
+    queryKey: calendarQueryKeyForFilter(user?.uid ?? "", watchedFilter),
     queryFn: async ({ signal }) => {
       const { start, end } = initialLoadRange();
       const from = monthBounds(start.year, start.month).from;
       const to = monthBounds(end.year, end.month).to;
 
-      const res = await apiFetch(`/calendar?from_date=${from}&to_date=${to}`, { signal });
+      const res = await apiFetch(buildCalendarUrl(from, to, watchedFilter), { signal });
       if (!res.ok) throw new Error("Failed to fetch calendar data");
       return res.json() as Promise<CalendarResponse>;
     },
@@ -149,12 +172,12 @@ export function useCalendarData() {
       const from = monthBounds(fromYear, fromMonth).from;
       const to = monthBounds(toEnd.year, toEnd.month).to;
 
-      const res = await apiFetch(`/calendar?from_date=${from}&to_date=${to}`);
+      const res = await apiFetch(buildCalendarUrl(from, to, watchedFilter));
       if (!res.ok) return;
       const chunk: CalendarResponse = await res.json();
 
       queryClient.setQueryData<CalendarResponse>(
-        calendarQueryKey(user.uid),
+        calendarQueryKeyForFilter(user.uid, watchedFilter),
         (prev) => ({
           shows: mergeShows(prev?.shows ?? [], chunk.shows),
           movies: mergeMovies(prev?.movies ?? [], chunk.movies),

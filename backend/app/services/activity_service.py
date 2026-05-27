@@ -6,6 +6,8 @@ from datetime import datetime, timedelta, timezone
 from app.models.activity import Activity
 from app.models.friendship import Friendship
 from app.models.user import User
+from app.models.show import Show
+from app.models.movie import Movie
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +92,20 @@ def log_activity(
     db.flush()
 
 
-def _serialize_activity(a: Activity, username: str, display_name: str | None = None) -> dict:
+def _serialize_activity(
+    a: Activity,
+    username: str,
+    display_name: str | None = None,
+    media_fallback: dict[tuple[str, int], tuple[str | None, str | None]] | None = None,
+) -> dict:
+    title = a.content_title
+    poster = a.content_poster_path
+    if media_fallback is not None and (not title or not poster):
+        fb_title, fb_poster = media_fallback.get((a.content_type, a.content_id), (None, None))
+        if not title:
+            title = fb_title
+        if not poster:
+            poster = fb_poster
     return {
         "id": a.id,
         "user_id": a.user_id,
@@ -99,13 +114,42 @@ def _serialize_activity(a: Activity, username: str, display_name: str | None = N
         "activity_type": a.activity_type,
         "content_type": a.content_type,
         "content_id": a.content_id,
-        "content_title": a.content_title,
-        "content_poster_path": a.content_poster_path,
+        "content_title": title,
+        "content_poster_path": poster,
         "rating": a.rating,
         "season_number": a.season_number,
         "episode_number": a.episode_number,
         "created_at": a.created_at.isoformat() if a.created_at else None,
     }
+
+
+def _build_media_fallback(
+    db: Session, rows: list
+) -> dict[tuple[str, int], tuple[str | None, str | None]]:
+    """
+    For any activity row missing title or poster, look up the canonical value
+    from the Show/Movie tables. The activity row stores a snapshot at log time,
+    but those values are None when the item was added before its background
+    populate completed.
+    """
+    movie_ids: set[int] = set()
+    show_ids: set[int] = set()
+    for a, *_ in rows:
+        if a.content_title and a.content_poster_path:
+            continue
+        if a.content_type == "movie":
+            movie_ids.add(a.content_id)
+        elif a.content_type == "tv":
+            show_ids.add(a.content_id)
+
+    fallback: dict[tuple[str, int], tuple[str | None, str | None]] = {}
+    if movie_ids:
+        for m in db.query(Movie.id, Movie.title, Movie.poster_path).filter(Movie.id.in_(movie_ids)):
+            fallback[("movie", m.id)] = (m.title or None, m.poster_path)
+    if show_ids:
+        for s in db.query(Show.id, Show.name, Show.poster_path).filter(Show.id.in_(show_ids)):
+            fallback[("tv", s.id)] = (s.name or None, s.poster_path)
+    return fallback
 
 
 def _visible_friend_ids(db: Session, user_id: str) -> list[str]:
@@ -152,7 +196,8 @@ def get_my_activity(db: Session, user_id: str, limit: int = 50) -> list:
         .limit(limit)
         .all()
     )
-    return [_serialize_activity(a, username, display_name) for a, username, display_name in rows]
+    fallback = _build_media_fallback(db, rows)
+    return [_serialize_activity(a, username, display_name, fallback) for a, username, display_name in rows]
 
 
 def get_activity_feed(db: Session, user_id: str, limit: int = 50) -> list:
@@ -171,7 +216,8 @@ def get_activity_feed(db: Session, user_id: str, limit: int = 50) -> list:
         .all()
     )
 
-    return [_serialize_activity(a, username, display_name) for a, username, display_name in rows]
+    fallback = _build_media_fallback(db, rows)
+    return [_serialize_activity(a, username, display_name, fallback) for a, username, display_name in rows]
 
 
 def get_friends_activity(db: Session, user_id: str, limit: int = 30) -> list:
@@ -190,7 +236,8 @@ def get_friends_activity(db: Session, user_id: str, limit: int = 30) -> list:
         .all()
     )
 
-    return [_serialize_activity(a, username, display_name) for a, username, display_name in rows]
+    fallback = _build_media_fallback(db, rows)
+    return [_serialize_activity(a, username, display_name, fallback) for a, username, display_name in rows]
 
 
 def lift_expired_moderation(db: Session) -> None:
