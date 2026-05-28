@@ -117,6 +117,7 @@ const socialSections: NavSection[] = [
       { name: "Activity", href: "/activity" },
       { name: "Friends", href: "/friends" },
       { name: "My Groups", href: "/my-groups" },
+      { name: "Fantasy", href: "/fantasy" },
     ],
   },
 ];

@@ -56,6 +56,10 @@ const FeedbackPage = lazy(() => import("./pages/FeedbackPage"));
 const AdminFeedbackPage = lazy(() => import("./pages/AdminFeedbackPage"));
 const StatsPage = lazy(() => import("./pages/StatsPage"));
 const ImportPage = lazy(() => import("./pages/ImportPage"));
+const MyLeagues = lazy(() => import("./pages/MyLeagues"));
+const LeagueDetail = lazy(() => import("./pages/LeagueDetail"));
+const SeasonDetail = lazy(() => import("./pages/SeasonDetail"));
+const DraftRoom = lazy(() => import("./pages/DraftRoom"));
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -196,6 +200,38 @@ function App() {
             }
           />
           <Route path="/groups/:slug" element={<GroupDetail />} />
+          <Route
+            path="/fantasy"
+            element={
+              <ProtectedRoute>
+                <MyLeagues />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/fantasy/:leagueId"
+            element={
+              <ProtectedRoute>
+                <LeagueDetail />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/fantasy/:leagueId/seasons/:seasonId"
+            element={
+              <ProtectedRoute>
+                <SeasonDetail />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/fantasy/:leagueId/seasons/:seasonId/draft"
+            element={
+              <ProtectedRoute>
+                <DraftRoom />
+              </ProtectedRoute>
+            }
+          />
           <Route path="/for-you" element={<ForYou />} />
           <Route path="/unsubscribe" element={<Unsubscribe />} />
           <Route path="/community-guidelines" element={<CommunityGuidelines />} />

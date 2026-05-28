@@ -149,6 +149,12 @@ def _upsert_providers(db: Session, us_providers: dict, link_model, **link_kwargs
 def _upsert_seasons_for_show(db: Session, show: Show, seasons_data: list):
     if not seasons_data:
         return
+    # Flush any pending Season adds from earlier in this transaction so the
+    # existing_seasons query below sees them. Without this, calling
+    # _upsert_seasons_for_show twice in the same session (e.g. ensure_show_in_db
+    # followed by refresh_show_metadata) would try to re-insert the same rows
+    # and fail with a duplicate primary key.
+    db.flush()
     season_ids = [s.get("id") for s in seasons_data if s.get("id")]
     existing_seasons = {
         s.id: s for s in db.query(Season).filter(Season.id.in_(season_ids)).all()
@@ -173,6 +179,12 @@ def _upsert_seasons_for_show(db: Session, show: Show, seasons_data: list):
                 )
             )
         else:
+            # Refresh mutable fields too — TMDb often fills in air_date and
+            # other metadata after a season is announced but before it airs.
+            season.air_date = s.get("air_date") or None
+            season.name = s.get("name") or season.name
+            season.overview = s.get("overview") or season.overview
+            season.poster_path = s.get("poster_path") or season.poster_path
             season.episode_count = s.get("episode_count")
             season.vote_average = s.get("vote_average")
 
@@ -442,6 +454,31 @@ def ensure_movie_stub_in_db(db: Session, content_id: int, already_tracked: bool)
     db.add(movie)
     db.flush()
     return movie
+
+
+def refresh_show_metadata(db: Session, content_id: int) -> Show | None:
+    """Force-refresh a show's metadata + seasons from TMDb, regardless of how
+    recently the row was updated. Returns the refreshed Show. Useful when we
+    need the latest season-level data (e.g. checking if an unannounced-at-cache
+    -time season is now scheduled to air)."""
+    show = db.query(Show).filter_by(id=content_id).first()
+    if not show:
+        return None
+
+    show_data = fetch_show_from_tmdb(content_id, "")
+    if not show_data:
+        return show
+
+    show.last_air_date = show_data.get("last_air_date")
+    show.in_production = show_data.get("in_production")
+    show.number_of_seasons = show_data.get("number_of_seasons")
+    show.number_of_episodes = show_data.get("number_of_episodes")
+    show.status = show_data.get("status")
+    show.first_air_date = show_data.get("first_air_date")
+    show.updated_at = datetime.now(timezone.utc)
+    _upsert_seasons_for_show(db, show, show_data.get("seasons", []))
+    db.commit()
+    return show
 
 
 def populate_show_bg(content_id: int) -> None:

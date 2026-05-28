@@ -149,6 +149,25 @@ def get_tv_airing_today(page: int = 1):
     }
 
 
+@lru_cache(maxsize=16)
+def get_tv_discover_in_window(min_date: str, max_date: str, page: int = 1):
+    """Shows with at least one episode airing inside [min_date, max_date],
+    sorted by popularity. TMDb's `air_date.gte`/`air_date.lte` discover filter
+    is per-episode, so this catches both new seasons starting in window AND
+    ongoing shows mid-season during the window."""
+    data = get(
+        "/discover/tv",
+        params={
+            "language": "en-US",
+            "sort_by": "popularity.desc",
+            "air_date.gte": min_date,
+            "air_date.lte": max_date,
+            "page": page,
+        },
+    )
+    return data.get("results", [])
+
+
 @lru_cache(maxsize=4)
 def get_movie_now_playing(page: int = 1):
     data = get("/movie/now_playing", params={"language": "en-US", "page": page})

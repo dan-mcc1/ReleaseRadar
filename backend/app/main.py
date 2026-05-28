@@ -66,6 +66,14 @@ from app.routers import (
     streaming,
     watch_status,
     feedback,
+    fantasy_leagues,
+    fantasy_invitations,
+    fantasy_roster,
+    fantasy_admin,
+    fantasy_waivers,
+    fantasy_trades,
+    fantasy_lineup,
+    fantasy_auction,
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -93,6 +101,14 @@ from app.services.stripe_reconciliation_service import reconcile_stripe_subscrip
 from app.services.collection_ingest_service import (
     daily_refresh as collections_daily_sync,
 )
+from app.services.fantasy_scoring_runner import run_all_active_seasons
+from app.services.fantasy_auction_service import (
+    close_expired_nominations,
+    close_uncontested_nominations,
+    advance_stale_turns,
+    mark_finished_seasons,
+)
+from app.services.fantasy_auction_ws import manager as fantasy_ws_manager
 
 logger = logging.getLogger(__name__)
 
@@ -276,6 +292,56 @@ async def _episode_alert_loop():
         await asyncio.sleep(EPISODE_ALERT_INTERVAL)
 
 
+async def _fantasy_auction_loop():
+    """Every 60s: close any expired draft nominations (assign winning asset,
+    deduct budget, advance turn), close any nominations where the high bidder
+    is the only viable participant remaining, and skip stale nominators whose
+    nomination deadline has passed without opening an auction."""
+    while True:
+        try:
+            with _db_session() as db:
+                closed = await asyncio.to_thread(close_expired_nominations, db)
+                if closed:
+                    logger.info("auction: closed %d expired nomination(s)", closed)
+                uncontested = await asyncio.to_thread(
+                    close_uncontested_nominations, db
+                )
+                if uncontested:
+                    logger.info(
+                        "auction: closed %d uncontested nomination(s)", uncontested
+                    )
+                advanced = await asyncio.to_thread(advance_stale_turns, db)
+                if advanced:
+                    logger.info("auction: advanced %d stale turn(s)", advanced)
+                finished = await asyncio.to_thread(mark_finished_seasons, db)
+                if finished:
+                    logger.info("auction: marked %d season(s) complete", finished)
+        except Exception as e:
+            logger.error("auction loop error: %s", e)
+        await asyncio.sleep(60)
+
+
+async def _fantasy_scoring_loop():
+    """Daily fantasy scoring run at 06:00 ET. Idempotently re-scores the current
+    week for every active season — captures rolling box-office, new episodes
+    that aired, and renewal/cancellation events recorded that day."""
+    eastern = ZoneInfo("America/New_York")
+    while True:
+        try:
+            now = datetime.now(eastern)
+            next_run = now.replace(hour=6, minute=0, second=0, microsecond=0)
+            if now >= next_run:
+                next_run += timedelta(days=1)
+            await asyncio.sleep((next_run - now).total_seconds())
+            logger.info("fantasy scoring: starting daily run")
+            with _db_session() as db:
+                results = await asyncio.to_thread(run_all_active_seasons, db)
+            logger.info("fantasy scoring: done, results=%s", results)
+        except Exception as e:
+            logger.error("fantasy scoring loop error: %s", e)
+            await asyncio.sleep(60)
+
+
 async def _collection_sync_loop():
     """Daily collection mirror sync at 08:00 UTC, right after TMDb publishes
     the id dump and the day's /movie/changes window closes. Pulls new +
@@ -305,6 +371,10 @@ async def lifespan(app: FastAPI):
     # with the migration history. Tests still call create_all in conftest.py.
     import app.models  # noqa: F401 — registers all models with Base.metadata
 
+    # Bind the running loop so fantasy auction service can push WebSocket
+    # events from sync code / background threads via run_coroutine_threadsafe.
+    fantasy_ws_manager.bind_loop(asyncio.get_running_loop())
+
     tasks: list[asyncio.Task] = []
     if settings.RUN_SCHEDULERS:
         tasks = [
@@ -316,6 +386,8 @@ async def lifespan(app: FastAPI):
             asyncio.create_task(_stripe_reconciliation_loop()),
             asyncio.create_task(_episode_alert_loop()),
             asyncio.create_task(_collection_sync_loop()),
+            asyncio.create_task(_fantasy_scoring_loop()),
+            asyncio.create_task(_fantasy_auction_loop()),
         ]
     else:
         logger.info("RUN_SCHEDULERS=false — background loops disabled on this replica")
@@ -441,5 +513,13 @@ app.include_router(export_router.router, prefix="/export", tags=["export"])
 app.include_router(streaming.router, prefix="/streaming", tags=["streaming"])
 app.include_router(watch_status.router, prefix="/watch-status", tags=["watch-status"])
 app.include_router(feedback.router, tags=["feedback"])
+app.include_router(fantasy_leagues.router, prefix="/fantasy/leagues", tags=["fantasy"])
+app.include_router(fantasy_invitations.router, prefix="/fantasy/invitations", tags=["fantasy"])
+app.include_router(fantasy_roster.router, prefix="/fantasy/roster", tags=["fantasy"])
+app.include_router(fantasy_admin.router, prefix="/fantasy/admin", tags=["fantasy"])
+app.include_router(fantasy_waivers.router, prefix="/fantasy/waivers", tags=["fantasy"])
+app.include_router(fantasy_trades.router, prefix="/fantasy/trades", tags=["fantasy"])
+app.include_router(fantasy_lineup.router, prefix="/fantasy/lineup", tags=["fantasy"])
+app.include_router(fantasy_auction.router, prefix="/fantasy/auction", tags=["fantasy"])
 if settings.ENVIRONMENT != "production":
     app.include_router(dev.router, prefix="/dev", tags=["dev"])

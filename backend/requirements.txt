@@ -1,6 +1,6 @@
 alembic
 fastapi
-uvicorn
+uvicorn[standard]
 pydantic_settings
 sqlalchemy
 requests

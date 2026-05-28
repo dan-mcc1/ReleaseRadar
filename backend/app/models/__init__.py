@@ -17,6 +17,22 @@ from app.models.currently_watching import CurrentlyWatching  # noqa: F401
 from app.models.device_token import DeviceToken  # noqa: F401
 from app.models.episode import Episode  # noqa: F401
 from app.models.episode_watched import EpisodeWatched  # noqa: F401
+from app.models.fantasy import (  # noqa: F401
+    FantasyLeague,
+    FantasyLeagueMember,
+    FantasyLeagueInvitation,
+    FantasySeason,
+    FantasyAsset,
+    FantasyWaiverBid,
+    FantasyTrade,
+    FantasyTradeAsset,
+    FantasyLineupBoost,
+    FantasyWeeklyScore,
+    FantasyRenewalEvent,
+    FantasyDraftNomination,
+    FantasyDraftBid,
+    FantasyDraftPass,
+)
 from app.models.favorite import Favorite  # noqa: F401
 from app.models.feedback import Feedback  # noqa: F401
 from app.models.finish_by_goal import FinishByGoal  # noqa: F401
