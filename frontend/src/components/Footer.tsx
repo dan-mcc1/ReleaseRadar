@@ -60,6 +60,18 @@ export default function Footer() {
               Community Guidelines
             </Link>
             <Link
+              to="/terms"
+              className="hover:text-neutral-300 transition-colors"
+            >
+              Terms
+            </Link>
+            <Link
+              to="/privacy"
+              className="hover:text-neutral-300 transition-colors"
+            >
+              Privacy
+            </Link>
+            <Link
               to="/feedback"
               className="hover:text-neutral-300 transition-colors"
             >

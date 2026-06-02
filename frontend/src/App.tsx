@@ -56,6 +56,9 @@ const FeedbackPage = lazy(() => import("./pages/FeedbackPage"));
 const AdminFeedbackPage = lazy(() => import("./pages/AdminFeedbackPage"));
 const StatsPage = lazy(() => import("./pages/StatsPage"));
 const ImportPage = lazy(() => import("./pages/ImportPage"));
+const Terms = lazy(() => import("./pages/Terms"));
+const Privacy = lazy(() => import("./pages/Privacy"));
+const NotFound = lazy(() => import("./pages/NotFound"));
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -199,6 +202,8 @@ function App() {
           <Route path="/for-you" element={<ForYou />} />
           <Route path="/unsubscribe" element={<Unsubscribe />} />
           <Route path="/community-guidelines" element={<CommunityGuidelines />} />
+          <Route path="/terms" element={<Terms />} />
+          <Route path="/privacy" element={<Privacy />} />
           <Route path="/feedback" element={<FeedbackPage />} />
           <Route path="/pricing" element={<Pricing />} />
           <Route path="/billing" element={<BillingSettings />} />
@@ -258,6 +263,7 @@ function App() {
               </ProtectedRoute>
             }
           />
+          <Route path="*" element={<NotFound />} />
         </Routes>
         </RouteErrorBoundary>
         </Suspense>
