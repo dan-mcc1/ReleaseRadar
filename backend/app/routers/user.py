@@ -103,12 +103,16 @@ def create_user_route(
 ):
     uid = claims["uid"]
     email = claims.get("email")  # always use the Firebase-verified email
+    # Apple only returns the display name on the very first sign-in; Firebase
+    # surfaces it via the `name` claim. Capture it here so accounts created
+    # via Apple aren't stuck with a blank display name.
+    display_name = claims.get("name")
     username = body.username
     if username is not None:
         if not is_username_available(db, username):
             raise HTTPException(status_code=409, detail="Username already taken.")
     avatar = random.choice(VALID_AVATAR_KEYS) if username is not None else None
-    return create_user(db, uid, email, username, avatar)
+    return create_user(db, uid, email, username, avatar, display_name=display_name)
 
 
 @router.get("/me")
@@ -118,6 +122,76 @@ def get_current_user_route(
     user = get_user(db, uid)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+
+@router.get("/linked-providers")
+def get_linked_providers(uid: str = Depends(get_current_user)):
+    """
+    Return the auth providers currently linked to the Firebase account.
+
+    Used by the settings UI to show e.g. "Apple — linked / not linked" and to
+    decide whether to offer linkWithCredential(apple.com) or unlink. The actual
+    link/unlink flow happens on the client via the Firebase SDK; this endpoint
+    is read-only.
+    """
+    try:
+        record = firebase_auth.get_user(uid)
+    except firebase_auth.UserNotFoundError:
+        raise HTTPException(status_code=404, detail="Firebase user not found.")
+
+    providers = [
+        {
+            "provider_id": p.provider_id,  # e.g. "apple.com", "google.com", "password"
+            "email": p.email,
+            "display_name": p.display_name,
+            "uid": p.uid,
+        }
+        for p in (record.provider_data or [])
+    ]
+    return {
+        "email": record.email,
+        "email_verified": record.email_verified,
+        "providers": providers,
+        "provider_ids": [p["provider_id"] for p in providers],
+    }
+
+
+@router.post("/sync-from-firebase")
+def sync_from_firebase(
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    """
+    Re-read the Firebase user record and copy email / display_name into our
+    local user row. Call after a successful linkWithCredential on the client
+    (e.g. linking Apple to an existing account) — Apple may surface a fresh
+    primary email or the name on the very first link, and we want the local
+    DB to match.
+
+    Display name is only filled if the local row doesn't already have one, so
+    we don't clobber a name the user picked manually.
+    """
+    try:
+        record = firebase_auth.get_user(uid)
+    except firebase_auth.UserNotFoundError:
+        raise HTTPException(status_code=404, detail="Firebase user not found.")
+
+    user = db.query(User).filter_by(id=uid).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    changed = False
+    if record.email and record.email != user.email:
+        user.email = record.email
+        changed = True
+    if record.display_name and not user.display_name:
+        user.display_name = record.display_name
+        changed = True
+
+    if changed:
+        db.commit()
+        db.refresh(user)
     return user
 
 

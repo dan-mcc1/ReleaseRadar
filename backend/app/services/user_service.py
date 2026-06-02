@@ -16,6 +16,7 @@ def create_user(
     email: str = None,
     username: str = None,
     avatar_key: str = None,
+    display_name: str | None = None,
 ):
     """
     Create a user in the database if they don't exist.
@@ -24,10 +25,13 @@ def create_user(
     if existing:
         return existing
 
+    cleaned_display = (display_name or "").strip() or None
+
     db_user = User(
         id=user_id,
         email=email,
         username=username,
+        display_name=cleaned_display,
         created_at=datetime.now(timezone.utc),
         avatar_key=avatar_key,
     )

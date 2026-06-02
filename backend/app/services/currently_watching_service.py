@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, union_all, select, literal, null
+from sqlalchemy import and_, func, union_all, select, literal, null
 from app.models.currently_watching import CurrentlyWatching
 from app.models.movie import Movie
 from app.models.show import Show
@@ -22,7 +22,27 @@ def _is_on_other_list(
 def _get_currently_watching_items(db: Session, user_id: str, content_type: str):
     # The currently-watching strip only needs basic card fields — no seasons,
     # genres, or providers — so skip the heavy selectinload options.
+    #
+    # Ordering: most recently added or watched first. For shows that means
+    # greatest(added_at, latest episode_watched.watched_at) so marking an
+    # episode bumps the show to the front. Movies use added_at.
     if content_type == "tv":
+        ew_max_subq = (
+            select(
+                EpisodeWatched.show_id.label("show_id"),
+                func.max(EpisodeWatched.watched_at).label("last_watched_at"),
+            )
+            .where(EpisodeWatched.user_id == user_id)
+            .group_by(EpisodeWatched.show_id)
+            .subquery()
+        )
+        # COALESCE first so both inputs to GREATEST are non-null — PostgreSQL
+        # would handle NULL fine, but the SQLite test shim registers a Python
+        # `max` UDF that errors on None.
+        order_expr = func.greatest(
+            CurrentlyWatching.added_at,
+            func.coalesce(ew_max_subq.c.last_watched_at, CurrentlyWatching.added_at),
+        )
         items = (
             db.query(Show)
             .select_from(CurrentlyWatching)
@@ -34,6 +54,8 @@ def _get_currently_watching_items(db: Session, user_id: str, content_type: str):
                     CurrentlyWatching.user_id == user_id,
                 ),
             )
+            .outerjoin(ew_max_subq, ew_max_subq.c.show_id == CurrentlyWatching.content_id)
+            .order_by(order_expr.desc())
             .all()
         )
         return [
@@ -62,6 +84,7 @@ def _get_currently_watching_items(db: Session, user_id: str, content_type: str):
                     CurrentlyWatching.user_id == user_id,
                 ),
             )
+            .order_by(CurrentlyWatching.added_at.desc())
             .all()
         )
         return [
@@ -133,7 +156,29 @@ def remove_from_currently_watching(
 
 
 def get_currently_watching(db: Session, user_id: str):
-    """Single UNION ALL query — one DB round-trip instead of two."""
+    """Single UNION ALL query — one DB round-trip instead of two.
+
+    Each row carries an order_ts so the caller can sort by "most recently
+    added or watched": for shows that's greatest(added_at, latest
+    episode_watched.watched_at), for movies it's added_at.
+    """
+    ew_max_subq = (
+        select(
+            EpisodeWatched.show_id.label("show_id"),
+            func.max(EpisodeWatched.watched_at).label("last_watched_at"),
+        )
+        .where(EpisodeWatched.user_id == user_id)
+        .group_by(EpisodeWatched.show_id)
+        .subquery()
+    )
+    # COALESCE first so both inputs to GREATEST are non-null — PostgreSQL
+    # would handle NULL fine, but the SQLite test shim registers a Python
+    # `max` UDF that errors on None.
+    show_order_ts = func.greatest(
+        CurrentlyWatching.added_at,
+        func.coalesce(ew_max_subq.c.last_watched_at, CurrentlyWatching.added_at),
+    )
+
     show_q = (
         select(
             literal("tv").label("content_type"),
@@ -149,6 +194,7 @@ def get_currently_watching(db: Session, user_id: str):
             Show.in_production,
             Show.air_time,
             Show.air_timezone,
+            show_order_ts.label("order_ts"),
         )
         .select_from(CurrentlyWatching)
         .join(
@@ -158,6 +204,7 @@ def get_currently_watching(db: Session, user_id: str):
                 CurrentlyWatching.content_type == "tv",
             ),
         )
+        .outerjoin(ew_max_subq, ew_max_subq.c.show_id == CurrentlyWatching.content_id)
         .where(CurrentlyWatching.user_id == user_id)
     )
     movie_q = (
@@ -175,6 +222,7 @@ def get_currently_watching(db: Session, user_id: str):
             null().label("in_production"),
             null().label("air_time"),
             null().label("air_timezone"),
+            CurrentlyWatching.added_at.label("order_ts"),
         )
         .select_from(CurrentlyWatching)
         .join(
@@ -188,7 +236,7 @@ def get_currently_watching(db: Session, user_id: str):
     )
 
     rows = db.execute(union_all(show_q, movie_q)).all()
-    movies, shows = [], []
+    movies_with_ts, shows_with_ts = [], []
     for row in rows:
         (
             ct,
@@ -204,32 +252,46 @@ def get_currently_watching(db: Session, user_id: str):
             in_production,
             air_time,
             air_timezone,
+            order_ts,
         ) = row
         if ct == "tv":
-            shows.append(
-                {
-                    "id": id_,
-                    "name": name,
-                    "poster_path": poster_path,
-                    "backdrop_path": backdrop_path,
-                    "air_time": air_time,
-                    "air_timezone": air_timezone,
-                    "vote_average": vote_average,
-                    "status": status,
-                    "in_production": in_production,
-                }
+            shows_with_ts.append(
+                (
+                    order_ts,
+                    {
+                        "id": id_,
+                        "name": name,
+                        "poster_path": poster_path,
+                        "backdrop_path": backdrop_path,
+                        "air_time": air_time,
+                        "air_timezone": air_timezone,
+                        "vote_average": vote_average,
+                        "status": status,
+                        "in_production": in_production,
+                    },
+                )
             )
         else:
-            movies.append(
-                {
-                    "id": id_,
-                    "title": title,
-                    "poster_path": poster_path,
-                    "backdrop_path": backdrop_path,
-                    "runtime": runtime,
-                    "release_date": str(release_date) if release_date else None,
-                    "vote_average": vote_average,
-                    "status": status,
-                }
+            movies_with_ts.append(
+                (
+                    order_ts,
+                    {
+                        "id": id_,
+                        "title": title,
+                        "poster_path": poster_path,
+                        "backdrop_path": backdrop_path,
+                        "runtime": runtime,
+                        "release_date": str(release_date) if release_date else None,
+                        "vote_average": vote_average,
+                        "status": status,
+                    },
+                )
             )
-    return {"movies": movies, "shows": shows}
+
+    _epoch = datetime.min.replace(tzinfo=timezone.utc)
+    shows_with_ts.sort(key=lambda t: t[0] or _epoch, reverse=True)
+    movies_with_ts.sort(key=lambda t: t[0] or _epoch, reverse=True)
+    return {
+        "movies": [m for _, m in movies_with_ts],
+        "shows": [s for _, s in shows_with_ts],
+    }
