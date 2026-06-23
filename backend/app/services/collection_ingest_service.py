@@ -139,7 +139,19 @@ def _ingest_collection_details(db: Session, collection_id: int, now: datetime) -
     if not data:
         return {"status": "missing", "parts": 0, "skipped_adult": 0, "fetched_movies": 0}
 
-    c = db.get(Collection, collection_id)
+    existing = db.get(Collection, collection_id)
+
+    # Adult collections carry no usable parts. Don't add them — and drop the
+    # row if a prior pass (or the index sync) left one behind.
+    if data.get("adult"):
+        if existing is not None:
+            db.query(CollectionMovie).filter(
+                CollectionMovie.collection_id == collection_id
+            ).delete()
+            db.delete(existing)
+        return {"status": "empty", "parts": 0, "skipped_adult": 0, "fetched_movies": 0}
+
+    c = existing
     if c is None:
         c = Collection(id=collection_id)
         db.add(c)
@@ -211,11 +223,21 @@ def _ingest_collection_details(db: Session, collection_id: int, now: datetime) -
         c.min_year = min(years) if years else None
         c.max_year = max(years) if years else None
     else:
-        c.size = 0
-        c.avg_rating = None
-        c.popularity = None
-        c.min_year = None
-        c.max_year = None
+        # No non-adult, fetchable parts survived. Treat this like an adult /
+        # empty collection: don't keep it in the catalog. The CollectionMovie
+        # rows were already cleared above; drop the Collection row too. (The
+        # index sync may re-insert it from the dump; the next ingest pass will
+        # delete it again.)
+        if c in db.new:
+            db.expunge(c)
+        else:
+            db.delete(c)
+        return {
+            "status": "empty",
+            "parts": len(valid_parts),
+            "skipped_adult": skipped_adult,
+            "fetched_movies": fetched_movies,
+        }
 
     return {
         "status": "ok",

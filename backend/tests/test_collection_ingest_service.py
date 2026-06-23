@@ -48,11 +48,17 @@ class TestIngestCollectionDetails:
             "poster_path": "/p.jpg",
             "backdrop_path": "/b.jpg",
             "overview": "ov",
-            "parts": [],
+            "parts": [
+                {"id": 9001, "adult": False, "release_date": "2010-01-01", "popularity": 5.0},
+            ],
         }
+        movie_mock = MagicMock(id=9001)
         with patch(
             "app.services.collection_ingest_service.get_collection",
             return_value=payload,
+        ), patch(
+            "app.services.collection_ingest_service.populate_movie_full",
+            return_value=movie_mock,
         ):
             now = datetime.now(timezone.utc)
             stats = _ingest_collection_details(db, 999, now)
@@ -65,8 +71,86 @@ class TestIngestCollectionDetails:
         assert col.poster_path == "/p.jpg"
         # SQLite strips tzinfo on round-trip; compare naive.
         assert col.details_refreshed_at.replace(tzinfo=None) == now.replace(tzinfo=None)
-        # No parts → size=0
-        assert col.size == 0
+        assert col.size == 1
+
+    def test_empty_collection_is_not_persisted(self, db):
+        """A collection whose parts are all adult/unfetchable (size 0) must not
+        be added to the catalog."""
+        from app.models.collection import Collection
+        from app.services.collection_ingest_service import _ingest_collection_details
+
+        payload = {
+            "id": 998,
+            "name": "Adult Collection",
+            "parts": [
+                {"id": 8001, "adult": True, "release_date": "2020-01-01"},
+            ],
+        }
+        with patch(
+            "app.services.collection_ingest_service.get_collection",
+            return_value=payload,
+        ), patch(
+            "app.services.collection_ingest_service.populate_movie_full",
+            return_value=None,
+        ):
+            now = datetime.now(timezone.utc)
+            stats = _ingest_collection_details(db, 998, now)
+            db.flush()
+
+        assert stats["status"] == "empty"
+        assert db.get(Collection, 998) is None
+
+    def test_existing_collection_removed_when_it_becomes_empty(self, db):
+        """If a previously-ingested collection loses all non-adult parts, the
+        stale Collection row is deleted."""
+        from app.models.collection import Collection, CollectionMovie
+        from app.services.collection_ingest_service import _ingest_collection_details
+
+        db.add(Collection(id=997, name="Was Populated", size=1))
+        db.flush()
+        db.add(CollectionMovie(collection_id=997, movie_id=5, sort_order=0))
+        db.commit()
+
+        payload = {
+            "id": 997,
+            "name": "Was Populated",
+            "parts": [
+                {"id": 5, "adult": True, "release_date": "2020-01-01"},
+            ],
+        }
+        with patch(
+            "app.services.collection_ingest_service.get_collection",
+            return_value=payload,
+        ), patch(
+            "app.services.collection_ingest_service.populate_movie_full",
+            return_value=None,
+        ):
+            stats = _ingest_collection_details(db, 997, datetime.now(timezone.utc))
+            db.flush()
+
+        assert stats["status"] == "empty"
+        assert db.get(Collection, 997) is None
+        assert db.query(CollectionMovie).filter_by(collection_id=997).count() == 0
+
+    def test_adult_collection_flag_is_not_persisted(self, db):
+        """A collection flagged adult at the top level is dropped outright."""
+        from app.models.collection import Collection
+        from app.services.collection_ingest_service import _ingest_collection_details
+
+        # Pre-seed a stale row that the index sync might have created.
+        db.add(Collection(id=996, name="Adult"))
+        db.commit()
+
+        payload = {"id": 996, "name": "Adult", "adult": True, "parts": []}
+        with patch(
+            "app.services.collection_ingest_service.get_collection",
+            return_value=payload,
+        ):
+            stats = _ingest_collection_details(db, 996, datetime.now(timezone.utc))
+            db.flush()
+
+        assert stats["status"] == "empty"
+        assert db.get(Collection, 996) is None
 
     def test_skips_adult_parts(self, db):
         from app.services.collection_ingest_service import _ingest_collection_details
