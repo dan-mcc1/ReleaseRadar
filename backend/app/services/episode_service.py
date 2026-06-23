@@ -486,15 +486,19 @@ def refresh_episodes_for_show(db: Session, show_id: int):
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         season_results = dict(executor.map(_fetch_season, seasons_to_refresh))
 
-    existing = {
-        ep.id: ep
-        for ep in db.query(Episode)
+    existing_rows = (
+        db.query(Episode)
         .filter(
             Episode.show_id == show_id,
             Episode.season_number.in_(seasons_to_refresh),
         )
         .all()
-    }
+    )
+    existing = {ep.id: ep for ep in existing_rows}
+    # Fallback lookup: TMDB occasionally reissues an episode under a new id
+    # while keeping the same (season, episode_number). Without this we'd try to
+    # INSERT a "new" episode that collides with the unique constraint.
+    existing_by_pos = {(ep.season_number, ep.episode_number): ep for ep in existing_rows}
 
     changed = False
     for sn in seasons_to_refresh:
@@ -518,8 +522,8 @@ def refresh_episodes_for_show(db: Session, show_id: int):
                 ep_num, sn, ep.get("episode_type"), show.in_production
             )
 
-            if ep_id in existing:
-                row = existing[ep_id]
+            row = existing.get(ep_id) or existing_by_pos.get((sn, ep_num))
+            if row is not None:
                 if (
                     str(row.air_date) != str(new_air_date)
                     or row.name != new_name
