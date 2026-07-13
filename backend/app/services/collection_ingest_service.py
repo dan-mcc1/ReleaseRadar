@@ -22,10 +22,10 @@ and is published around 08:00 UTC.
 from __future__ import annotations
 
 import gzip
-import io
+import itertools
 import json
 import logging
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from datetime import datetime, timedelta, timezone as dt_timezone
 
 import requests
@@ -63,17 +63,23 @@ def _dump_url_for(now_utc: datetime) -> str:
 
 
 def _iter_dump_records(url: str):
-    resp = requests.get(url, stream=True, timeout=120)
-    resp.raise_for_status()
-    with gzip.GzipFile(fileobj=io.BytesIO(resp.content)) as gz:
-        for line in gz:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                yield json.loads(line)
-            except json.JSONDecodeError:
-                continue
+    # stream=True + resp.raw lets GzipFile pull and decompress the dump
+    # incrementally, one buffer at a time. Reading resp.content instead would
+    # buffer the entire compressed file into RAM first, defeating the stream.
+    # decode_content=False: the .gz is the file body, not a transfer encoding,
+    # so we gunzip it ourselves rather than letting urllib3 do it.
+    with requests.get(url, stream=True, timeout=120) as resp:
+        resp.raise_for_status()
+        resp.raw.decode_content = False
+        with gzip.GzipFile(fileobj=resp.raw) as gz:
+            for line in gz:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    yield json.loads(line)
+                except json.JSONDecodeError:
+                    continue
 
 
 # ---------------------------------------------------------------------------
@@ -271,24 +277,46 @@ def _ingest_one_threadsafe(collection_id: int, now: datetime) -> dict:
 
 
 def _parallel_ingest(collection_ids: list[int], now: datetime) -> tuple[int, int]:
-    """Run _ingest_one_threadsafe across a pool. Returns (succeeded, failed)."""
+    """Run _ingest_one_threadsafe across a pool with a bounded in-flight window.
+
+    Submitting one future per collection up front materialises a Future and a
+    queued work item for every id at once — scheduling overhead that grows with
+    the whole catalog (hundreds of thousands of collections) and is pinned for
+    the entire ~11 min run. That fixed cost is what tips the 4am job into OOM as
+    the catalog grows. Instead we keep at most `max_pending` futures live at a
+    time, draining completed ones before submitting more, so peak memory is
+    O(concurrency) regardless of catalog size. Returns (succeeded, failed).
+    """
     if not collection_ids:
         return 0, 0
+
     succeeded = 0
     failed = 0
+    max_pending = _INGEST_CONCURRENCY * 4
+    ids = iter(collection_ids)
+
     with ThreadPoolExecutor(max_workers=_INGEST_CONCURRENCY) as ex:
-        futures = [ex.submit(_ingest_one_threadsafe, cid, now) for cid in collection_ids]
-        for fut in as_completed(futures):
-            try:
-                stats = fut.result()
-            except Exception as e:
-                logger.warning("collections: ingest worker raised: %s", e)
-                failed += 1
-                continue
-            if stats.get("status") == "ok":
-                succeeded += 1
-            else:
-                failed += 1
+        in_flight = {
+            ex.submit(_ingest_one_threadsafe, cid, now)
+            for cid in itertools.islice(ids, max_pending)
+        }
+        while in_flight:
+            done, in_flight = wait(in_flight, return_when=FIRST_COMPLETED)
+            for fut in done:
+                try:
+                    stats = fut.result()
+                except Exception as e:
+                    logger.warning("collections: ingest worker raised: %s", e)
+                    failed += 1
+                    continue
+                if stats.get("status") == "ok":
+                    succeeded += 1
+                else:
+                    failed += 1
+            # Refill the window with as many new tasks as we just drained.
+            for cid in itertools.islice(ids, len(done)):
+                in_flight.add(ex.submit(_ingest_one_threadsafe, cid, now))
+
     return succeeded, failed
 
 
