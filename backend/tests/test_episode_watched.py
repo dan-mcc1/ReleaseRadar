@@ -148,10 +148,10 @@ class TestSeasonWatched:
 
 
 class TestGetWatchedEpisodes:
-    def test_get_all_watched_empty(self, client, seed_users):
+    def test_list_all_endpoint_removed(self, client, seed_users):
+        """GET /watched-episode (every episode ever watched) was removed; no client used it."""
         r = client.get("/watched-episode")
-        assert r.status_code == 200
-        assert r.json() == []
+        assert r.status_code == 404
 
     def test_get_watched_episodes_for_show(self, client, seed_show, seed_users):
         client.post(

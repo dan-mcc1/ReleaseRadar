@@ -86,8 +86,9 @@ from app.services.episode_service import (
 from app.services.streaming_notification_service import refresh_streaming_providers
 from app.services.trailer_notification_service import refresh_trailers
 from app.services.episode_alert_service import (
-    dispatch_due_episode_alerts,
-    SWEEP_INTERVAL_SECONDS as EPISODE_ALERT_INTERVAL,
+    next_alert_window,
+    plan_episode_alerts,
+    send_planned_alert,
 )
 from app.services.stripe_reconciliation_service import reconcile_stripe_subscriptions
 from app.services.collection_ingest_service import (
@@ -95,6 +96,12 @@ from app.services.collection_ingest_service import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _seconds_until_next_hour() -> float:
+    now = datetime.now(dt_timezone.utc)
+    next_hour = now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+    return (next_hour - now).total_seconds()
 
 
 @contextmanager
@@ -110,7 +117,9 @@ def _db_session():
 
 
 async def _activity_cleanup_loop():
-    """Delete activity and old recommendations, runs every hour."""
+    """Delete activity and old recommendations. Runs at startup, then at the
+    top of every hour alongside the digest and episode-alert planning, so the
+    hourly jobs share one database wake-up (Neon bills compute while awake)."""
     while True:
         try:
             with _db_session() as db:
@@ -129,7 +138,7 @@ async def _activity_cleanup_loop():
                 lift_expired_moderation(db)
         except Exception as e:
             logger.error("activity cleanup error: %s", e)
-        await asyncio.sleep(3600)  # 1 hour
+        await asyncio.sleep(_seconds_until_next_hour())
 
 
 # async def _daily_digest_loop():
@@ -262,18 +271,42 @@ async def _streaming_refresh_loop():
 
 
 async def _episode_alert_loop():
-    """Fire per-episode air-time pushes. Runs every 5 minutes to match the
-    5-minute granularity of the user's lead-time preference."""
+    """Per-episode air-time pushes.
+
+    Plans the rest of the hour's alerts at the top of each hour (alongside the
+    digest), then sleeps until each one is due. The database is only touched
+    when planning and when a push actually goes out, so Neon can scale to zero
+    in between; polling every 5 minutes kept it awake around the clock.
+    """
+    planned_until = None
     while True:
         try:
-            now_utc = datetime.now(dt_timezone.utc)
+            window_start, window_end = next_alert_window(
+                datetime.now(dt_timezone.utc), planned_until
+            )
             with _db_session() as db:
-                sent = await asyncio.to_thread(dispatch_due_episode_alerts, db, now_utc)
-                if sent:
-                    logger.info("episode alerts: sent %d push(es)", sent)
+                alerts = await asyncio.to_thread(
+                    plan_episode_alerts, db, window_start, window_end
+                )
+            planned_until = window_end
+            for alert in alerts:
+                delay = (alert.send_at - datetime.now(dt_timezone.utc)).total_seconds()
+                if delay > 0:
+                    await asyncio.sleep(delay)
+                with _db_session() as db:
+                    if await asyncio.to_thread(send_planned_alert, db, alert):
+                        logger.info(
+                            "episode alerts: pushed show %s to %s", alert.show_id, alert.user_id
+                        )
+            await asyncio.sleep(
+                max(0.0, (window_end - datetime.now(dt_timezone.utc)).total_seconds())
+            )
         except Exception as e:
             logger.error("episode alert loop error: %s", e)
-        await asyncio.sleep(EPISODE_ALERT_INTERVAL)
+            # Re-plan from "now" so alerts left in this hour aren't dropped;
+            # SentEpisodeAlert keeps anything already sent from repeating.
+            planned_until = None
+            await asyncio.sleep(60)
 
 
 async def _collection_sync_loop():

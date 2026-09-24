@@ -7,7 +7,7 @@ _cache: dict[str, tuple[float, dict]] = {}
 _cache_version = 3
 CACHE_TTL = 3600  # 1 hour — conserves the 100 req/day free tier limit
 
-NEWSAPI_BASE = "https://newsapi.org/v2"
+NEWSAPI_BASE = settings.NEWSAPI_BASE_URL
 
 # Entertainment trade press + reputable film/TV outlets. NewsAPI accepts up to
 # 20 comma-separated domains; restricting to this set is the single biggest

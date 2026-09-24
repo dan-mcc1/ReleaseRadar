@@ -29,6 +29,13 @@ class Settings(BaseSettings):
     )
     NEWS_API_KEY: str = ""  # Free key from https://newsapi.org/
 
+    # Upstream API base URLs. Only overridden by the load-test harness, which
+    # points them at a local record/replay proxy (see loadtest/README.md).
+    TMDB_BASE_URL: str = "https://api.themoviedb.org/3"
+    OMDB_BASE_URL: str = "https://www.omdbapi.com"
+    NEWSAPI_BASE_URL: str = "https://newsapi.org/v2"
+    TVMAZE_BASE_URL: str = "https://api.tvmaze.com"
+
     STRIPE_SECRET_KEY: str = ""
     STRIPE_WEBHOOK_SECRET: str = ""
     STRIPE_PREMIUM_MONTHLY_PRICE_ID: str = ""

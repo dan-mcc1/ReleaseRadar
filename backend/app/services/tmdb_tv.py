@@ -1,3 +1,4 @@
+import copy
 import threading
 from datetime import date, timedelta
 from typing import Tuple, Optional
@@ -186,39 +187,6 @@ def get_show_networks(tv_id: int):
 
 
 # -------------------------
-# Calendar (ALL episodes with air dates)
-# -------------------------
-
-
-@cached(**_cache(512, _TTL_STD))
-def get_show_full_calendar(tv_id: int):
-    """
-    Returns ALL episodes that have an air_date
-    (used for calendars)
-    """
-    show = get(f"/tv/{tv_id}")
-    episodes = []
-
-    for season in show.get("seasons", []):
-        season_number = season["season_number"]
-
-        # Skip specials
-        if season_number == 0:
-            continue
-
-        season_data = get(f"/tv/{tv_id}/season/{season_number}")
-
-        for ep in season_data.get("episodes", []):
-            if ep.get("air_date"):
-                episodes.append(ep)
-
-    return {
-        "show_details": show,
-        "episodes": episodes,
-    }
-
-
-# -------------------------
 # Calendar (Current seaon episodes)
 # -------------------------
 
@@ -261,6 +229,21 @@ def fetch_show_from_tmdb(show_id: int, append: str | None):
         params["append_to_response"] = append
 
     return get(f"/tv/{show_id}", params=params)
+
+
+@cached(**_cache(1024, _TTL_STD))
+def _fetch_show_from_tmdb_cached(show_id: int, append: str | None):
+    return fetch_show_from_tmdb(show_id, append)
+
+
+def fetch_show_from_tmdb_cached(show_id: int, append: str | None):
+    """fetch_show_from_tmdb behind a 1-hour cache, for user-facing routes.
+
+    Returns a deep copy because callers (e.g. /tv/{id}/full) modify the dict.
+    Background jobs that need fresh data (provider/trailer refreshes, ingestion)
+    keep calling fetch_show_from_tmdb directly.
+    """
+    return copy.deepcopy(_fetch_show_from_tmdb_cached(show_id, append))
 
 
 @cached(**_cache(1024, _TTL_STD))

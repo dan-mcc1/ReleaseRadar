@@ -6,7 +6,6 @@ from app.db.session import get_db
 from app.services.watched_episode_service import (
     add_episode_watched,
     remove_episode_watched,
-    get_watched_episodes,
     get_watched_episodes_by_show,
     get_next_unwatched_episode,
     get_next_unwatched_episodes_bulk,
@@ -59,14 +58,6 @@ def remove_episode(
 
 
 # Get all watched episodes for the current user
-@router.get("")
-def get_user_watched_episodes(
-    db: Session = Depends(get_db),
-    uid: str = Depends(get_current_user),
-):
-    return get_watched_episodes(db, uid)
-
-
 # Mark all episodes in a season as watched
 @router.post("/season/add")
 @limiter.limit("30/minute")

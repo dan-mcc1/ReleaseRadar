@@ -14,7 +14,7 @@ def get_omdb_scores(imdb_id: str) -> dict:
         return {}
     try:
         r = httpx.get(
-            "https://www.omdbapi.com/",
+            f"{settings.OMDB_BASE_URL}/",
             params={"i": imdb_id, "apikey": api_key},
             timeout=5,
         )

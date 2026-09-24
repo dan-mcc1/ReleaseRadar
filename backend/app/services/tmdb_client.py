@@ -5,7 +5,7 @@ import httpx
 
 from app.config import settings
 
-BASE_URL = "https://api.themoviedb.org/3"
+BASE_URL = settings.TMDB_BASE_URL
 _HEADERS = {
     "Authorization": f"Bearer {settings.TMDB_BEARER_TOKEN}",
     "Accept": "application/json",

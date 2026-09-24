@@ -1,14 +1,18 @@
 """Episode air-time push alerts.
 
-Runs every 5 minutes. For each tracked show with a known `air_time`,
-computes the UTC air datetime for each episode airing today and fires a
-push to each opted-in tracker `episode_alert_lead_minutes` ahead of that
-moment. SentEpisodeAlert prevents double-sending if the loop overlaps
-with another tick.
+For each tracked show with a known `air_time`, computes the UTC air datetime
+of upcoming episodes and pushes to each opted-in tracker
+`episode_alert_lead_minutes` ahead of that moment.
+
+The scheduler (main.py) plans once an hour with plan_episode_alerts() and
+sleeps until each alert is due, then calls send_planned_alert(). Polling every
+few minutes instead would keep a scale-to-zero database (Neon) awake 24/7.
+SentEpisodeAlert prevents double-sending across workers and restarts.
 """
 
 import logging
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone as dt_timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -25,8 +29,20 @@ from app.services.push_service import push_notification, tmdb_poster_url
 
 logger = logging.getLogger(__name__)
 
-# Sweep cadence — keep this matched to the 5-minute lead-time granularity.
-SWEEP_INTERVAL_SECONDS = 300
+# An alert is never sent more than this late (e.g. after a restart or stall).
+LATE_GRACE_SECONDS = 300
+MAX_LEAD_MINUTES = 60
+
+
+@dataclass(frozen=True)
+class PlannedAlert:
+    """One push: a user's alert for 1+ episodes of a show airing together."""
+
+    send_at: datetime
+    user_id: str
+    show_id: int
+    episode_ids: tuple[int, ...]
+    lead: int
 
 
 def _parse_air_time(value: str | None) -> time | None:
@@ -54,48 +70,8 @@ def _air_datetime_utc(show: Show, air_date: date) -> datetime | None:
     return local.astimezone(dt_timezone.utc)
 
 
-def dispatch_due_episode_alerts(db: Session, now_utc: datetime | None = None) -> int:
-    """Returns the number of pushes sent in this sweep."""
-    if now_utc is None:
-        now_utc = datetime.now(dt_timezone.utc)
-
-    # Window = the sweep interval. An episode is "due" if its lead-adjusted
-    # send time falls anywhere in [now - interval, now]. That gives at-most-once
-    # delivery per episode (guarded by SentEpisodeAlert) even if a tick is late.
-    window_start = now_utc - timedelta(seconds=SWEEP_INTERVAL_SECONDS)
-
-    # Bound the SQL scan: today and tomorrow in UTC cover every show timezone.
-    today_utc = now_utc.date()
-    candidate_dates = [today_utc - timedelta(days=1), today_utc, today_utc + timedelta(days=1)]
-
-    rows = (
-        db.query(Episode, Show)
-        .join(Show, Show.id == Episode.show_id)
-        .filter(Episode.air_date.in_(candidate_dates), Show.air_time.isnot(None))
-        .all()
-    )
-    if not rows:
-        return 0
-
-    # Map show_id -> [(episode, air_dt_utc), ...] for episodes whose air time
-    # is anywhere within the next 65 minutes (max lead) or the recent past window.
-    # Filtering here keeps the per-user loop tight.
-    horizon = now_utc + timedelta(minutes=65)
-    eligible_by_show: dict[int, list[tuple[Episode, Show, datetime]]] = defaultdict(list)
-    for ep, show in rows:
-        air_dt = _air_datetime_utc(show, ep.air_date)
-        if air_dt is None:
-            continue
-        if air_dt < window_start - timedelta(minutes=65) or air_dt > horizon:
-            continue
-        eligible_by_show[show.id].append((ep, show, air_dt))
-
-    if not eligible_by_show:
-        return 0
-
-    show_ids = list(eligible_by_show.keys())
-
-    # Trackers: Watchlist (notify=true) + CurrentlyWatching.
+def _trackers_by_show(db: Session, show_ids: list[int]) -> dict[int, set[str]]:
+    """Users tracking each show: Watchlist with notify on, or CurrentlyWatching."""
     watchlist_rows = (
         db.query(Watchlist.user_id, Watchlist.content_id)
         .filter(
@@ -113,34 +89,67 @@ def dispatch_due_episode_alerts(db: Session, now_utc: datetime | None = None) ->
         )
         .all()
     )
-
     show_to_users: dict[int, set[str]] = defaultdict(set)
-    for user_id, content_id in watchlist_rows:
+    for user_id, content_id in [*watchlist_rows, *cw_rows]:
         show_to_users[content_id].add(user_id)
-    for user_id, content_id in cw_rows:
-        show_to_users[content_id].add(user_id)
+    return show_to_users
 
-    relevant_user_ids = {uid for uids in show_to_users.values() for uid in uids}
-    if not relevant_user_ids:
-        return 0
 
-    users_by_id = {
+def _opted_in_users(db: Session, user_ids) -> dict[str, User]:
+    return {
         u.id: u
         for u in db.query(User)
         .filter(
-            User.id.in_(relevant_user_ids),
+            User.id.in_(user_ids),
             User.push_notifications_enabled == True,  # noqa: E712
             User.push_notify_episode_air == True,  # noqa: E712
         )
         .all()
     }
-    if not users_by_id:
-        return 0
 
-    # Skip episodes we've already alerted for, per (user, episode).
-    candidate_episode_ids = [
-        ep.id for entries in eligible_by_show.values() for ep, _, _ in entries
+
+def plan_episode_alerts(
+    db: Session, window_start: datetime, window_end: datetime
+) -> list[PlannedAlert]:
+    """Every air-time push whose send time falls in [window_start, window_end).
+
+    One PlannedAlert per (user, show, air time); episodes dropping together
+    (e.g. a full Netflix season) share one push. Sorted by send time.
+    """
+    # An episode is relevant if its lead-adjusted send time can land in the
+    # window: air time between window_start and window_end + the max lead.
+    air_from = window_start
+    air_to = window_end + timedelta(minutes=MAX_LEAD_MINUTES)
+    # Episodes store a local air date; +/- a day covers every show timezone.
+    first_day = air_from.date() - timedelta(days=1)
+    candidate_dates = [
+        first_day + timedelta(days=i)
+        for i in range((air_to.date() + timedelta(days=1) - first_day).days + 1)
     ]
+
+    rows = (
+        db.query(Episode, Show)
+        .join(Show, Show.id == Episode.show_id)
+        .filter(Episode.air_date.in_(candidate_dates), Show.air_time.isnot(None))
+        .all()
+    )
+    eligible_by_show: dict[int, list[tuple[Episode, datetime]]] = defaultdict(list)
+    for ep, show in rows:
+        air_dt = _air_datetime_utc(show, ep.air_date)
+        if air_dt is not None and air_from <= air_dt < air_to:
+            eligible_by_show[show.id].append((ep, air_dt))
+    if not eligible_by_show:
+        return []
+
+    show_to_users = _trackers_by_show(db, list(eligible_by_show))
+    relevant_user_ids = {uid for uids in show_to_users.values() for uid in uids}
+    if not relevant_user_ids:
+        return []
+    users_by_id = _opted_in_users(db, relevant_user_ids)
+    if not users_by_id:
+        return []
+
+    candidate_episode_ids = [ep.id for entries in eligible_by_show.values() for ep, _ in entries]
     already_sent = {
         (uid, eid)
         for uid, eid in db.query(SentEpisodeAlert.user_id, SentEpisodeAlert.episode_id)
@@ -151,77 +160,107 @@ def dispatch_due_episode_alerts(db: Session, now_utc: datetime | None = None) ->
         .all()
     }
 
-    sent_count = 0
+    planned: list[PlannedAlert] = []
     for show_id, entries in eligible_by_show.items():
-        tracker_ids = show_to_users[show_id] & users_by_id.keys()
-        if not tracker_ids:
-            continue
-
-        for uid in tracker_ids:
-            user = users_by_id[uid]
-            lead = max(0, min(60, user.episode_alert_lead_minutes or 0))
-
-            # Group this user's not-yet-sent, due episodes for this show by
-            # air_dt. Same air_dt → one combined push (e.g., Netflix drops 8
-            # episodes at midnight → one banner, not eight).
-            buckets: dict[datetime, list[tuple[Episode, Show]]] = defaultdict(list)
-            for ep, show, air_dt in entries:
-                if (uid, ep.id) in already_sent:
-                    continue
+        for uid in show_to_users[show_id] & users_by_id.keys():
+            lead = max(0, min(MAX_LEAD_MINUTES, users_by_id[uid].episode_alert_lead_minutes or 0))
+            buckets: dict[datetime, list[Episode]] = defaultdict(list)
+            for ep, air_dt in entries:
                 send_at = air_dt - timedelta(minutes=lead)
-                if not (window_start <= send_at <= now_utc):
-                    continue
-                buckets[air_dt].append((ep, show))
+                if (uid, ep.id) not in already_sent and window_start <= send_at < window_end:
+                    buckets[air_dt].append(ep)
+            for air_dt, eps in buckets.items():
+                eps.sort(key=lambda e: (e.season_number or 0, e.episode_number or 0))
+                planned.append(PlannedAlert(
+                    send_at=air_dt - timedelta(minutes=lead),
+                    user_id=uid,
+                    show_id=show_id,
+                    episode_ids=tuple(e.id for e in eps),
+                    lead=lead,
+                ))
+    planned.sort(key=lambda a: a.send_at)
+    return planned
 
-            for items in buckets.values():
-                # Sort by (season, episode) so the body reads in order.
-                items.sort(
-                    key=lambda pair: (
-                        pair[0].season_number or 0,
-                        pair[0].episode_number or 0,
-                    )
-                )
-                episodes_to_send = []
-                show = items[0][1]
 
-                # Claim each episode in the group. Per-episode commits so a
-                # race on one episode doesn't lose the whole batch.
-                for ep, _ in items:
-                    db.add(SentEpisodeAlert(user_id=uid, episode_id=ep.id))
-                    try:
-                        db.commit()
-                        episodes_to_send.append(ep)
-                    except IntegrityError:
-                        db.rollback()
-                        # Another worker beat us to this episode; the rest of
-                        # the batch is still ours.
+def send_planned_alert(db: Session, alert: PlannedAlert) -> bool:
+    """Send one planned push. Returns True if a push went out.
 
-                if not episodes_to_send:
-                    continue
+    Re-checks the user's settings first, so turning pushes off or muting the
+    show after the hourly plan still takes effect immediately.
+    """
+    if not _opted_in_users(db, [alert.user_id]):
+        return False
+    if alert.user_id not in _trackers_by_show(db, [alert.show_id]).get(alert.show_id, set()):
+        return False
 
-                title, body = _build_push_text(show, episodes_to_send, lead)
-                first_ep = episodes_to_send[0]
-                try:
-                    push_notification(
-                        db,
-                        uid,
-                        type="episode_air",
-                        title=title,
-                        body=body,
-                        content_type="tv",
-                        content_id=show.id,
-                        season_number=first_ep.season_number,
-                        episode_id=first_ep.id,
-                        image_url=tmdb_poster_url(show.poster_path),
-                    )
-                    sent_count += 1
-                except Exception:
-                    logger.exception(
-                        "episode-alert: push failed for user=%s show=%s eps=%s",
-                        uid, show.id, [e.id for e in episodes_to_send],
-                    )
+    show = db.get(Show, alert.show_id)
+    episodes = sorted(
+        db.query(Episode).filter(Episode.id.in_(alert.episode_ids)).all(),
+        key=lambda e: (e.season_number or 0, e.episode_number or 0),
+    )
+    if show is None or not episodes:
+        return False
 
-    return sent_count
+    # Claim each episode. Per-episode commits so a race on one episode (another
+    # worker, or an overlapping sweep) doesn't lose the whole batch.
+    episodes_to_send = []
+    for ep in episodes:
+        db.add(SentEpisodeAlert(user_id=alert.user_id, episode_id=ep.id))
+        try:
+            db.commit()
+            episodes_to_send.append(ep)
+        except IntegrityError:
+            db.rollback()
+    if not episodes_to_send:
+        return False
+
+    title, body = _build_push_text(show, episodes_to_send, alert.lead)
+    first_ep = episodes_to_send[0]
+    try:
+        push_notification(
+            db,
+            alert.user_id,
+            type="episode_air",
+            title=title,
+            body=body,
+            content_type="tv",
+            content_id=show.id,
+            season_number=first_ep.season_number,
+            episode_id=first_ep.id,
+            image_url=tmdb_poster_url(show.poster_path),
+        )
+    except Exception:
+        logger.exception(
+            "episode-alert: push failed for user=%s show=%s eps=%s",
+            alert.user_id, show.id, [e.id for e in episodes_to_send],
+        )
+        return False
+    return True
+
+
+def next_alert_window(
+    now_utc: datetime, planned_until: datetime | None
+) -> tuple[datetime, datetime]:
+    """The next window to plan: from where the last plan stopped (never more
+    than LATE_GRACE_SECONDS back) to the next top of the hour."""
+    earliest = now_utc - timedelta(seconds=LATE_GRACE_SECONDS)
+    start = earliest if planned_until is None else max(planned_until, earliest)
+    end = now_utc.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+    return start, end
+
+
+def dispatch_due_episode_alerts(db: Session, now_utc: datetime | None = None) -> int:
+    """Send every alert due in the last LATE_GRACE_SECONDS right now.
+
+    One-shot sweep; the scheduler in main.py plans hourly instead.
+    Returns the number of pushes sent.
+    """
+    if now_utc is None:
+        now_utc = datetime.now(dt_timezone.utc)
+    window_start = now_utc - timedelta(seconds=LATE_GRACE_SECONDS)
+    # +1µs keeps an alert due exactly now inside the half-open window.
+    alerts = plan_episode_alerts(db, window_start, now_utc + timedelta(microseconds=1))
+    return sum(send_planned_alert(db, a) for a in alerts)
 
 
 def _build_push_text(

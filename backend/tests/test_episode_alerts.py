@@ -446,3 +446,167 @@ class TestDispatchDueEpisodeAlerts:
         from app.services.episode_alert_service import dispatch_due_episode_alerts
 
         assert dispatch_due_episode_alerts(db) == 0
+
+
+# ── Hourly planning (plan_episode_alerts / send_planned_alert) ─────────────
+#
+# The scheduler plans a window of alerts once an hour and sleeps until each is
+# due, so Neon can scale to zero between hours instead of being queried every
+# five minutes.
+
+
+class TestPlanEpisodeAlerts:
+    AIR_DATE = date(2026, 5, 25)
+
+    def _setup(self, db, lead=15, uid="u1"):
+        _seed_show_with_episode(db, air_date_val=self.AIR_DATE)
+        _seed_user(db, uid=uid, lead_minutes=lead)
+        _watchlist(db, uid, 300)
+        return _air_dt_utc(self.AIR_DATE, "20:00", "America/New_York")
+
+    def test_plans_send_time_as_air_time_minus_lead(self, db):
+        from app.services.episode_alert_service import plan_episode_alerts
+        air = self._setup(db, lead=15)
+        start = air.replace(minute=0) - timedelta(hours=1)
+        alerts = plan_episode_alerts(db, start, start + timedelta(hours=2))
+        assert len(alerts) == 1
+        a = alerts[0]
+        assert a.send_at == air - timedelta(minutes=15)
+        assert (a.user_id, a.show_id, a.episode_ids, a.lead) == ("u1", 300, (400,), 15)
+
+    def test_window_is_half_open(self, db):
+        """An alert due exactly at the window end belongs to the next window."""
+        from app.services.episode_alert_service import plan_episode_alerts
+        air = self._setup(db, lead=0)
+        assert plan_episode_alerts(db, air - timedelta(hours=1), air) == []
+        assert len(plan_episode_alerts(db, air, air + timedelta(hours=1))) == 1
+
+    def test_skips_alerts_already_sent(self, db):
+        from app.models.sent_episode_alert import SentEpisodeAlert
+        from app.services.episode_alert_service import plan_episode_alerts
+        air = self._setup(db, lead=0)
+        db.add(SentEpisodeAlert(user_id="u1", episode_id=400))
+        db.commit()
+        assert plan_episode_alerts(db, air - timedelta(minutes=5), air + timedelta(hours=1)) == []
+
+    def test_skips_users_with_pushes_off(self, db):
+        from app.services.episode_alert_service import plan_episode_alerts
+        _seed_show_with_episode(db, air_date_val=self.AIR_DATE)
+        _seed_user(db, uid="off", push_notifications_enabled=False)
+        _watchlist(db, "off", 300)
+        air = _air_dt_utc(self.AIR_DATE, "20:00", "America/New_York")
+        assert plan_episode_alerts(db, air - timedelta(hours=1), air + timedelta(hours=1)) == []
+
+    def test_groups_simultaneous_drops_into_one_alert(self, db):
+        from app.models.episode import Episode
+        from app.services.episode_alert_service import plan_episode_alerts
+        air = self._setup(db, lead=0)
+        db.add(Episode(id=401, show_id=300, season_number=1, episode_number=2,
+                       name="Two", air_date=self.AIR_DATE))
+        db.commit()
+        alerts = plan_episode_alerts(db, air - timedelta(minutes=1), air + timedelta(hours=1))
+        assert len(alerts) == 1
+        assert set(alerts[0].episode_ids) == {400, 401}
+
+    def test_one_alert_per_user_with_their_own_lead(self, db):
+        from app.services.episode_alert_service import plan_episode_alerts
+        air = self._setup(db, lead=0, uid="now")
+        _seed_user(db, uid="early", lead_minutes=30)
+        _watchlist(db, "early", 300)
+        alerts = plan_episode_alerts(db, air - timedelta(hours=1), air + timedelta(hours=1))
+        by_user = {a.user_id: a.send_at for a in alerts}
+        assert by_user == {"now": air, "early": air - timedelta(minutes=30)}
+
+    def test_window_crossing_midnight_utc_finds_next_days_episode(self, db):
+        """00:30 UTC air time, planned from 23:00 UTC the day before with a 60-min lead."""
+        from app.services.episode_alert_service import plan_episode_alerts
+        next_day = date(2026, 5, 26)
+        _seed_show_with_episode(db, air_date_val=next_day, air_time="00:30", air_timezone="UTC")
+        _seed_user(db, uid="u1", lead_minutes=60)
+        _watchlist(db, "u1", 300)
+        start = datetime(2026, 5, 25, 23, 0, tzinfo=dt_timezone.utc)
+        alerts = plan_episode_alerts(db, start, start + timedelta(hours=1))
+        assert [a.send_at for a in alerts] == [datetime(2026, 5, 25, 23, 30, tzinfo=dt_timezone.utc)]
+
+
+class TestSendPlannedAlert:
+    AIR_DATE = date(2026, 5, 25)
+
+    def _planned(self, db, lead=0):
+        from app.services.episode_alert_service import plan_episode_alerts
+        _seed_show_with_episode(db, air_date_val=self.AIR_DATE)
+        _seed_user(db, uid="u1", lead_minutes=lead)
+        _watchlist(db, "u1", 300)
+        air = _air_dt_utc(self.AIR_DATE, "20:00", "America/New_York")
+        (alert,) = plan_episode_alerts(db, air - timedelta(hours=1), air + timedelta(hours=1))
+        return alert
+
+    def test_sends_and_records_marker(self, db):
+        from app.models.sent_episode_alert import SentEpisodeAlert
+        from app.services import episode_alert_service as svc
+        alert = self._planned(db, lead=15)
+        with patch.object(svc, "push_notification") as mock_push:
+            assert svc.send_planned_alert(db, alert) is True
+        assert "airs in 15 minutes" in mock_push.call_args.kwargs["title"]
+        assert db.query(SentEpisodeAlert).filter_by(user_id="u1", episode_id=400).count() == 1
+
+    def test_second_send_is_a_no_op(self, db):
+        from app.services import episode_alert_service as svc
+        alert = self._planned(db)
+        with patch.object(svc, "push_notification") as mock_push:
+            svc.send_planned_alert(db, alert)
+            assert svc.send_planned_alert(db, alert) is False
+        assert mock_push.call_count == 1
+
+    def test_respects_push_turned_off_after_planning(self, db):
+        from app.models.user import User
+        from app.services import episode_alert_service as svc
+        alert = self._planned(db)
+        db.get(User, "u1").push_notify_episode_air = False
+        db.commit()
+        with patch.object(svc, "push_notification") as mock_push:
+            assert svc.send_planned_alert(db, alert) is False
+        mock_push.assert_not_called()
+
+    def test_respects_show_muted_after_planning(self, db):
+        from app.models.watchlist import Watchlist
+        from app.services import episode_alert_service as svc
+        alert = self._planned(db)
+        db.query(Watchlist).filter_by(user_id="u1", content_id=300).update({"notify": False})
+        db.commit()
+        with patch.object(svc, "push_notification") as mock_push:
+            assert svc.send_planned_alert(db, alert) is False
+        mock_push.assert_not_called()
+
+    def test_respects_show_removed_after_planning(self, db):
+        from app.models.watchlist import Watchlist
+        from app.services import episode_alert_service as svc
+        alert = self._planned(db)
+        db.query(Watchlist).filter_by(user_id="u1", content_id=300).delete()
+        db.commit()
+        with patch.object(svc, "push_notification") as mock_push:
+            assert svc.send_planned_alert(db, alert) is False
+        mock_push.assert_not_called()
+
+
+class TestNextAlertWindow:
+    def test_plans_through_the_next_top_of_hour(self):
+        from app.services.episode_alert_service import next_alert_window
+        now = datetime(2026, 5, 25, 14, 0, 3, tzinfo=dt_timezone.utc)
+        start, end = next_alert_window(now, planned_until=datetime(2026, 5, 25, 14, 0, tzinfo=dt_timezone.utc))
+        assert start == datetime(2026, 5, 25, 14, 0, tzinfo=dt_timezone.utc)
+        assert end == datetime(2026, 5, 25, 15, 0, tzinfo=dt_timezone.utc)
+
+    def test_first_run_mid_hour_catches_the_last_five_minutes(self):
+        from app.services.episode_alert_service import LATE_GRACE_SECONDS, next_alert_window
+        now = datetime(2026, 5, 25, 14, 37, tzinfo=dt_timezone.utc)
+        start, end = next_alert_window(now, planned_until=None)
+        assert start == now - timedelta(seconds=LATE_GRACE_SECONDS)
+        assert end == datetime(2026, 5, 25, 15, 0, tzinfo=dt_timezone.utc)
+
+    def test_never_sends_alerts_more_than_five_minutes_late(self):
+        """After a long stall, skip stale alerts rather than pushing 'airs in 15 minutes' hours late."""
+        from app.services.episode_alert_service import LATE_GRACE_SECONDS, next_alert_window
+        now = datetime(2026, 5, 25, 18, 2, tzinfo=dt_timezone.utc)
+        start, _ = next_alert_window(now, planned_until=datetime(2026, 5, 25, 15, 0, tzinfo=dt_timezone.utc))
+        assert start == now - timedelta(seconds=LATE_GRACE_SECONDS)

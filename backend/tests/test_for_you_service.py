@@ -19,13 +19,19 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def _clear_rec_cache():
-    """The module-level TTL cache leaks state across tests; flush it each time."""
-    from app.services.for_you_service import _rec_cache, _rec_cache_lock
+    """The module-level TTL caches leak state across tests; flush them each time."""
+    from app.services.for_you_service import (
+        _rec_cache, _rec_cache_lock, _ranked_cache, _ranked_cache_lock,
+    )
     with _rec_cache_lock:
         _rec_cache.clear()
+    with _ranked_cache_lock:
+        _ranked_cache.clear()
     yield
     with _rec_cache_lock:
         _rec_cache.clear()
+    with _ranked_cache_lock:
+        _ranked_cache.clear()
 
 
 @pytest.fixture
@@ -256,6 +262,97 @@ class TestGetForYouRecommendations:
             result = get_for_you_recommendations(db, "uid1")
         ids = {m["id"] for m in result["movies"]}
         assert 12345 in ids
+
+
+# ── Ranked-result cache and seed limit ────────────────────────────────────
+
+
+def _counting_fetch(recs_by_seed):
+    """Stand-in for _fetch_tmdb_recommendations that records each call."""
+    calls = []
+
+    def fetch(content_type, content_id):
+        calls.append((content_type, content_id))
+        return [dict(r) for r in recs_by_seed.get((content_type, content_id), [])]
+
+    return fetch, calls
+
+
+class TestForYouRankedCache:
+    RECS = {("movie", 550): [{"id": 999, "title": "New pick", "popularity": 10},
+                             {"id": 998, "title": "Other pick", "popularity": 5}]}
+
+    def test_repeat_visit_skips_tmdb_entirely(self, db, seed_user_with_history):
+        from app.services.for_you_service import get_for_you_recommendations
+        fetch, calls = _counting_fetch(self.RECS)
+        with patch("app.services.for_you_service._fetch_tmdb_recommendations", side_effect=fetch):
+            first = get_for_you_recommendations(db, "uid1")
+            n = len(calls)
+            second = get_for_you_recommendations(db, "uid1")
+        assert n > 0
+        assert len(calls) == n
+        assert first["movies"] == second["movies"]
+
+    def test_titles_added_since_are_still_excluded(self, db, seed_user_with_history):
+        from app.models.watchlist import Watchlist
+        from app.services.for_you_service import get_for_you_recommendations
+        fetch, _ = _counting_fetch(self.RECS)
+        with patch("app.services.for_you_service._fetch_tmdb_recommendations", side_effect=fetch):
+            assert 999 in {m["id"] for m in get_for_you_recommendations(db, "uid1", "top_rated")["movies"]}
+            # Adding to the watchlist changes "recent" seeds but not "top_rated" ones,
+            # so this second call is served from the cache; 999 must still drop out.
+            db.add(Watchlist(user_id="uid1", content_type="movie", content_id=999))
+            db.commit()
+            ids = {m["id"] for m in get_for_you_recommendations(db, "uid1", "top_rated")["movies"]}
+        assert 999 not in ids
+        assert 998 in ids
+
+    def test_new_seed_recomputes(self, db, seed_user_with_history):
+        from datetime import datetime, timezone
+        from app.models.watched import Watched
+        from app.services.for_you_service import get_for_you_recommendations
+        fetch, calls = _counting_fetch(self.RECS)
+        with patch("app.services.for_you_service._fetch_tmdb_recommendations", side_effect=fetch):
+            get_for_you_recommendations(db, "uid1")
+            db.add(Watched(user_id="uid1", content_type="movie", content_id=777,
+                           watched_at=datetime(2024, 6, 1, tzinfo=timezone.utc)))
+            db.commit()
+            calls.clear()
+            get_for_you_recommendations(db, "uid1")
+        assert ("movie", 777) in calls
+
+    def test_empty_results_are_not_cached(self, db, seed_user_with_history):
+        """A TMDb outage returns [] for every seed; that must not stick for 30 minutes."""
+        from app.services.for_you_service import get_for_you_recommendations
+        fetch, calls = _counting_fetch({})
+        with patch("app.services.for_you_service._fetch_tmdb_recommendations", side_effect=fetch):
+            get_for_you_recommendations(db, "uid1")
+            n = len(calls)
+            get_for_you_recommendations(db, "uid1")
+        assert len(calls) == 2 * n
+
+
+class TestSeedLimit:
+    def test_recent_seeds_capped_at_20(self, db):
+        from datetime import datetime, timedelta, timezone
+        from app.models.user import User
+        from app.models.watched import Watched
+        from app.services.for_you_service import _SOURCE_LIMIT, _get_seeds_recent
+
+        db.add(User(id="busy", username="busy", email="b@test.com"))
+        db.flush()
+        start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        db.add_all([
+            Watched(user_id="busy", content_type="movie", content_id=5000 + i,
+                    watched_at=start + timedelta(hours=i))
+            for i in range(30)
+        ])
+        db.commit()
+        seeds = _get_seeds_recent(db, "busy")
+        assert _SOURCE_LIMIT == 20
+        assert len(seeds) == 20
+        # Most recent first
+        assert seeds[0] == ("movie", 5029)
 
 
 # ── PG-only paths ──────────────────────────────────────────────────────────

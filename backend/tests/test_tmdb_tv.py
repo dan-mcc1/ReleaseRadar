@@ -185,36 +185,6 @@ class TestGetShowNetworks:
             assert get_show_networks(5) == []
 
 
-class TestGetShowFullCalendar:
-    def test_skips_specials_and_no_aired_episodes(self):
-        from app.services.tmdb_tv import get_show_full_calendar
-
-        def fake_get(path, params=None):
-            if path == "/tv/1":
-                return {
-                    "id": 1,
-                    "seasons": [
-                        {"season_number": 0},  # specials skipped
-                        {"season_number": 1},
-                        {"season_number": 2},
-                    ],
-                }
-            if path == "/tv/1/season/1":
-                return {"episodes": [
-                    {"air_date": "2024-01-01", "id": 100},
-                    {"air_date": None, "id": 101},  # skipped
-                ]}
-            if path == "/tv/1/season/2":
-                return {"episodes": [{"air_date": "2024-02-01", "id": 200}]}
-            return {}
-
-        with patch("app.services.tmdb_tv.get", side_effect=fake_get):
-            result = get_show_full_calendar(1)
-        assert result["show_details"]["id"] == 1
-        assert len(result["episodes"]) == 2
-        assert {e["id"] for e in result["episodes"]} == {100, 200}
-
-
 class TestGetShowSeasonCalendar:
     def test_no_non_special_seasons(self):
         from app.services.tmdb_tv import get_show_season_calendar
@@ -273,6 +243,51 @@ class TestFetchShowFromTmdb:
         assert m.call_args.kwargs["params"] == {
             "append_to_response": "videos,credits"
         }
+
+    def test_uncached_version_always_calls_tmdb(self):
+        """Background jobs rely on fetch_show_from_tmdb returning fresh data."""
+        from app.services.tmdb_tv import fetch_show_from_tmdb
+        with patch("app.services.tmdb_tv.get", return_value={"id": 5}) as m:
+            fetch_show_from_tmdb(5, "watch/providers")
+            fetch_show_from_tmdb(5, "watch/providers")
+        assert m.call_count == 2
+
+
+class TestFetchShowFromTmdbCached:
+    def test_repeat_calls_hit_tmdb_once(self):
+        from app.services.tmdb_tv import fetch_show_from_tmdb_cached
+        with patch("app.services.tmdb_tv.get", return_value={"id": 5, "name": "Show"}) as m:
+            first = fetch_show_from_tmdb_cached(5, "seasons")
+            second = fetch_show_from_tmdb_cached(5, "seasons")
+        assert m.call_count == 1
+        assert first == second == {"id": 5, "name": "Show"}
+
+    def test_append_is_part_of_the_key(self):
+        from app.services.tmdb_tv import fetch_show_from_tmdb_cached
+        with patch("app.services.tmdb_tv.get", return_value={"id": 5}) as m:
+            fetch_show_from_tmdb_cached(5, "seasons")
+            fetch_show_from_tmdb_cached(5, "credits")
+            fetch_show_from_tmdb_cached(5, None)
+        assert m.call_count == 3
+
+    def test_callers_get_independent_copies(self):
+        """/tv/{id}/full mutates the payload; that must not leak into the cache."""
+        from app.services.tmdb_tv import fetch_show_from_tmdb_cached
+        payload = {"id": 5, "logo_path": None, "seasons": [{"id": 1}]}
+        with patch("app.services.tmdb_tv.get", return_value=payload):
+            first = fetch_show_from_tmdb_cached(5, "seasons")
+            first["logo_path"] = "/mutated.png"
+            first["seasons"][0]["end_date"] = "2020-01-01"
+            second = fetch_show_from_tmdb_cached(5, "seasons")
+        assert second == {"id": 5, "logo_path": None, "seasons": [{"id": 1}]}
+
+    def test_errors_are_not_cached(self):
+        from app.services.tmdb_tv import fetch_show_from_tmdb_cached
+        with patch("app.services.tmdb_tv.get", side_effect=[RuntimeError("TMDb down"), {"id": 5}]) as m:
+            with pytest.raises(RuntimeError):
+                fetch_show_from_tmdb_cached(5, None)
+            assert fetch_show_from_tmdb_cached(5, None) == {"id": 5}
+        assert m.call_count == 2
 
 
 class TestFetchSeasonDataFromTmdb:

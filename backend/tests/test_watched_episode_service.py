@@ -156,28 +156,10 @@ class TestRemoveEpisodeWatched:
         assert "not found" in result["message"].lower()
 
 
-# ── get_watched_episodes / get_watched_episodes_by_show ─────────────────────
+# ── get_watched_episodes_by_show ────────────────────────────────────────────
 
 
-class TestGetWatchedEpisodes:
-    def test_empty(self, db, seed_user):
-        from app.services.watched_episode_service import get_watched_episodes
-        assert get_watched_episodes(db, "test-uid-1") == []
-
-    def test_returns_all_for_user(self, db, seed_show_ended):
-        from app.services.watched_episode_service import (
-            add_episode_watched, get_watched_episodes,
-        )
-        with patch("app.services.watched_episode_service.ensure_show_in_db"):
-            add_episode_watched(db, "test-uid-1", 2001, 1, 1)
-        out = get_watched_episodes(db, "test-uid-1")
-        assert len(out) == 1
-        assert out[0]["show_id"] == 2001
-        assert out[0]["season_number"] == 1
-        assert out[0]["episode_number"] == 1
-        # watched_at is serialized via isoformat
-        assert isinstance(out[0]["watched_at"], str)
-
+class TestGetWatchedEpisodesByShow:
     def test_by_show_filters(self, db, seed_show_ended):
         from app.services.watched_episode_service import (
             add_episode_watched, get_watched_episodes_by_show,
@@ -386,6 +368,88 @@ class TestBulkNextUnwatched:
         assert 2070 in out
         # Either finished or has an episode payload — no exception is the main check
         assert "finished" in out[2070]
+
+    @pytest.fixture
+    def two_season_show(self, db, seed_user):
+        """Show 2080: a special (S0E1), S1E1-E3 and S2E1-E2."""
+        from app.models.show import Show
+        from app.models.episode import Episode
+
+        db.add(Show(
+            id=2080, name="Two Seasons", status="Ended", first_air_date=date(2015, 1, 1),
+            number_of_seasons=2, number_of_episodes=5, in_production=False,
+            tracking_count=1, vote_average=7.0,
+        ))
+        db.flush()
+        eps = [(0, 1), (1, 1), (1, 2), (1, 3), (2, 1), (2, 2)]
+        db.add_all([
+            Episode(id=208000 + s * 10 + e, show_id=2080, season_number=s, episode_number=e,
+                    name=f"S{s}E{e}", overview=f"Overview {s}.{e}", still_path=f"/s{s}e{e}.jpg",
+                    air_date=date(2015, 1, 1 + s * 7 + e))
+            for s, e in eps
+        ])
+        db.commit()
+
+    def _watch(self, db, uid, show_id, pairs):
+        from app.models.episode_watched import EpisodeWatched
+        from app.models.episode import Episode
+
+        for s, e in pairs:
+            ep = db.query(Episode).filter_by(show_id=show_id, season_number=s, episode_number=e).one()
+            db.add(EpisodeWatched(user_id=uid, show_id=show_id, episode_id=ep.id,
+                                  season_number=s, episode_number=e))
+        db.commit()
+
+    def test_bulk_returns_earliest_gap_not_latest_progress(self, db, two_season_show):
+        from app.services.watched_episode_service import get_next_unwatched_episodes_bulk
+
+        # Watched S1E1, S1E3 and all of S2: the S1E2 gap is still "next".
+        self._watch(db, "test-uid-1", 2080, [(1, 1), (1, 3), (2, 1), (2, 2)])
+        out = get_next_unwatched_episodes_bulk(db, "test-uid-1", [2080])
+        assert out[2080] == {
+            "finished": False,
+            "season_number": 1,
+            "episode_number": 2,
+            "name": "S1E2",
+            "still_path": "/s1e2.jpg",
+            "overview": "Overview 1.2",
+            "air_date": "2015-01-10",
+        }
+
+    def test_bulk_ignores_specials(self, db, two_season_show):
+        from app.services.watched_episode_service import get_next_unwatched_episodes_bulk
+
+        # S0E1 is unwatched but specials never count as "next" or block "finished".
+        self._watch(db, "test-uid-1", 2080, [(1, 1), (1, 2), (1, 3), (2, 1), (2, 2)])
+        out = get_next_unwatched_episodes_bulk(db, "test-uid-1", [2080])
+        assert out[2080] == {"finished": True}
+
+    def test_bulk_crosses_season_boundary(self, db, two_season_show):
+        from app.services.watched_episode_service import get_next_unwatched_episodes_bulk
+
+        self._watch(db, "test-uid-1", 2080, [(1, 1), (1, 2), (1, 3)])
+        out = get_next_unwatched_episodes_bulk(db, "test-uid-1", [2080])
+        assert (out[2080]["season_number"], out[2080]["episode_number"]) == (2, 1)
+
+    def test_bulk_ignores_other_users_progress(self, db, two_season_show):
+        from app.models.user import User
+        from app.services.watched_episode_service import get_next_unwatched_episodes_bulk
+
+        db.add(User(id="other-uid", username="bob", email="bob@test.com"))
+        db.commit()
+        self._watch(db, "other-uid", 2080, [(1, 1), (1, 2)])
+        out = get_next_unwatched_episodes_bulk(db, "test-uid-1", [2080])
+        assert (out[2080]["season_number"], out[2080]["episode_number"]) == (1, 1)
+
+    def test_bulk_handles_several_shows_in_one_call(self, db, two_season_show, seed_show_ended):
+        from app.services.watched_episode_service import get_next_unwatched_episodes_bulk
+
+        self._watch(db, "test-uid-1", 2080, [(1, 1)])
+        self._watch(db, "test-uid-1", 2001, [(1, 1), (1, 2)])
+        out = get_next_unwatched_episodes_bulk(db, "test-uid-1", [2080, 2001])
+        assert set(out) == {2080, 2001}
+        assert (out[2080]["season_number"], out[2080]["episode_number"]) == (1, 2)
+        assert out[2001] == {"finished": True}
 
 
 # ── maybe_auto_complete_show ────────────────────────────────────────────────

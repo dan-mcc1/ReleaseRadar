@@ -15,7 +15,7 @@ class TestGetShowInfo:
 
     def test_falls_back_to_tmdb_when_missing(self, client):
         with patch(
-            "app.routers.tv.fetch_show_from_tmdb",
+            "app.routers.tv.fetch_show_from_tmdb_cached",
             return_value={"id": 9999, "name": "Remote Show"},
         ) as m:
             r = client.get("/tv/9999")
@@ -24,7 +24,7 @@ class TestGetShowInfo:
         m.assert_called_once()
 
     def test_tmdb_404_returns_404(self, client):
-        with patch("app.routers.tv.fetch_show_from_tmdb", return_value=None):
+        with patch("app.routers.tv.fetch_show_from_tmdb_cached", return_value=None):
             r = client.get("/tv/9999")
         assert r.status_code == 404
 
@@ -39,13 +39,13 @@ class TestFullShowInfo:
             "images": {"logos": []},
         }
         with patch(
-            "app.routers.tv.fetch_show_from_tmdb", return_value=tmdb_data
+            "app.routers.tv.fetch_show_from_tmdb_cached", return_value=tmdb_data
         ):
             r = client.get("/tv/1396/full")
         assert r.status_code == 200
 
     def test_missing_show_returns_404(self, client):
-        with patch("app.routers.tv.fetch_show_from_tmdb", return_value=None):
+        with patch("app.routers.tv.fetch_show_from_tmdb_cached", return_value=None):
             r = client.get("/tv/1/full")
         assert r.status_code == 404
 
@@ -61,7 +61,7 @@ class TestFullShowInfo:
             },
         }
         with patch(
-            "app.routers.tv.fetch_show_from_tmdb", return_value=tmdb_data
+            "app.routers.tv.fetch_show_from_tmdb_cached", return_value=tmdb_data
         ):
             r = client.get("/tv/1/full")
         assert r.json()["logo_path"] == "/en.png"
@@ -80,7 +80,7 @@ class TestSeasonCalendar:
         # No show in DB; fetch_show_from_tmdb supplies seasons,
         # fetch_season_data_from_tmdb supplies episodes.
         with patch(
-            "app.routers.tv.fetch_show_from_tmdb",
+            "app.routers.tv.fetch_show_from_tmdb_cached",
             return_value={"id": 7, "seasons": [{"season_number": 1}]},
         ), patch(
             "app.routers.tv.fetch_season_data_from_tmdb",
@@ -91,25 +91,8 @@ class TestSeasonCalendar:
         assert isinstance(r.json(), list)
 
     def test_tmdb_404_returns_404(self, client):
-        with patch("app.routers.tv.fetch_show_from_tmdb", return_value=None):
+        with patch("app.routers.tv.fetch_show_from_tmdb_cached", return_value=None):
             r = client.get("/tv/9999/season_calendar")
-        assert r.status_code == 404
-
-
-class TestFullCalendar:
-    def test_db_show_returns_all_season_calendars(self, client, seed_show):
-        with patch(
-            "app.routers.tv.fetch_season_data_from_tmdb",
-            return_value=[{"id": 1}],
-        ):
-            r = client.get("/tv/1396/full_calendar")
-        assert r.status_code == 200
-        # Seeded show has one season → one calendar entry
-        assert isinstance(r.json(), list)
-
-    def test_tmdb_404_returns_404(self, client):
-        with patch("app.routers.tv.fetch_show_from_tmdb", return_value=None):
-            r = client.get("/tv/9999/full_calendar")
         assert r.status_code == 404
 
 

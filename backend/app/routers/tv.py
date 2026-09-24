@@ -11,7 +11,7 @@ from app.services.provider_utils import normalize_tmdb_watch_providers
 from app.services.tmdb_client import async_get
 from app.services.tmdb_tv import (
     fetch_season_data_from_tmdb,
-    fetch_show_from_tmdb,
+    fetch_show_from_tmdb_cached,
     get_full_season_info,
 )
 
@@ -29,7 +29,7 @@ async def get_show_info(
     )
     if show:
         return serialize_show(show)
-    payload = await run_in_threadpool(fetch_show_from_tmdb, id, append)
+    payload = await run_in_threadpool(fetch_show_from_tmdb_cached, id, append)
     if not payload:
         raise HTTPException(status_code=404, detail="Show not found")
     return payload
@@ -51,7 +51,7 @@ async def get_full_show_info(
             "content_ratings",
         ]
     )
-    show_data = await run_in_threadpool(fetch_show_from_tmdb, id, append)
+    show_data = await run_in_threadpool(fetch_show_from_tmdb_cached, id, append)
     if not show_data:
         raise HTTPException(status_code=404, detail="Show not found")
 
@@ -132,7 +132,7 @@ async def season_calendar(
             )
             return [_serialize(ep) for ep in db_episodes]
 
-        show_data = await run_in_threadpool(fetch_show_from_tmdb, id, "seasons")
+        show_data = await run_in_threadpool(fetch_show_from_tmdb_cached, id, "seasons")
         if not show_data:
             raise HTTPException(status_code=404, detail="Show not found")
         recent = sorted(
@@ -160,7 +160,7 @@ async def season_calendar(
         seasons = [{"season_number": s.season_number} for s in show.seasons]
         show_id = show.id
     else:
-        show_data = await run_in_threadpool(fetch_show_from_tmdb, id, "seasons")
+        show_data = await run_in_threadpool(fetch_show_from_tmdb_cached, id, "seasons")
         if not show_data:
             raise HTTPException(status_code=404, detail="Show not found")
         seasons = show_data["seasons"]
@@ -189,34 +189,6 @@ async def season_calendar(
             )
 
     return all_episodes
-
-
-@router.get("/{id}/full_calendar")
-async def full_calendar(id: int, db: Session = Depends(get_db)):
-    show = await run_in_threadpool(
-        lambda: db.query(Show)
-        .options(selectinload(Show.seasons))
-        .filter(Show.id == id)
-        .first()
-    )
-
-    if show:
-        seasons = [{"season_number": s.season_number} for s in show.seasons]
-        show_id = show.id
-    else:
-        show_data = await run_in_threadpool(fetch_show_from_tmdb, id, "seasons")
-        if not show_data:
-            raise HTTPException(status_code=404, detail="Show not found")
-        seasons = show_data["seasons"]
-        show_id = show_data["id"]
-
-    calendar = []
-    for season in seasons:
-        calendar.append(
-            await run_in_threadpool(fetch_season_data_from_tmdb, show_id, season["season_number"])
-        )
-
-    return calendar
 
 
 @router.get("/{id}/episode_ratings")

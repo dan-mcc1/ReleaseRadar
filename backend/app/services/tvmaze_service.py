@@ -1,6 +1,8 @@
 import requests
 
-TVMAZE_BASE = "https://api.tvmaze.com"
+from app.config import settings
+
+TVMAZE_BASE = settings.TVMAZE_BASE_URL
 
 
 def fetch_show_air_time(show_name: str) -> tuple[str | None, str | None]:
