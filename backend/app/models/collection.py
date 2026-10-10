@@ -16,9 +16,14 @@ class Collection(Base):
     # joins. NULL when the collection hasn't been ingested yet.
     size = Column(Integer, nullable=True, index=True)
     avg_rating = Column(Float, nullable=True, index=True)
-    # Average of TMDb's `popularity` across the collection's parts at ingest
-    # time. We don't persist popularity on Movie (it decays daily and would
-    # bloat refresh churn) — only the per-collection aggregate.
+    # Vote-aware (Bayesian) rating used to sort by rating — avg_rating alone
+    # lets a single 1-vote 9.0 outrank Lord of the Rings. See
+    # collection_ingest_service._rating_score.
+    rating_score = Column(Float, nullable=True, index=True)
+    # sqrt(total vote_count × total TMDb `popularity`) over the released parts
+    # at ingest time — see collection_ingest_service._popularity_score. We
+    # don't persist popularity on Movie (it decays daily and would bloat
+    # refresh churn) — only the per-collection aggregate.
     popularity = Column(Float, nullable=True, index=True)
     min_year = Column(Integer, nullable=True)
     max_year = Column(Integer, nullable=True)

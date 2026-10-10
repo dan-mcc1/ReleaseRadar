@@ -992,7 +992,7 @@ export default function Watchlist() {
 
       {/* Loading skeleton */}
       {loading && (
-        <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 gap-3 mt-8">
+        <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 2xl:grid-cols-posters gap-3 mt-8">
           {Array.from({ length: 12 }).map((_, i) => (
             <div key={i} className="flex flex-col gap-2 animate-pulse">
               <div className="aspect-[2/3] rounded-xl bg-neutral-800" />
@@ -1085,7 +1085,7 @@ export default function Watchlist() {
                 items={combinedItems.map((i) => `${i._contentType}-${i.id}`)}
                 strategy={rectSortingStrategy}
               >
-                <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 gap-x-3 gap-y-5">
+                <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 2xl:grid-cols-posters gap-x-3 gap-y-5">
                   {combinedItems.map((item, idx) => (
                     <SortableWatchlistCard
                       key={`${item._contentType}-${item.id}`}
@@ -1141,7 +1141,7 @@ export default function Watchlist() {
         activeTab !== "up_next" &&
         activeTab !== "currently_watching" &&
         myOrderFilteredItems.length > 0 && (
-          <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 gap-x-3 gap-y-5 mt-8">
+          <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 2xl:grid-cols-posters gap-x-3 gap-y-5 mt-8">
             {myOrderFilteredItems.map((item) => {
               const allIdx = combinedItems.findIndex(
                 (c) => c._contentType === item._contentType && c.id === item.id,
@@ -1205,7 +1205,7 @@ export default function Watchlist() {
             <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-neutral-500 mb-3">
               Currently watching
             </p>
-            <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 gap-x-3 gap-y-5">
+            <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 2xl:grid-cols-posters gap-x-3 gap-y-5">
               {[
                 ...(activeTab !== "shows"
                   ? cwFilteredMovies.map((m) => ({
@@ -1242,7 +1242,7 @@ export default function Watchlist() {
       {!loading &&
         (!isMyOrder || activeTab === "up_next" || activeTab === "currently_watching") &&
         gridItems.length > 0 && (
-          <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 gap-x-3 gap-y-5 mt-8">
+          <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 2xl:grid-cols-posters gap-x-3 gap-y-5 mt-8">
             {gridItems.map((item) => (
               <WatchlistCard
                 key={`${item._contentType}-${item.id}`}

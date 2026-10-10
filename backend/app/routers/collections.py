@@ -86,8 +86,8 @@ async def search(
 
 
 @router.get("/{collection_id}")
-async def collection_detail(collection_id: int):
-    data = await run_in_threadpool(get_collection_detail, collection_id)
+async def collection_detail(collection_id: int, db: Session = Depends(get_db)):
+    data = await run_in_threadpool(get_collection_detail, db, collection_id)
     if not data:
         raise HTTPException(status_code=404, detail="Collection not found")
     return data

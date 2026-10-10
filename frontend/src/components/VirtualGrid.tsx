@@ -12,8 +12,14 @@ export interface ColBreakpoint {
   cols: number;
 }
 
-// Matches Tailwind sm/md/lg/xl breakpoints — override per page as needed.
+// Matches Tailwind sm/md/lg/xl breakpoints, then the --poster-cols tiers in
+// index.css from 2xl up — override per page as needed.
 export const POSTER_COLS: ColBreakpoint[] = [
+  { minWidth: 3840, cols: 16 },
+  { minWidth: 3072, cols: 14 },
+  { minWidth: 2560, cols: 12 },
+  { minWidth: 1920, cols: 10 },
+  { minWidth: 1536, cols: 9 },
   { minWidth: 1280, cols: 8 },
   { minWidth: 1024, cols: 7 },
   { minWidth: 768, cols: 6 },

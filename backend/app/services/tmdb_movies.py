@@ -119,10 +119,16 @@ def get_movies_by_actor(actor: str):
     return credits.get("cast", [])
 
 
-@lru_cache(maxsize=2048)
-def fetch_movie_from_tmdb(movie_id: int, append: str = None):
+def fetch_movie_from_tmdb_uncached(movie_id: int, append: str = None):
+    """Always hits TMDb — for refreshes that must see today's data. Also keeps
+    bulk refreshes from filling the cache below."""
     params = {}
     if append:
         # params["append_to_response"] = ",".join(append)
         params["append_to_response"] = append
     return get(f"/movie/{movie_id}", params=params)
+
+
+@lru_cache(maxsize=2048)
+def fetch_movie_from_tmdb(movie_id: int, append: str = None):
+    return fetch_movie_from_tmdb_uncached(movie_id, append)

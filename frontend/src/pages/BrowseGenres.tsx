@@ -328,7 +328,7 @@ export default function BrowseGenres() {
 
       {/* Poster grid */}
       {!loading && rawItems.length > 0 && (
-        <div className="px-6 sm:px-10 pb-8 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 lg:grid-cols-8 gap-4">
+        <div className="px-6 sm:px-10 pb-8 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 lg:grid-cols-8 2xl:grid-cols-posters gap-4">
           {rawItems.map((item) => (
             <PosterCard
               key={item.id}

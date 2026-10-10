@@ -2,6 +2,7 @@ import { useParams } from "react-router-dom";
 import { BASE_IMAGE_URL } from "../constants";
 import type { Movie } from "../types/calendar";
 import { usePageTitle } from "../hooks/usePageTitle";
+import { toLocalISODate } from "../utils/date";
 import MediaList from "../components/MediaList";
 import FavoriteButton from "../components/FavoriteButton";
 import StarIcon from "../components/icons/StarIcon";
@@ -12,6 +13,7 @@ import {
   useCollectionStats,
   useCollectionRanking,
   useSetCollectionRanking,
+  isNotFoundError,
 } from "../hooks/api/useCollectionInfo";
 import { useMemo, useState } from "react";
 import {
@@ -110,18 +112,24 @@ export default function CollectionInfo() {
     setRanking.mutate(reordered.map((m) => m.id));
   }
 
+  // "Watched of released", matching the browse cards and My Collections:
+  // upcoming parts don't count until they're out.
   const progress = useMemo(() => {
     if (!user || sortedParts.length === 0) return null;
+    const today = toLocalISODate(new Date());
+    const released = sortedParts.filter(
+      (p) => p.release_date && p.release_date <= today,
+    );
     let watched = 0;
     let watching = 0;
     let watchlisted = 0;
-    for (const part of sortedParts) {
+    for (const part of released) {
       const status = statusMap?.[`movie:${part.id}`]?.status;
       if (status === "Watched") watched++;
       else if (status === "Currently Watching") watching++;
       else if (status === "Want To Watch") watchlisted++;
     }
-    const total = sortedParts.length;
+    const total = released.length;
     return {
       total,
       watched,
@@ -141,7 +149,8 @@ export default function CollectionInfo() {
         </div>
       </div>
     );
-  if (error) return <p className="text-error-400 p-6">{error?.message}</p>;
+  if (error && !isNotFoundError(error))
+    return <p className="text-error-400 p-6">{error.message}</p>;
   if (!rawCollection)
     return <p className="text-neutral-400 p-6">Collection not found.</p>;
 

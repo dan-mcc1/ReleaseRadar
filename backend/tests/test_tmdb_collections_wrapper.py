@@ -25,6 +25,52 @@ class TestGetCollection:
             assert get_collection(10) == {"id": 10, "parts": []}
         m.assert_called_once_with("/collection/10")
 
+    def test_returns_none_when_tmdb_404s(self):
+        """TMDb deletes/merges duplicate collections; their ids then 404.
+        tmdb_client.get raises on 404, so the wrapper must translate it."""
+        import httpx
+        from app.services.tmdb_collections import get_collection
+        req = httpx.Request("GET", "https://api.themoviedb.org/3/collection/10")
+        err = httpx.HTTPStatusError(
+            "not found", request=req, response=httpx.Response(404, request=req)
+        )
+        with patch("app.services.tmdb_collections.get", side_effect=err):
+            assert get_collection(10) is None
+
+    def test_other_http_errors_still_raise(self):
+        import httpx
+        from app.services.tmdb_collections import get_collection
+        req = httpx.Request("GET", "https://api.themoviedb.org/3/collection/10")
+        err = httpx.HTTPStatusError(
+            "unauthorized", request=req, response=httpx.Response(401, request=req)
+        )
+        with patch("app.services.tmdb_collections.get", side_effect=err):
+            with pytest.raises(httpx.HTTPStatusError):
+                get_collection(10)
+
+
+class TestFetchCollection:
+    """Uncached variant for the nightly ingest."""
+
+    def test_hits_tmdb_every_call(self):
+        from app.services.tmdb_collections import fetch_collection
+        with patch(
+            "app.services.tmdb_collections.get", return_value={"id": 10}
+        ) as m:
+            fetch_collection(10)
+            fetch_collection(10)
+        assert m.call_count == 2
+
+    def test_returns_none_when_tmdb_404s(self):
+        import httpx
+        from app.services.tmdb_collections import fetch_collection
+        req = httpx.Request("GET", "https://api.themoviedb.org/3/collection/10")
+        err = httpx.HTTPStatusError(
+            "not found", request=req, response=httpx.Response(404, request=req)
+        )
+        with patch("app.services.tmdb_collections.get", side_effect=err):
+            assert fetch_collection(10) is None
+
 
 class TestSearchCollectionsPaginated:
     def test_returns_structured_response(self):

@@ -78,7 +78,7 @@ function PosterGrid({
 }) {
   const gridClass =
     cols === 8
-      ? "grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2"
+      ? "grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 2xl:grid-cols-posters-dense gap-2"
       : cols === 6
         ? "grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3"
         : cols === 4
@@ -120,7 +120,7 @@ function CollectionPosterGrid({
   items: { id: number; name: string; poster_path: string | null }[];
 }) {
   return (
-    <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
+    <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 2xl:grid-cols-posters-dense gap-2">
       {items.map((c) => (
         <Link key={c.id} to={`/collection/${c.id}`} className="group block">
           <div className="rounded-xl overflow-hidden aspect-[2/3] bg-neutral-800">

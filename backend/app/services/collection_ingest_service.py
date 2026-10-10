@@ -1,7 +1,8 @@
 """TMDb collection mirror.
 
-- ``daily_sync(db)``: pulls TMDb's collection_ids dump (id + name only) and
-  upserts the Collection table. Cheap; one HTTP call. Adult content is not
+- ``daily_sync(db)``: pulls TMDb's collection_ids dump (id + name only),
+  upserts the Collection table, and prunes collections no longer in the dump
+  (TMDb deleted or merged them). Cheap; one HTTP call. Adult content is not
   present in the dump.
 
 - ``daily_refresh(db)``: full daily refresh job. Runs ``daily_sync`` to pick
@@ -25,19 +26,22 @@ import gzip
 import itertools
 import json
 import logging
+import math
 from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
-from datetime import datetime, timedelta, timezone as dt_timezone
+from datetime import date, datetime, timedelta, timezone as dt_timezone
 
+import httpx
 import requests
-from sqlalchemy import select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
 from app.models.collection import Collection, CollectionMovie
 from app.models.movie import Movie
+from app.models.user_collection_ranking import UserCollectionRanking
 from app.services.media_upsert import populate_movie_full
-from app.services.tmdb_collections import get_collection
+from app.services.tmdb_collections import fetch_collection
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +54,20 @@ _INDEX_UPSERT_BATCH = 1000
 # ingesting brand-new collections; for routine refreshes of existing collections
 # it's just one /collection/{id} call per worker.
 _INGEST_CONCURRENCY = 10
+
+# A dump that yields fewer ids than this fraction of the rows we already hold
+# is treated as truncated/corrupt, and pruning is skipped for that run.
+_PRUNE_MIN_SEEN_RATIO = 0.5
+
+# Parts released within this many days are re-fetched on every ingest: their
+# US release date and rating are still settling.
+_RECENT_RELEASE_DAYS = 90
+
+# Bayesian prior for rating_score: a collection starts as if it had
+# _RATING_PRIOR_VOTES votes at _RATING_PRIOR_MEAN (roughly TMDb's average for
+# rated films), so a handful of votes can't outrank a well-loved franchise.
+_RATING_PRIOR_MEAN = 6.5
+_RATING_PRIOR_VOTES = 1000
 
 
 # ---------------------------------------------------------------------------
@@ -82,17 +100,50 @@ def _iter_dump_records(url: str):
                     continue
 
 
+def _iter_latest_dump(now_utc: datetime):
+    """Records from today's dump, or yesterday's if today's isn't up yet. TMDb
+    only promises the day's files "by 8:00 AM UTC" and keeps old ones for 3
+    months. Falls back only when the download fails before the first record —
+    a failure partway through propagates, so a half-read dump is never used
+    (or pruned against)."""
+    url = _dump_url_for(now_utc)
+    records = _iter_dump_records(url)
+    try:
+        first = next(records)
+    except StopIteration:
+        return
+    except requests.RequestException as e:
+        url = _dump_url_for(now_utc - timedelta(days=1))
+        logger.warning("collections sync: today's dump unavailable (%s); using %s", e, url)
+        yield from _iter_dump_records(url)
+        return
+    logger.info("collections sync: reading %s", url)
+    yield first
+    yield from records
+
+
+def _delete_collection(db: Session, collection_id: int) -> None:
+    """Remove a collection and the rows hanging off it. Explicit deletes rather
+    than relying on the FK cascades, so it behaves the same under SQLite."""
+    db.query(CollectionMovie).filter(
+        CollectionMovie.collection_id == collection_id
+    ).delete()
+    db.query(UserCollectionRanking).filter(
+        UserCollectionRanking.collection_id == collection_id
+    ).delete()
+    db.query(Collection).filter(Collection.id == collection_id).delete()
+
+
 # ---------------------------------------------------------------------------
 # Daily index sync (id + name only)
 # ---------------------------------------------------------------------------
 
 
 def daily_sync(db: Session, *, now_utc: datetime | None = None) -> dict:
-    """Pull the collection_ids dump and upsert names. The dump excludes adult
-    content, so we can write straight through without filtering."""
+    """Pull the collection_ids dump, upsert names, then prune ids the dump no
+    longer lists. The dump excludes adult content, so we can write straight
+    through without filtering."""
     now_utc = now_utc or datetime.now(dt_timezone.utc)
-    url = _dump_url_for(now_utc)
-    logger.info("collections sync: downloading %s", url)
 
     batch: list[dict] = []
     upserted = 0
@@ -115,7 +166,7 @@ def daily_sync(db: Session, *, now_utc: datetime | None = None) -> dict:
         upserted += len(batch)
         batch.clear()
 
-    for rec in _iter_dump_records(url):
+    for rec in _iter_latest_dump(now_utc):
         cid = rec.get("id")
         name = rec.get("name") or rec.get("original_name")
         if cid is None or not name:
@@ -126,13 +177,103 @@ def daily_sync(db: Session, *, now_utc: datetime | None = None) -> dict:
             _flush()
     _flush()
 
-    logger.info("collections sync: upserted %d (saw %d ids)", upserted, len(seen))
-    return {"upserted": upserted, "seen": len(seen)}
+    pruned = _prune_stale_collections(db, now_utc=now_utc, seen=len(seen))
+
+    logger.info(
+        "collections sync: upserted %d (saw %d ids), pruned %d",
+        upserted, len(seen), pruned,
+    )
+    return {"upserted": upserted, "seen": len(seen), "pruned": pruned}
+
+
+def _prune_stale_collections(db: Session, *, now_utc: datetime, seen: int) -> int:
+    """Delete collections that have dropped out of TMDb's export — deleted, or
+    merged into another collection as a duplicate. Left in place, they keep
+    their old poster and parts and show up on browse beside the surviving
+    collection, then fail when clicked because TMDb 404s the id.
+
+    daily_sync stamps every id in the dump with index_refreshed_at=now_utc, so
+    anything older (or never stamped) wasn't in this dump. Returns the number
+    of collections deleted.
+    """
+    total = db.execute(select(func.count()).select_from(Collection)).scalar_one()
+    if total == 0 or seen < total * _PRUNE_MIN_SEEN_RATIO:
+        logger.warning(
+            "collections sync: dump had %d ids vs %d rows — skipping prune", seen, total
+        )
+        return 0
+
+    stale = or_(
+        Collection.index_refreshed_at < now_utc,
+        Collection.index_refreshed_at.is_(None),
+    )
+    stale_ids = select(Collection.id).where(stale)
+    db.execute(delete(CollectionMovie).where(CollectionMovie.collection_id.in_(stale_ids)))
+    db.execute(
+        delete(UserCollectionRanking).where(UserCollectionRanking.collection_id.in_(stale_ids))
+    )
+    pruned = db.execute(delete(Collection).where(stale)).rowcount
+    db.commit()
+    return pruned
 
 
 # ---------------------------------------------------------------------------
 # Per-collection detail + parts ingest
 # ---------------------------------------------------------------------------
+
+
+def _popularity_score(parts: list[dict], today: date) -> float | None:
+    """Collection popularity: sqrt(total vote_count × total popularity) over
+    the released parts.
+
+    TMDb's per-movie `popularity` is a trending score that decays daily, and
+    `vote_count` is all-time audience. The old score, mean popularity, ranked
+    small collections riding one trending film above Harry Potter / Star Wars
+    and buried long franchises under their older entries. Summing popularity
+    alone overrates long niche series (Detective Conan, Doraemon); vote_count
+    alone ignores what's hot now. The geometric mean of the two totals needs
+    both reach and buzz to rank high.
+
+    Unreleased parts are skipped: their popularity is pre-release hype and
+    they have no votes. Returns None when nothing is released yet (sorts last).
+    """
+    cutoff = today.isoformat()
+    released = [p for p in parts if (p.get("release_date") or "9999") <= cutoff]
+    votes = sum(p.get("vote_count") or 0 for p in released)
+    popularity = sum(p.get("popularity") or 0 for p in released)
+    score = math.sqrt(votes * popularity) if votes > 0 and popularity > 0 else 0.0
+    return score or None
+
+
+def _rating_score(parts: list[dict], today: date) -> float | None:
+    """Collection rating for sorting: a Bayesian average over the released
+    parts' votes, (C·m + Σ rating·votes) / (C + Σ votes). Big samples land on
+    their real vote-weighted average; a few votes get pulled toward m, so a
+    single 1-vote 9.0 can't outrank Lord of the Rings. Returns None without
+    any votes (sorts last)."""
+    cutoff = today.isoformat()
+    voted = [
+        p for p in parts
+        if (p.get("release_date") or "9999") <= cutoff and (p.get("vote_count") or 0) > 0
+    ]
+    if not voted:
+        return None
+    votes = sum(p["vote_count"] for p in voted)
+    weighted = sum((p.get("vote_average") or 0) * p["vote_count"] for p in voted)
+    return (_RATING_PRIOR_VOTES * _RATING_PRIOR_MEAN + weighted) / (_RATING_PRIOR_VOTES + votes)
+
+
+def _part_needs_refresh(part: dict, stored_release: date | None, today: date) -> bool:
+    """Movie rows are saved once and nothing else refreshes their release
+    date, so re-fetch the parts whose data still moves: unreleased or undated,
+    recently released, or saved back when upcoming and still holding that
+    date."""
+    tmdb_release = part.get("release_date") or ""
+    if not tmdb_release or tmdb_release > today.isoformat():
+        return True
+    if tmdb_release >= (today - timedelta(days=_RECENT_RELEASE_DAYS)).isoformat():
+        return True
+    return stored_release is None or stored_release > today
 
 
 def _ingest_collection_details(db: Session, collection_id: int, now: datetime) -> dict:
@@ -141,23 +282,19 @@ def _ingest_collection_details(db: Session, collection_id: int, now: datetime) -
     Movies are fully populated via populate_movie_full (genres, providers,
     runtime, certification, etc.). Returns a small stats dict.
     """
-    data = get_collection(collection_id)
+    data = fetch_collection(collection_id)
     if not data:
+        # TMDb no longer has it (deleted, or merged into another collection).
+        _delete_collection(db, collection_id)
         return {"status": "missing", "parts": 0, "skipped_adult": 0, "fetched_movies": 0}
-
-    existing = db.get(Collection, collection_id)
 
     # Adult collections carry no usable parts. Don't add them — and drop the
     # row if a prior pass (or the index sync) left one behind.
     if data.get("adult"):
-        if existing is not None:
-            db.query(CollectionMovie).filter(
-                CollectionMovie.collection_id == collection_id
-            ).delete()
-            db.delete(existing)
+        _delete_collection(db, collection_id)
         return {"status": "empty", "parts": 0, "skipped_adult": 0, "fetched_movies": 0}
 
-    c = existing
+    c = db.get(Collection, collection_id)
     if c is None:
         c = Collection(id=collection_id)
         db.add(c)
@@ -191,25 +328,43 @@ def _ingest_collection_details(db: Session, collection_id: int, now: datetime) -
 
     db.query(CollectionMovie).filter(CollectionMovie.collection_id == collection_id).delete()
     movie_ids_kept: list[int] = []
-    # Popularity is read from the TMDb /collection response (each `part` carries
-    # it). Captured here instead of via Movie because TMDb's popularity decays
-    # daily — we don't want to persist it per-movie and chase it forever.
-    popularities_kept: list[float] = []
+    # Score inputs (popularity, vote_count, vote_average) are read from the
+    # TMDb /collection response — each `part` carries them. Captured here
+    # instead of via Movie because TMDb's popularity decays daily — we don't
+    # want to persist it per-movie and chase it forever.
+    parts_kept: list[dict] = []
+    today = now.date()
+    stored_releases = dict(
+        db.query(Movie.id, Movie.release_date)
+        .filter(Movie.id.in_([mid for mid, _ in valid_parts]))
+        .all()
+    )
     for idx, (mid, p) in enumerate(valid_parts):
-        movie = populate_movie_full(db, mid)
+        refresh = _part_needs_refresh(p, stored_releases.get(mid), today)
+        try:
+            movie = populate_movie_full(db, mid, force=refresh)
+        except httpx.HTTPStatusError as e:
+            # A dead movie id in TMDb's parts list. Skip the part rather than
+            # aborting the whole ingest (which would keep the stale copy).
+            if e.response.status_code != 404:
+                raise
+            movie = None
         if movie is None:
             # Adult or unfetchable — skip this part entirely.
             skipped_adult += 1
             continue
         fetched_movies += 1
         movie_ids_kept.append(mid)
-        pop = p.get("popularity")
-        if isinstance(pop, (int, float)) and pop > 0:
-            popularities_kept.append(float(pop))
+        parts_kept.append(p)
+        if not refresh and isinstance(p.get("vote_average"), (int, float)):
+            # Settled parts skip the /movie call; their rating still comes
+            # fresh from the /collection payload.
+            movie.vote_average = p["vote_average"]
         db.add(CollectionMovie(collection_id=collection_id, movie_id=mid, sort_order=idx))
 
     # Refresh the denormalized aggregates that /collections/browse reads.
     if movie_ids_kept:
+        db.flush()  # autoflush is off; the query below must see updated ratings
         ratings = (
             db.query(Movie.vote_average, Movie.release_date)
             .filter(Movie.id.in_(movie_ids_kept))
@@ -223,9 +378,8 @@ def _ingest_collection_details(db: Session, collection_id: int, now: datetime) -
         c.avg_rating = (
             sum(positive_ratings) / len(positive_ratings) if positive_ratings else None
         )
-        c.popularity = (
-            sum(popularities_kept) / len(popularities_kept) if popularities_kept else None
-        )
+        c.rating_score = _rating_score(parts_kept, today)
+        c.popularity = _popularity_score(parts_kept, today)
         c.min_year = min(years) if years else None
         c.max_year = max(years) if years else None
     else:
@@ -237,7 +391,7 @@ def _ingest_collection_details(db: Session, collection_id: int, now: datetime) -
         if c in db.new:
             db.expunge(c)
         else:
-            db.delete(c)
+            _delete_collection(db, collection_id)
         return {
             "status": "empty",
             "parts": len(valid_parts),
@@ -344,8 +498,16 @@ def daily_refresh(
     """
     now_utc = now_utc or datetime.now(dt_timezone.utc)
 
-    # Step 1: refresh index — cheap, one HTTP call.
-    index_stats = daily_sync(db, now_utc=now_utc)
+    # Step 1: refresh index — cheap, one HTTP call. A failure here must not
+    # cost the day's refresh of the collections we already have.
+    try:
+        index_stats = daily_sync(db, now_utc=now_utc)
+    except Exception as e:
+        logger.error(
+            "collections refresh: index sync failed, refreshing existing collections only: %s", e
+        )
+        db.rollback()
+        index_stats = {}
 
     # Step 2: refresh every collection in the DB. Order: new collections first
     # (so they pick up details on this same run), then existing ones.
@@ -385,6 +547,7 @@ def daily_refresh(
     )
     return {
         "index_upserted": index_stats.get("upserted", 0),
+        "index_pruned": index_stats.get("pruned", 0),
         "new_collections_seen": len(new_ids),
         "existing_collections_seen": len(existing_ids),
         "collections_succeeded": succeeded,

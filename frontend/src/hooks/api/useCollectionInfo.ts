@@ -37,11 +37,16 @@ export function useBulkCollectionStatus(collectionIds: number[]) {
   });
 }
 
+export const isNotFoundError = (err: Error | null) =>
+  !!err?.message.startsWith("API error 404");
+
 export function useCollectionInfo(id: string | undefined) {
   return useQuery({
     queryKey: queryKeys.collection(id ?? ""),
     queryFn: ({ signal }) => queryFetch<Collection>(`/collections/${id}`, { signal }),
     enabled: !!id,
+    // A 404 means TMDb dropped the collection — retrying won't bring it back.
+    retry: (count, err) => !isNotFoundError(err) && count < 3,
   });
 }
 

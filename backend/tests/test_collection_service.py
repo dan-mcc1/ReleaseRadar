@@ -89,6 +89,18 @@ class TestSearchCollections:
         from app.services.collection_service import search_collections
         assert search_collections(db, "nonexistent") == []
 
+    def test_excludes_uningested_and_empty_collections(self, db, seed_collection):
+        """Name-only stubs from the index sync (size NULL) and collections the
+        ingest found empty (size 0) can't be rendered — keep them out."""
+        from app.models.collection import Collection
+        from app.services.collection_service import search_collections
+        db.add_all([
+            Collection(id=11, name="The Test Trilogy", size=None),
+            Collection(id=12, name="The Test Trilogy", size=0),
+        ])
+        db.commit()
+        assert [c.id for c in search_collections(db, "trilogy")] == [10]
+
 
 # ── Stats ─────────────────────────────────────────────────────────────────
 
@@ -150,6 +162,19 @@ class TestGetWatchStatus:
         s = get_watch_status(db, "test-uid-1", 10)
         assert s["finished"] is True
 
+    def test_watched_unreleased_part_is_not_counted(self, db, user_and_collection):
+        """Progress is "watched of released" everywhere — cards, My Collections,
+        and the collection page — so an upcoming part never counts."""
+        from app.models.watched import Watched
+        from app.services.collection_service import get_watch_status
+        db.add(Watched(user_id="test-uid-1", content_type="movie", content_id=101))
+        db.add(Watched(user_id="test-uid-1", content_type="movie", content_id=103))
+        db.commit()
+
+        s = get_watch_status(db, "test-uid-1", 10)
+        assert s["watched_parts"] == 1
+        assert s["finished"] is False
+
 
 class TestGetWatchStatusBulk:
     def test_empty_input_returns_empty(self, db):
@@ -169,6 +194,16 @@ class TestGetWatchStatusBulk:
         assert out[10]["released_parts"] == 2
         assert out[10]["watched_parts"] == 1
         assert out[10]["finished"] is False
+
+    def test_watched_unreleased_part_is_not_counted(self, db, user_and_collection):
+        from app.models.watched import Watched
+        from app.services.collection_service import get_watch_status_bulk
+        db.add(Watched(user_id="test-uid-1", content_type="movie", content_id=101))
+        db.add(Watched(user_id="test-uid-1", content_type="movie", content_id=103))
+        db.commit()
+
+        out = get_watch_status_bulk(db, "test-uid-1", [10])
+        assert out[10]["watched_parts"] == 1
 
 
 # ── Rankings ──────────────────────────────────────────────────────────────
@@ -215,12 +250,14 @@ class TestRankings:
 def multi_collections(db):
     """Three collections with varying size/rating/year for filter+sort tests."""
     from app.models.collection import Collection
-    c1 = Collection(id=1, name="Apple", size=3, avg_rating=8.0, popularity=50.0,
-                    min_year=2000, max_year=2010, poster_path="/a.jpg")
-    c2 = Collection(id=2, name="Banana", size=5, avg_rating=6.5, popularity=80.0,
-                    min_year=1990, max_year=2005, poster_path="/b.jpg")
-    c3 = Collection(id=3, name="Cherry", size=2, avg_rating=9.0, popularity=30.0,
-                    min_year=2015, max_year=2022, poster_path=None)
+    # Cherry has the highest raw avg_rating but few votes, so its Bayesian
+    # rating_score sits below Apple's.
+    c1 = Collection(id=1, name="Apple", size=3, avg_rating=8.0, rating_score=7.9,
+                    popularity=50.0, min_year=2000, max_year=2010, poster_path="/a.jpg")
+    c2 = Collection(id=2, name="Banana", size=5, avg_rating=6.5, rating_score=6.6,
+                    popularity=80.0, min_year=1990, max_year=2005, poster_path="/b.jpg")
+    c3 = Collection(id=3, name="Cherry", size=2, avg_rating=9.0, rating_score=6.8,
+                    popularity=30.0, min_year=2015, max_year=2022, poster_path=None)
     db.add_all([c1, c2, c3])
     db.commit()
     return [c1, c2, c3]
@@ -247,7 +284,8 @@ class TestBrowseCollections:
     def test_sort_by_rating(self, db, multi_collections):
         from app.services.collection_service import browse_collections
         result = browse_collections(db, sort="rating")
-        assert result["results"][0]["name"] == "Cherry"  # 9.0
+        # Sorted by vote-aware rating_score, not the raw average.
+        assert [r["name"] for r in result["results"]] == ["Apple", "Cherry", "Banana"]
 
     def test_sort_by_popularity(self, db, multi_collections):
         from app.services.collection_service import browse_collections
@@ -298,6 +336,37 @@ class TestBrowseCollections:
         # Total reflects unfiltered count, not page length
         assert page1["total"] == 3
         assert page2["total"] == 3
+
+    def test_excludes_uningested_and_empty_collections(self, db, multi_collections):
+        from app.models.collection import Collection
+        from app.services.collection_service import browse_collections
+        db.add_all([
+            Collection(id=4, name="Stub", size=None),
+            Collection(id=5, name="Emptied", size=0),
+        ])
+        db.commit()
+        result = browse_collections(db)
+        assert result["total"] == 3
+        assert {r["id"] for r in result["results"]} == {1, 2, 3}
+
+    @pytest.mark.parametrize("sort", ["name", "size", "popularity"])
+    def test_ties_break_on_id_so_pages_never_overlap(self, db, sort):
+        """OFFSET pagination needs a total order. Without a unique tiebreaker,
+        rows with equal sort keys can repeat across pages (or be skipped)."""
+        from app.models.collection import Collection
+        from app.services.collection_service import browse_collections
+        db.add_all([
+            Collection(id=i, name="Halloween Collection", size=2, popularity=10.0,
+                       poster_path="/h.jpg")
+            for i in (31, 7, 19, 3, 25)
+        ])
+        db.commit()
+        seen = [
+            r["id"]
+            for p in (1, 2, 3)
+            for r in browse_collections(db, sort=sort, page=p, page_size=2)["results"]
+        ]
+        assert seen == [3, 7, 19, 25, 31]
 
 
 # ── User overview ─────────────────────────────────────────────────────────
@@ -399,14 +468,42 @@ class TestCollectionEndpoints:
         assert r.status_code == 200
         assert len(r.json()["results"]) == 1
 
-    def test_collection_detail_calls_tmdb(self, client, seed_collection):
+    def test_collection_detail_served_from_db(self, client, seed_collection):
+        """Same parts, dates, and count that browse/stats/progress use — and
+        no TMDb call."""
         with patch(
             "app.services.collection_service.tmdb_get_collection",
-            return_value={"id": 10, "name": "TMDB Name", "parts": []},
+            side_effect=AssertionError("should not call TMDb for an ingested collection"),
         ):
             r = client.get("/collections/10")
-            assert r.status_code == 200
-            assert r.json()["name"] == "TMDB Name"
+        assert r.status_code == 200
+        body = r.json()
+        assert body["name"] == "The Test Trilogy"
+        assert body["poster_path"] == "/poster.jpg"
+        assert [p["id"] for p in body["parts"]] == [101, 102, 103]
+        assert body["parts"][0]["title"] == "Part One"
+        assert body["parts"][0]["release_date"]
+
+    def test_collection_detail_falls_back_to_tmdb_before_first_ingest(self, client):
+        """New on TMDb today and not ingested yet → TMDb, minus adult parts."""
+        with patch(
+            "app.services.collection_service.tmdb_get_collection",
+            return_value={"id": 30, "name": "Brand New", "parts": [
+                {"id": 1, "adult": False, "title": "Ok"},
+                {"id": 2, "adult": True, "title": "Adult"},
+            ]},
+        ):
+            r = client.get("/collections/30")
+        assert r.status_code == 200
+        assert [p["id"] for p in r.json()["parts"]] == [1]
+
+    def test_collection_detail_404_for_adult_tmdb_collection(self, client):
+        with patch(
+            "app.services.collection_service.tmdb_get_collection",
+            return_value={"id": 31, "name": "Adult", "adult": True, "parts": []},
+        ):
+            r = client.get("/collections/31")
+        assert r.status_code == 404
 
     def test_collection_detail_404(self, client):
         with patch(
@@ -415,6 +512,20 @@ class TestCollectionEndpoints:
         ):
             r = client.get("/collections/99999")
             assert r.status_code == 404
+
+    def test_collection_detail_404_when_tmdb_404s(self, client):
+        """End-to-end through the real wrapper: a TMDb 404 used to surface as
+        an unhandled HTTPStatusError → 500."""
+        import httpx
+        from app.services.tmdb_collections import get_collection
+        get_collection.cache_clear()
+        req = httpx.Request("GET", "https://api.themoviedb.org/3/collection/88888")
+        err = httpx.HTTPStatusError(
+            "not found", request=req, response=httpx.Response(404, request=req)
+        )
+        with patch("app.services.tmdb_collections.get", side_effect=err):
+            r = client.get("/collections/88888")
+        assert r.status_code == 404
 
     def test_stats_endpoint(self, client, seed_collection):
         r = client.get("/collections/10/stats")

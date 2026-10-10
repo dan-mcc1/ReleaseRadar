@@ -169,6 +169,33 @@ body {
   overflow-x: hidden;
 }
 
+/* Poster grid columns from 2xl up: a fixed count per common screen width, so
+   e.g. a 1080p monitor always shows 10 per row. Grids opt in with the
+   grid-cols-posters utilities below (2xl: prefixed); VirtualGrid's
+   POSTER_COLS mirrors these tiers. */
+:root {
+  --poster-cols: 9; /* 1536px+: 1080p laptops at 125% scaling, 1600, 1680 */
+  --poster-cols-dense: 11;
+}
+@media (width >= 1920px) {
+  :root { --poster-cols: 10; --poster-cols-dense: 12; } /* 1080p */
+}
+@media (width >= 2560px) {
+  :root { --poster-cols: 12; --poster-cols-dense: 14; } /* 1440p, 4K at 150% */
+}
+@media (width >= 3072px) {
+  :root { --poster-cols: 14; --poster-cols-dense: 16; } /* 4K at 125%, ultrawide */
+}
+@media (width >= 3840px) {
+  :root { --poster-cols: 16; --poster-cols-dense: 18; } /* 4K at 100% */
+}
+@utility grid-cols-posters {
+  grid-template-columns: repeat(var(--poster-cols), minmax(0, 1fr));
+}
+@utility grid-cols-posters-dense {
+  grid-template-columns: repeat(var(--poster-cols-dense), minmax(0, 1fr));
+}
+
 @keyframes route-progress-slide {
   0% { transform: translateX(-100%); }
   100% { transform: translateX(400%); }

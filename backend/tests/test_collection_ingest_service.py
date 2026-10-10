@@ -7,7 +7,7 @@ The TMDb HTTP layer (``get_collection``) and the requests-driven dump fetch
 are marked skipped on SQLite.
 """
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -22,6 +22,65 @@ class TestDailySync:
         pass
 
 
+# ── _prune_stale_collections ─────────────────────────────────────────────────
+
+
+class TestPruneStaleCollections:
+    """daily_sync stamps every id in the dump with index_refreshed_at=now.
+    Anything older (or never stamped) is no longer on TMDb."""
+
+    def _seed(self, db, now):
+        from datetime import timedelta
+        from app.models.collection import Collection, CollectionMovie
+        from app.models.user import User
+        from app.models.user_collection_ranking import UserCollectionRanking
+
+        db.add(User(id="u1", username="u1", email="u1@test.com"))
+        db.add_all([
+            Collection(id=1, name="Live A", index_refreshed_at=now),
+            Collection(id=2, name="Live B", index_refreshed_at=now),
+            Collection(id=3, name="Live C", index_refreshed_at=now),
+            Collection(id=4, name="Gone", index_refreshed_at=now - timedelta(days=3)),
+            Collection(id=5, name="Never stamped", index_refreshed_at=None),
+        ])
+        db.flush()
+        db.add_all([
+            CollectionMovie(collection_id=1, movie_id=100, sort_order=0),
+            CollectionMovie(collection_id=4, movie_id=100, sort_order=0),
+            UserCollectionRanking(user_id="u1", collection_id=4, movie_id=100, rank=1),
+        ])
+        db.commit()
+
+    def test_deletes_collections_missing_from_dump(self, db):
+        from app.models.collection import Collection, CollectionMovie
+        from app.models.user_collection_ranking import UserCollectionRanking
+        from app.services.collection_ingest_service import _prune_stale_collections
+
+        now = datetime.now(timezone.utc)
+        self._seed(db, now)
+
+        pruned = _prune_stale_collections(db, now_utc=now, seen=3)
+
+        assert pruned == 2
+        assert {c.id for c in db.query(Collection).all()} == {1, 2, 3}
+        assert db.query(CollectionMovie).filter_by(collection_id=4).count() == 0
+        assert db.query(CollectionMovie).filter_by(collection_id=1).count() == 1
+        assert db.query(UserCollectionRanking).count() == 0
+
+    def test_skips_when_dump_looks_truncated(self, db):
+        """A short or corrupt dump must not wipe the catalog."""
+        from app.models.collection import Collection
+        from app.services.collection_ingest_service import _prune_stale_collections
+
+        now = datetime.now(timezone.utc)
+        self._seed(db, now)
+
+        pruned = _prune_stale_collections(db, now_utc=now, seen=1)
+
+        assert pruned == 0
+        assert db.query(Collection).count() == 5
+
+
 # ── _ingest_collection_details ───────────────────────────────────────────────
 
 
@@ -30,13 +89,81 @@ class TestIngestCollectionDetails:
         from app.services.collection_ingest_service import _ingest_collection_details
 
         with patch(
-            "app.services.collection_ingest_service.get_collection",
+            "app.services.collection_ingest_service.fetch_collection",
             return_value=None,
         ):
             now = datetime.now(timezone.utc)
             stats = _ingest_collection_details(db, 12345, now)
         assert stats["status"] == "missing"
         assert stats["parts"] == 0
+
+    def test_existing_collection_deleted_when_tmdb_no_longer_has_it(self, db):
+        """TMDb merged/deleted the collection (its id 404s). Our stale copy —
+        poster, parts, rankings — must go, or it lingers on browse as a
+        duplicate that errors when clicked."""
+        from app.models.collection import Collection, CollectionMovie
+        from app.models.user import User
+        from app.models.user_collection_ranking import UserCollectionRanking
+        from app.services.collection_ingest_service import _ingest_collection_details
+
+        db.add(User(id="u1", username="u1", email="u1@test.com"))
+        db.add(Collection(id=995, name="Merged Away", poster_path="/p.jpg", size=1))
+        db.flush()
+        db.add(CollectionMovie(collection_id=995, movie_id=5, sort_order=0))
+        db.add(UserCollectionRanking(user_id="u1", collection_id=995, movie_id=5, rank=1))
+        db.commit()
+
+        with patch(
+            "app.services.collection_ingest_service.fetch_collection",
+            return_value=None,
+        ):
+            stats = _ingest_collection_details(db, 995, datetime.now(timezone.utc))
+            db.flush()
+
+        assert stats["status"] == "missing"
+        assert db.get(Collection, 995) is None
+        assert db.query(CollectionMovie).filter_by(collection_id=995).count() == 0
+        assert db.query(UserCollectionRanking).filter_by(collection_id=995).count() == 0
+
+    def test_part_that_404s_is_skipped_not_fatal(self, db):
+        """One dead movie id in TMDb's parts list used to abort the whole
+        ingest, leaving the collection's stale data in place forever."""
+        import httpx
+        from app.models.collection import Collection, CollectionMovie
+        from app.services.collection_ingest_service import _ingest_collection_details
+
+        req = httpx.Request("GET", "https://api.themoviedb.org/3/movie/9102")
+        not_found = httpx.HTTPStatusError(
+            "not found", request=req, response=httpx.Response(404, request=req)
+        )
+
+        def _populate(_db, mid, **_):
+            if mid == 9102:
+                raise not_found
+            return MagicMock(id=mid)
+
+        payload = {
+            "id": 994,
+            "name": "Has A Dead Part",
+            "parts": [
+                {"id": 9101, "release_date": "2001-01-01"},
+                {"id": 9102, "release_date": "2002-01-01"},
+            ],
+        }
+        with patch(
+            "app.services.collection_ingest_service.fetch_collection",
+            return_value=payload,
+        ), patch(
+            "app.services.collection_ingest_service.populate_movie_full",
+            side_effect=_populate,
+        ):
+            stats = _ingest_collection_details(db, 994, datetime.now(timezone.utc))
+            db.flush()
+
+        assert stats["status"] == "ok"
+        assert db.get(Collection, 994).size == 1
+        parts = db.query(CollectionMovie).filter_by(collection_id=994).all()
+        assert [p.movie_id for p in parts] == [9101]
 
     def test_creates_collection_row_when_absent(self, db):
         from app.models.collection import Collection
@@ -54,7 +181,7 @@ class TestIngestCollectionDetails:
         }
         movie_mock = MagicMock(id=9001)
         with patch(
-            "app.services.collection_ingest_service.get_collection",
+            "app.services.collection_ingest_service.fetch_collection",
             return_value=payload,
         ), patch(
             "app.services.collection_ingest_service.populate_movie_full",
@@ -87,7 +214,7 @@ class TestIngestCollectionDetails:
             ],
         }
         with patch(
-            "app.services.collection_ingest_service.get_collection",
+            "app.services.collection_ingest_service.fetch_collection",
             return_value=payload,
         ), patch(
             "app.services.collection_ingest_service.populate_movie_full",
@@ -119,7 +246,7 @@ class TestIngestCollectionDetails:
             ],
         }
         with patch(
-            "app.services.collection_ingest_service.get_collection",
+            "app.services.collection_ingest_service.fetch_collection",
             return_value=payload,
         ), patch(
             "app.services.collection_ingest_service.populate_movie_full",
@@ -143,7 +270,7 @@ class TestIngestCollectionDetails:
 
         payload = {"id": 996, "name": "Adult", "adult": True, "parts": []}
         with patch(
-            "app.services.collection_ingest_service.get_collection",
+            "app.services.collection_ingest_service.fetch_collection",
             return_value=payload,
         ):
             stats = _ingest_collection_details(db, 996, datetime.now(timezone.utc))
@@ -164,7 +291,7 @@ class TestIngestCollectionDetails:
             ],
         }
         with patch(
-            "app.services.collection_ingest_service.get_collection",
+            "app.services.collection_ingest_service.fetch_collection",
             return_value=payload,
         ):
             with patch(
@@ -192,7 +319,7 @@ class TestIngestCollectionDetails:
         }
         movie_mock = MagicMock(id=100)
         with patch(
-            "app.services.collection_ingest_service.get_collection",
+            "app.services.collection_ingest_service.fetch_collection",
             return_value=payload,
         ):
             with patch(
@@ -240,16 +367,18 @@ class TestIngestCollectionDetails:
             "id": 50,
             "name": "Saga",
             "parts": [
-                {"id": 201, "adult": False, "release_date": "2010-01-01", "popularity": 10.0},
-                {"id": 202, "adult": False, "release_date": "2020-01-01", "popularity": 20.0},
+                {"id": 201, "adult": False, "release_date": "2010-01-01",
+                 "popularity": 10.0, "vote_count": 1000},
+                {"id": 202, "adult": False, "release_date": "2020-01-01",
+                 "popularity": 20.0, "vote_count": 3000},
             ],
         }
 
-        def _populate(_db, mid):
+        def _populate(_db, mid, **_):
             return _db.query(Movie).filter_by(id=mid).first()
 
         with patch(
-            "app.services.collection_ingest_service.get_collection",
+            "app.services.collection_ingest_service.fetch_collection",
             return_value=payload,
         ), patch(
             "app.services.collection_ingest_service.populate_movie_full",
@@ -263,7 +392,9 @@ class TestIngestCollectionDetails:
         col = db.get(Collection, 50)
         assert col.size == 2
         assert col.avg_rating == pytest.approx(8.0)
-        assert col.popularity == pytest.approx(15.0)
+        # sqrt(total votes × total popularity) = sqrt(4000 × 30)
+        assert col.popularity == pytest.approx((4000 * 30) ** 0.5)
+        assert col.rating_score is not None
         assert col.min_year == 2010
         assert col.max_year == 2020
 
@@ -305,11 +436,11 @@ class TestIngestCollectionDetails:
             ],
         }
 
-        def _populate(_db, mid):
+        def _populate(_db, mid, **_):
             return _db.query(Movie).filter_by(id=mid).first()
 
         with patch(
-            "app.services.collection_ingest_service.get_collection",
+            "app.services.collection_ingest_service.fetch_collection",
             return_value=payload,
         ), patch(
             "app.services.collection_ingest_service.populate_movie_full",
@@ -323,6 +454,207 @@ class TestIngestCollectionDetails:
         # Name overwritten
         col = db.get(Collection, 70)
         assert col.name == "New Name"
+
+    def test_ingest_reads_fresh_tmdb_data_not_the_page_cache(self, db):
+        """The collection page caches TMDb responses in-process with no expiry.
+        The nightly ingest must not pick up a stale copy from that cache."""
+        from app.models.collection import Collection
+        from app.services.collection_ingest_service import _ingest_collection_details
+        from app.services.tmdb_collections import get_collection
+
+        get_collection.cache_clear()
+        old = {"id": 71, "name": "Old Name", "parts": [{"id": 7101, "release_date": "2001-01-01"}]}
+        new = {"id": 71, "name": "New Name", "parts": [{"id": 7101, "release_date": "2001-01-01"}]}
+        try:
+            with patch("app.services.tmdb_collections.get", return_value=old):
+                get_collection(71)  # a page view caches the old payload
+            with patch("app.services.tmdb_collections.get", return_value=new), patch(
+                "app.services.collection_ingest_service.populate_movie_full",
+                return_value=MagicMock(id=7101),
+            ):
+                _ingest_collection_details(db, 71, datetime.now(timezone.utc))
+                db.flush()
+        finally:
+            get_collection.cache_clear()
+
+        assert db.get(Collection, 71).name == "New Name"
+
+
+# ── Part movie refresh (Movie rows are otherwise never refreshed) ────────────
+
+
+class TestPartMovieRefresh:
+    """Runs the real populate_movie_full; only the TMDb /movie fetch is faked."""
+
+    NOW = datetime(2026, 10, 9, 9, 0, tzinfo=timezone.utc)
+
+    def _seed_movie(self, db, mid, release, vote_average=6.0):
+        from app.models.movie import Movie
+        db.add(Movie(id=mid, title=f"M{mid}", release_date=release, tracking_count=0,
+                     vote_average=vote_average, updated_at=self.NOW))
+        db.commit()
+
+    def _tmdb_movie(self, mid, release, vote_average=7.0):
+        return {
+            "id": mid, "title": f"M{mid}", "release_date": release,
+            "vote_average": vote_average, "release_dates": {"results": []},
+            "genres": [], "watch/providers": {"results": {}}, "images": {"logos": []},
+        }
+
+    def _ingest(self, db, parts, movie_responses):
+        from app.services.collection_ingest_service import _ingest_collection_details
+        from app.services.tmdb_movies import fetch_movie_from_tmdb
+        payload = {"id": 80, "name": "Saga", "parts": parts}
+        fetch_movie_from_tmdb.cache_clear()
+        with patch(
+            "app.services.collection_ingest_service.fetch_collection", return_value=payload
+        ), patch(
+            # The HTTP boundary, so the movie cache is exercised for real.
+            "app.services.tmdb_movies.get",
+            side_effect=lambda path, params=None: movie_responses[int(path.rsplit("/", 1)[1])],
+        ) as fetch, patch(
+            # populate_movie_full stores the ISO string, which Postgres accepts
+            # but SQLite's Date type rejects.
+            "app.services.media_upsert.get_theatrical_release_date",
+            side_effect=lambda data: date.fromisoformat(data["release_date"]),
+        ):
+            stats = _ingest_collection_details(db, 80, self.NOW)
+            db.flush()
+        return stats, fetch
+
+    def test_upcoming_movie_picks_up_its_new_release_date(self, db):
+        from app.models.movie import Movie
+        self._seed_movie(db, 8001, date(2026, 12, 1))
+        self._ingest(
+            db,
+            [{"id": 8001, "release_date": "2027-03-05"}],
+            {8001: self._tmdb_movie(8001, "2027-03-05")},
+        )
+        assert db.get(Movie, 8001).release_date == date(2027, 3, 5)
+
+    def test_row_saved_as_upcoming_is_refreshed_once_released(self, db):
+        """Saved back when it was upcoming; TMDb has since listed it as out a
+        while ago, but our row still holds the old future date."""
+        from app.models.movie import Movie
+        self._seed_movie(db, 8002, date(2026, 12, 1))
+        self._ingest(
+            db,
+            [{"id": 8002, "release_date": "2025-06-01"}],
+            {8002: self._tmdb_movie(8002, "2025-06-01")},
+        )
+        assert db.get(Movie, 8002).release_date == date(2025, 6, 1)
+
+    def test_recently_released_movie_is_refreshed(self, db):
+        from app.models.movie import Movie
+        self._seed_movie(db, 8003, date(2026, 9, 1), vote_average=6.0)
+        self._ingest(
+            db,
+            [{"id": 8003, "release_date": "2026-09-01"}],
+            {8003: self._tmdb_movie(8003, "2026-09-01", vote_average=7.4)},
+        )
+        assert db.get(Movie, 8003).vote_average == pytest.approx(7.4)
+
+    def test_settled_movie_is_not_refetched_but_gets_fresh_rating(self, db):
+        """Long-released movies don't cost a /movie call; their rating comes
+        straight from the /collection payload."""
+        from app.models.collection import Collection
+        from app.models.movie import Movie
+        self._seed_movie(db, 8004, date(2010, 5, 1), vote_average=6.0)
+        stats, fetch = self._ingest(
+            db,
+            [{"id": 8004, "release_date": "2010-05-01", "vote_average": 7.7}],
+            {},
+        )
+        assert fetch.call_count == 0
+        assert stats["status"] == "ok"
+        assert db.get(Movie, 8004).vote_average == pytest.approx(7.7)
+        assert db.get(Collection, 80).avg_rating == pytest.approx(7.7)
+
+
+# ── _rating_score ────────────────────────────────────────────────────────────
+
+
+class TestRatingScore:
+    TODAY = date(2026, 10, 9)
+
+    def _part(self, avg, votes, release="2015-01-01"):
+        return {"vote_average": avg, "vote_count": votes, "release_date": release}
+
+    def test_few_votes_are_pulled_toward_the_typical_rating(self):
+        """A 1-vote 9.0 used to top the rating sort above Lord of the Rings."""
+        from app.services.collection_ingest_service import _rating_score
+        one_vote = [self._part(9.0, 1)]
+        lotr = [self._part(8.4, 28000), self._part(8.4, 24000), self._part(8.5, 27000)]
+        assert _rating_score(lotr, self.TODAY) > _rating_score(one_vote, self.TODAY)
+        # Big samples barely move: raw vote-weighted mean is ~8.43.
+        assert _rating_score(lotr, self.TODAY) == pytest.approx(8.41, abs=0.01)
+
+    def test_bayesian_average_of_released_parts(self):
+        from app.services.collection_ingest_service import (
+            _RATING_PRIOR_MEAN, _RATING_PRIOR_VOTES, _rating_score,
+        )
+        parts = [self._part(8.0, 1000), self._part(7.0, 3000)]
+        expected = (_RATING_PRIOR_VOTES * _RATING_PRIOR_MEAN + 8.0 * 1000 + 7.0 * 3000) / (
+            _RATING_PRIOR_VOTES + 4000
+        )
+        assert _rating_score(parts, self.TODAY) == pytest.approx(expected)
+
+    def test_unreleased_and_unvoted_parts_are_ignored(self):
+        from app.services.collection_ingest_service import _rating_score
+        base = [self._part(8.0, 5000)]
+        noisy = base + [self._part(10.0, 3, release="2027-01-01"), self._part(0.0, 0)]
+        assert _rating_score(noisy, self.TODAY) == pytest.approx(_rating_score(base, self.TODAY))
+
+    def test_none_without_any_votes(self):
+        from app.services.collection_ingest_service import _rating_score
+        assert _rating_score([self._part(0.0, 0)], self.TODAY) is None
+        assert _rating_score([], self.TODAY) is None
+
+
+# ── _popularity_score ────────────────────────────────────────────────────────
+
+
+class TestPopularityScore:
+    TODAY = date(2026, 10, 9)
+
+    def _part(self, pop, votes, release="2015-01-01"):
+        return {"popularity": pop, "vote_count": votes, "release_date": release}
+
+    def test_geometric_mean_of_total_votes_and_total_popularity(self):
+        from app.services.collection_ingest_service import _popularity_score
+        parts = [self._part(10.0, 1000), self._part(20.0, 3000)]
+        assert _popularity_score(parts, self.TODAY) == pytest.approx((4000 * 30) ** 0.5)
+
+    def test_unreleased_parts_are_ignored(self):
+        """Announced sequels have hype-driven popularity and no votes — they
+        shouldn't move the franchise either way."""
+        from app.services.collection_ingest_service import _popularity_score
+        parts = [
+            self._part(10.0, 100),
+            self._part(500.0, 0, release="2027-05-01"),
+            self._part(80.0, 0, release=""),  # no date yet
+        ]
+        assert _popularity_score(parts, self.TODAY) == pytest.approx((100 * 10) ** 0.5)
+
+    def test_none_when_nothing_released(self):
+        from app.services.collection_ingest_service import _popularity_score
+        assert _popularity_score([self._part(50.0, 0, release="2027-01-01")], self.TODAY) is None
+        assert _popularity_score([], self.TODAY) is None
+
+    def test_big_franchise_beats_small_collection_riding_one_trending_film(self):
+        """The old mean-of-popularity score ranked a 2-film collection with one
+        trending entry above Harry Potter-sized franchises."""
+        from app.services.collection_ingest_service import _popularity_score
+        franchise = [self._part(25.0, 20000) for _ in range(8)]
+        one_hit = [self._part(225.0, 3000), self._part(10.0, 500)]
+        assert _popularity_score(franchise, self.TODAY) > _popularity_score(one_hit, self.TODAY)
+
+    def test_long_obscure_series_does_not_beat_a_major_franchise(self):
+        """Summing alone would let a 30-film niche series outrank a major one."""
+        from app.services.collection_ingest_service import _popularity_score
+        niche = [self._part(8.0, 300) for _ in range(30)]
+        major = [self._part(30.0, 15000) for _ in range(3)]
+        assert _popularity_score(major, self.TODAY) > _popularity_score(niche, self.TODAY)
 
 
 # ── _ingest_one ──────────────────────────────────────────────────────────────
@@ -377,6 +709,58 @@ class TestDumpUrlFor:
         assert "06_15_2024" in url
 
 
+# ── _iter_latest_dump ────────────────────────────────────────────────────────
+
+
+class TestIterLatestDump:
+    """TMDb only promises the day's files "by 8:00 AM UTC"; older dumps stay up
+    for 3 months, so yesterday's is a safe fallback."""
+
+    NOW = datetime(2024, 6, 15, 8, 30, tzinfo=timezone.utc)
+
+    def _records(self, url, recs, fail_on=None):
+        import requests
+        if fail_on and fail_on in url:
+            raise requests.HTTPError("403 Forbidden")
+        yield from recs
+
+    def test_uses_todays_dump_when_available(self):
+        from app.services.collection_ingest_service import _iter_latest_dump
+        urls = []
+
+        def fake(url):
+            urls.append(url)
+            return self._records(url, [{"id": 1}])
+
+        with patch("app.services.collection_ingest_service._iter_dump_records", side_effect=fake):
+            assert list(_iter_latest_dump(self.NOW)) == [{"id": 1}]
+        assert len(urls) == 1 and "06_15_2024" in urls[0]
+
+    def test_falls_back_to_yesterday_when_today_is_not_up_yet(self):
+        from app.services.collection_ingest_service import _iter_latest_dump
+        with patch(
+            "app.services.collection_ingest_service._iter_dump_records",
+            side_effect=lambda url: self._records(url, [{"id": 2, "url": url}], fail_on="06_15_2024"),
+        ):
+            recs = list(_iter_latest_dump(self.NOW))
+        assert [r["id"] for r in recs] == [2]
+        assert "06_14_2024" in recs[0]["url"]
+
+    def test_failure_midway_through_the_dump_is_not_masked(self):
+        """A partial read must raise — falling back (or pruning) on a half-read
+        dump would be wrong."""
+        import requests
+        from app.services.collection_ingest_service import _iter_latest_dump
+
+        def partial(url):
+            yield {"id": 1}
+            raise requests.ConnectionError("reset")
+
+        with patch("app.services.collection_ingest_service._iter_dump_records", side_effect=partial):
+            with pytest.raises(requests.ConnectionError):
+                list(_iter_latest_dump(self.NOW))
+
+
 # ── daily_refresh — orchestration smoke test ─────────────────────────────────
 
 
@@ -412,6 +796,29 @@ class TestDailyRefresh:
         assert result["existing_collections_seen"] == 1
         assert result["collections_succeeded"] == 2
         assert result["collections_failed"] == 0
+
+    def test_index_sync_failure_still_refreshes_existing_collections(self, db):
+        """A failed dump download used to abort the whole run, and the loop then
+        waited until the next day."""
+        from app.models.collection import Collection
+        from app.services.collection_ingest_service import daily_refresh
+
+        now = datetime.now(timezone.utc)
+        db.add(Collection(id=1, name="A", details_refreshed_at=now))
+        db.add(Collection(id=2, name="B", details_refreshed_at=now))
+        db.commit()
+
+        with patch(
+            "app.services.collection_ingest_service.daily_sync",
+            side_effect=RuntimeError("dump unavailable"),
+        ), patch(
+            "app.services.collection_ingest_service._parallel_ingest",
+            return_value=(2, 0),
+        ) as mock_ingest:
+            result = daily_refresh(db, now_utc=now)
+
+        assert mock_ingest.call_args[0][0] == [1, 2]
+        assert result["collections_succeeded"] == 2
 
 
 # ── backfill_collections — orchestration smoke test ──────────────────────────

@@ -1,8 +1,11 @@
 """Collection helpers.
 
-Local CollectionMovie + Movie rows are the source of truth for browse,
-search, stats, status, and rankings. /collections/{id} detail is still a
-TMDb passthrough until the backfill finishes.
+Local CollectionMovie + Movie rows are the source of truth for detail,
+browse, search, stats, status, and rankings. Detail falls back to TMDb only
+for collections the nightly ingest hasn't reached yet.
+
+Progress everywhere is "watched of released": an upcoming part never counts
+toward watched_parts or blocks `finished`.
 """
 
 from __future__ import annotations
@@ -19,16 +22,42 @@ from app.models.genre import Genre, MovieGenre
 from app.models.movie import Movie
 from app.models.user_collection_ranking import UserCollectionRanking
 from app.models.watched import Watched
+from app.services.media_serializers import _movie_query_options_list, serialize_movie_list
 from app.services.tmdb_collections import get_collection as tmdb_get_collection
 
 
 # ---------------------------------------------------------------------------
-# Detail (still TMDb passthrough)
+# Detail
 # ---------------------------------------------------------------------------
 
 
-def get_collection_detail(collection_id: int) -> dict | None:
-    return tmdb_get_collection(collection_id) or None
+def get_collection_detail(db: Session, collection_id: int) -> dict | None:
+    """Collection page payload, served from our mirror so its parts, dates,
+    and count match browse, stats, and progress. Falls back to TMDb only for a
+    collection the nightly ingest hasn't reached yet (new on TMDb today)."""
+    c = db.get(Collection, collection_id)
+    if c is not None and c.size:
+        movies = (
+            db.query(Movie)
+            .join(CollectionMovie, CollectionMovie.movie_id == Movie.id)
+            .filter(CollectionMovie.collection_id == collection_id)
+            .options(*_movie_query_options_list())
+            .order_by(CollectionMovie.sort_order)
+            .all()
+        )
+        return {
+            "id": c.id,
+            "name": c.name,
+            "overview": c.overview,
+            "poster_path": c.poster_path,
+            "backdrop_path": c.backdrop_path,
+            "parts": [serialize_movie_list(m) for m in movies],
+        }
+
+    data = tmdb_get_collection(collection_id)
+    if not data or data.get("adult"):
+        return None
+    return {**data, "parts": [p for p in data.get("parts") or [] if not p.get("adult")]}
 
 
 def _part_ids_from_db(db: Session, collection_id: int) -> list[int]:
@@ -53,8 +82,8 @@ def search_collections(db: Session, query: str, limit: int = 25) -> list[Collect
     pattern = f"%{query.strip()}%"
     return (
         db.query(Collection)
-        .filter(Collection.name.ilike(pattern))
-        .order_by(Collection.name.asc())
+        .filter(Collection.name.ilike(pattern), Collection.size > 0)
+        .order_by(Collection.name.asc(), Collection.id.asc())
         .limit(limit)
         .all()
     )
@@ -155,7 +184,10 @@ def get_watch_status_bulk(
                 case((Movie.release_date <= today, 1), else_=0)
             ).label("released"),
             func.sum(
-                case((Watched.content_id.isnot(None), 1), else_=0)
+                case(
+                    (and_(Watched.content_id.isnot(None), Movie.release_date <= today), 1),
+                    else_=0,
+                )
             ).label("watched"),
         )
         .join(Movie, Movie.id == CollectionMovie.movie_id, isouter=True)
@@ -223,7 +255,7 @@ def get_watch_status(db: Session, user_id: str, collection_id: int) -> dict | No
         "collection_id": collection_id,
         "total_parts": len(part_ids),
         "released_parts": len(released_ids),
-        "watched_parts": len(watched_ids),
+        "watched_parts": len(watched_ids.intersection(released_ids)),
         "finished": finished,
         "watched_movie_ids": sorted(watched_ids),
     }
@@ -421,7 +453,9 @@ def browse_collections(
     `collection` row at ingest time, so this endpoint is just a paginated
     SELECT with a parallel COUNT against the same WHERE clause.
     """
-    q = db.query(Collection)
+    # size is NULL until a collection is ingested and 0 never persists, so this
+    # hides name-only stubs from the index sync that we can't render yet.
+    q = db.query(Collection).filter(Collection.size > 0)
 
     if genre_id is not None:
         # The only filter that still requires a join. A semi-join via EXISTS
@@ -470,17 +504,20 @@ def browse_collections(
     sort_columns: dict[str, object] = {
         "name": Collection.name,
         "size": Collection.size,
-        "rating": Collection.avg_rating,
+        # Vote-aware score; avg_rating stays the displayed number and filter.
+        "rating": Collection.rating_score,
         "popularity": Collection.popularity,
         "earliest": Collection.min_year,
         "latest": Collection.max_year,
     }
     col = sort_columns[sort]
     primary = col.asc().nullslast() if effective_dir == "asc" else col.desc().nullslast()
+    # Collection.id last: OFFSET pagination needs a total order, otherwise
+    # rows with tied sort keys can repeat across pages or be skipped.
     if sort == "name":
-        q = q.order_by(has_poster, primary)
+        q = q.order_by(has_poster, primary, Collection.id.asc())
     else:
-        q = q.order_by(primary, Collection.name.asc())
+        q = q.order_by(primary, Collection.name.asc(), Collection.id.asc())
 
     rows = q.offset((page - 1) * page_size).limit(page_size).all()
 

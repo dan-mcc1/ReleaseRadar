@@ -499,7 +499,7 @@ export default function Search() {
                   count={shows.length}
                   onSeeAll={shows.length > 8 ? () => setActiveTab("tv") : undefined}
                 />
-                <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-3">
+                <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 2xl:grid-cols-posters gap-3">
                   {previewShows.map((s) => (
                     <PosterCard key={s.id} item={s} type="tv" />
                   ))}
@@ -513,7 +513,7 @@ export default function Search() {
                   count={movies.length}
                   onSeeAll={movies.length > 8 ? () => setActiveTab("movies") : undefined}
                 />
-                <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-3">
+                <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 2xl:grid-cols-posters gap-3">
                   {previewMovies.map((m) => (
                     <PosterCard key={m.id} item={m} type="movie" />
                   ))}
@@ -577,7 +577,7 @@ export default function Search() {
       {!loading && activeTab === "tv" && (
         <div className="px-6 sm:px-10">
           <SectionHeader title="TV Shows" count={shows.length} />
-          <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-3">
+          <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 2xl:grid-cols-posters gap-3">
             {shows.map((s) => (
               <PosterCard key={s.id} item={s} type="tv" />
             ))}
@@ -588,7 +588,7 @@ export default function Search() {
       {!loading && activeTab === "movies" && (
         <div className="px-6 sm:px-10">
           <SectionHeader title="Movies" count={movies.length} />
-          <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-3">
+          <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 2xl:grid-cols-posters gap-3">
             {movies.map((m) => (
               <PosterCard key={m.id} item={m} type="movie" />
             ))}

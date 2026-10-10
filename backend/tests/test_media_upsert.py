@@ -358,23 +358,45 @@ class TestPopulateMovieFull:
             fetch.assert_not_called()
         assert result is seed_movie
 
-    def test_force_refetches_even_when_populated(self, db, seed_movie):
-        from app.services.media_upsert import populate_movie_full
-        seed_movie.updated_at = datetime.now(timezone.utc)
-        db.commit()
-        movie_data = {
+    @staticmethod
+    def _movie_payload(title):
+        return {
             "id": 550,
-            "title": "Replaced",
+            "title": title,
             "genres": [],
             "release_dates": {"results": []},
             "watch/providers": {"results": {}},
             "images": {"logos": []},
         }
-        with patch("app.services.media_upsert.fetch_movie_from_tmdb",
-                   return_value=movie_data) as fetch:
+
+    def test_force_refetches_even_when_populated(self, db, seed_movie):
+        from app.services.media_upsert import populate_movie_full
+        seed_movie.updated_at = datetime.now(timezone.utc)
+        db.commit()
+        with patch("app.services.tmdb_movies.get",
+                   return_value=self._movie_payload("Replaced")) as get:
             result = populate_movie_full(db, 550, force=True)
-            fetch.assert_called_once()
+            get.assert_called_once()
         assert result.title == "Replaced"
+
+    def test_force_bypasses_the_in_memory_tmdb_cache(self, db, seed_movie):
+        """fetch_movie_from_tmdb is an lru_cache with no expiry. A forced
+        refresh that read through it would get the copy cached on an earlier
+        night, so release-date changes would never land."""
+        from app.services.media_upsert import populate_movie_full
+        from app.services.tmdb_movies import fetch_movie_from_tmdb
+
+        seed_movie.updated_at = datetime.now(timezone.utc)
+        db.commit()
+        fetch_movie_from_tmdb.cache_clear()
+        try:
+            with patch("app.services.tmdb_movies.get", return_value=self._movie_payload("Old")):
+                fetch_movie_from_tmdb(550, "watch/providers,release_dates,images")
+            with patch("app.services.tmdb_movies.get", return_value=self._movie_payload("New")):
+                result = populate_movie_full(db, 550, force=True)
+        finally:
+            fetch_movie_from_tmdb.cache_clear()
+        assert result.title == "New"
 
     def test_missing_row_creates_new(self, db):
         from app.services.media_upsert import populate_movie_full

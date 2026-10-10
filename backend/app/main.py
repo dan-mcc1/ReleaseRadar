@@ -310,13 +310,14 @@ async def _episode_alert_loop():
 
 
 async def _collection_sync_loop():
-    """Daily collection mirror sync at 08:00 UTC, right after TMDb publishes
-    the id dump and the day's /movie/changes window closes. Pulls new +
+    """Daily collection mirror sync at 08:30 UTC. TMDb promises the day's id
+    dump "by 8:00 AM UTC"; the extra half hour clears that edge, and the sync
+    falls back to yesterday's dump if today's still isn't up. Pulls new +
     changed collections and re-fetches details."""
     while True:
         try:
             now = datetime.now(dt_timezone.utc)
-            next_run = now.replace(hour=8, minute=0, second=0, microsecond=0)
+            next_run = now.replace(hour=8, minute=30, second=0, microsecond=0)
             if now >= next_run:
                 next_run += timedelta(days=1)
             await asyncio.sleep((next_run - now).total_seconds())

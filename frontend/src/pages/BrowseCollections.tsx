@@ -450,7 +450,7 @@ export default function BrowseCollections() {
 
       {/* Grid */}
       {!loading && results.length > 0 && (
-        <div className="px-6 sm:px-10 pb-8 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 lg:grid-cols-8 gap-4">
+        <div className="px-6 sm:px-10 pb-8 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 lg:grid-cols-8 2xl:grid-cols-posters gap-4">
           {results.map((c) => (
             <CollectionCard key={c.id} c={c} status={statusMap?.[String(c.id)]} />
           ))}

@@ -417,7 +417,7 @@ export default function Watched() {
 
       {/* Loading skeleton */}
       {isLoading && (
-        <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 gap-3 mt-8">
+        <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 2xl:grid-cols-posters gap-3 mt-8">
           {Array.from({ length: 12 }).map((_, i) => (
             <div key={i} className="flex flex-col gap-2 animate-pulse">
               <div className="aspect-[2/3] rounded-xl bg-neutral-800" />

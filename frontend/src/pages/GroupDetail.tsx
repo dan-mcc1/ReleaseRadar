@@ -957,7 +957,7 @@ function TitlesTab({
               </p>
               {firstSection === "shows" && editButton}
             </div>
-            <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-3">
+            <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 2xl:grid-cols-posters-dense gap-3">
               {shows.map((s) => renderItem(s, "tv"))}
             </div>
           </section>
@@ -970,7 +970,7 @@ function TitlesTab({
               </p>
               {firstSection === "movies" && editButton}
             </div>
-            <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-3">
+            <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 2xl:grid-cols-posters-dense gap-3">
               {movies.map((m) => renderItem(m, "movie"))}
             </div>
           </section>

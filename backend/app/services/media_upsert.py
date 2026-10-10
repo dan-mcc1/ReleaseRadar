@@ -6,7 +6,7 @@ from app.models.show import Show
 from app.models.genre import Genre, ShowGenre, MovieGenre
 from app.models.provider import Provider, ShowProvider, MovieProvider
 from app.models.season import Season
-from app.services.tmdb_movies import fetch_movie_from_tmdb
+from app.services.tmdb_movies import fetch_movie_from_tmdb, fetch_movie_from_tmdb_uncached
 from app.services.tmdb_tv import fetch_show_from_tmdb
 from app.services.provider_utils import canonical_provider_id, canonical_provider_name
 from app.services.tvmaze_service import fetch_show_air_time
@@ -292,7 +292,9 @@ def populate_movie_full(
     if movie and movie.updated_at is not None and not force:
         return movie
 
-    movie_data = fetch_movie_from_tmdb(movie_id, "watch/providers,release_dates,images")
+    # A forced refresh must not get a response cached on an earlier run.
+    fetch = fetch_movie_from_tmdb_uncached if force else fetch_movie_from_tmdb
+    movie_data = fetch(movie_id, "watch/providers,release_dates,images")
     if not movie_data or not movie_data.get("title"):
         return None
     if movie_data.get("adult"):
