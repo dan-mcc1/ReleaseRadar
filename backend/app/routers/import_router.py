@@ -1,4 +1,5 @@
 # app/routers/import_router.py
+import logging
 import asyncio
 import csv
 import io
@@ -24,6 +25,8 @@ from app.models.show import Show
 from app.models.episode import Episode
 from app.models.episode_watched import EpisodeWatched
 from datetime import datetime, timezone
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -1087,7 +1090,9 @@ async def import_tvtime(
             try:
                 await asyncio.to_thread(_sync_in_thread, sid, season)
             except Exception:
-                pass
+                logger.warning(
+                    "tvtime import: syncing show %s season %s failed", sid, season, exc_info=True
+                )
 
     await asyncio.gather(*[sync_one(sid, season) for sid, season in seasons_needed])
 

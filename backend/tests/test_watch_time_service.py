@@ -5,10 +5,8 @@ Covers the public get_watch_time_stats aggregation plus the _humor_fact helper.
 Seeds the DB with mixed movie + episode watches, then asserts the totals,
 genre/platform breakdowns, longest-binge, and available years come out right.
 
-watch_time_service spins up its own SessionLocal in worker threads.
-conftest.py patches app.db.session.SessionLocal so they hit the shared
-in-memory test engine. Movies/episodes need real runtime values so the
-sum aggregations are meaningful.
+Movies/episodes need real runtime values so the sum aggregations are
+meaningful.
 """
 
 from datetime import date, datetime, timezone
@@ -230,3 +228,20 @@ class TestGetWatchTimeStats:
         assert stats["year"] == 2024
         stats_all = get_watch_time_stats(db, "u1")
         assert stats_all["year"] is None
+
+
+class TestConnectionUse:
+    def test_uses_only_the_callers_session(self, db, seed_watch_history):
+        """One stats request should hold one DB connection, not open seven
+        more sessions for parallel queries (each one a pool checkout)."""
+        from app.services.watch_time_service import get_watch_time_stats
+
+        with patch(
+            "app.services.watch_time_service.SessionLocal",
+            side_effect=AssertionError("opened an extra session"),
+            create=True,
+        ):
+            stats = get_watch_time_stats(db, "u1")
+
+        assert (stats["movies_count"], stats["episodes_count"]) == (2, 3)
+        assert stats["total_minutes"] == 120 + 90 + 50 + 60 + 40

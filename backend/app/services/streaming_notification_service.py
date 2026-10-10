@@ -1,3 +1,4 @@
+import logging
 from collections import defaultdict
 
 from sqlalchemy.orm import Session
@@ -13,6 +14,8 @@ from app.services.push_service import push_notification, tmdb_poster_url
 from app.services.tmdb_movies import fetch_movie_from_tmdb
 from app.services.tmdb_tv import fetch_show_from_tmdb
 from app.db.session import SessionLocal
+
+logger = logging.getLogger(__name__)
 
 
 def _fetch_fresh_us_providers(content_id: int, content_type: str) -> dict:
@@ -120,7 +123,10 @@ def ensure_providers_populated(db: Session, content_id: int, content_type: str) 
         _diff_and_update_providers(db, content_id, content_type, fresh)
         # No commit — caller owns the transaction
     except Exception:
-        pass
+        logger.warning(
+            "could not back-fill providers for %s %s; the nightly refresh will retry",
+            content_type, content_id, exc_info=True,
+        )
 
 
 def ensure_providers_populated_bg(content_id: int, content_type: str) -> None:
@@ -129,9 +135,9 @@ def ensure_providers_populated_bg(content_id: int, content_type: str) -> None:
     try:
         ensure_providers_populated(db, content_id, content_type)
         db.commit()
-    except Exception as e:
+    except Exception:
         db.rollback()
-        print(f"[ensure_providers_populated_bg] Error for {content_type} {content_id}: {e}")
+        logger.exception("ensure_providers_populated_bg failed for %s %s", content_type, content_id)
     finally:
         db.close()
 
@@ -157,8 +163,8 @@ def refresh_streaming_providers(db: Session) -> None:
             added, removed = _diff_and_update_providers(db, content_id, content_type, fresh)
             if added or removed:
                 changes[(content_id, content_type)] = {"added": added, "removed": removed}
-        except Exception as e:
-            print(f"[streaming] Error refreshing {content_type} {content_id}: {e}")
+        except Exception:
+            logger.exception("streaming: failed to refresh %s %s", content_type, content_id)
 
     db.commit()
 
@@ -235,8 +241,8 @@ def refresh_streaming_providers(db: Session) -> None:
                     alerts,
                     uid=user.id,
                 )
-            except Exception as e:
-                print(f"[streaming] Failed to email {user.email}: {e}")
+            except Exception:
+                logger.exception("streaming: failed to email user %s", user.id)
 
         if user.push_notifications_enabled and user.push_notify_streaming_changes:
             for alert in alerts:
@@ -261,5 +267,5 @@ def refresh_streaming_providers(db: Session) -> None:
                         content_id=alert["content_id"],
                         image_url=tmdb_poster_url(alert.get("poster_path")),
                     )
-                except Exception as e:
-                    print(f"[streaming] Failed to push {user.id}: {e}")
+                except Exception:
+                    logger.exception("streaming: failed to push to user %s", user.id)

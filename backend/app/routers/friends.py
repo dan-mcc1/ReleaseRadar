@@ -1,4 +1,5 @@
 # app/routers/friends.py
+import logging
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -22,6 +23,8 @@ from app.services.activity_service import (
 from app.models.user import User
 from app.services.nav_counts import notify_counts_changed
 from app.services.push_service import push_notification
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -105,7 +108,7 @@ def send_request(
                     friendship_id=result.id,
                 )
             except Exception:
-                pass
+                logger.warning("push for friend request %s failed", result.id, exc_info=True)
     return result
 
 

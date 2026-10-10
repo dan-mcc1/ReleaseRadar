@@ -1,5 +1,4 @@
 import random
-from concurrent.futures import ThreadPoolExecutor
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, extract, union
 from app.models.watched import Watched
@@ -9,7 +8,6 @@ from app.models.show import Show
 from app.models.episode import Episode
 from app.models.genre import Genre, MovieGenre, ShowGenre
 from app.models.provider import Provider, ShowProvider, MovieProvider
-from app.db.session import SessionLocal
 
 
 # (min_minutes_needed, "you could have ___" phrase)
@@ -112,13 +110,6 @@ def _humor_fact(total_minutes: int) -> str:
 
 
 def get_watch_time_stats(db: Session, user_id: str, year: int | None = None) -> dict:
-    def _with_session(fn):
-        s = SessionLocal()
-        try:
-            return fn(s)
-        finally:
-            s.close()
-
     # Combined count + runtime for movies in one query
     def _movie_stats(s):
         q = (
@@ -247,8 +238,7 @@ def get_watch_time_stats(db: Session, user_id: str, year: int | None = None) -> 
             "minutes": int(row.day_mins) if row else 0,
         }
 
-    # Union of movie + episode years in a single round-trip; runs on the
-    # existing db session on the main thread while the 4 threads run in parallel.
+    # Union of movie + episode years in a single round-trip.
     def _years(s):
         movie_yr = s.query(
             func.extract("year", Watched.watched_at).label("yr")
@@ -259,25 +249,18 @@ def get_watch_time_stats(db: Session, user_id: str, year: int | None = None) -> 
         rows = s.execute(union(movie_yr, ep_yr)).fetchall()
         return sorted({int(r[0]) for r in rows if r[0]}, reverse=True)
 
-    # All 7 queries fire in parallel; years runs on the main thread concurrently.
-    with ThreadPoolExecutor(max_workers=7) as ex:
-        f_movie = ex.submit(_with_session, _movie_stats)
-        f_ep = ex.submit(_with_session, _ep_stats)
-        f_movie_genres = ex.submit(_with_session, _movie_genres)
-        f_show_genres = ex.submit(_with_session, _show_genres)
-        f_movie_providers = ex.submit(_with_session, _movie_providers)
-        f_show_providers = ex.submit(_with_session, _show_providers)
-        f_binge = ex.submit(_with_session, _binge)
-        all_years = _years(db)
-
-    movies_count, movie_minutes = f_movie.result()
-    episodes_count, ep_minutes = f_ep.result()
-    longest_binge = f_binge.result()
+    # Sequential on the caller's session: running these in parallel needed a
+    # session (and pool connection) per query, so one request held eight and
+    # a few concurrent stats views could drain the pool. It was slower, too.
+    movies_count, movie_minutes = _movie_stats(db)
+    episodes_count, ep_minutes = _ep_stats(db)
+    longest_binge = _binge(db)
+    all_years = _years(db)
 
     genre_mins: dict[str, int] = {}
-    for name, mins in f_movie_genres.result():
+    for name, mins in _movie_genres(db):
         genre_mins[name] = genre_mins.get(name, 0) + int(mins)
-    for name, mins in f_show_genres.result():
+    for name, mins in _show_genres(db):
         genre_mins[name] = genre_mins.get(name, 0) + int(mins)
     top_genres = sorted(
         [{"name": k, "minutes": v} for k, v in genre_mins.items()],
@@ -286,11 +269,11 @@ def get_watch_time_stats(db: Session, user_id: str, year: int | None = None) -> 
     )[:8]
 
     platform_data: dict[str, dict] = {}
-    for name, logo, mins in f_movie_providers.result():
+    for name, logo, mins in _movie_providers(db):
         if name not in platform_data:
             platform_data[name] = {"name": name, "logo_path": logo, "minutes": 0}
         platform_data[name]["minutes"] += int(mins)
-    for name, logo, mins in f_show_providers.result():
+    for name, logo, mins in _show_providers(db):
         if name not in platform_data:
             platform_data[name] = {"name": name, "logo_path": logo, "minutes": 0}
         platform_data[name]["minutes"] += int(mins)

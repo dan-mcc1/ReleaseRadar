@@ -14,11 +14,12 @@ from app.services.tmdb_tv import (
     fetch_show_from_tmdb_cached,
     get_full_season_info,
 )
+from app.core.http_cache import DETAIL_CACHE
 
 router = APIRouter()
 
 
-@router.get("/{id}")
+@router.get("/{id}", dependencies=[DETAIL_CACHE])
 async def get_show_info(
     id: int,
     append: str | None = Query(None, description="Comma-separated TMDB append fields"),
@@ -35,7 +36,7 @@ async def get_show_info(
     return payload
 
 
-@router.get("/{id}/full")
+@router.get("/{id}/full", dependencies=[DETAIL_CACHE])
 async def get_full_show_info(
     id: int,
     db: Session = Depends(get_db),
@@ -93,7 +94,7 @@ async def get_full_show_info(
     return show_data
 
 
-@router.get("/{id}/season_calendar")
+@router.get("/{id}/season_calendar", dependencies=[DETAIL_CACHE])
 async def season_calendar(
     id: int,
     min_date: str | None = Query(None, description="ISO date YYYY-MM-DD — start of window"),
@@ -191,7 +192,7 @@ async def season_calendar(
     return all_episodes
 
 
-@router.get("/{id}/episode_ratings")
+@router.get("/{id}/episode_ratings", dependencies=[DETAIL_CACHE])
 async def episode_ratings(id: int, db: Session = Depends(get_db)):
     show = await run_in_threadpool(
         lambda: db.query(Show).filter(Show.id == id).first()
@@ -222,12 +223,12 @@ async def episode_ratings(id: int, db: Session = Depends(get_db)):
     ]
 
 
-@router.get("/{id}/season/{season_number}/info")
+@router.get("/{id}/season/{season_number}/info", dependencies=[DETAIL_CACHE])
 async def full_season_info(id: int, season_number: int, db: Session = Depends(get_db)):
     return await run_in_threadpool(get_full_season_info, id, season_number)
 
 
-@router.get("/{id}/season/{season_number}/episode/{episode_number}")
+@router.get("/{id}/season/{season_number}/episode/{episode_number}", dependencies=[DETAIL_CACHE])
 async def get_episode_info(id: int, season_number: int, episode_number: int):
     try:
         data = await async_get(

@@ -1,3 +1,4 @@
+import logging
 import base64
 import hashlib
 import hmac
@@ -21,6 +22,8 @@ from app.models.show import Show
 from app.models.user import User
 from app.models.watchlist import Watchlist
 from app.core.limiter import limiter
+
+logger = logging.getLogger(__name__)
 
 # Calendar apps choke on multi-thousand-event feeds. The volume problem is
 # back-catalog: tracking a finished show like Friends (236 episodes) shouldn't
@@ -231,8 +234,8 @@ def get_ical_feed(request: Request, token: str, db: Session = Depends(get_db)):
                     # Cap description length to avoid parse issues in some clients
                     event.add("description", ep.overview[:500])
                 cal.add_component(event)
-            except Exception as e:
-                print(f"[ical] Skipped episode {ep.id}: {e}")
+            except Exception:
+                logger.warning("ical: skipped episode %s", ep.id, exc_info=True)
 
     # ── Movies ────────────────────────────────────────────────────────────────
     if movie_ids:
@@ -259,8 +262,8 @@ def get_ical_feed(request: Request, token: str, db: Session = Depends(get_db)):
                 if movie.overview:
                     event.add("description", movie.overview[:500])
                 cal.add_component(event)
-            except Exception as e:
-                print(f"[ical] Skipped movie {movie.id}: {e}")
+            except Exception:
+                logger.warning("ical: skipped movie %s", movie.id, exc_info=True)
 
     body = cal.to_ical()
     etag = '"' + hashlib.sha256(body).hexdigest() + '"'

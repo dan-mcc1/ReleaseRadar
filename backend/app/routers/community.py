@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -25,6 +26,8 @@ from app.schemas.common import (
     ContentType,
     Visibility,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -223,7 +226,7 @@ def invite(
                 community_invitation_id=inv.id,
             )
         except Exception:
-            pass
+            logger.warning("push for community invitation %s failed", inv.id, exc_info=True)
 
     return {
         "id": inv.id,

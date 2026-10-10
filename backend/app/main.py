@@ -136,8 +136,8 @@ async def _activity_cleanup_loop():
                         deleted_recs,
                     )
                 lift_expired_moderation(db)
-        except Exception as e:
-            logger.error("activity cleanup error: %s", e)
+        except Exception:
+            logger.exception("activity cleanup error")
         await asyncio.sleep(_seconds_until_next_hour())
 
 
@@ -188,8 +188,8 @@ async def _daily_digest_loop():
                 )
             logger.info("daily digest: hourly sweep done")
 
-        except Exception as e:
-            logger.error("daily digest loop error: %s", e)
+        except Exception:
+            logger.exception("daily digest loop error")
             await asyncio.sleep(60)
 
 
@@ -209,8 +209,8 @@ async def _episode_update_loop():
                 check_and_reactivate_watched_shows(db)
                 await asyncio.to_thread(update_all_vote_averages, db)
                 prune_stale_cache(db)
-        except Exception as e:
-            logger.error("vote update error: %s", e)
+        except Exception:
+            logger.exception("vote update error")
 
 
 async def _trailer_refresh_loop():
@@ -227,8 +227,8 @@ async def _trailer_refresh_loop():
             with _db_session() as db:
                 await asyncio.to_thread(refresh_trailers, db)
             logger.info("trailers: done")
-        except Exception as e:
-            logger.error("trailers loop error: %s", e)
+        except Exception:
+            logger.exception("trailers loop error")
             await asyncio.sleep(60)
 
 
@@ -246,8 +246,8 @@ async def _stripe_reconciliation_loop():
             with _db_session() as db:
                 await asyncio.to_thread(reconcile_stripe_subscriptions, db)
             logger.info("stripe reconcile: done")
-        except Exception as e:
-            logger.error("stripe reconcile loop error: %s", e)
+        except Exception:
+            logger.exception("stripe reconcile loop error")
             await asyncio.sleep(60)
 
 
@@ -265,8 +265,8 @@ async def _streaming_refresh_loop():
             with _db_session() as db:
                 await asyncio.to_thread(refresh_streaming_providers, db)
             logger.info("streaming: done")
-        except Exception as e:
-            logger.error("streaming loop error: %s", e)
+        except Exception:
+            logger.exception("streaming loop error")
             await asyncio.sleep(60)
 
 
@@ -301,8 +301,8 @@ async def _episode_alert_loop():
             await asyncio.sleep(
                 max(0.0, (window_end - datetime.now(dt_timezone.utc)).total_seconds())
             )
-        except Exception as e:
-            logger.error("episode alert loop error: %s", e)
+        except Exception:
+            logger.exception("episode alert loop error")
             # Re-plan from "now" so alerts left in this hour aren't dropped;
             # SentEpisodeAlert keeps anything already sent from repeating.
             planned_until = None
@@ -325,8 +325,8 @@ async def _collection_sync_loop():
             with _db_session() as db:
                 await asyncio.to_thread(collections_daily_sync, db)
             logger.info("collections sync: done")
-        except Exception as e:
-            logger.error("collections sync loop error: %s", e)
+        except Exception:
+            logger.exception("collections sync loop error")
             await asyncio.sleep(60)
 
 

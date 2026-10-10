@@ -502,9 +502,9 @@ def daily_refresh(
     # cost the day's refresh of the collections we already have.
     try:
         index_stats = daily_sync(db, now_utc=now_utc)
-    except Exception as e:
-        logger.error(
-            "collections refresh: index sync failed, refreshing existing collections only: %s", e
+    except Exception:
+        logger.exception(
+            "collections refresh: index sync failed, refreshing existing collections only"
         )
         db.rollback()
         index_stats = {}

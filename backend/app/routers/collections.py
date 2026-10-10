@@ -16,6 +16,7 @@ from app.services.collection_service import (
     search_collections,
     set_rankings,
 )
+from app.core.http_cache import DETAIL_CACHE, LIST_CACHE, STATIC_CACHE
 
 router = APIRouter()
 
@@ -29,13 +30,13 @@ def my_collections(
     return get_user_collection_overview(db, uid)
 
 
-@router.get("/genres")
+@router.get("/genres", dependencies=[STATIC_CACHE])
 async def collection_genres(db: Session = Depends(get_db)):
     """Genres that appear across the collection catalog (drives the filter UI)."""
     return {"genres": await run_in_threadpool(list_genres_in_collections, db)}
 
 
-@router.get("/browse")
+@router.get("/browse", dependencies=[LIST_CACHE])
 async def browse(
     min_size: int | None = Query(None, ge=1),
     max_size: int | None = Query(None, ge=1),
@@ -65,7 +66,7 @@ async def browse(
     )
 
 
-@router.get("/search")
+@router.get("/search", dependencies=[LIST_CACHE])
 async def search(
     query: str,
     limit: int = Query(25, ge=1, le=100),
@@ -85,7 +86,7 @@ async def search(
     }
 
 
-@router.get("/{collection_id}")
+@router.get("/{collection_id}", dependencies=[DETAIL_CACHE])
 async def collection_detail(collection_id: int, db: Session = Depends(get_db)):
     data = await run_in_threadpool(get_collection_detail, db, collection_id)
     if not data:
@@ -93,7 +94,7 @@ async def collection_detail(collection_id: int, db: Session = Depends(get_db)):
     return data
 
 
-@router.get("/{collection_id}/stats")
+@router.get("/{collection_id}/stats", dependencies=[DETAIL_CACHE])
 async def collection_stats(collection_id: int, db: Session = Depends(get_db)):
     stats = await run_in_threadpool(get_collection_stats, db, collection_id)
     if stats is None:

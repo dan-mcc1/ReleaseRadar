@@ -1,4 +1,5 @@
 # app/services/media_upsert.py
+import logging
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 from app.models.movie import Movie
@@ -11,6 +12,8 @@ from app.services.tmdb_tv import fetch_show_from_tmdb
 from app.services.provider_utils import canonical_provider_id, canonical_provider_name
 from app.services.tvmaze_service import fetch_show_air_time
 from app.db.session import SessionLocal
+
+logger = logging.getLogger(__name__)
 
 
 # -------------------------
@@ -537,9 +540,9 @@ def populate_show_bg(content_id: int) -> None:
         # Sync episodes now that seasons are committed and the show row is complete.
         from app.services.episode_service import sync_show_episodes
         sync_show_episodes(db, content_id)
-    except Exception as e:
+    except Exception:
         db.rollback()
-        print(f"[populate_show_bg] Error for show {content_id}: {e}")
+        logger.exception("populate_show_bg failed for show %s", content_id)
     finally:
         db.close()
 
@@ -600,8 +603,8 @@ def populate_movie_bg(content_id: int) -> None:
         )
 
         db.commit()
-    except Exception as e:
+    except Exception:
         db.rollback()
-        print(f"[populate_movie_bg] Error for movie {content_id}: {e}")
+        logger.exception("populate_movie_bg failed for movie %s", content_id)
     finally:
         db.close()

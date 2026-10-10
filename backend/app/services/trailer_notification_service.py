@@ -1,3 +1,4 @@
+import logging
 from collections import defaultdict
 
 from sqlalchemy.orm import Session
@@ -14,6 +15,8 @@ from app.services.email_service import send_trailer_alert_email
 from app.services.push_service import push_notification, tmdb_poster_url
 from app.services.tmdb_movies import fetch_movie_from_tmdb
 from app.services.tmdb_tv import fetch_show_from_tmdb
+
+logger = logging.getLogger(__name__)
 
 _NOTIFY_TYPES = {"Trailer"}
 
@@ -82,7 +85,10 @@ def ensure_trailers_populated(db: Session, content_id: int, content_type: str) -
         _detect_new_videos(db, content_id, content_type, fresh)
         # No commit — caller owns the transaction
     except Exception:
-        pass
+        logger.warning(
+            "could not back-fill trailers for %s %s; the nightly refresh will retry",
+            content_type, content_id, exc_info=True,
+        )
 
 
 def ensure_trailers_populated_bg(content_id: int, content_type: str) -> None:
@@ -91,9 +97,9 @@ def ensure_trailers_populated_bg(content_id: int, content_type: str) -> None:
     try:
         ensure_trailers_populated(db, content_id, content_type)
         db.commit()
-    except Exception as e:
+    except Exception:
         db.rollback()
-        print(f"[ensure_trailers_populated_bg] Error for {content_type} {content_id}: {e}")
+        logger.exception("ensure_trailers_populated_bg failed for %s %s", content_type, content_id)
     finally:
         db.close()
 
@@ -119,8 +125,8 @@ def refresh_trailers(db: Session) -> None:
             new_vids = _detect_new_videos(db, content_id, content_type, fresh)
             if new_vids:
                 changes[(content_id, content_type)] = new_vids
-        except Exception as e:
-            print(f"[trailers] Error refreshing {content_type} {content_id}: {e}")
+        except Exception:
+            logger.exception("trailers: failed to refresh %s %s", content_type, content_id)
 
     db.commit()
 
@@ -198,8 +204,8 @@ def refresh_trailers(db: Session) -> None:
                     alerts,
                     uid=user.id,
                 )
-            except Exception as e:
-                print(f"[trailers] Failed to email {user.email}: {e}")
+            except Exception:
+                logger.exception("trailers: failed to email user %s", user.id)
 
         if user.push_notifications_enabled and user.push_notify_trailers:
             for alert in alerts:
@@ -217,5 +223,5 @@ def refresh_trailers(db: Session) -> None:
                         video_key=video.get("key"),
                         image_url=tmdb_poster_url(alert.get("poster_path")),
                     )
-                except Exception as e:
-                    print(f"[trailers] Failed to push {user.id}: {e}")
+                except Exception:
+                    logger.exception("trailers: failed to push to user %s", user.id)

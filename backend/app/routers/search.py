@@ -21,11 +21,12 @@ from app.services.tmdb_search import (
     get_tv_trending_results,
     get_tv_upcoming,
 )
+from app.core.http_cache import LIST_CACHE, STATIC_CACHE
 
 router = APIRouter()
 
 
-@router.get("")
+@router.get("", dependencies=[LIST_CACHE])
 async def search(
     query: str = "",
     genre_id: int = None,
@@ -62,51 +63,51 @@ async def search(
     return {"movies": movies, "shows": shows, "people": people, "collections": collections}
 
 
-@router.get("/genres")
+@router.get("/genres", dependencies=[STATIC_CACHE])
 async def genres():
     return await run_in_threadpool(get_genre_list)
 
 
-@router.get("/multi/trending")
+@router.get("/multi/trending", dependencies=[LIST_CACHE])
 async def multi_trending():
     return await run_in_threadpool(get_multi_trending_results)
 
 
-@router.get("/tv/trending")
+@router.get("/tv/trending", dependencies=[LIST_CACHE])
 async def tv_trending(page: int = Query(1, ge=1)):
     return await run_in_threadpool(get_tv_trending_results, page)
 
 
-@router.get("/movie/trending")
+@router.get("/movie/trending", dependencies=[LIST_CACHE])
 async def movie_trending(page: int = Query(1, ge=1)):
     return await run_in_threadpool(get_movie_trending_results, page)
 
 
-@router.get("/tv/upcoming")
+@router.get("/tv/upcoming", dependencies=[LIST_CACHE])
 async def tv_upcoming(min_date: str, max_date: str, page: int = Query(1, ge=1)):
     return await run_in_threadpool(get_tv_upcoming, min_date, max_date, page)
 
 
-@router.get("/movie/upcoming")
+@router.get("/movie/upcoming", dependencies=[LIST_CACHE])
 async def movie_upcoming(min_date: str, max_date: str, page: int = Query(1, ge=1)):
     return await run_in_threadpool(get_movie_upcoming, min_date, max_date, page)
 
 
-@router.get("/tv/airing-today")
+@router.get("/tv/airing-today", dependencies=[LIST_CACHE])
 async def tv_airing_today(page: int = Query(1, ge=1)):
     return await run_in_threadpool(get_tv_airing_today, page)
 
 
-@router.get("/movie/now-playing")
+@router.get("/movie/now-playing", dependencies=[LIST_CACHE])
 async def movie_now_playing(page: int = Query(1, ge=1)):
     return await run_in_threadpool(get_movie_now_playing, page)
 
 
-@router.get("/multi/popular")
+@router.get("/multi/popular", dependencies=[LIST_CACHE])
 async def multi_popular():
     return await run_in_threadpool(get_multi_popular_results)
 
 
-@router.get("/multi/top-rated")
+@router.get("/multi/top-rated", dependencies=[LIST_CACHE])
 async def multi_top_rated():
     return await run_in_threadpool(get_multi_top_rated_results)

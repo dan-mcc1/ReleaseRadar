@@ -2,21 +2,22 @@ from fastapi import APIRouter
 from fastapi.concurrency import run_in_threadpool
 
 from app.services.tmdb_people import get_person, search_person
+from app.core.http_cache import DETAIL_CACHE, LIST_CACHE
 
 router = APIRouter()
 
 
-@router.get("/search")
+@router.get("/search", dependencies=[LIST_CACHE])
 async def search(query: str):
     return await run_in_threadpool(search_person, query)
 
 
-@router.get("/{id}")
+@router.get("/{id}", dependencies=[DETAIL_CACHE])
 async def person(id: int):
     return await run_in_threadpool(get_person, id, "")
 
 
-@router.get("/{id}/info")
+@router.get("/{id}/info", dependencies=[DETAIL_CACHE])
 async def full_actor_info(id: int):
     append = "external_ids,movie_credits,tv_credits"
     cached = await run_in_threadpool(get_person, id, append)

@@ -9,11 +9,12 @@ from app.models.currently_watching import CurrentlyWatching
 from app.models.show import Show
 from app.models.movie import Movie
 from app.services.provider_utils import canonical_provider_id, canonical_provider_name, is_canonical, all_ids_for_service
+from app.core.http_cache import STATIC_CACHE
 
 router = APIRouter()
 
 
-@router.get("/providers")
+@router.get("/providers", dependencies=[STATIC_CACHE])
 def list_all_providers(db: Session = Depends(get_db)):
     """Return all known providers from the DB for the service picker, deduplicated to canonical entries."""
     providers = db.query(Provider).all()

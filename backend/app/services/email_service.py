@@ -1,3 +1,4 @@
+import logging
 import hmac
 import hashlib
 from datetime import datetime, timezone
@@ -5,6 +6,8 @@ import resend
 from collections import defaultdict
 from app.config import settings
 from html import escape
+
+logger = logging.getLogger(__name__)
 
 TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w185"
 
@@ -804,9 +807,7 @@ def send_trailer_alert_email(
 
 def send_email(to_email: str, subject: str, html_body: str):
     if not settings.RESEND_API_KEY:
-        print(
-            f"[email_service] RESEND_API_KEY not configured, skipping email to {to_email}"
-        )
+        logger.warning("RESEND_API_KEY not configured, skipping email")
         return
 
     resend.api_key = settings.RESEND_API_KEY
@@ -819,5 +820,5 @@ def send_email(to_email: str, subject: str, html_body: str):
                 "html": html_body,
             }
         )
-    except Exception as e:
-        print(f"[email_service] Failed to send email to {to_email}: {e}")
+    except Exception:
+        logger.exception("email send failed (subject %r)", subject)

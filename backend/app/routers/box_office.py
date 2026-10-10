@@ -5,6 +5,7 @@ import time
 from fastapi import APIRouter, HTTPException, Query
 
 from app.services.tmdb_client import async_get
+from app.core.http_cache import LIST_CACHE
 
 router = APIRouter()
 
@@ -159,7 +160,7 @@ async def _build_all_time_leaderboard(page: int, limit: int) -> list[dict]:
     return ranked
 
 
-@router.get("/yearly")
+@router.get("/yearly", dependencies=[LIST_CACHE])
 async def box_office_yearly(
     year: int = Query(..., ge=1900, le=2100),
     limit: int = Query(20, ge=1, le=50),
@@ -167,7 +168,7 @@ async def box_office_yearly(
     return await _build_leaderboard(year, 0, limit)
 
 
-@router.get("/monthly")
+@router.get("/monthly", dependencies=[LIST_CACHE])
 async def box_office_monthly(
     year: int = Query(..., ge=1900, le=2100),
     month: int = Query(..., ge=1, le=12),
@@ -176,7 +177,7 @@ async def box_office_monthly(
     return await _build_leaderboard(year, month, limit)
 
 
-@router.get("/all-time")
+@router.get("/all-time", dependencies=[LIST_CACHE])
 async def box_office_all_time(
     page: int = Query(1, ge=1, le=20),
     limit: int = Query(20, ge=1, le=20),

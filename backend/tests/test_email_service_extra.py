@@ -12,6 +12,7 @@ covers the *non-XSS* responsibilities:
   - helper formatters (_format_date, format_air_time) handle edge cases
 """
 
+import logging
 import hashlib
 import hmac
 from unittest.mock import patch, MagicMock
@@ -586,13 +587,13 @@ class TestTrailerAlertEmail:
 
 
 class TestSendEmail:
-    def test_no_api_key_is_noop(self, capsys):
+    def test_no_api_key_is_noop(self, caplog):
         from app.services import email_service
 
-        with patch.object(email_service.settings, "RESEND_API_KEY", ""):
+        with patch.object(email_service.settings, "RESEND_API_KEY", ""),              patch.object(email_service, "resend") as mock_resend,              caplog.at_level(logging.WARNING):
             email_service.send_email("a@b.com", "subj", "<p>body</p>")
-        out = capsys.readouterr().out
-        assert "RESEND_API_KEY not configured" in out
+        mock_resend.Emails.send.assert_not_called()
+        assert "RESEND_API_KEY not configured" in caplog.text
 
     def test_calls_resend_when_key_set(self):
         from app.services import email_service
@@ -607,16 +608,16 @@ class TestSendEmail:
             assert payload["subject"] == "subj"
             assert payload["html"] == "<p>body</p>"
 
-    def test_swallows_exceptions(self, capsys):
+    def test_swallows_exceptions_and_logs_traceback(self, caplog):
         from app.services import email_service
 
-        with patch.object(email_service, "resend") as mock_resend:
+        with patch.object(email_service, "resend") as mock_resend,              caplog.at_level(logging.ERROR):
             mock_resend.Emails = MagicMock()
             mock_resend.Emails.send = MagicMock(side_effect=RuntimeError("boom"))
             # Must not raise
             email_service.send_email("a@b.com", "subj", "<p>body</p>")
-        out = capsys.readouterr().out
-        assert "Failed to send email" in out
+        failures = [r for r in caplog.records if r.exc_info]
+        assert [str(r.exc_info[1]) for r in failures] == ["boom"]
 
 
 # ── Wrapper always present ────────────────────────────────────────────────

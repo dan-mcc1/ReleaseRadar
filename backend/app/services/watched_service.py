@@ -1,4 +1,5 @@
 # app/services/watched_service.py
+import logging
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, text
 from datetime import datetime, timezone
@@ -21,6 +22,8 @@ from app.models.episode_watched import EpisodeWatched
 from app.models.watchlist import Watchlist
 from app.models.currently_watching import CurrentlyWatching
 from app.db.session import SessionLocal, _is_sqlite
+
+logger = logging.getLogger(__name__)
 
 
 def _is_on_other_list(
@@ -141,9 +144,9 @@ def sync_watched_episodes_bg(user_id: str, content_id: int):
         sync_show_episodes(db, content_id)
         _mark_episodes_watched(db, user_id, content_id)
         db.commit()
-    except Exception as e:
+    except Exception:
         db.rollback()
-        print(f"[sync_watched_episodes_bg] Error for show {content_id}: {e}")
+        logger.exception("sync_watched_episodes_bg failed for show %s", content_id)
     finally:
         db.close()
 

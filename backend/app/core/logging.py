@@ -35,6 +35,20 @@ def setup_logging():
     logger.propagate = False
     logger.setLevel(logging.INFO)
 
+    # The app's own loggers (logging.getLogger(__name__) under app.*). uvicorn
+    # only configures its own, so without this INFO lines were dropped and
+    # warnings/errors went out bare through logging's last-resort handler.
+    # Still propagates, so pytest's caplog and any root handlers see them;
+    # Sentry hooks every logger and records ERROR and above as events.
+    app_handler = logging.StreamHandler()
+    app_handler.setFormatter(
+        logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+    )
+    app_logger = logging.getLogger("app")
+    app_logger.handlers.clear()
+    app_logger.addHandler(app_handler)
+    app_logger.setLevel(logging.INFO)
+
 
 def install_query_counter(engine):
     """Register a SQLAlchemy listener that increments request_query_count

@@ -1,4 +1,5 @@
 # app/services/episode_watched_service.py
+import logging
 from sqlalchemy.orm import Session
 from sqlalchemy import select, exists, union_all, literal, func
 from datetime import datetime, timezone
@@ -18,6 +19,8 @@ from app.services.watched_service import add_to_watched
 from app.services.watchlist_service import remove_from_watchlist
 from app.services.currently_watching_service import remove_from_currently_watching
 from app.services.activity_service import log_activity
+
+logger = logging.getLogger(__name__)
 
 
 def add_episode_watched(
@@ -438,7 +441,7 @@ def maybe_auto_complete_show(db: Session, user_id: str, show_id: int) -> bool:
     remove_from_currently_watching(db, user_id, "tv", show_id, commit=False)
     db.commit()
 
-    print(f"[auto-complete] Show {show_id} auto-moved to Watched for user {user_id}")
+    logger.info("auto-complete: show %s moved to Watched for user %s", show_id, user_id)
     return True
 
 
@@ -447,8 +450,8 @@ def maybe_auto_complete_show_bg(user_id: str, show_id: int) -> None:
     db = SessionLocal()
     try:
         maybe_auto_complete_show(db, user_id, show_id)
-    except Exception as e:
+    except Exception:
         db.rollback()
-        print(f"[maybe_auto_complete_show_bg] Error for show {show_id}: {e}")
+        logger.exception("maybe_auto_complete_show_bg failed for show %s", show_id)
     finally:
         db.close()

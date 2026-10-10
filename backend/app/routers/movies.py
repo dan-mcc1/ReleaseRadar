@@ -7,11 +7,12 @@ from app.models.movie import Movie
 from app.services.media_serializers import _movie_query_options, serialize_movie
 from app.services.provider_utils import normalize_tmdb_watch_providers
 from app.services.tmdb_movies import fetch_movie_from_tmdb_cached
+from app.core.http_cache import DETAIL_CACHE
 
 router = APIRouter()
 
 
-@router.get("/{id}")
+@router.get("/{id}", dependencies=[DETAIL_CACHE])
 async def get_movie_info(
     id: int,
     append: str | None = Query(None, description="Comma-separated TMDB append fields"),
@@ -28,7 +29,7 @@ async def get_movie_info(
     return payload
 
 
-@router.get("/{id}/info")
+@router.get("/{id}/info", dependencies=[DETAIL_CACHE])
 async def full_movie_info(
     id: int,
     db: Session = Depends(get_db),

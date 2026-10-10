@@ -17,6 +17,7 @@ from datetime import date, datetime, timedelta, timezone
 from unittest.mock import patch, MagicMock
 
 import pytest
+from sqlalchemy import event
 
 
 # ── _compute_episode_type ─────────────────────────────────────────────────
@@ -570,3 +571,109 @@ class TestReactivateWatchedShows:
         ):
             # Should not raise
             check_and_reactivate_watched_shows(db)
+
+
+class TestReactivationDetails:
+    """Which season and premiere date a reactivation reports, the unaired
+    edge cases, and that the check doesn't load episodes into memory."""
+
+    def _watched_s1(self, db):
+        from app.models.episode_watched import EpisodeWatched
+        from app.models.show import Show
+        from app.models.user import User
+        from app.models.watched import Watched
+
+        db.query(Show).filter_by(id=1396).first().in_production = True
+        db.query(User).filter_by(id="test-uid-1").first().email_notifications = True
+        for ep_num in (1, 2):
+            db.add(EpisodeWatched(
+                user_id="test-uid-1", show_id=1396, season_number=1,
+                episode_number=ep_num, watched_at=datetime.now(timezone.utc),
+            ))
+        db.add(Watched(user_id="test-uid-1", content_type="tv", content_id=1396))
+
+    def _run(self, db):
+        from app.services.episode_service import check_and_reactivate_watched_shows
+        with patch("app.services.episode_service.send_new_season_available_email") as mock_email:
+            check_and_reactivate_watched_shows(db)
+        return mock_email
+
+    def _still_watched(self, db):
+        from app.models.watched import Watched
+        db.expire_all()
+        return db.query(Watched).filter_by(content_id=1396).first() is not None
+
+    def test_email_names_first_new_season_and_its_premiere(self, db, seed_users, seed_show):
+        from app.models.episode import Episode
+        self._watched_s1(db)
+        s2e1 = date.today() - timedelta(days=3)
+        db.add_all([
+            Episode(id=99601, show_id=1396, season_number=2, episode_number=2,
+                    air_date=date.today() - timedelta(days=1)),
+            Episode(id=99602, show_id=1396, season_number=2, episode_number=1, air_date=s2e1),
+            Episode(id=99603, show_id=1396, season_number=3, episode_number=1,
+                    air_date=date.today() + timedelta(days=200)),
+        ])
+        db.commit()
+
+        mock_email = self._run(db)
+
+        shows = mock_email.call_args.kwargs["shows"]
+        assert [(s["show_id"], s["season_number"], s["premiere_date"]) for s in shows] == [
+            (1396, 2, str(s2e1)),
+        ]
+
+    def test_unaired_episode_in_a_watched_season_does_not_reactivate(
+        self, db, seed_users, seed_show
+    ):
+        from app.models.episode import Episode
+        self._watched_s1(db)
+        db.add_all([
+            Episode(id=99611, show_id=1396, season_number=1, episode_number=3,
+                    air_date=date.today() + timedelta(days=5)),
+            Episode(id=99612, show_id=1396, season_number=1, episode_number=4, air_date=None),
+        ])
+        db.commit()
+
+        mock_email = self._run(db)
+
+        assert self._still_watched(db)
+        mock_email.assert_not_called()
+
+    def test_announced_future_season_reactivates_with_its_date(self, db, seed_users, seed_show):
+        from app.models.episode import Episode
+        self._watched_s1(db)
+        premiere = date.today() + timedelta(days=30)
+        db.add(Episode(id=99621, show_id=1396, season_number=2, episode_number=1, air_date=premiere))
+        db.commit()
+
+        mock_email = self._run(db)
+
+        assert not self._still_watched(db)
+        assert mock_email.call_args.kwargs["shows"][0]["premiere_date"] == str(premiere)
+
+    def test_does_not_load_episodes_into_memory(self, db, seed_users, seed_show):
+        """It used to load every episode of every in-production watched show,
+        plus every episode_watched row, into Python on each nightly run."""
+        from app.models.episode import Episode
+        from app.models.episode_watched import EpisodeWatched
+        self._watched_s1(db)
+        db.add(Episode(id=99631, show_id=1396, season_number=2, episode_number=1,
+                       air_date=date.today() - timedelta(days=1)))
+        db.commit()
+        db.expunge_all()
+        loaded = []
+
+        def _count(target, _context):
+            loaded.append(type(target).__name__)
+
+        event.listen(Episode, "load", _count)
+        event.listen(EpisodeWatched, "load", _count)
+        try:
+            self._run(db)
+        finally:
+            event.remove(Episode, "load", _count)
+            event.remove(EpisodeWatched, "load", _count)
+
+        assert loaded == []
+        assert not self._still_watched(db)

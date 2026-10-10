@@ -5,11 +5,12 @@ from app.services.news_service import (
     get_tv_news,
     search_news,
 )
+from app.core.http_cache import LIST_CACHE
 
 router = APIRouter()
 
 
-@router.get("/")
+@router.get("/", dependencies=[LIST_CACHE])
 def get_news(
     category: str = Query("entertainment", description="entertainment | movies | tv"),
     page: int = Query(1, ge=1),
