@@ -376,3 +376,26 @@ class TestFetchVideos:
                 svc.refresh_trailers(db)
                 mock_push.assert_called_once()
                 assert mock_push.call_args.kwargs["body"] == "New trailer"
+
+
+class TestRefreshReadsFreshData:
+    def test_new_movie_trailer_is_seen_on_the_next_run(self, db):
+        """Each nightly run must read TMDb fresh. A cached response would hide
+        every trailer added after the first fetch."""
+        from app.services import trailer_notification_service as svc
+
+        _seed_movie(db, mid=7002, title="Dune")
+        _seed_user(db, uid="u1", subscription_tier="premium")
+        _watchlist(db, "u1", 7002, "movie")
+        responses = iter([
+            {"videos": {"results": []}},
+            {"videos": {"results": [_video("vk9", name="Official Trailer")]}},
+        ])
+
+        with patch("app.services.tmdb_movies.get", side_effect=lambda *a, **k: next(responses)):
+            with patch("app.services.trailer_notification_service.send_trailer_alert_email") as mock_email:
+                svc.refresh_trailers(db)
+                svc.refresh_trailers(db)
+
+        mock_email.assert_called_once()
+        assert mock_email.call_args.args[2][0]["videos"][0]["key"] == "vk9"

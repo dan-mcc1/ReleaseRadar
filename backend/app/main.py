@@ -81,8 +81,8 @@ from app.services.vote_update_service import update_all_vote_averages
 from app.services.episode_service import (
     refresh_episodes_for_active_shows,
     check_and_reactivate_watched_shows,
-    prune_stale_cache,
 )
+from app.services.cache_prune_service import prune_stale_cache
 from app.services.streaming_notification_service import refresh_streaming_providers
 from app.services.trailer_notification_service import refresh_trailers
 from app.services.episode_alert_service import (

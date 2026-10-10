@@ -1,13 +1,18 @@
-from functools import lru_cache
-
 from app.services.tmdb_client import get
+from app.services.ttl_cache import (
+    DETAIL_MAXSIZE,
+    LIST_MAXSIZE,
+    TTL_LONG,
+    TTL_STD,
+    ttl_cached,
+)
 
 # -------------------------
 # Search
 # -------------------------
 
 
-@lru_cache(maxsize=1024)
+@ttl_cached(LIST_MAXSIZE, TTL_STD)
 def search_person(query: str):
     data = get(
         "/search/person",
@@ -21,7 +26,7 @@ def search_person(query: str):
 # -------------------------
 
 
-@lru_cache(maxsize=1024)
+@ttl_cached(DETAIL_MAXSIZE, TTL_STD)
 def get_person(person_id: int, append: str | None):
     params = {}
     if append:
@@ -35,7 +40,7 @@ def get_person(person_id: int, append: str | None):
 # -------------------------
 
 
-@lru_cache(maxsize=1024)
+@ttl_cached(DETAIL_MAXSIZE, TTL_STD)
 def get_person_credits(person_id: int):
     """
     Returns both movie + TV credits
@@ -49,6 +54,6 @@ def get_person_credits(person_id: int):
 # -------------------------
 
 
-@lru_cache(maxsize=1024)
+@ttl_cached(1024, TTL_LONG)
 def get_external_ids(person_id: int):
     return get(f"/person/{person_id}/external_ids")

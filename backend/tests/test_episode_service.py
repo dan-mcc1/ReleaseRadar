@@ -11,7 +11,6 @@ Covers:
 - refresh_episodes_for_active_shows (skips finished shows, runs only on in-production)
 - check_and_reactivate_watched_shows (reactivates, no-op when caught up,
   skips users with notifications off)
-- prune_stale_cache
 """
 
 from datetime import date, datetime, timedelta, timezone
@@ -571,49 +570,3 @@ class TestReactivateWatchedShows:
         ):
             # Should not raise
             check_and_reactivate_watched_shows(db)
-
-
-# ── prune_stale_cache ────────────────────────────────────────────────────
-
-
-class TestPruneStaleCache:
-    def test_deletes_old_zero_tracker_shows(self, db):
-        from app.models.show import Show
-        from app.services.episode_service import prune_stale_cache
-
-        old = datetime.now(timezone.utc) - timedelta(days=100)
-        recent = datetime.now(timezone.utc) - timedelta(days=10)
-
-        # Stale, no trackers → delete
-        db.add(Show(id=900, name="OldStale", tracking_count=0, updated_at=old))
-        # Recent → keep
-        db.add(Show(id=901, name="Recent", tracking_count=0, updated_at=recent))
-        # Has trackers → keep
-        db.add(Show(id=902, name="Tracked", tracking_count=3, updated_at=old))
-        db.commit()
-
-        prune_stale_cache(db)
-        db.expire_all()
-        ids = {s.id for s in db.query(Show).all()}
-        assert 900 not in ids
-        assert 901 in ids
-        assert 902 in ids
-
-    def test_deletes_old_zero_tracker_movies(self, db):
-        from app.models.movie import Movie
-        from app.services.episode_service import prune_stale_cache
-
-        old = datetime.now(timezone.utc) - timedelta(days=100)
-        db.add(Movie(id=900, title="StaleM", tracking_count=0, updated_at=old))
-        db.add(Movie(id=901, title="ActiveM", tracking_count=2, updated_at=old))
-        db.commit()
-
-        prune_stale_cache(db)
-        db.expire_all()
-        ids = {m.id for m in db.query(Movie).all()}
-        assert 900 not in ids
-        assert 901 in ids
-
-    def test_noop_when_nothing_to_prune(self, db):
-        from app.services.episode_service import prune_stale_cache
-        prune_stale_cache(db)  # No exception

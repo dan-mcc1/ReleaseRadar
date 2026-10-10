@@ -54,6 +54,10 @@ class Settings(BaseSettings):
     # loops will fire N times in parallel.
     RUN_SCHEDULERS: bool = True
 
+    # Nightly deletion of cached shows/movies nobody references. Off until the
+    # first run has been reviewed with scripts/prune_review.py.
+    CACHE_PRUNE_ENABLED: bool = False
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

@@ -19,23 +19,22 @@ async def person(id: int):
 @router.get("/{id}/info")
 async def full_actor_info(id: int):
     append = "external_ids,movie_credits,tv_credits"
-    person_data = await run_in_threadpool(get_person, id, append)
+    cached = await run_in_threadpool(get_person, id, append)
 
-    if "movie_credits" in person_data and "cast" in person_data["movie_credits"]:
-        person_data["movie_credits"]["cast"].sort(
-            key=lambda x: x.get("popularity", 0), reverse=True
-        )
-    if "movie_credits" in person_data and "crew" in person_data["movie_credits"]:
-        person_data["movie_credits"]["crew"].sort(
-            key=lambda x: x.get("popularity", 0), reverse=True
-        )
-    if "tv_credits" in person_data and "cast" in person_data["tv_credits"]:
-        person_data["tv_credits"]["cast"].sort(
-            key=lambda x: x.get("popularity", 0), reverse=True
-        )
-    if "tv_credits" in person_data and "crew" in person_data["tv_credits"]:
-        person_data["tv_credits"]["crew"].sort(
-            key=lambda x: x.get("popularity", 0), reverse=True
-        )
+    # get_person's result is shared through its cache: build sorted copies
+    # rather than sorting its lists in place.
+    person_data = dict(cached)
+    for credits_key in ("movie_credits", "tv_credits"):
+        credits = cached.get(credits_key)
+        if not isinstance(credits, dict):
+            continue
+        person_data[credits_key] = {
+            **credits,
+            **{
+                part: sorted(credits[part], key=lambda x: x.get("popularity", 0), reverse=True)
+                for part in ("cast", "crew")
+                if part in credits
+            },
+        }
 
     return person_data

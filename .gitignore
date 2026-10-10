@@ -1,5 +1,8 @@
 .superpowers/
 
+# Cache prune review output (contains usernames) — see backend/scripts/prune_review.py
+backend/prune_review/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

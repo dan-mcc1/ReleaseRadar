@@ -504,3 +504,27 @@ class TestFetchFreshUsProviders:
 
         with patch.object(svc, "fetch_movie_from_tmdb", return_value=None):
             assert svc._fetch_fresh_us_providers(1, "movie") == {}
+
+
+class TestRefreshReadsFreshData:
+    def test_movie_provider_change_is_seen_on_the_next_run(self, db):
+        """Each nightly run must read TMDb fresh. A cached response would hide
+        every change after the first fetch, so alerts would never go out."""
+        from app.services import streaming_notification_service as svc
+
+        _seed_movie(db, mid=7001, title="Fight Club")
+        _seed_user(db, uid="u1", email="u1@t.com")
+        _watchlist(db, "u1", 7001, "movie")
+        responses = iter([
+            _provider_response(flatrate=[(8, "Netflix")]),
+            _provider_response(flatrate=[(15, "Hulu")]),
+        ])
+
+        with patch("app.services.tmdb_movies.get", side_effect=lambda *a, **k: next(responses)):
+            with patch("app.services.streaming_notification_service.send_streaming_alert_email") as mock_email:
+                svc.refresh_streaming_providers(db)
+                svc.refresh_streaming_providers(db)
+
+        alerts = mock_email.call_args.args[2]
+        assert alerts[0]["added"] == ["Hulu"]
+        assert alerts[0]["removed"] == ["Netflix"]

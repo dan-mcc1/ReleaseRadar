@@ -199,7 +199,7 @@ def mock_tmdb_and_upsert():
     def fake_find(name, year):
         return config["search"].get(name)
 
-    def fake_ensure_movie(db, tmdb_id, already_tracked):
+    def fake_ensure_movie(db, tmdb_id, already_tracked, tmdb_data=None):
         from app.models.movie import Movie
         existing = db.query(Movie).filter_by(id=tmdb_id).first()
         if existing:
@@ -211,7 +211,7 @@ def mock_tmdb_and_upsert():
         db.flush()
         return m
 
-    def fake_ensure_show(db, tmdb_id, already_tracked):
+    def fake_ensure_show(db, tmdb_id, already_tracked, tmdb_data=None):
         from app.models.show import Show
         existing = db.query(Show).filter_by(id=tmdb_id).first()
         if existing:
@@ -946,3 +946,145 @@ class TestExtFormatEndpoint:
         assert db.query(WL).filter_by(
             user_id="test-uid-1", content_type="tv", content_id=1396
         ).first() is None
+
+
+# ── TMDb fetching during an import (real ensure_*_in_db, TMDb at the HTTP seam) ──
+
+
+def _tmdb_movie(mid):
+    """A /movie/{id}?append_to_response=watch/providers,release_dates,images
+    response, with the non-US and non-logo bulk that dominates its size."""
+    return {
+        "id": mid, "title": "The Matrix", "imdb_id": "tt0133093", "adult": False,
+        "backdrop_path": "/bd.jpg", "poster_path": "/p.jpg", "overview": "o",
+        "tagline": "t", "homepage": "", "budget": 63000000, "revenue": 463517383,
+        "runtime": 136, "status": "Released", "vote_average": 8.2,
+        "release_date": "1999-03-30",
+        "genres": [{"id": 28, "name": "Action"}],
+        "images": {
+            "backdrops": [{"file_path": f"/b{i}.jpg", "iso_639_1": None} for i in range(50)],
+            "posters": [{"file_path": f"/p{i}.jpg", "iso_639_1": "en"} for i in range(50)],
+            "logos": [
+                {"file_path": "/fr-logo.png", "iso_639_1": "fr"},
+                {"file_path": "/en-logo.png", "iso_639_1": "en"},
+            ],
+        },
+        "release_dates": {"results": [
+            {"iso_3166_1": "GB", "release_dates": [
+                {"type": 3, "certification": "15", "release_date": "1999-06-11T00:00:00.000Z"},
+            ]},
+            {"iso_3166_1": "US", "release_dates": [
+                {"type": 3, "certification": "R", "release_date": "1999-03-31T00:00:00.000Z"},
+            ]},
+        ]},
+        "watch/providers": {"results": {
+            "GB": {"flatrate": [{"provider_id": 39, "provider_name": "Now TV", "logo_path": "/n.png"}]},
+            "US": {"flatrate": [{"provider_id": 8, "provider_name": "Netflix", "logo_path": "/nf.png"}]},
+        }},
+    }
+
+
+def _tmdb_show(sid):
+    """A /tv/{id}?append_to_response=watch/providers,images,content_ratings
+    response. Dates are None because SQLite's Date column rejects strings."""
+    return {
+        "id": sid, "name": "Game of Thrones", "first_air_date": None,
+        "last_air_date": None, "in_production": False, "number_of_seasons": 1,
+        "number_of_episodes": 10, "status": "Ended", "type": "Scripted",
+        "overview": "o", "tagline": "", "homepage": "", "vote_average": 8.5,
+        "backdrop_path": "/b.jpg", "poster_path": "/p.jpg",
+        "genres": [{"id": 18, "name": "Drama"}],
+        "seasons": [{"id": 3624, "season_number": 1, "name": "Season 1",
+                     "episode_count": 10, "air_date": None}],
+        "images": {
+            "backdrops": [{"file_path": f"/b{i}.jpg"} for i in range(20)],
+            "posters": [{"file_path": f"/p{i}.jpg"} for i in range(20)],
+            "logos": [{"file_path": "/en-logo.png", "iso_639_1": "en"}],
+        },
+        "content_ratings": {"results": [
+            {"iso_3166_1": "DE", "rating": "16"},
+            {"iso_3166_1": "US", "rating": "TV-MA"},
+        ]},
+        "watch/providers": {"results": {
+            "US": {"flatrate": [{"provider_id": 1899, "provider_name": "Max", "logo_path": "/m.png"}]},
+        }},
+    }
+
+
+def _sqlite_release_date():
+    """populate stores the ISO string, which Postgres accepts but SQLite's Date
+    type rejects; convert it while keeping the real US-release lookup."""
+    from datetime import date
+    from app.services import media_upsert
+    real = media_upsert.get_theatrical_release_date
+    return patch.object(
+        media_upsert, "get_theatrical_release_date",
+        side_effect=lambda data: date.fromisoformat(real(data)) if real(data) else None,
+    )
+
+
+def _cached_entries(module) -> int:
+    total = 0
+    for obj in vars(module).values():
+        cache = getattr(obj, "cache", None)
+        if cache is not None and hasattr(cache, "currsize"):
+            total += len(cache)
+        elif hasattr(obj, "cache_info"):
+            total += obj.cache_info().currsize
+    return total
+
+
+class TestImportTmdbFetching:
+    def test_movie_import_leaves_nothing_in_the_shared_cache(self, client, seed_users):
+        """An import may hold up to 2,000 titles; their payloads must be freed
+        with the request, not pinned in the process-wide cache."""
+        from app.services import tmdb_movies
+
+        before = _cached_entries(tmdb_movies)
+        with patch.object(ir, "_find_tmdb_result", return_value=(603, "movie")), \
+             patch("app.services.tmdb_movies.get", return_value=_tmdb_movie(603)), \
+             _sqlite_release_date():
+            r = _csv_upload(client, "Name,Year\nThe Matrix,1999\n")
+
+        assert r.json()["summary"]["imported"] == 1
+        assert _cached_entries(tmdb_movies) == before
+
+    def test_movie_import_fetches_each_movie_once(self, client, seed_users):
+        with patch.object(ir, "_find_tmdb_result", return_value=(604, "movie")), \
+             patch("app.services.tmdb_movies.get", return_value=_tmdb_movie(604)) as get, \
+             _sqlite_release_date():
+            _csv_upload(client, "Name,Year\nThe Matrix,1999\n")
+
+        assert [c.args[0] for c in get.call_args_list] == ["/movie/604"]
+
+    def test_imported_movie_row_is_complete(self, client, seed_users, db):
+        from datetime import date
+        from app.models.movie import Movie
+        from app.models.provider import MovieProvider
+
+        with patch.object(ir, "_find_tmdb_result", return_value=(605, "movie")), \
+             patch("app.services.tmdb_movies.get", return_value=_tmdb_movie(605)), \
+             _sqlite_release_date():
+            _csv_upload(client, "Name,Year\nThe Matrix,1999\n")
+
+        db.expire_all()
+        movie = db.get(Movie, 605)
+        assert movie.logo_path == "/en-logo.png"
+        assert movie.certification == "R"
+        assert movie.release_date == date(1999, 3, 31)
+        assert db.query(MovieProvider).filter_by(movie_id=605).count() == 1
+
+    def test_show_import_fetches_each_show_once(self, client, seed_users, db):
+        from app.models.show import Show
+
+        with patch.object(ir, "_find_tmdb_result", return_value=(1399, "tv")), \
+             patch("app.services.tmdb_tv.get", return_value=_tmdb_show(1399)) as get, \
+             patch("app.services.media_upsert.fetch_show_air_time", return_value=(None, None)), \
+             patch.object(ir, "maybe_sync_show_episodes", return_value=None):
+            r = _csv_upload(client, "Name,Year\nGame of Thrones,2011\n")
+
+        assert r.json()["summary"]["imported"] == 1
+        assert [c.args[0] for c in get.call_args_list] == ["/tv/1399"]
+        db.expire_all()
+        show = db.get(Show, 1399)
+        assert (show.logo_path, show.certification) == ("/en-logo.png", "TV-MA")

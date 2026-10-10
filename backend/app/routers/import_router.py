@@ -12,7 +12,7 @@ from app.services.tmdb_client import get as tmdb_get
 from app.services.tmdb_movies import search_movies, fetch_movie_from_tmdb
 from app.services.tmdb_tv import fetch_show_from_tmdb
 from app.services.tmdb_search import get_tv_search_results
-from app.services.media_upsert import ensure_movie_in_db, ensure_show_in_db
+from app.services.media_upsert import ensure_movie_in_db, ensure_show_in_db, slim_tmdb_payload
 from app.services.watchlist_service import add_to_watchlist
 from app.services.episode_service import maybe_sync_show_episodes, sync_season_episodes
 from app.services.watched_episode_service import maybe_auto_complete_show
@@ -36,6 +36,15 @@ _WATCHLIST_CSVS = ["watchlist.csv"]
 
 _MOVIE_APPEND = "watch/providers,release_dates,images"
 _SHOW_APPEND = "watch/providers,images,content_ratings"
+
+
+def _fetch_slim(media_type: str, tmdb_id: int) -> dict | None:
+    """Fetch a title for an import, keeping only what ensure_*_in_db reads.
+    An import holds up to _MAX_ROWS of these at once, so full payloads
+    (~400 KB each for a movie) would cost hundreds of MB."""
+    if media_type == "movie":
+        return slim_tmdb_payload(fetch_movie_from_tmdb(tmdb_id, _MOVIE_APPEND))
+    return slim_tmdb_payload(fetch_show_from_tmdb(tmdb_id, _SHOW_APPEND))
 
 
 def _parse_letterboxd_rating(raw: str) -> float | None:
@@ -222,26 +231,25 @@ async def import_letterboxd(
     missing_movies = [mid for mid in movie_ids if mid not in existing_movies]
     missing_shows = [sid for sid in tv_ids if sid not in existing_shows]
 
-    async def prefetch_movie(tmdb_id: int) -> None:
-        async with sem:
-            try:
-                await asyncio.to_thread(fetch_movie_from_tmdb, tmdb_id, _MOVIE_APPEND)
-            except Exception:
-                pass
+    # Lives only for this request; the DB writes below reuse these payloads
+    # instead of fetching each title again.
+    prefetched: dict[tuple[str, int], dict] = {}
 
-    async def prefetch_show(tmdb_id: int) -> None:
+    async def prefetch(media_type: str, tmdb_id: int) -> None:
         async with sem:
             try:
-                await asyncio.to_thread(fetch_show_from_tmdb, tmdb_id, _SHOW_APPEND)
+                data = await asyncio.to_thread(_fetch_slim, media_type, tmdb_id)
             except Exception:
-                pass
+                return
+        if data:
+            prefetched[(media_type, tmdb_id)] = data
 
     await asyncio.gather(
-        *[prefetch_movie(mid) for mid in missing_movies],
-        *[prefetch_show(sid) for sid in missing_shows],
+        *[prefetch("movie", mid) for mid in missing_movies],
+        *[prefetch("tv", sid) for sid in missing_shows],
     )
 
-    # ── Phase 3: sequential DB writes (all TMDB calls are now cache hits) ───
+    # ── Phase 3: sequential DB writes, reusing the prefetched payloads ──────
     results: list[dict] = []
     imported = skipped = failed = watchlisted = 0
     seen_pairs: set[tuple[int, str]] = set()  # (tmdb_id, media_type)
@@ -285,11 +293,17 @@ async def import_letterboxd(
             try:
                 if media_type == "movie":
                     already_tracked = db.query(Movie).filter_by(id=tmdb_id).first() is not None
-                    media = ensure_movie_in_db(db, tmdb_id, already_tracked)
+                    media = ensure_movie_in_db(
+                        db, tmdb_id, already_tracked,
+                        tmdb_data=prefetched.get(("movie", tmdb_id)),
+                    )
                     title = media.title
                 else:
                     already_tracked = db.query(Show).filter_by(id=tmdb_id).first() is not None
-                    media = ensure_show_in_db(db, tmdb_id, already_tracked)
+                    media = ensure_show_in_db(
+                        db, tmdb_id, already_tracked,
+                        tmdb_data=prefetched.get(("tv", tmdb_id)),
+                    )
                     maybe_sync_show_episodes(db, tmdb_id)
                     title = media.name
             except Exception as e:
@@ -344,11 +358,17 @@ async def import_letterboxd(
             try:
                 if media_type == "movie":
                     already_tracked = db.query(Movie).filter_by(id=tmdb_id).first() is not None
-                    media = ensure_movie_in_db(db, tmdb_id, already_tracked)
+                    media = ensure_movie_in_db(
+                        db, tmdb_id, already_tracked,
+                        tmdb_data=prefetched.get(("movie", tmdb_id)),
+                    )
                     title = media.title
                 else:
                     already_tracked = db.query(Show).filter_by(id=tmdb_id).first() is not None
-                    media = ensure_show_in_db(db, tmdb_id, already_tracked)
+                    media = ensure_show_in_db(
+                        db, tmdb_id, already_tracked,
+                        tmdb_data=prefetched.get(("tv", tmdb_id)),
+                    )
                     maybe_sync_show_episodes(db, tmdb_id)
                     title = media.name
             except Exception as e:
@@ -989,23 +1009,22 @@ async def import_tvtime(
     missing_show_ids = needed_show_ids - existing_show_ids
     missing_movie_ids = needed_movie_ids - existing_movie_ids
 
-    async def prefetch_show(show_id: int) -> None:
-        async with sem:
-            try:
-                await asyncio.to_thread(fetch_show_from_tmdb, show_id, _SHOW_APPEND)
-            except Exception:
-                pass
+    # Lives only for this request; the upserts below reuse these payloads
+    # instead of fetching each title again.
+    prefetched: dict[tuple[str, int], dict] = {}
 
-    async def prefetch_movie(movie_id: int) -> None:
+    async def prefetch(media_type: str, tmdb_id: int) -> None:
         async with sem:
             try:
-                await asyncio.to_thread(fetch_movie_from_tmdb, movie_id, _MOVIE_APPEND)
+                data = await asyncio.to_thread(_fetch_slim, media_type, tmdb_id)
             except Exception:
-                pass
+                return
+        if data:
+            prefetched[(media_type, tmdb_id)] = data
 
     await asyncio.gather(
-        *[prefetch_show(sid) for sid in missing_show_ids],
-        *[prefetch_movie(mid) for mid in missing_movie_ids],
+        *[prefetch("tv", sid) for sid in missing_show_ids],
+        *[prefetch("movie", mid) for mid in missing_movie_ids],
     )
 
     # ── Sequentially upsert Show/Movie rows we'll need ──────────────────────
@@ -1017,14 +1036,16 @@ async def import_tvtime(
     for sid in needed_show_ids:
         try:
             ensure_show_in_db(
-                db, sid, db.query(Show).filter_by(id=sid).first() is not None
+                db, sid, db.query(Show).filter_by(id=sid).first() is not None,
+                tmdb_data=prefetched.get(("tv", sid)),
             )
         except Exception:
             db.rollback()
     for mid in needed_movie_ids:
         try:
             ensure_movie_in_db(
-                db, mid, db.query(Movie).filter_by(id=mid).first() is not None
+                db, mid, db.query(Movie).filter_by(id=mid).first() is not None,
+                tmdb_data=prefetched.get(("movie", mid)),
             )
         except Exception:
             db.rollback()
@@ -1184,7 +1205,10 @@ async def import_tvtime(
             shows_skipped += 1
             continue
         try:
-            ensure_show_in_db(db, sid, db.query(Show).filter_by(id=sid).first() is not None)
+            ensure_show_in_db(
+                db, sid, db.query(Show).filter_by(id=sid).first() is not None,
+                tmdb_data=prefetched.get(("tv", sid)),
+            )
             add_to_watchlist(db, uid, "tv", sid)
             shows_watchlisted += 1
         except Exception as e:
@@ -1242,11 +1266,17 @@ async def import_tvtime(
         try:
             if media_type == "movie":
                 already_tracked = db.query(Movie).filter_by(id=tmdb_id).first() is not None
-                media = ensure_movie_in_db(db, tmdb_id, already_tracked)
+                media = ensure_movie_in_db(
+                    db, tmdb_id, already_tracked,
+                    tmdb_data=prefetched.get(("movie", tmdb_id)),
+                )
                 resolved_title = media.title
             else:
                 already_tracked = db.query(Show).filter_by(id=tmdb_id).first() is not None
-                media = ensure_show_in_db(db, tmdb_id, already_tracked)
+                media = ensure_show_in_db(
+                    db, tmdb_id, already_tracked,
+                    tmdb_data=prefetched.get(("tv", tmdb_id)),
+                )
                 resolved_title = media.name
         except Exception as e:
             db.rollback()

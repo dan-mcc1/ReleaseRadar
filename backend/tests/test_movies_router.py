@@ -12,7 +12,7 @@ class TestGetMovieInfo:
 
     def test_falls_back_to_tmdb_when_missing(self, client):
         with patch(
-            "app.routers.movies.fetch_movie_from_tmdb",
+            "app.routers.movies.fetch_movie_from_tmdb_cached",
             return_value={"id": 1, "title": "T"},
         ) as m:
             r = client.get("/movies/1")
@@ -21,7 +21,7 @@ class TestGetMovieInfo:
         m.assert_called_once()
 
     def test_tmdb_404_returns_404(self, client):
-        with patch("app.routers.movies.fetch_movie_from_tmdb", return_value=None):
+        with patch("app.routers.movies.fetch_movie_from_tmdb_cached", return_value=None):
             r = client.get("/movies/9999")
         assert r.status_code == 404
 
@@ -54,7 +54,7 @@ class TestFullMovieInfo:
             "images": {"logos": []},
         }
         with patch(
-            "app.routers.movies.fetch_movie_from_tmdb", return_value=tmdb_data
+            "app.routers.movies.fetch_movie_from_tmdb_cached", return_value=tmdb_data
         ):
             r = client.get("/movies/42/info")
         body = r.json()
@@ -75,12 +75,12 @@ class TestFullMovieInfo:
             },
         }
         with patch(
-            "app.routers.movies.fetch_movie_from_tmdb", return_value=tmdb_data
+            "app.routers.movies.fetch_movie_from_tmdb_cached", return_value=tmdb_data
         ):
             r = client.get("/movies/9/info")
         assert r.json()["logo_path"] == "/en.png"
 
     def test_missing_movie_returns_404(self, client):
-        with patch("app.routers.movies.fetch_movie_from_tmdb", return_value=None):
+        with patch("app.routers.movies.fetch_movie_from_tmdb_cached", return_value=None):
             r = client.get("/movies/1/info")
         assert r.status_code == 404

@@ -6,7 +6,7 @@ from app.db.session import get_db
 from app.models.movie import Movie
 from app.services.media_serializers import _movie_query_options, serialize_movie
 from app.services.provider_utils import normalize_tmdb_watch_providers
-from app.services.tmdb_movies import fetch_movie_from_tmdb
+from app.services.tmdb_movies import fetch_movie_from_tmdb_cached
 
 router = APIRouter()
 
@@ -22,7 +22,7 @@ async def get_movie_info(
     )
     if movie:
         return serialize_movie(movie)
-    payload = await run_in_threadpool(fetch_movie_from_tmdb, id, append)
+    payload = await run_in_threadpool(fetch_movie_from_tmdb_cached, id, append)
     if not payload:
         raise HTTPException(status_code=404, detail="Show not found")
     return payload
@@ -44,7 +44,7 @@ async def full_movie_info(
             "release_dates",
         ]
     )
-    movie_data = await run_in_threadpool(fetch_movie_from_tmdb, id, append)
+    movie_data = await run_in_threadpool(fetch_movie_from_tmdb_cached, id, append)
     if not movie_data:
         raise HTTPException(status_code=404, detail="Show not found")
 

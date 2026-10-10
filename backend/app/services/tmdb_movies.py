@@ -1,15 +1,22 @@
-from functools import lru_cache
+import copy
 from datetime import date, timedelta
 from typing import Tuple, Optional
 
 from app.services.tmdb_client import get
+from app.services.ttl_cache import (
+    DETAIL_MAXSIZE,
+    LIST_MAXSIZE,
+    TTL_SHORT,
+    TTL_STD,
+    ttl_cached,
+)
 
 # -------------------------
 # Core movie info
 # -------------------------
 
 
-@lru_cache(maxsize=1024)
+@ttl_cached(DETAIL_MAXSIZE, TTL_STD)
 def get_movie_info(movie_id: int, append: Optional[Tuple[str, ...]] = None):
     params = {}
     if append:
@@ -23,7 +30,7 @@ def get_movie_info(movie_id: int, append: Optional[Tuple[str, ...]] = None):
 # -------------------------
 
 
-@lru_cache(maxsize=1024)
+@ttl_cached(32, TTL_SHORT)
 def get_popular_movies(region: str = "US", limit: int = 10):
     data = get(
         "/movie/popular",
@@ -32,7 +39,7 @@ def get_popular_movies(region: str = "US", limit: int = 10):
     return data.get("results", [])[:limit]
 
 
-@lru_cache(maxsize=1024)
+@ttl_cached(8, TTL_SHORT)
 def get_trending_movies(time_window: str = "week"):
     data = get(f"/trending/movie/{time_window}")
     return data.get("results", [])
@@ -43,7 +50,7 @@ def get_trending_movies(time_window: str = "week"):
 # -------------------------
 
 
-@lru_cache(maxsize=1024)
+@ttl_cached(8, TTL_STD)
 def get_now_playing_movies(region: str = "US"):
     data = get(
         "/movie/now_playing",
@@ -52,7 +59,7 @@ def get_now_playing_movies(region: str = "US"):
     return data.get("results", [])
 
 
-@lru_cache(maxsize=1024)
+@ttl_cached(32, TTL_STD)
 def get_upcoming_movies(region: str = "US", days: int = 30):
     today = date.today()
     end_date = today + timedelta(days=days)
@@ -74,7 +81,7 @@ def get_upcoming_movies(region: str = "US", days: int = 30):
 # -------------------------
 
 
-@lru_cache(maxsize=1024)
+@ttl_cached(LIST_MAXSIZE, TTL_STD)
 def search_movies(query: Optional[str] = None, genre: Optional[str] = None):
     """
     - query → /search/movie
@@ -101,7 +108,7 @@ def search_movies(query: Optional[str] = None, genre: Optional[str] = None):
 # -------------------------
 
 
-@lru_cache(maxsize=1024)
+@ttl_cached(LIST_MAXSIZE, TTL_STD)
 def get_movies_by_actor(actor: str):
     """
     1. Search person
@@ -119,16 +126,23 @@ def get_movies_by_actor(actor: str):
     return credits.get("cast", [])
 
 
-def fetch_movie_from_tmdb_uncached(movie_id: int, append: str = None):
-    """Always hits TMDb — for refreshes that must see today's data. Also keeps
-    bulk refreshes from filling the cache below."""
+def fetch_movie_from_tmdb(movie_id: int, append: str = None):
+    """Always hits TMDb. For adds, imports, collection ingest and the nightly
+    refreshes: they need today's data and must not fill the shared cache."""
     params = {}
     if append:
-        # params["append_to_response"] = ",".join(append)
         params["append_to_response"] = append
     return get(f"/movie/{movie_id}", params=params)
 
 
-@lru_cache(maxsize=2048)
-def fetch_movie_from_tmdb(movie_id: int, append: str = None):
-    return fetch_movie_from_tmdb_uncached(movie_id, append)
+@ttl_cached(DETAIL_MAXSIZE, TTL_STD)
+def _fetch_movie_from_tmdb_cached(movie_id: int, append: str | None):
+    return fetch_movie_from_tmdb(movie_id, append)
+
+
+def fetch_movie_from_tmdb_cached(movie_id: int, append: str | None):
+    """fetch_movie_from_tmdb behind a 1-hour cache, for user-facing routes.
+
+    Returns a deep copy because callers (e.g. /movies/{id}/info) modify the dict.
+    """
+    return copy.deepcopy(_fetch_movie_from_tmdb_cached(movie_id, append))

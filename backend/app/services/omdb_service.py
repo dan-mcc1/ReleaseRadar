@@ -1,9 +1,9 @@
-from functools import lru_cache
 import httpx
 from app.config import settings
+from app.services.ttl_cache import TTL_LONG, ttl_cached
 
 
-@lru_cache(maxsize=2048)
+@ttl_cached(1024, TTL_LONG)
 def get_omdb_scores(imdb_id: str) -> dict:
     """
     Fetch ratings from OMDB (Rotten Tomatoes, Metacritic, IMDb score).

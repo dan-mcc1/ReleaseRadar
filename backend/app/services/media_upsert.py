@@ -6,7 +6,7 @@ from app.models.show import Show
 from app.models.genre import Genre, ShowGenre, MovieGenre
 from app.models.provider import Provider, ShowProvider, MovieProvider
 from app.models.season import Season
-from app.services.tmdb_movies import fetch_movie_from_tmdb, fetch_movie_from_tmdb_uncached
+from app.services.tmdb_movies import fetch_movie_from_tmdb
 from app.services.tmdb_tv import fetch_show_from_tmdb
 from app.services.provider_utils import canonical_provider_id, canonical_provider_name
 from app.services.tvmaze_service import fetch_show_air_time
@@ -218,15 +218,41 @@ def get_theatrical_release_date(movie_data: dict) -> str | None:
     return movie_data.get("release_date") or None
 
 
+def slim_tmdb_payload(data: dict | None) -> dict | None:
+    """Keep only what ensure_movie_in_db / ensure_show_in_db read from a
+    /movie or /tv response: US providers, ratings and release dates, plus
+    logos. Every other country's entries and the poster/backdrop lists are
+    most of the payload (~400 KB -> ~40 KB for a movie once parsed)."""
+    if not data:
+        return data
+    slim = {
+        k: v for k, v in data.items()
+        if k not in ("images", "watch/providers", "release_dates", "content_ratings")
+    }
+    slim["images"] = {"logos": (data.get("images") or {}).get("logos", [])}
+    us_providers = ((data.get("watch/providers") or {}).get("results") or {}).get("US")
+    slim["watch/providers"] = {"results": {"US": us_providers} if us_providers else {}}
+    for key in ("release_dates", "content_ratings"):
+        if key in data:
+            slim[key] = {"results": [
+                r for r in (data[key] or {}).get("results", [])
+                if r.get("iso_3166_1") == "US"
+            ]}
+    return slim
+
+
 # -------------------------
 # Ensure-in-DB helpers
 # -------------------------
 
 
-def ensure_movie_in_db(db: Session, content_id: int, already_tracked: bool) -> Movie:
+def ensure_movie_in_db(
+    db: Session, content_id: int, already_tracked: bool, tmdb_data: dict | None = None
+) -> Movie:
     """
     Return the Movie row for content_id, creating it from TMDB if absent.
     Increments tracking_count when the row already exists and isn't tracked elsewhere.
+    Pass tmdb_data (e.g. an import's prefetched, slimmed payload) to skip the fetch.
     """
     movie = db.query(Movie).filter_by(id=content_id).first()
     if movie:
@@ -235,7 +261,7 @@ def ensure_movie_in_db(db: Session, content_id: int, already_tracked: bool) -> M
             movie.updated_at = datetime.now(timezone.utc)
         return movie
 
-    movie_data = fetch_movie_from_tmdb(
+    movie_data = tmdb_data or fetch_movie_from_tmdb(
         content_id, "watch/providers,release_dates,images"
     )
     if not movie_data or not movie_data.get("title"):
@@ -292,9 +318,7 @@ def populate_movie_full(
     if movie and movie.updated_at is not None and not force:
         return movie
 
-    # A forced refresh must not get a response cached on an earlier run.
-    fetch = fetch_movie_from_tmdb_uncached if force else fetch_movie_from_tmdb
-    movie_data = fetch(movie_id, "watch/providers,release_dates,images")
+    movie_data = fetch_movie_from_tmdb(movie_id, "watch/providers,release_dates,images")
     if not movie_data or not movie_data.get("title"):
         return None
     if movie_data.get("adult"):
@@ -336,10 +360,13 @@ def populate_movie_full(
     return movie
 
 
-def ensure_show_in_db(db: Session, content_id: int, already_tracked: bool) -> Show:
+def ensure_show_in_db(
+    db: Session, content_id: int, already_tracked: bool, tmdb_data: dict | None = None
+) -> Show:
     """
     Return the Show row for content_id, creating it from TMDB if absent.
     Increments tracking_count when the row already exists and isn't tracked elsewhere.
+    Pass tmdb_data (e.g. an import's prefetched, slimmed payload) to skip the fetch.
     """
     show = db.query(Show).filter_by(id=content_id).first()
     if show:
@@ -348,7 +375,9 @@ def ensure_show_in_db(db: Session, content_id: int, already_tracked: bool) -> Sh
             show.updated_at = datetime.now(timezone.utc)
         return show
 
-    show_data = fetch_show_from_tmdb(content_id, "watch/providers,images,content_ratings")
+    show_data = tmdb_data or fetch_show_from_tmdb(
+        content_id, "watch/providers,images,content_ratings"
+    )
     if not show_data or not show_data.get("name"):
         raise ValueError("Cannot add show without a name")
 

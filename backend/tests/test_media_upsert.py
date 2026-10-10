@@ -379,23 +379,25 @@ class TestPopulateMovieFull:
             get.assert_called_once()
         assert result.title == "Replaced"
 
-    def test_force_bypasses_the_in_memory_tmdb_cache(self, db, seed_movie):
-        """fetch_movie_from_tmdb is an lru_cache with no expiry. A forced
-        refresh that read through it would get the copy cached on an earlier
-        night, so release-date changes would never land."""
+    def test_force_ignores_the_route_cache(self, db, seed_movie):
+        """A forced refresh that read through the user-facing movie cache would
+        get the copy a page view cached earlier, so changes would not land."""
         from app.services.media_upsert import populate_movie_full
-        from app.services.tmdb_movies import fetch_movie_from_tmdb
+        from app.services.tmdb_movies import (
+            _fetch_movie_from_tmdb_cached,
+            fetch_movie_from_tmdb_cached,
+        )
 
         seed_movie.updated_at = datetime.now(timezone.utc)
         db.commit()
-        fetch_movie_from_tmdb.cache_clear()
+        _fetch_movie_from_tmdb_cached.cache_clear()
         try:
             with patch("app.services.tmdb_movies.get", return_value=self._movie_payload("Old")):
-                fetch_movie_from_tmdb(550, "watch/providers,release_dates,images")
+                fetch_movie_from_tmdb_cached(550, "watch/providers,release_dates,images")
             with patch("app.services.tmdb_movies.get", return_value=self._movie_payload("New")):
                 result = populate_movie_full(db, 550, force=True)
         finally:
-            fetch_movie_from_tmdb.cache_clear()
+            _fetch_movie_from_tmdb_cached.cache_clear()
         assert result.title == "New"
 
     def test_missing_row_creates_new(self, db):

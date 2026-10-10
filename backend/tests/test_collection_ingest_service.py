@@ -503,13 +503,11 @@ class TestPartMovieRefresh:
 
     def _ingest(self, db, parts, movie_responses):
         from app.services.collection_ingest_service import _ingest_collection_details
-        from app.services.tmdb_movies import fetch_movie_from_tmdb
         payload = {"id": 80, "name": "Saga", "parts": parts}
-        fetch_movie_from_tmdb.cache_clear()
         with patch(
             "app.services.collection_ingest_service.fetch_collection", return_value=payload
         ), patch(
-            # The HTTP boundary, so the movie cache is exercised for real.
+            # The HTTP boundary, so the real fetch path is exercised.
             "app.services.tmdb_movies.get",
             side_effect=lambda path, params=None: movie_responses[int(path.rsplit("/", 1)[1])],
         ) as fetch, patch(

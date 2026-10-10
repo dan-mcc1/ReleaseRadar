@@ -2,14 +2,13 @@
 import logging
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from sqlalchemy import and_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from app.models.episode import Episode
 from app.models.episode_watched import EpisodeWatched
-from app.models.movie import Movie
 from app.models.season import Season
 from app.models.show import Show
 from app.models.currently_watching import CurrentlyWatching
@@ -780,29 +779,3 @@ def check_and_reactivate_watched_shows(db: Session):
             )
         except Exception:
             logger.exception("Failed to send reactivation email to user %s", item["user_id"])
-
-
-def prune_stale_cache(db: Session) -> None:
-    """Delete Show/Movie cache rows that have no trackers and haven't been touched in 90 days."""
-    cutoff = datetime.now(timezone.utc) - timedelta(days=90)
-
-    # Cascading FKs on all child tables (episodes, seasons, providers, genres,
-    # show_videos, episode_watched, finish_by_goal) mean one DELETE handles everything.
-    deleted_shows = (
-        db.query(Show)
-        .filter(Show.tracking_count == 0, Show.updated_at < cutoff)
-        .delete(synchronize_session=False)
-    )
-    deleted_movies = (
-        db.query(Movie)
-        .filter(Movie.tracking_count == 0, Movie.updated_at < cutoff)
-        .delete(synchronize_session=False)
-    )
-
-    db.commit()
-
-    if deleted_shows or deleted_movies:
-        logger.info(
-            "Cache prune: removed %d show(s) and %d movie(s) with no trackers",
-            deleted_shows, deleted_movies,
-        )
