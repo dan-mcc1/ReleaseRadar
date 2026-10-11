@@ -14,6 +14,7 @@ from app.models.user import User
 from app.models.watched import Watched
 from app.models.watchlist import Watchlist
 from app.services.email_service import send_new_season_available_email
+from app.services.season_sync import drop_superseded_seasons
 from app.services.tmdb_client import get
 
 logger = logging.getLogger(__name__)
@@ -412,8 +413,16 @@ def _refresh_show_metadata(db: Session, show: Show):
         show.in_production = new_in_production
         changed = True
 
+    # A season TMDb reissued under a new id replaces its old row rather than
+    # sitting beside it. Specials (season 0) aren't managed here.
+    removed = drop_superseded_seasons(
+        db, show.id, [s for s in data.get("seasons", []) if s.get("season_number", 0) > 0]
+    )
+    if removed:
+        changed = True
+
     # Add Season rows for any seasons TMDB has that we don't yet have stored
-    existing_season_ids = {s.id for s in show.seasons}
+    existing_season_ids = {s.id for s in show.seasons} - removed
     for s in data.get("seasons", []):
         sn = s.get("season_number", 0)
         sid = s.get("id")

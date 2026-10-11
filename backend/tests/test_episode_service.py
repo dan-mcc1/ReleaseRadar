@@ -328,6 +328,65 @@ class TestRefreshShowMetadata:
         with patch("app.services.episode_service.get", return_value=None):
             _refresh_show_metadata(db, show)
 
+    @staticmethod
+    def _rookie_with_seasons(db, *season_rows):
+        """Show 79744 with the given (season id, season number) rows stored."""
+        from app.models.season import Season
+        from app.models.show import Show
+
+        show = Show(id=79744, name="The Rookie", number_of_seasons=9,
+                    in_production=True, tracking_count=0)
+        db.add(show)
+        db.flush()
+        for season_id, number in season_rows:
+            db.add(Season(id=season_id, show_id=79744, season_number=number, episode_count=0))
+        db.commit()
+        return show
+
+    @staticmethod
+    def _stored_seasons(db):
+        from app.models.season import Season
+
+        db.expire_all()
+        return sorted(
+            (s.season_number, s.id) for s in db.query(Season).filter_by(show_id=79744)
+        )
+
+    def test_reissued_season_id_replaces_the_stale_row(self, db):
+        """TMDb recreated season 9 under a new id: keep one row, TMDb's."""
+        from app.services.episode_service import _refresh_show_metadata
+
+        show = self._rookie_with_seasons(db, (512798, 9))
+        data = {"number_of_seasons": 9, "in_production": True,
+                "seasons": [{"id": 514233, "season_number": 9, "name": "Season 9"}]}
+        with patch("app.services.episode_service.get", return_value=data):
+            _refresh_show_metadata(db, show)
+
+        assert self._stored_seasons(db) == [(9, 514233)]
+
+    def test_duplicate_season_rows_collapse_to_tmdbs_id(self, db):
+        """Rows already duplicated by an earlier reissue heal on the next refresh."""
+        from app.services.episode_service import _refresh_show_metadata
+
+        show = self._rookie_with_seasons(db, (512798, 9), (514233, 9))
+        data = {"number_of_seasons": 9, "in_production": True,
+                "seasons": [{"id": 514233, "season_number": 9, "name": "Season 9"}]}
+        with patch("app.services.episode_service.get", return_value=data):
+            _refresh_show_metadata(db, show)
+
+        assert self._stored_seasons(db) == [(9, 514233)]
+
+    def test_seasons_tmdb_no_longer_lists_are_kept(self, db):
+        from app.services.episode_service import _refresh_show_metadata
+
+        show = self._rookie_with_seasons(db, (427613, 7), (455290, 8))
+        data = {"number_of_seasons": 9, "in_production": True,
+                "seasons": [{"id": 427613, "season_number": 7}]}
+        with patch("app.services.episode_service.get", return_value=data):
+            _refresh_show_metadata(db, show)
+
+        assert self._stored_seasons(db) == [(7, 427613), (8, 455290)]
+
 
 class TestRefreshEpisodesForShow:
     def test_missing_show_is_noop(self, db):

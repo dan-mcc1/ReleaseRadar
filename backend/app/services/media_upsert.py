@@ -14,6 +14,7 @@ from app.models.watchlist import Watchlist
 from app.services.tmdb_movies import fetch_movie_from_tmdb
 from app.services.tmdb_tv import fetch_show_from_tmdb
 from app.services.provider_utils import canonical_provider_id, canonical_provider_name
+from app.services.season_sync import drop_superseded_seasons
 from app.services.tvmaze_service import fetch_show_air_time
 from app.db.session import SessionLocal
 from app.db.upsert import insert_if_absent
@@ -168,6 +169,9 @@ def _upsert_providers(db: Session, us_providers: dict, link_model, **link_kwargs
 def _upsert_seasons_for_show(db: Session, show: Show, seasons_data: list):
     if not seasons_data:
         return
+    # A season TMDb reissued under a new id replaces its old row rather than
+    # sitting beside it.
+    drop_superseded_seasons(db, show.id, seasons_data)
     season_ids = [s.get("id") for s in seasons_data if s.get("id")]
     existing_seasons = {
         s.id: s for s in db.query(Season).filter(Season.id.in_(season_ids)).all()
