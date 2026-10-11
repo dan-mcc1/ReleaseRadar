@@ -150,6 +150,12 @@ class TestSchedules:
 
         assert Schedule("digests", "dispatch_digests", {}, hourly(0)) in SCHEDULES
 
+    def test_premiere_alerts_are_dispatched_every_hour(self):
+        from durable_queue.scheduler import hourly
+        from app.jobs import SCHEDULES, Schedule
+
+        assert Schedule("premiere-alerts", "dispatch_premiere_alerts", {}, hourly(0)) in SCHEDULES
+
 
 class TestStartJobQueue:
     def test_registers_every_schedule_then_starts_the_runner(self):
@@ -724,3 +730,97 @@ class TestDigestJobs:
             notifications.send_digest(user_id="u1", digest_date="2026-10-12")
 
         assert email.call_count == 1
+
+
+def _premium_user(db, uid="u1", **overrides):
+    _digest_user(db, uid, **{
+        "subscription_tier": "premium", "notify_new_seasons": True,
+        "push_notifications_enabled": True, "push_notify_new_seasons": True,
+        **overrides,
+    })
+
+
+def _season_on_watchlist(db, uid="u1", *, alert_date=date(2026, 10, 12), days_out=20):
+    from app.models.season import Season
+    from app.models.show import Show
+    from app.models.watchlist import Watchlist
+
+    db.add(Show(id=10, name="The Rookie", tracking_count=0))
+    db.flush()
+    db.add(Season(id=1009, show_id=10, season_number=9,
+                  air_date=alert_date + timedelta(days=days_out)))
+    db.add(Watchlist(user_id=uid, content_type="tv", content_id=10, notify=True))
+    db.commit()
+
+
+class TestPremiereAlertJobs:
+    def test_dispatch_queues_eligible_users_in_their_window(self, db):
+        from app.jobs import notifications
+
+        _premium_user(db, "u1")                                  # due
+        _premium_user(db, "u2", subscription_tier="free")        # not premium
+        _premium_user(db, "u3", digest_hour=20)                  # not yet
+        calls = []
+        with patch.object(notifications, "enqueue_many", _fake_enqueue_many(calls)),              patch.object(notifications, "datetime", _NineAmInNewYork):
+            notifications.dispatch_premiere_alerts()
+
+        assert calls == [(
+            "send_premiere_alerts",
+            [{"user_id": "u1", "alert_date": "2024-06-01"}],
+            ["premiere:u1:2024-06-01"],
+        )]
+
+    def test_emails_records_then_pushes(self, db):
+        from app.jobs import notifications
+        from app.models.sent_premiere_alert import SentPremiereAlert
+
+        _premium_user(db)
+        _season_on_watchlist(db)
+        with patch.object(notifications, "send_season_premiere_email") as email,              patch.object(notifications, "push_notification") as push:
+            notifications.send_premiere_alerts(user_id="u1", alert_date="2026-10-12")
+
+        assert email.call_args.kwargs["idempotency_key"] == "premiere:u1:2026-10-12"
+        assert push.call_count == 1
+        assert push.call_args.kwargs["title"] == "A new season of The Rookie airs in 20 days"
+        db.expire_all()
+        assert [(a.show_id, a.season_number, a.lead_days)
+                for a in db.query(SentPremiereAlert)] == [(10, 9, 30)]
+
+    def test_running_twice_sends_once(self, db):
+        from app.jobs import notifications
+
+        _premium_user(db)
+        _season_on_watchlist(db)
+        with patch.object(notifications, "send_season_premiere_email") as email,              patch.object(notifications, "push_notification") as push:
+            notifications.send_premiere_alerts(user_id="u1", alert_date="2026-10-12")
+            notifications.send_premiere_alerts(user_id="u1", alert_date="2026-10-12")
+
+        assert (email.call_count, push.call_count) == (1, 1)
+
+    def test_failed_email_records_nothing_and_pushes_nothing(self, db):
+        from app.jobs import notifications
+        from app.models.sent_premiere_alert import SentPremiereAlert
+
+        _premium_user(db)
+        _season_on_watchlist(db)
+        with patch.object(notifications, "send_season_premiere_email",
+                          side_effect=RuntimeError("resend down")),              patch.object(notifications, "push_notification") as push,              pytest.raises(RuntimeError):
+            notifications.send_premiere_alerts(user_id="u1", alert_date="2026-10-12")
+
+        push.assert_not_called()
+        db.expire_all()
+        assert db.query(SentPremiereAlert).count() == 0
+
+    def test_push_only_user_gets_the_push_and_it_is_recorded(self, db):
+        from app.jobs import notifications
+        from app.models.sent_premiere_alert import SentPremiereAlert
+
+        _premium_user(db, email_notifications=False)
+        _season_on_watchlist(db)
+        with patch.object(notifications, "send_season_premiere_email") as email,              patch.object(notifications, "push_notification") as push:
+            notifications.send_premiere_alerts(user_id="u1", alert_date="2026-10-12")
+
+        email.assert_not_called()
+        assert push.call_count == 1
+        db.expire_all()
+        assert db.query(SentPremiereAlert).count() == 1
