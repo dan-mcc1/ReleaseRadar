@@ -204,3 +204,42 @@ class TestUpdateAllVoteAverages:
         db.expire_all()
         assert db.query(Show).filter_by(id=400).first().vote_average == 9.0
         assert db.query(Movie).filter_by(id=500).first().vote_average == 8.0
+
+
+class TestTitlesTmdbNoLongerHas:
+    def test_404_is_skipped_quietly_and_the_rest_still_update(self, db, seed_user, caplog):
+        """TMDb deleted the title (seen for show 297772). That's not a failure
+        to page anyone about every night: skip it at INFO, update the rest."""
+        import logging
+
+        import httpx
+        from app.models.show import Show
+        from app.models.watchlist import Watchlist
+        from app.services.vote_update_service import update_all_vote_averages
+
+        db.add_all([
+            Show(id=297772, name="Gone from TMDb", vote_average=None, tracking_count=0),
+            Show(id=101, name="Still there", vote_average=5.5, tracking_count=0),
+        ])
+        db.add_all([
+            Watchlist(user_id="vote-user", content_type="tv", content_id=297772),
+            Watchlist(user_id="vote-user", content_type="tv", content_id=101),
+        ])
+        db.commit()
+
+        def fake_get(path):
+            if path == "/tv/297772":
+                request = httpx.Request("GET", "https://api.themoviedb.org/3/tv/297772")
+                raise httpx.HTTPStatusError(
+                    "404", request=request, response=httpx.Response(404, request=request)
+                )
+            return {"vote_average": 8.1}
+
+        with patch("app.services.vote_update_service.get", side_effect=fake_get), \
+             caplog.at_level(logging.INFO, logger="app.services.vote_update_service"):
+            update_all_vote_averages(db)
+
+        assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
+        assert "297772" in caplog.text
+        db.expire_all()
+        assert db.get(Show, 101).vote_average == 8.1
