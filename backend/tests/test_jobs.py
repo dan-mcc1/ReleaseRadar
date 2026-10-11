@@ -605,9 +605,10 @@ class TestDailyJobs:
         db.add(Watchlist(user_id="u1", content_id=1, content_type="movie", notify=True))
         db.commit()
         trailer = {"key": "vk1", "name": "Trailer 1", "type": "Trailer", "official": True}
+        upcoming = {"release_date": "2999-01-01", "videos": {"results": [trailer]}}
 
-        with patch("app.services.trailer_notification_service._fetch_videos",
-                   return_value=[trailer]),              patch("app.services.trailer_notification_service.send_trailer_alert_email") as email:
+        with patch("app.services.trailer_notification_service.fetch_movie_from_tmdb",
+                   return_value=upcoming),              patch("app.services.trailer_notification_service.send_trailer_alert_email") as email:
             refresh_trailer_videos()
             refresh_trailer_videos()  # a retry after the first run committed
 
