@@ -5,9 +5,10 @@ The queue's SQL is Postgres-only, so these call task functions directly and
 patch the Runner; test_job_queue_postgres.py runs a job through a real queue.
 """
 
+import json
 import logging
 from datetime import datetime, timedelta, timezone
-from unittest.mock import patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 
@@ -88,3 +89,85 @@ class TestCleanupActivity:
         registered = get_registered_task("cleanup_activity")
         assert registered.fn is cleanup_activity
         assert registered.wants_connection is False
+
+
+class TestSchedules:
+    def test_every_schedule_names_a_registered_task_with_json_args(self):
+        from durable_queue.registry import get_registered_task
+        from app.jobs import SCHEDULES
+
+        for name, task_name, args, when in SCHEDULES:
+            get_registered_task(task_name)  # KeyError names a typo or unimported module
+            json.dumps(args)  # stored as jsonb on every job
+
+    def test_schedule_names_are_unique(self):
+        from app.jobs import SCHEDULES
+
+        # Registering a second entry under a taken name silently replaces it.
+        names = [name for name, *_ in SCHEDULES]
+        assert len(names) == len(set(names))
+
+    def test_activity_cleanup_runs_at_the_top_of_every_hour(self):
+        from durable_queue.scheduler import hourly
+        from app.jobs import SCHEDULES
+
+        assert ("activity-cleanup", "cleanup_activity", {}, hourly(0)) in SCHEDULES
+
+
+class TestStartJobQueue:
+    def test_registers_every_schedule_then_starts_the_runner(self):
+        import app.jobs as jobs
+
+        conn = MagicMock()
+        events = []
+        with patch.object(jobs, "get_connection", return_value=conn) as get_connection, \
+             patch.object(jobs, "register_schedule") as register, \
+             patch.object(jobs, "Runner") as Runner:
+            register.side_effect = lambda *args: events.append("register")
+            Runner.return_value.start.side_effect = lambda: events.append("start")
+            runner = jobs.start_job_queue("postgresql://queue")
+
+        get_connection.assert_called_once_with("postgresql://queue")
+        assert register.call_args_list == [
+            call(conn, name, task_name, args, when)
+            for name, task_name, args, when in jobs.SCHEDULES
+        ]
+        conn.close.assert_called_once()
+        Runner.assert_called_once_with(concurrency=4, dsn="postgresql://queue")
+        assert runner is Runner.return_value
+        # Schedules exist before the scheduler thread first looks.
+        assert events == ["register"] * len(jobs.SCHEDULES) + ["start"]
+
+    def test_missing_queue_tables_say_to_run_migrations(self):
+        import app.jobs as jobs
+        from psycopg.errors import UndefinedTable
+
+        conn = MagicMock()
+        with patch.object(jobs, "get_connection", return_value=conn), \
+             patch.object(jobs, "register_schedule",
+                          side_effect=UndefinedTable('relation "schedules" does not exist')), \
+             patch.object(jobs, "Runner") as Runner, \
+             pytest.raises(RuntimeError, match="alembic upgrade head"):
+            jobs.start_job_queue()
+
+        conn.close.assert_called_once()
+        Runner.assert_not_called()
+
+    def test_unreachable_database_raises_before_anything_starts(self):
+        import psycopg
+        import app.jobs as jobs
+
+        with patch.object(jobs, "get_connection",
+                          side_effect=psycopg.OperationalError("connection refused")), \
+             patch.object(jobs, "Runner") as Runner, \
+             pytest.raises(psycopg.OperationalError):
+            jobs.start_job_queue()
+
+        Runner.assert_not_called()
+
+    def test_stop_stops_the_runner(self):
+        import app.jobs as jobs
+
+        runner = MagicMock()
+        jobs.stop_job_queue(runner)
+        runner.stop.assert_called_once_with()
