@@ -36,6 +36,10 @@ class Settings(BaseSettings):
 
     TMDB_BEARER_TOKEN: str
     DATABASE_URL: str
+    # The job queue's database: the direct (non-pooler) Neon endpoint of the
+    # same database. durable-queue reads it from the environment itself,
+    # falling back to DATABASE_URL; declared so .env may set it.
+    DURABLE_QUEUE_DATABASE_URL: str = ""
     FRONTEND_URL: str
     # Public base URL of this API (e.g. https://api.releaseradar.co). Emails
     # use it for the one-click List-Unsubscribe header; unset = no header.
