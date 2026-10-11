@@ -12,14 +12,12 @@ interface RecommendButtonProps {
   contentType: "movie" | "tv";
   contentId: number;
   contentTitle: string;
-  contentPosterPath: string | null;
 }
 
 export default function RecommendButton({
   contentType,
   contentId,
   contentTitle,
-  contentPosterPath,
 }: RecommendButtonProps) {
   const user = useAuthUser();
   const [open, setOpen] = useState(false);
@@ -32,18 +30,6 @@ export default function RecommendButton({
   const { data: friendsData, isLoading: loadingFriends } = useFriends();
   const friends = (friendsData as Friend[] | undefined) ?? [];
   const sendMutation = useSendRecommendation();
-
-  // Close on outside click
-  useEffect(() => {
-    if (!open) return;
-    function handler(e: MouseEvent) {
-      if (modalRef.current && !modalRef.current.contains(e.target as Node)) {
-        handleClose();
-      }
-    }
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
 
   function handleOpen() {
     setOpen(true);
@@ -61,6 +47,18 @@ export default function RecommendButton({
     setMessage("");
   }
 
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    function handler(e: MouseEvent) {
+      if (modalRef.current && !modalRef.current.contains(e.target as Node)) {
+        handleClose();
+      }
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
   async function handleSend() {
     if (!selected) return;
     if (!user) return;
@@ -70,8 +68,6 @@ export default function RecommendButton({
         recipient_username: selected,
         content_type: contentType,
         content_id: contentId,
-        content_title: contentTitle,
-        content_poster_path: contentPosterPath ?? "",
         message: message.trim(),
       });
       setSent(true);

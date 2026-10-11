@@ -70,10 +70,6 @@ function getDate(item: Movie | Show): string {
   );
 }
 
-function getYear(item: Movie | Show): string {
-  return getDate(item).slice(0, 4) || "—";
-}
-
 function getTimeRemaining(
   item: Movie | Show,
   bingePlans?: Record<string, ShowProgress>,
@@ -752,7 +748,7 @@ export default function Watchlist() {
   }
 
   // Grid items for non-my-order views, and for up_next regardless of sort
-  const gridItems: CombinedItem[] = useMemo(() => {
+  const gridItems: CombinedItem[] = (() => {
     if (isMyOrder && activeTab !== "up_next" && activeTab !== "currently_watching") return [];
     switch (activeTab) {
       case "up_next":
@@ -775,10 +771,7 @@ export default function Watchlist() {
           ...tagCW(cwFilteredShows, "tv"),
         ];
     }
-  }, [
-    isMyOrder, activeTab, filteredMovies, filteredShows, upNextShows,
-    cwFilteredMovies, cwFilteredShows, cwMovieIds, cwShowIds,
-  ]);
+  })();
 
   // My order filtered items for movies/shows tabs
   const myOrderFilteredItems =

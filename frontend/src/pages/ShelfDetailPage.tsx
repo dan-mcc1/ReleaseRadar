@@ -3,7 +3,7 @@ import { useShelves, useShelfItems, useRemoveFromShelf } from "../hooks/api/useS
 import MediaCard from "../components/MediaCard";
 import { usePageTitle } from "../hooks/usePageTitle";
 import ShelfCalendarView from "../components/calendar/ShelfCalendarView";
-import { Movie, Show } from "../types/calendar";
+import type { Movie, Show } from "../types/calendar";
 
 export default function ShelfDetailPage() {
   const { id } = useParams<{ id: string }>();

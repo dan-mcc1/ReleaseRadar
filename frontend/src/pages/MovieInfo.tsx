@@ -219,7 +219,6 @@ export default function MovieInfo() {
                   contentType="movie"
                   contentId={movie.id}
                   contentTitle={movie.title}
-                  contentPosterPath={movie.poster_path ?? null}
                 />
               )}
               {trailer && <TrailerButton trailerKey={trailer.key} />}

@@ -12,13 +12,23 @@ import {
   AuthCredential,
 } from "firebase/auth";
 import { auth } from "../firebase";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { apiFetch } from "../utils/apiFetch";
 import { usePageTitle } from "../hooks/usePageTitle";
 
 const USERNAME_RE = /^[a-zA-Z0-9_]{3,30}$/;
 
 const PRIMARY = "#10b981";
+
+/** Where to go after signing in: the page ProtectedRoute bounced from, if it
+ * is a path on this site. Anything else (absolute or protocol-relative URLs)
+ * is ignored so the link can't be used to redirect people off-site. */
+function safeNextPath(next: string | null): string {
+  if (next && next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\")) {
+    return next;
+  }
+  return "/calendar";
+}
 
 function RadarSVG() {
   return (
@@ -90,6 +100,8 @@ function RadarSVG() {
 const SignIn: React.FC = () => {
   usePageTitle("Sign In");
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const afterSignIn = safeNextPath(searchParams.get("next"));
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
@@ -224,7 +236,7 @@ const SignIn: React.FC = () => {
     setIsLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      navigate("/calendar");
+      navigate(afterSignIn);
     } catch (error) {
       console.error("Error logging in:", error);
       setErrorMessage("Invalid email or password.");
@@ -268,7 +280,7 @@ const SignIn: React.FC = () => {
       }
       const res = await createUserWithEmailAndPassword(auth, email, password);
       await registerUserInBackend(res.user, username);
-      navigate("/calendar");
+      navigate(afterSignIn);
     } catch (err: unknown) {
       console.error("Error registering:", err);
       const e = err as { code?: string; message?: string };
@@ -305,7 +317,7 @@ const SignIn: React.FC = () => {
     } catch {
       // non-critical
     }
-    navigate("/calendar");
+    navigate(afterSignIn);
   }
 
   async function handleOAuthUsernameSubmit(e: React.FormEvent) {
@@ -334,7 +346,7 @@ const SignIn: React.FC = () => {
         setErrorMessage(err.detail ?? "Failed to set username.");
         return;
       }
-      navigate("/calendar");
+      navigate(afterSignIn);
     } catch {
       setErrorMessage("Network error.");
     } finally {

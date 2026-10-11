@@ -24,3 +24,5 @@ dist-ssr
 *.sw?
 
 .env
+# TypeScript incremental build info (lives in node_modules/.tmp now)
+*.tsbuildinfo

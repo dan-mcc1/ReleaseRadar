@@ -1,3 +1,5 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session, selectinload
@@ -101,8 +103,8 @@ async def get_full_show_info(
 @router.get("/{id}/season_calendar", dependencies=[DETAIL_CACHE])
 async def season_calendar(
     id: int,
-    min_date: str | None = Query(None, description="ISO date YYYY-MM-DD — start of window"),
-    max_date: str | None = Query(None, description="ISO date YYYY-MM-DD — end of window"),
+    min_date: date | None = Query(None, description="ISO date YYYY-MM-DD — start of window"),
+    max_date: date | None = Query(None, description="ISO date YYYY-MM-DD — end of window"),
     db: Session = Depends(get_db),
 ):
     def _serialize(ep: Episode) -> dict:
@@ -150,7 +152,7 @@ async def season_calendar(
             for ep in await run_in_threadpool(
                 fetch_season_data_from_tmdb, show_data["id"], season["season_number"]
             ):
-                if ep.get("air_date") and min_date <= ep["air_date"] <= max_date:
+                if ep.get("air_date") and min_date.isoformat() <= ep["air_date"] <= max_date.isoformat():
                     all_episodes.append(ep)
         return all_episodes
 

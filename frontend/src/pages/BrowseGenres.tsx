@@ -3,7 +3,7 @@ import { usePageTitle } from "../hooks/usePageTitle";
 import { useGenres, useGenreResults } from "../hooks/api/useSearch";
 import { BASE_IMAGE_URL } from "../constants";
 import { parseLocalDate } from "../utils/date";
-import { Movie, Show } from "../types/calendar";
+import type { Movie, Show } from "../types/calendar";
 import MiniWatchButton from "../components/MiniWatchButton";
 import MiniWatchedButton from "../components/MiniWatchedButton";
 import StarIcon from "../components/icons/StarIcon";

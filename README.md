@@ -126,7 +126,7 @@ RESEND_API_KEY=your_resend_key
 EMAIL_FROM=noreply@yourdomain.com
 OMDB_API_KEY=your_omdb_key
 ICAL_SECRET=any_random_secret
-UNSUBSCRIBE_KEY=any_random_secret
+UNSUBSCRIBE_SECRET=any_random_secret
 FRONTEND_URL=http://localhost:5173
 ```
 

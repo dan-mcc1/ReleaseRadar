@@ -9,6 +9,7 @@ import MiniWatchedButton from "../components/MiniWatchedButton";
 import { useBulkWatchStatus } from "../hooks/api/useWatchStatus";
 import type { WatchStatus } from "../components/WatchButton";
 import { useAuthUser } from "../hooks/useAuthUser";
+import { toLocalISODate } from "../utils/date";
 
 type AnyItem = Movie | Show;
 type TypedItem = AnyItem & { _type: "movie" | "tv" };
@@ -310,10 +311,10 @@ export default function Trending() {
   const { data: topRatedData, isPending: topRatedLoading } = useTopRatedMulti();
 
   const today = new Date();
-  const minDate = today.toISOString().split("T")[0];
+  const minDate = toLocalISODate(today);
   const nextMonth = new Date(today);
   nextMonth.setMonth(nextMonth.getMonth() + 1);
-  const maxDate = nextMonth.toISOString().split("T")[0];
+  const maxDate = toLocalISODate(nextMonth);
 
   const formatDateRange = () => {
     const opts: Intl.DateTimeFormatOptions = { month: "long", day: "numeric" };

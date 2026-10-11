@@ -20,6 +20,13 @@ export const PREMIUM_FEATURES = {
 
 export type Feature = keyof typeof PREMIUM_FEATURES;
 
+/**
+ * Open beta: the Stripe upgrade buttons are hidden behind a "Currently in
+ * Beta" placeholder. Set to true at paywall launch, together with the
+ * backend's is_premium() in app/dependencies/subscription.py.
+ */
+export const CHECKOUT_ENABLED = false;
+
 /** Returns true if the feature requires a Premium subscription. */
 export function isPremiumFeature(feature: Feature): boolean {
   return PREMIUM_FEATURES[feature];

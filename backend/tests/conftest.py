@@ -18,7 +18,9 @@ os.environ.setdefault("RESEND_API_KEY", "test-key")
 os.environ.setdefault("EMAIL_FROM", "test@test.com")
 os.environ.setdefault("OMDB_API_KEY", "test-key")
 os.environ.setdefault("ICAL_SECRET", "test-secret")
-os.environ.setdefault("UNSUBSCRIBE_KEY", "test-unsubscribe")
+# Every required setting, so the suite doesn't depend on a local .env.
+os.environ.setdefault("UNSUBSCRIBE_SECRET", "test-unsubscribe")
+os.environ.setdefault("CORS_ORIGINS", '["http://localhost:5173"]')
 os.environ.setdefault("FRONTEND_URL", "http://localhost:5173")
 os.environ.setdefault("ENVIRONMENT", "test")
 # Force-disable Sentry in tests so test runs don't emit events to the dashboard.

@@ -1,4 +1,4 @@
-import { Provider, WatchProvider } from "../types/calendar";
+import type { Provider, WatchProvider } from "../types/calendar";
 import { BASE_IMAGE_URL } from "../constants";
 import { getProviderUrl, getProviderDedupeKey } from "../utils/providerUrls";
 import { safeHref } from "../utils/safeHref";

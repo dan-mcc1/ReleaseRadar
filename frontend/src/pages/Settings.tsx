@@ -43,6 +43,7 @@ import {
   useAddStreamingService,
   useRemoveStreamingService,
 } from "../hooks/api/useStreamingServices";
+import { toLocalISODate } from "../utils/date";
 
 const USERNAME_RE = /^[a-zA-Z0-9_]{3,30}$/;
 
@@ -569,7 +570,7 @@ export default function Settings() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      const stamp = new Date().toISOString().slice(0, 10);
+      const stamp = toLocalISODate(new Date());
       a.download = `releaseradar-${userMe?.username ?? "export"}-${stamp}.zip`;
       a.click();
       URL.revokeObjectURL(url);

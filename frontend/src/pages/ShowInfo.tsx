@@ -199,7 +199,6 @@ export default function ShowInfo() {
                   contentType="tv"
                   contentId={show.id}
                   contentTitle={show.name}
-                  contentPosterPath={show.poster_path ?? null}
                 />
               )}
               {trailer && <TrailerButton trailerKey={trailer.key} />}

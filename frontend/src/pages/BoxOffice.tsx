@@ -1,7 +1,7 @@
 import { Link, useSearchParams } from "react-router-dom";
 import { BASE_IMAGE_URL } from "../constants";
 import { usePageTitle } from "../hooks/usePageTitle";
-import { useBoxOffice, useAllTimeBoxOffice, BoxOfficeMovie } from "../hooks/api/useBoxOffice";
+import { useBoxOffice, useAllTimeBoxOffice, type BoxOfficeMovie } from "../hooks/api/useBoxOffice";
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -256,7 +256,7 @@ export default function BoxOffice() {
           {/* Hero + leaderboard */}
           <div className="grid grid-cols-1 xl:grid-cols-[380px_1fr] gap-5">
             {/* #1 hero card */}
-            {hero && <HeroCard movie={hero} year={year} mode={mode} month={month} page={allTimePage} />}
+            {hero && <HeroCard movie={hero} year={year} mode={mode} month={month} />}
 
             {/* Leaderboard table */}
             <div className="bg-neutral-800/60 border border-white/8 rounded-2xl overflow-hidden">
@@ -271,7 +271,7 @@ export default function BoxOffice() {
               </div>
 
               {/* Rows */}
-              {movies.map((movie, i) => {
+              {movies.map((movie) => {
                 const profit = movie.revenue - movie.budget;
                 const positive = profit >= 0;
                 const ratio = movie.budget > 0 ? movie.revenue / movie.budget : 0;
@@ -390,7 +390,7 @@ export default function BoxOffice() {
   );
 }
 
-function HeroCard({ movie, year, mode, month, page }: { movie: BoxOfficeMovie; year: number; mode: "yearly" | "monthly" | "all-time"; month: number; page: number }) {
+function HeroCard({ movie, year, mode, month }: { movie: BoxOfficeMovie; year: number; mode: "yearly" | "monthly" | "all-time"; month: number }) {
   const profit = movie.revenue - movie.budget;
   const ratio = movie.budget > 0 ? movie.revenue / movie.budget : 0;
   const genreLabel = movie.genres?.slice(0, 2).map((g) => g.name).join(" · ") ?? "";

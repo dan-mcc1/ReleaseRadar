@@ -1,5 +1,5 @@
 import { BASE_IMAGE_URL } from "../constants";
-import { Season, Episode } from "../types/calendar";
+import type { Season, Episode } from "../types/calendar";
 import { memo, useState, useMemo, useCallback, useRef } from "react";
 import { useAuthUser } from "../hooks/useAuthUser";
 import { apiFetch } from "../utils/apiFetch";

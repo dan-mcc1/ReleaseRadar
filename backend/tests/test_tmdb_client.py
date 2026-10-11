@@ -163,3 +163,34 @@ class TestGetAsyncClient:
         assert c is not None
         # Returns same instance on second call
         assert tmdb_client._get_async_client() is c
+
+
+class TestRetryDelay:
+    """Retry-After can be seconds or an HTTP date (RFC 9110). A date used to
+    raise ValueError mid-retry, and a huge value parked the worker thread."""
+
+    def _delay(self, header, attempt=0):
+        import httpx
+        from app.services.tmdb_client import _retry_delay
+
+        headers = {"Retry-After": header} if header is not None else {}
+        return _retry_delay(httpx.Response(429, headers=headers), attempt)
+
+    def test_seconds(self):
+        assert self._delay("7") == 7
+
+    def test_http_date(self):
+        from datetime import datetime, timedelta, timezone
+        from email.utils import format_datetime
+
+        when = datetime.now(timezone.utc) + timedelta(seconds=20)
+        assert 15 <= self._delay(format_datetime(when, usegmt=True)) <= 20
+
+    def test_unparseable_value_falls_back_to_backoff(self):
+        assert self._delay("soon", attempt=2) == 4
+
+    def test_long_waits_are_capped(self):
+        assert self._delay("3600") == 30
+
+    def test_no_header_uses_exponential_backoff(self):
+        assert self._delay(None, attempt=3) == 8

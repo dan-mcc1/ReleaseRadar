@@ -64,6 +64,18 @@ export default function VirtualGrid<T>({
     return () => ro.disconnect();
   }, []);
 
+  // The grid's own width, for row-height estimates. Measured by an observer
+  // (which also reports once when it starts) instead of reading the ref while
+  // rendering, which returned null on first render and stale widths after.
+  const [containerWidth, setContainerWidth] = useState(0);
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setContainerWidth(el.clientWidth));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   // scrollMargin = distance from page top to grid top, needed by useWindowVirtualizer.
   useLayoutEffect(() => {
     const update = () => {
@@ -83,8 +95,8 @@ export default function VirtualGrid<T>({
 
   // Estimate row height: poster is aspect-[2/3], title is ~20px, gap on top of each row.
   // Container width minus inter-column gaps, divided by numCols → cell width.
-  const containerWidth = containerRef.current?.clientWidth ?? viewportWidth;
-  const cellWidth = (containerWidth - colGap * (numCols - 1)) / numCols;
+  const gridWidth = containerWidth || viewportWidth;
+  const cellWidth = (gridWidth - colGap * (numCols - 1)) / numCols;
   const estimatedRowHeight = Math.round(cellWidth * 1.5) + 24; // poster + title
 
   const estimateSize = useCallback(

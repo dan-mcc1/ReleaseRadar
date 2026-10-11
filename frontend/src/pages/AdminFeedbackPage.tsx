@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { usePageTitle } from "../hooks/usePageTitle";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "../utils/apiFetch";
 import AdminLayout, {
   ADM,
@@ -198,7 +198,6 @@ function DetailPanel({
 
 export default function AdminFeedbackPage() {
   usePageTitle("Admin — Feedback");
-  const qc = useQueryClient();
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("open");
   const [selected, setSelected] = useState<FeedbackItem | null>(null);

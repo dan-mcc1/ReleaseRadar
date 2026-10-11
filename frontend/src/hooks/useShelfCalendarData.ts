@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ShowWithCalendar, Movie } from "../types/calendar";
 import { useAuthUser } from "./useAuthUser";
 import { apiFetch } from "../utils/apiFetch";
+import { toLocalISODate } from "../utils/date";
 
 const CHUNK_MONTHS = 6;
 const PREFETCH_THRESHOLD = CHUNK_MONTHS;
@@ -17,7 +18,9 @@ function mkMonthKey(year: number, month: number): string {
 }
 
 function monthBounds(year: number, month: number): { from: string; to: string } {
-  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+  // Local dates: toISOString() is UTC, which east of UTC turns local
+  // midnight on the 1st into the previous day and drops the month's last day.
+  const fmt = toLocalISODate;
   return {
     from: fmt(new Date(year, month, 1)),
     to: fmt(new Date(year, month + 1, 0)),

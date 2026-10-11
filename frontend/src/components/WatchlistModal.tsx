@@ -18,8 +18,6 @@ export default function WatchlistModal({
   isOpen,
   onClose,
 }: WatchlistModalProps) {
-  if (!isOpen) return null;
-
   const user = useAuthUser();
   const queryClient = useQueryClient();
   const removeFromList = useRemoveFromList();
@@ -53,6 +51,10 @@ export default function WatchlistModal({
     onClose();
     navigate("/trending");
   };
+
+  // After every hook: returning earlier would change the hook count between
+  // renders when isOpen flips, which React treats as a crash.
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">

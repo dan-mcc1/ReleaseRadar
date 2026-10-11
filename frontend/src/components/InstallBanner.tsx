@@ -1,9 +1,27 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 const DISMISSED_KEY = "pwa-install-dismissed";
 
 function isIOS() {
   return /iphone|ipad|ipod/i.test(navigator.userAgent);
+}
+
+interface BeforeInstallPromptEvent extends Event {
+  prompt(): Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+}
+
+// localStorage throws in some private-browsing modes and when site data is blocked.
+function wasDismissed(): boolean {
+  try {
+    return localStorage.getItem(DISMISSED_KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
+function shouldShowIOSBanner(): boolean {
+  return !isInStandaloneMode() && !wasDismissed() && isIOS();
 }
 
 function isInStandaloneMode() {
@@ -14,24 +32,17 @@ function isInStandaloneMode() {
 }
 
 export default function InstallBanner() {
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [showIOS, setShowIOS] = useState(false);
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    // Don't show if already installed or previously dismissed
-    if (isInStandaloneMode()) return;
-    if (localStorage.getItem(DISMISSED_KEY)) return;
-
-    if (isIOS()) {
-      setShowIOS(true);
-      setVisible(true);
-      return;
-    }
-  }, []);
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  // Decided once on mount: not installed, not dismissed before, and on iOS.
+  const [showIOS] = useState(shouldShowIOSBanner);
+  const [visible, setVisible] = useState(shouldShowIOSBanner);
 
   function dismiss() {
-    localStorage.setItem(DISMISSED_KEY, "1");
+    try {
+      localStorage.setItem(DISMISSED_KEY, "1");
+    } catch {
+      // storage unavailable — the banner just comes back next visit
+    }
     setVisible(false);
   }
 

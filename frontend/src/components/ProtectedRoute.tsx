@@ -1,12 +1,13 @@
 // frontend/src/components/ProtectedRoute.tsx
-import { ReactNode, useEffect, useState } from "react";
-import { Navigate } from "react-router-dom";
-import { onAuthStateChanged, User } from "firebase/auth";
+import { type ReactNode, useEffect, useState } from "react";
+import { Navigate, useLocation } from "react-router-dom";
+import { onAuthStateChanged, type User } from "firebase/auth";
 import { auth } from "../firebase";
 
 export default function ProtectedRoute({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [authResolved, setAuthResolved] = useState(false);
+  const location = useLocation();
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
@@ -27,6 +28,9 @@ export default function ProtectedRoute({ children }: { children: ReactNode }) {
       </div>
     );
   }
-  if (!user) return <Navigate to="/" replace />;
+  if (!user) {
+    const next = encodeURIComponent(location.pathname + location.search);
+    return <Navigate to={`/signIn?next=${next}`} replace />;
+  }
   return <>{children}</>;
 }

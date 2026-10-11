@@ -1,6 +1,6 @@
 // frontend/src/components/calendar/CalendarControls.tsx
 import { useRef, useState } from "react";
-import { User } from "firebase/auth";
+import type { User } from "firebase/auth";
 
 export type ViewMode = "month" | "week" | "day";
 

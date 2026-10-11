@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { BASE_IMAGE_URL } from "../constants";
 import { usePageTitle } from "../hooks/usePageTitle";
@@ -221,7 +221,7 @@ export default function BrowseCollections() {
     });
   }
 
-  const [pendingScrollPage, setPendingScrollPage] = useState<number | null>(null);
+  const pendingScrollPage = useRef<number | null>(null);
 
   function setPage(p: number) {
     setSearchParams((prev) => {
@@ -229,19 +229,19 @@ export default function BrowseCollections() {
       next.set("page", String(p));
       return next;
     });
-    setPendingScrollPage(p);
+    pendingScrollPage.current = p;
   }
 
   // Scroll to top only once the data for the requested page has actually
   // arrived — otherwise (because of keepPreviousData) we'd scroll while the
   // previous page's cards are still visible.
   useEffect(() => {
-    if (pendingScrollPage == null) return;
+    if (pendingScrollPage.current == null) return;
     if (browse.isFetching) return;
-    if (browse.data?.page !== pendingScrollPage) return;
+    if (browse.data?.page !== pendingScrollPage.current) return;
     window.scrollTo({ top: 0, behavior: "smooth" });
-    setPendingScrollPage(null);
-  }, [pendingScrollPage, browse.isFetching, browse.data?.page]);
+    pendingScrollPage.current = null;
+  }, [browse.isFetching, browse.data?.page]);
 
   function clearFilters() {
     setSearchParams((prev) => {

@@ -1,56 +1,28 @@
-// {
-//   "compilerOptions": {
-//     "composite": true,
-//     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
-//     "target": "ES2022",
-//     "useDefineForClassFields": true,
-//     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-//     "module": "ESNext",
-//     "types": ["vite/client"],
-//     "skipLibCheck": true,
+{
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "types": ["vite/client"],
+    "skipLibCheck": true,
 
-//     /* Bundler mode */
-//     "moduleResolution": "bundler",
-//     "allowImportingTsExtensions": true,
-//     "verbatimModuleSyntax": true,
-//     "moduleDetection": "force",
-//     "noEmit": true,
-//     "jsx": "react-jsx",
+    /* Bundler mode — Vite compiles; tsc only type-checks (noEmit) */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "jsx": "react-jsx",
 
-//     /* Linting */
-//     "strict": true,
-//     "noUnusedLocals": true,
-//     "noUnusedParameters": true,
-//     "erasableSyntaxOnly": true,
-//     "noFallthroughCasesInSwitch": true,
-//     "noUncheckedSideEffectImports": true
-//   },
-//   "include": ["src"]
-// }
-
-// {
-//   "compilerOptions": {
-//     "composite": true,
-//     "declaration": true,
-//     "declarationMap": true,
-//     "outDir": "./dist",
-//     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
-//     "target": "ES2022",
-//     "useDefineForClassFields": true,
-//     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-//     "module": "ESNext",
-//     "types": ["vite/client"],
-//     "skipLibCheck": true,
-//     "moduleResolution": "bundler",
-//     "verbatimModuleSyntax": true,
-//     "moduleDetection": "force",
-//     "jsx": "react-jsx",
-//     "strict": true,
-//     "noUnusedLocals": true,
-//     "noUnusedParameters": true,
-//     "erasableSyntaxOnly": true,
-//     "noFallthroughCasesInSwitch": true,
-//     "noUncheckedSideEffectImports": true
-//   },
-//   "include": ["src"]
-// }
+    /* Linting */
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "erasableSyntaxOnly": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedSideEffectImports": true
+  },
+  "include": ["src"]
+}

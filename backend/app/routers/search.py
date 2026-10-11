@@ -1,4 +1,5 @@
 import asyncio
+from datetime import date
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.concurrency import run_in_threadpool
@@ -90,13 +91,17 @@ async def movie_trending(page: int = Query(1, ge=1)):
 
 
 @router.get("/tv/upcoming", dependencies=[LIST_CACHE])
-async def tv_upcoming(min_date: str, max_date: str, page: int = Query(1, ge=1)):
-    return await run_in_threadpool(get_tv_upcoming, min_date, max_date, page)
+async def tv_upcoming(min_date: date, max_date: date, page: int = Query(1, ge=1)):
+    return await run_in_threadpool(
+        get_tv_upcoming, min_date.isoformat(), max_date.isoformat(), page
+    )
 
 
 @router.get("/movie/upcoming", dependencies=[LIST_CACHE])
-async def movie_upcoming(min_date: str, max_date: str, page: int = Query(1, ge=1)):
-    return await run_in_threadpool(get_movie_upcoming, min_date, max_date, page)
+async def movie_upcoming(min_date: date, max_date: date, page: int = Query(1, ge=1)):
+    return await run_in_threadpool(
+        get_movie_upcoming, min_date.isoformat(), max_date.isoformat(), page
+    )
 
 
 @router.get("/tv/airing-today", dependencies=[LIST_CACHE])

@@ -23,13 +23,24 @@ export interface UseMediaInfoResult<T> {
   aggRating: AggregateRating | null;
 }
 
-export async function fetchMediaFull(type: "movie" | "tv", id: string | number): Promise<any> {
+/** A /tv/{id}/full or /movies/{id}/info payload as the API returns it. */
+type RawMediaPayload = {
+  "watch/providers"?: { results?: { US?: unknown } };
+  [key: string]: unknown;
+};
+
+/** Lift the US watch providers to `providers`, where the pages read them. */
+function withUSProviders(raw: RawMediaPayload): RawMediaPayload {
+  const us = raw["watch/providers"]?.results?.US;
+  return us ? { ...raw, providers: us } : raw;
+}
+
+export async function fetchMediaFull(
+  type: "movie" | "tv",
+  id: string | number,
+): Promise<RawMediaPayload> {
   const path = type === "tv" ? `/tv/${id}/full` : `/movies/${id}/info`;
-  const rawData = await queryFetch<any>(path);
-  if (rawData["watch/providers"]?.["results"]?.["US"]) {
-    return { ...rawData, providers: rawData["watch/providers"]["results"]["US"] };
-  }
-  return rawData;
+  return withUSProviders(await queryFetch<RawMediaPayload>(path));
 }
 
 export function useMediaInfo<T extends { id: number; external_ids?: { imdb_id?: string } }>(
@@ -40,13 +51,8 @@ export function useMediaInfo<T extends { id: number; external_ids?: { imdb_id?: 
   // Main data fetch
   const mediaQuery = useQuery({
     queryKey: queryKeys.mediaDetailFull(contentType, id ?? ""),
-    queryFn: async ({ signal }) => {
-      const rawData = await queryFetch<any>(fetchUrl, { signal });
-      if (rawData["watch/providers"]?.["results"]?.["US"]) {
-        return { ...rawData, providers: rawData["watch/providers"]["results"]["US"] } as T;
-      }
-      return rawData as T;
-    },
+    queryFn: async ({ signal }) =>
+      withUSProviders(await queryFetch<RawMediaPayload>(fetchUrl, { signal })) as T,
     enabled: !!id,
   });
 

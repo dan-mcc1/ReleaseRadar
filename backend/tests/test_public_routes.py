@@ -101,3 +101,31 @@ class TestEpisodeRouteCache:
             second = client.get("/tv/990003/season/1/episode/2")
         assert first.json() == second.json() == {"id": 5, "name": "Pilot", "show_id": 990003}
         assert get.call_count == 1
+
+
+class TestDateParams:
+    """Date query params used to be plain strings: garbage went straight into
+    SQL (a 500 on Postgres) or to TMDb."""
+
+    def test_season_calendar_rejects_a_bad_date(self, client, seed_show):
+        r = client.get("/tv/1396/season_calendar?min_date=nope&max_date=2026-01-01")
+        assert r.status_code == 422
+
+    def test_season_calendar_accepts_real_dates(self, client, seed_show):
+        r = client.get("/tv/1396/season_calendar?min_date=2008-01-01&max_date=2008-01-31")
+        assert r.status_code == 200
+        assert [e["episode_number"] for e in r.json()] == [1, 2]
+
+    @pytest.mark.parametrize("kind", ["tv", "movie"])
+    def test_upcoming_rejects_a_bad_date(self, client, kind):
+        r = client.get(f"/search/{kind}/upcoming?min_date=2026-13-45&max_date=2026-12-31")
+        assert r.status_code == 422
+
+    def test_upcoming_passes_iso_dates_to_tmdb(self, client):
+        with patch("app.services.tmdb_search.get",
+                   return_value={"results": [], "total_pages": 1}) as get:
+            r = client.get("/search/movie/upcoming?min_date=2031-02-03&max_date=2031-03-04")
+        assert r.status_code == 200
+        params = get.call_args.kwargs["params"]
+        assert (params["primary_release_date.gte"], params["primary_release_date.lte"]) == (
+            "2031-02-03", "2031-03-04")

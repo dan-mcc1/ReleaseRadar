@@ -3,7 +3,7 @@ import { BASE_IMAGE_URL } from "../constants";
 import { useAuthUser } from "../hooks/useAuthUser";
 import { Link, useNavigate } from "react-router-dom";
 import { usePageTitle } from "../hooks/usePageTitle";
-import WatchButton, { WatchStatus } from "../components/WatchButton";
+import WatchButton, { type WatchStatus } from "../components/WatchButton";
 import { useMyActivity, useFriendsActivity } from "../hooks/api/useActivity";
 import {
   useRecommendationsInbox,
@@ -402,8 +402,10 @@ function RecsInboxPanel({
 }
 
 function WeekStatsPanel({ friendItems }: { friendItems: ActivityItem[] }) {
+  // Read the clock once per mount; calling Date.now() while rendering makes
+  // the output depend on when React happens to re-render.
+  const [now] = useState(Date.now);
   const uniqueFriends = useMemo(() => {
-    const now = Date.now();
     const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
     const ids = new Set(
       friendItems

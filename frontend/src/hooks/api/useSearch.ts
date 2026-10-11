@@ -52,7 +52,7 @@ export function useUpcoming(
   maxDate: string,
 ) {
   return useQuery({
-    queryKey: queryKeys.upcoming(type, page),
+    queryKey: queryKeys.upcoming(type, page, minDate, maxDate),
     queryFn: ({ signal }) =>
       queryFetch<UpcomingResults>(
         `/search/${type}/upcoming?min_date=${minDate}&max_date=${maxDate}&page=${page}`,
@@ -63,7 +63,7 @@ export function useUpcoming(
 
 export function useComingSoon(minDate: string, maxDate: string) {
   return useQuery({
-    queryKey: queryKeys.comingSoon(),
+    queryKey: queryKeys.comingSoon(minDate, maxDate),
     queryFn: async ({ signal }) => {
       const data = await queryFetch<{ results: Movie[] }>(
         `/search/movie/upcoming?${new URLSearchParams({ min_date: minDate, max_date: maxDate })}`,

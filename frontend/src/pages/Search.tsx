@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useSearch } from "../hooks/api/useSearch";
@@ -363,22 +363,20 @@ export default function Search() {
   const tabs = allTabs.filter((t) => t.key === "all" || t.count > 0);
 
   // Top result — highest popularity movie or show
-  const topResult = useMemo(() => {
-    const candidates: { item: Movie | Show; type: "movie" | "tv" }[] = [
-      ...movies.map((m) => ({ item: m as Movie | Show, type: "movie" as const })),
-      ...shows.map((s) => ({ item: s as Movie | Show, type: "tv" as const })),
-    ];
-    if (!candidates.length) return null;
-    return candidates.reduce((best, c) =>
-      (c.item.popularity ?? 0) > (best.item.popularity ?? 0) ? c : best,
-    );
-  }, [movies, shows]);
+  const candidates: { item: Movie | Show; type: "movie" | "tv" }[] = [
+    ...movies.map((m) => ({ item: m as Movie | Show, type: "movie" as const })),
+    ...shows.map((s) => ({ item: s as Movie | Show, type: "tv" as const })),
+  ];
+  const topResult = candidates.length
+    ? candidates.reduce((best, c) =>
+        (c.item.popularity ?? 0) > (best.item.popularity ?? 0) ? c : best,
+      )
+    : null;
 
   // Bulk status for hero
-  const statusItems = useMemo(() => {
-    if (!topResult) return [];
-    return [{ content_type: topResult.type, content_id: topResult.item.id }];
-  }, [topResult]);
+  const statusItems = topResult
+    ? [{ content_type: topResult.type, content_id: topResult.item.id }]
+    : [];
   const { data: statusMap } = useBulkWatchStatus(statusItems);
 
   const heroStatusEntry = topResult

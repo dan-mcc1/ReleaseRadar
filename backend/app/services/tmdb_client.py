@@ -1,5 +1,7 @@
 import asyncio
 import time
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 
 import httpx
 
@@ -59,9 +61,26 @@ def _get_async_client() -> httpx.AsyncClient:
     return _async_client
 
 
+_MAX_RETRY_DELAY = 30.0
+
+
 def _retry_delay(res: httpx.Response, attempt: int) -> float:
+    """Seconds to wait before retrying: the server's Retry-After (seconds or
+    an HTTP date) when it parses, else exponential backoff — capped either
+    way, since the caller sleeps holding a worker thread."""
+    backoff = min(2**attempt, _MAX_RETRY_DELAY)
     retry_after = res.headers.get("Retry-After")
-    return float(retry_after) if retry_after else min(2**attempt, 30)
+    if not retry_after:
+        return backoff
+    try:
+        delay = float(retry_after)
+    except ValueError:
+        try:
+            when = parsedate_to_datetime(retry_after)
+        except (TypeError, ValueError):
+            return backoff
+        delay = (when - datetime.now(timezone.utc)).total_seconds()
+    return min(max(delay, 0.0), _MAX_RETRY_DELAY)
 
 
 def get(path: str, params: dict | None = None):

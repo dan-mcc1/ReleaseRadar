@@ -228,6 +228,11 @@ function SearchBar() {
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  // An empty box means no search and a closed dropdown, whatever the
+  // debounced state still holds.
+  const searchActive = searchQuery.trim().length > 0;
+  const activeQuery = searchActive ? debouncedQuery : "";
+  const showDropdown = searchActive && dropdownOpen;
   const [searchFocused, setSearchFocused] = useState(false);
   const searchContainerRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -236,7 +241,7 @@ function SearchBar() {
     /Mac|iPhone|iPad|iPod/.test(navigator.platform);
 
   const { data: searchData, isPending: searchPending } =
-    useSearch(debouncedQuery);
+    useSearch(activeQuery);
 
   const dropdownResults: SearchResult[] = (() => {
     if (!searchData) return [];
@@ -268,7 +273,7 @@ function SearchBar() {
     }
     return combined.slice(0, 6);
   })();
-  const dropdownLoading = searchPending && debouncedQuery.length > 0;
+  const dropdownLoading = searchPending && activeQuery.length > 0;
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && searchQuery.trim() !== "") {
@@ -293,11 +298,7 @@ function SearchBar() {
 
   useEffect(() => {
     const q = searchQuery.trim();
-    if (!q) {
-      setDebouncedQuery("");
-      setDropdownOpen(false);
-      return;
-    }
+    if (!q) return; // cleared input: see searchActive below
     const timer = setTimeout(() => {
       setDebouncedQuery(q);
       setDropdownOpen(true);
@@ -369,7 +370,7 @@ function SearchBar() {
         )}
       </div>
 
-      {dropdownOpen && (
+      {showDropdown && (
         <div className="absolute top-full mt-1.5 right-0 w-80 bg-neutral-900 border border-neutral-700/70 rounded-xl shadow-2xl shadow-black/50 z-50 overflow-hidden">
           {dropdownLoading && dropdownResults.length === 0 ? (
             <div className="px-4 py-3 text-[13px] text-neutral-500">
@@ -750,6 +751,9 @@ export default function NavBar() {
   const [mobileSearchQuery, setMobileSearchQuery] = useState("");
   const mobileCloseRef = useRef<HTMLButtonElement>(null);
   const esRef = useRef<EventSource | null>(null);
+  // Reconnect timers call through this ref: connectSSE can't name itself
+  // inside its own useCallback (the React Compiler rejects that).
+  const connectSSERef = useRef<(uid: string) => void>(() => {});
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptsRef = useRef(0);
   const connectedUidRef = useRef<string | null>(null);
@@ -789,7 +793,7 @@ export default function NavBar() {
         const delay = base / 2 + Math.random() * (base / 2);
         reconnectTimerRef.current = setTimeout(() => {
           reconnectTimerRef.current = null;
-          connectSSE(uid);
+          connectSSERef.current(uid);
         }, delay);
       };
 
@@ -860,6 +864,10 @@ export default function NavBar() {
     },
     [queryClient],
   );
+
+  useEffect(() => {
+    connectSSERef.current = connectSSE;
+  }, [connectSSE]);
 
   useEffect(() => {
     const unsubscribe = onIdTokenChanged(auth, async (currentUser) => {

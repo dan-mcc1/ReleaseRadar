@@ -2,7 +2,6 @@ import { useState, useMemo, useEffect } from "react";
 import { isPremiumFeature } from "../../config/features";
 import CalendarSyncModal from "../CalendarSyncModal";
 import ProUpgradeModal from "../ProUpgradeModal";
-import { useAuthUser } from "../../hooks/useAuthUser";
 import { useUserMe } from "../../hooks/api/useUser";
 import { useCalendarData } from "../../hooks/useCalendarData";
 import { useCurrentlyWatching } from "../../hooks/api/useLists";
@@ -38,7 +37,6 @@ const monthNames = [
 ];
 
 export default function CalendarView() {
-  const user = useAuthUser();
   const { data: userMe } = useUserMe();
   const [watchFilter, setWatchFilter] = useState<
     "all" | "watched" | "unwatched"
@@ -131,17 +129,6 @@ export default function CalendarView() {
     [allItems, currentMonth, currentYear],
   );
 
-  const todayItemCount = useMemo(
-    () =>
-      applyFilters(
-        getItemsForDate(allItems, today),
-        filterType,
-        watchFilter,
-        cwIds,
-      ).length,
-    [allItems, filterType, watchFilter, cwIds],
-  );
-
   // Navigation handlers — only set date/month/year state + call maybePrefetch
   const handlePrev = () => {
     if (viewMode === "month") {
@@ -177,19 +164,6 @@ export default function CalendarView() {
       setSelectedDate(newDate);
       maybePrefetch(newDate.getFullYear(), newDate.getMonth());
     }
-  };
-
-  const getCenterLabel = (): string => {
-    if (viewMode === "month")
-      return `${monthNames[currentMonth]} ${currentYear}`;
-    if (viewMode === "week") {
-      const start = weekDays[0].date;
-      const end = weekDays[6].date;
-      if (start.getMonth() === end.getMonth())
-        return `${monthNames[start.getMonth()]} ${start.getDate()}–${end.getDate()} ${start.getFullYear()}`;
-      return `${monthNames[start.getMonth()].slice(0, 3)} ${start.getDate()} – ${monthNames[end.getMonth()].slice(0, 3)} ${end.getDate()} ${end.getFullYear()}`;
-    }
-    return `${monthNames[currentMonth]} ${selectedDate?.getDate() ?? ""}, ${currentYear}`;
   };
 
   const emptyCells = Array(

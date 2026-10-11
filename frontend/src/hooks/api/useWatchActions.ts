@@ -23,12 +23,13 @@ export function useUpdateWatchStatus() {
     mutationFn: async ({
       contentType,
       contentId,
-      currentStatus,
       targetStatus,
       notify,
     }: {
       contentType: "movie" | "tv";
       contentId: number;
+      // Not sent: the server looks up the current list itself. Still passed
+      // in so onSuccess can move the item between the cached lists.
       currentStatus: WatchStatus;
       targetStatus: WatchStatus;
       notify?: boolean;
@@ -40,7 +41,6 @@ export function useUpdateWatchStatus() {
           content_type: contentType,
           content_id: contentId,
           target: targetStatus,
-          current: currentStatus,
           ...(targetStatus === "Want To Watch" && notify !== undefined ? { notify } : {}),
         }),
       });

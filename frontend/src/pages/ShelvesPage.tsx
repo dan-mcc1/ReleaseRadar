@@ -8,6 +8,7 @@ import {
   type Shelf,
 } from "../hooks/api/useShelves";
 import { usePageTitle } from "../hooks/usePageTitle";
+import { CHECKOUT_ENABLED } from "../config/features";
 import { useUserMe } from "../hooks/api/useUser";
 import ProUpgradeModal from "../components/ProUpgradeModal";
 import { BASE_IMAGE_URL } from "../constants";
@@ -347,8 +348,8 @@ export default function ShelvesPage() {
         </button>
       </div>
 
-      {/* Free tier banner — hidden during open beta */}
-      {false && isPremium === false && (
+      {/* Free tier banner — shown once the paywall launches */}
+      {CHECKOUT_ENABLED && isPremium === false && (
         <div className="mb-6 flex items-center gap-3.5 px-4 py-3.5 rounded-2xl border border-neutral-700 bg-primary-600/5 text-sm">
           <span className="w-7 h-7 rounded-lg bg-primary-600 text-white flex items-center justify-center shrink-0">
             <svg

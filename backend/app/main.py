@@ -6,7 +6,7 @@ import httpx
 from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timedelta, timezone as dt_timezone
 from zoneinfo import ZoneInfo
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
@@ -142,28 +142,6 @@ async def _activity_cleanup_loop():
         except Exception:
             logger.exception("activity cleanup error")
         await asyncio.sleep(_seconds_until_next_hour())
-
-
-# async def _daily_digest_loop():
-#     """Send daily email digest at 9am Eastern every day."""
-#     eastern = ZoneInfo("America/New_York")
-#     while True:
-#         now = datetime.now(eastern)
-#         next_run = now.replace(hour=9, minute=0, second=0, microsecond=0)
-#         if now >= next_run:
-#             next_run += timedelta(days=1)
-#         wait_seconds = (next_run - now).total_seconds()
-#         await asyncio.sleep(wait_seconds)
-#         print("[daily digest] Firing now...")
-#         try:
-#             db = SessionLocal()
-#             send_daily_digest_to_all(db)
-#             send_season_premiere_alerts_to_all(db)
-#             print("[daily digest] Done — emails sent")
-#         except Exception as e:
-#             print(f"[daily digest] Error: {e}")
-#         finally:
-#             db.close()
 
 
 async def _daily_digest_loop():

@@ -1,11 +1,13 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { useAuthUser } from "../hooks/useAuthUser";
 import { BASE_IMAGE_URL, AVATAR_PRESETS, getAvatarColor } from "../constants";
 import { Link } from "react-router-dom";
 import FriendSearch from "../components/FriendSearch";
 import FriendRequests from "../components/FriendRequests";
-import StatsSection from "../components/StatsSection";
 import { usePageTitle } from "../hooks/usePageTitle";
+
+// Charts (Recharts) are most of this page's code; load them on their own.
+const StatsSection = lazy(() => import("../components/StatsSection"));
 import { useProfileSummary, type ProfileSummary } from "../hooks/api/useUser";
 import { useShelves } from "../hooks/api/useShelves";
 import { useSendFriendRequest, useRemoveFriend } from "../hooks/api/useFriends";
@@ -751,7 +753,9 @@ export default function ProfilePage() {
           <section>
             <SectionHead title="Your stats" action="Full stats" actionHref="/stats" />
             <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6">
-              <StatsSection />
+              <Suspense fallback={<div className="h-40" />}>
+                <StatsSection />
+              </Suspense>
             </div>
           </section>
         </div>

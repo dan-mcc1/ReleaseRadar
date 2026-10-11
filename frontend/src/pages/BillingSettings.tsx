@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { usePageTitle } from "../hooks/usePageTitle";
+import { CHECKOUT_ENABLED } from "../config/features";
 import {
   useSubscription,
   useBillingStatus,
@@ -225,7 +226,9 @@ export default function BillingSettings() {
               </div>
 
               <div className="flex flex-col sm:flex-row gap-3 pt-1">
-                {/* <button
+                {CHECKOUT_ENABLED ? (
+                  <>
+                <button
                   onClick={() => handleUpgrade("yearly")}
                   disabled={checkout.isPending}
                   className="px-5 py-2.5 rounded-xl text-sm font-semibold bg-amber-500 hover:bg-amber-400 text-black transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
@@ -238,10 +241,13 @@ export default function BillingSettings() {
                   className="px-5 py-2.5 rounded-xl text-sm font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30 hover:bg-amber-500/25 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {checkout.isPending ? "Redirecting…" : "Upgrade monthly — $4.99/mo"}
-                </button> */}
-                <button className="px-5 py-2.5 rounded-xl text-sm font-semibold bg-amber-500 text-black transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
-                  Currently in Beta
                 </button>
+                  </>
+                ) : (
+                  <button className="px-5 py-2.5 rounded-xl text-sm font-semibold bg-amber-500 text-black transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
+                    Currently in Beta
+                  </button>
+                )}
               </div>
               {checkoutError && (
                 <p className="text-xs text-red-400">{checkoutError}</p>

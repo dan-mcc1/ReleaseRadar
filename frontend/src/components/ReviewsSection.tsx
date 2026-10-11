@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import type { User } from "firebase/auth";
 import {
@@ -204,17 +204,11 @@ export default function ReviewsSection({
     ? (reviews.find((r) => r.user_id === user.uid) ?? null)
     : null;
 
-  // Pre-fill draft when editing
-  useEffect(() => {
-    if (editing && myReview) {
-      setDraft(myReview.review_text);
-      setDraftIsSpoiler(myReview.is_spoiler);
-    }
-    if (!editing) {
-      setDraft("");
-      setDraftIsSpoiler(false);
-    }
-  }, [editing, myReview]);
+  function startEditing() {
+    setDraft(myReview?.review_text ?? "");
+    setDraftIsSpoiler(myReview?.is_spoiler ?? false);
+    setEditing(true);
+  }
 
   async function submitReview() {
     if (!user || !draft.trim()) return;
@@ -238,6 +232,7 @@ export default function ReviewsSection({
       .catch(() => {});
     setEditing(false);
     setDraft("");
+    setDraftIsSpoiler(false);
   }
 
   function toggleLike(review: Review) {
@@ -287,7 +282,7 @@ export default function ReviewsSection({
         <div className="mb-6">
           {!myReview && !editing ? (
             <button
-              onClick={() => setEditing(true)}
+              onClick={startEditing}
               className="text-sm text-highlight-400 hover:text-highlight-300 transition-colors flex items-center gap-1.5"
             >
               <svg
@@ -339,7 +334,7 @@ export default function ReviewsSection({
                     </span>
                   )}
                   <button
-                    onClick={() => setEditing(true)}
+                    onClick={startEditing}
                     className="text-xs text-neutral-400 hover:text-neutral-200 transition-colors px-2 py-1 rounded"
                   >
                     Edit

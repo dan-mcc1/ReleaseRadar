@@ -3,6 +3,7 @@ import { useShowProgress } from "../hooks/api/useBingePlan";
 import { useSetFinishByGoal, useClearFinishByGoal } from "../hooks/api/useFinishByGoal";
 import { useSubscription } from "../hooks/api/useSubscription";
 import { isPremiumFeature } from "../config/features";
+import { toLocalISODate } from "../utils/date";
 
 function fmtMins(mins: number): string {
   const h = Math.floor(mins / 60);
@@ -37,7 +38,7 @@ export default function BingePlanWidget({ showId }: { showId: number }) {
 
   const canSetGoal = isPremium || !isPremiumFeature("finishByGoal");
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = toLocalISODate(new Date());
 
   function handleSetGoal() {
     if (!dateInput) return;

@@ -1,7 +1,10 @@
 # app/services/friends_service.py
+import threading
 from datetime import datetime, timezone, timedelta
+
+from cachetools import TTLCache
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, and_, func, literal, null, union_all, text, update
+from sqlalchemy import or_, and_, bindparam, func, literal, null, union_all, text, update
 from fastapi import HTTPException
 
 from app.models.friendship import Friendship
@@ -408,6 +411,67 @@ def cancel_friend_request(db: Session, requester_id: str, friendship_id: int):
     db.commit()
 
 
+# The most-connected users, best first. It's the same for everyone and
+# counting it reads the whole friendship table, so it's shared for 10 minutes.
+_POPULAR_POOL = 200
+_popular_cache: TTLCache = TTLCache(maxsize=1, ttl=600)
+_popular_lock = threading.Lock()
+
+_ELIGIBLE = """
+    u.username IS NOT NULL
+    AND u.profile_visibility != 'private'
+    AND u.is_banned = false
+"""
+
+
+def _popular_user_ids(db: Session) -> list[str]:
+    with _popular_lock:
+        cached = _popular_cache.get("ids")
+    if cached is not None:
+        return cached
+    ids = list(db.execute(text("""
+        SELECT uid FROM (
+            SELECT requester_id AS uid FROM friendship
+            WHERE status IN ('accepted', 'following')
+            UNION ALL
+            SELECT addressee_id FROM friendship
+            WHERE status IN ('accepted', 'following')
+        ) connections
+        GROUP BY uid
+        ORDER BY COUNT(*) DESC, uid
+        LIMIT :n
+    """), {"n": _POPULAR_POOL}).scalars())
+    with _popular_lock:
+        _popular_cache["ids"] = ids
+    return ids
+
+
+def _not_suggestable(db: Session, user_id: str) -> set[str]:
+    """Me, everyone I'm connected to (incl. pending), and blocks either way."""
+    return set(db.execute(text("""
+        SELECT addressee_id FROM friendship
+        WHERE requester_id = :user_id AND status IN ('accepted', 'following', 'pending')
+        UNION
+        SELECT requester_id FROM friendship
+        WHERE addressee_id = :user_id AND status IN ('accepted', 'following', 'pending')
+        UNION
+        SELECT blocked_id FROM block WHERE blocker_id = :user_id
+        UNION
+        SELECT blocker_id FROM block WHERE blocked_id = :user_id
+    """), {"user_id": user_id}).scalars()) | {user_id}
+
+
+def _suggestion(row, mutual_friends: int, reason: str) -> dict:
+    return {
+        "id": row.id,
+        "username": row.username,
+        "display_name": row.display_name,
+        "profile_visibility": row.profile_visibility or "friends_only",
+        "mutual_friends": mutual_friends,
+        "reason": reason,
+    }
+
+
 def get_suggested_friends(db: Session, user_id: str, limit: int = 10) -> list[dict]:
     """
     Hybrid suggestion algorithm:
@@ -415,95 +479,62 @@ def get_suggested_friends(db: Session, user_id: str, limit: int = 10) -> list[di
     2. Popular users (most total connections) as fallback
     Private profiles and blocked/banned users are excluded.
     """
-    sql = text("""
-        WITH
-        -- Both sides of my accepted/following/pending connections
-        my_connections AS (
-            SELECT addressee_id AS friend_id
-            FROM friendship
-            WHERE requester_id = :user_id
-              AND status IN ('accepted', 'following', 'pending')
+    excluded = _not_suggestable(db, user_id)
+
+    fof_sql = text(f"""
+        WITH my_connections AS (
+            SELECT addressee_id AS friend_id FROM friendship
+            WHERE requester_id = :user_id AND status IN ('accepted', 'following', 'pending')
             UNION
-            SELECT requester_id
-            FROM friendship
-            WHERE addressee_id = :user_id
-              AND status IN ('accepted', 'following', 'pending')
+            SELECT requester_id FROM friendship
+            WHERE addressee_id = :user_id AND status IN ('accepted', 'following', 'pending')
         ),
-        -- Full exclusion set: me + my connections + blocks in both directions
-        excluded AS (
-            SELECT friend_id AS id FROM my_connections
-            UNION
-            SELECT :user_id
-            UNION
-            SELECT blocked_id FROM block WHERE blocker_id = :user_id
-            UNION
-            SELECT blocker_id FROM block WHERE blocked_id = :user_id
-        ),
-        -- Friends-of-my-friends with mutual connection count
         fof AS (
             SELECT candidate, COUNT(*) AS mutual_count
             FROM (
                 SELECT f.addressee_id AS candidate
-                FROM friendship f
-                JOIN my_connections mc ON f.requester_id = mc.friend_id
+                FROM friendship f JOIN my_connections mc ON f.requester_id = mc.friend_id
                 WHERE f.status IN ('accepted', 'following')
                 UNION ALL
                 SELECT f.requester_id
-                FROM friendship f
-                JOIN my_connections mc ON f.addressee_id = mc.friend_id
+                FROM friendship f JOIN my_connections mc ON f.addressee_id = mc.friend_id
                 WHERE f.status IN ('accepted', 'following')
             ) sub
-            WHERE sub.candidate NOT IN (SELECT id FROM excluded)
             GROUP BY candidate
-        ),
-        -- Total connection count per user for popularity ranking
-        pop_counts AS (
-            SELECT uid, SUM(cnt) AS total
-            FROM (
-                SELECT requester_id AS uid, COUNT(*) AS cnt
-                FROM friendship
-                WHERE status IN ('accepted', 'following')
-                GROUP BY requester_id
-                UNION ALL
-                SELECT addressee_id, COUNT(*)
-                FROM friendship
-                WHERE status IN ('accepted', 'following')
-                GROUP BY addressee_id
-            ) sub
-            GROUP BY uid
         )
-        SELECT
-            u.id,
-            u.username,
-            u.display_name,
-            COALESCE(u.profile_visibility, 'friends_only') AS profile_visibility,
-            COALESCE(fof.mutual_count, 0)                  AS mutual_friends,
-            CASE WHEN fof.candidate IS NOT NULL
-                 THEN 'mutual_friends' ELSE 'popular' END  AS reason
-        FROM "user" u
-        LEFT JOIN fof        ON u.id = fof.candidate
-        LEFT JOIN pop_counts ON u.id = pop_counts.uid
-        WHERE u.id NOT IN (SELECT id FROM excluded)
-          AND u.username IS NOT NULL
-          AND u.profile_visibility != 'private'
-          AND u.is_banned = false
-          AND (fof.candidate IS NOT NULL OR pop_counts.uid IS NOT NULL)
-        ORDER BY fof.mutual_count DESC NULLS LAST, pop_counts.total DESC NULLS LAST
+        SELECT u.id, u.username, u.display_name, u.profile_visibility, fof.mutual_count
+        FROM fof JOIN "user" u ON u.id = fof.candidate
+        WHERE u.id NOT IN :excluded AND {_ELIGIBLE}
+        ORDER BY fof.mutual_count DESC, u.id
         LIMIT :limit
-    """)
-
-    rows = db.execute(sql, {"user_id": user_id, "limit": limit}).fetchall()
-    return [
-        {
-            "id": row.id,
-            "username": row.username,
-            "display_name": row.display_name,
-            "profile_visibility": row.profile_visibility,
-            "mutual_friends": row.mutual_friends,
-            "reason": row.reason,
-        }
-        for row in rows
+    """).bindparams(bindparam("excluded", expanding=True))
+    suggestions = [
+        _suggestion(row, row.mutual_count, "mutual_friends")
+        for row in db.execute(
+            fof_sql, {"user_id": user_id, "excluded": list(excluded), "limit": limit}
+        )
     ]
+
+    if len(suggestions) < limit:
+        taken = excluded | {s["id"] for s in suggestions}
+        candidates = [uid for uid in _popular_user_ids(db) if uid not in taken]
+        if candidates:
+            rows = db.execute(
+                text(f"""
+                    SELECT u.id, u.username, u.display_name, u.profile_visibility
+                    FROM "user" u
+                    WHERE u.id IN :ids AND {_ELIGIBLE}
+                """).bindparams(bindparam("ids", expanding=True)),
+                {"ids": candidates},
+            )
+            by_id = {row.id: row for row in rows}
+            for uid in candidates:
+                if len(suggestions) >= limit:
+                    break
+                if uid in by_id:
+                    suggestions.append(_suggestion(by_id[uid], 0, "popular"))
+
+    return suggestions
 
 
 def get_followers(db: Session, user_id: str) -> list[dict]:

@@ -4,8 +4,10 @@ export const queryKeys = {
   searchDebounce: (query: string) => ["search", "debounce", query] as const,
   trending: (type: "movie" | "tv", page: number) => ["trending", type, page] as const,
   trendingMulti: () => ["trending", "multi"] as const,
-  upcoming: (type: "movie" | "tv", page: number) => ["upcoming", type, page] as const,
-  comingSoon: () => ["upcoming", "comingSoon"] as const,
+  upcoming: (type: "movie" | "tv", page: number, minDate: string, maxDate: string) =>
+    ["upcoming", type, page, minDate, maxDate] as const,
+  comingSoon: (minDate: string, maxDate: string) =>
+    ["upcoming", "comingSoon", minDate, maxDate] as const,
   airingToday: () => ["airingToday"] as const,
   nowPlaying: () => ["nowPlaying"] as const,
   popularMulti: () => ["popular", "multi"] as const,

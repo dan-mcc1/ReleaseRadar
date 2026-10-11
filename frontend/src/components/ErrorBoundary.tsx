@@ -1,5 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
-import * as Sentry from "@sentry/react";
+import { reportError } from "../sentry";
 
 type Props = {
   children: ReactNode;
@@ -83,10 +83,9 @@ export class ErrorBoundary extends Component<Props, State> {
     if (isChunkLoadError(error)) {
       if (tryReloadOnce()) return;
       // Already reloaded this session and still failing — report it for real.
-      Sentry.withScope((scope) => {
-        if (this.props.scope) scope.setTag("boundary", this.props.scope);
-        scope.setTag("chunkReloadFailed", "true");
-        Sentry.captureException(error);
+      reportError(error, {
+        ...(this.props.scope ? { boundary: this.props.scope } : {}),
+        chunkReloadFailed: "true",
       });
       return;
     }
@@ -106,12 +105,11 @@ export class ErrorBoundary extends Component<Props, State> {
       return;
     }
 
-    Sentry.withScope((scope) => {
-      if (this.props.scope) scope.setTag("boundary", this.props.scope);
-      scope.setExtra("componentStack", info.componentStack);
-      scope.setExtra("retryCount", this.state.retryCount);
-      Sentry.captureException(error);
-    });
+    reportError(
+      error,
+      this.props.scope ? { boundary: this.props.scope } : {},
+      { componentStack: info.componentStack, retryCount: this.state.retryCount },
+    );
   }
 
   componentWillUnmount() {

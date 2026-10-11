@@ -53,9 +53,7 @@ export function useSendRecommendation() {
     mutationFn: (payload: {
       recipient_username: string;
       content_type: string;
-      content_id: number;
-      content_title: string;
-      content_poster_path: string;
+      content_id: number; // the server looks up the title and poster
       message: string;
     }) =>
       checkedFetch("/recommendations/send", {

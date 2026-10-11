@@ -1,13 +1,13 @@
 import { BASE_IMAGE_URL } from "../constants";
 import { Link } from "react-router-dom";
-import { Movie, Show, Person, CollectionResult } from "../types/calendar";
+import type { Movie, Show, Person, CollectionResult } from "../types/calendar";
 import ContentRatingBadge from "./media/ContentRatingBadge";
 import { parseLocalDate } from "../utils/date";
 import { tmdbSrcSet } from "../utils/tmdbImage";
 import StarIcon from "./icons/StarIcon";
 import { useState, useMemo } from "react";
 import { useAuthUser } from "../hooks/useAuthUser";
-import WatchButton, { WatchStatus } from "./WatchButton";
+import WatchButton, { type WatchStatus } from "./WatchButton";
 import { useBulkWatchStatus } from "../hooks/api/useWatchStatus";
 
 interface MediaListProps {

@@ -1,5 +1,5 @@
 // frontend/src/components/calendar/CalendarDayDetail.tsx
-import { RefObject } from "react";
+import type { RefObject } from "react";
 import DayScheduleView from "../DayScheduleView";
 import type { CalendarItem } from "../../utils/calendarUtils";
 

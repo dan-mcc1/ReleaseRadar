@@ -3,6 +3,7 @@ import type { Movie, Show } from "../types/calendar";
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useUpcoming } from "../hooks/api/useSearch";
 import { BASE_IMAGE_URL } from "../constants";
+import { toLocalISODate } from "../utils/date";
 
 type MediaType = "movie" | "tv";
 
@@ -77,10 +78,10 @@ export default function Upcoming() {
   const page = Number(searchParams.get("page") ?? "1");
 
   const today = new Date();
-  const minDate = today.toISOString().split("T")[0];
+  const minDate = toLocalISODate(today);
   const nextMonth = new Date(today);
   nextMonth.setMonth(nextMonth.getMonth() + 1);
-  const maxDate = nextMonth.toISOString().split("T")[0];
+  const maxDate = toLocalISODate(nextMonth);
 
   const formatDateRange = () => {
     const opts: Intl.DateTimeFormatOptions = { month: "long", day: "numeric" };

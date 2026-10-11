@@ -132,6 +132,7 @@ export default function ImportPage() {
       const res = await apiFetch(active.endpoint, {
         method: "POST",
         body: form,
+        timeoutMs: 0, // can take minutes for a large export
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));

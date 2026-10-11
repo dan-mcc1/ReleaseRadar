@@ -10,9 +10,6 @@ import { useAccountStatus } from "./hooks/api/useUser";
 import { setAccountRestricted, onBanDetected } from "./utils/accountState";
 import LandingPage from "./pages/LandingPage";
 import CalendarPage from "./pages/CalendarPage";
-import SignIn from "./pages/SignIn";
-import MovieInfo from "./pages/MovieInfo";
-import ShowInfo from "./pages/ShowInfo";
 import Footer from "./components/Footer";
 import SpotlightTour from "./components/SpotlightTour";
 import WarningModal from "./components/WarningModal";
@@ -20,9 +17,13 @@ import SuspensionBanModal from "./components/SuspensionBanModal";
 import { ToastProvider } from "./components/Toast";
 import ErrorBoundary from "./components/ErrorBoundary";
 
+// Landing and Calendar stay in the main bundle: they're the entry pages,
+// and lazy-loading them would add a round trip before first paint.
+const SignIn = lazy(() => import("./pages/SignIn"));
+const MovieInfo = lazy(() => import("./pages/MovieInfo"));
+const ShowInfo = lazy(() => import("./pages/ShowInfo"));
 const Search = lazy(() => import("./pages/Search"));
 const Settings = lazy(() => import("./pages/Settings"));
-const Upcoming = lazy(() => import("./pages/Upcoming"));
 const PersonInfo = lazy(() => import("./pages/PersonInfo"));
 const Watched = lazy(() => import("./pages/Watched"));
 const Watchlist = lazy(() => import("./pages/Watchlist"));
@@ -69,30 +70,31 @@ function ScrollToTop() {
 }
 
 function BanGate({ children }: { children: ReactNode }) {
-  const [banDetected, setBanDetected] = useState(false);
+  // When an API call comes back banned/suspended, remember when.
+  const [banDetectedAt, setBanDetectedAt] = useState<number | null>(null);
   const queryClient = useQueryClient();
 
   useEffect(() => {
     onBanDetected(() => {
-      setBanDetected(true);
+      setBanDetectedAt(Date.now());
       queryClient.invalidateQueries({ queryKey: ["accountStatus"] });
     });
   }, [queryClient]);
 
-  const { data: status, isLoading } = useAccountStatus();
-  const isRestricted = !!(status?.is_banned || status?.is_suspended) || banDetected;
+  const { data: status, isLoading, dataUpdatedAt } = useAccountStatus();
+  const statusRestricted = !!(status?.is_banned || status?.is_suspended);
+  // A detection stands until an account-status response fetched *after* it
+  // says the account is fine. (Clearing it on the cached status, fetched
+  // before the ban, briefly let a banned user back in.) Once cleared, the
+  // 5-minute polling stops and apiFetch is unblocked.
+  const banDetected =
+    banDetectedAt !== null &&
+    !(status && dataUpdatedAt > banDetectedAt && !statusRestricted);
+  const isRestricted = statusRestricted || banDetected;
 
   useEffect(() => {
     setAccountRestricted(isRestricted);
   }, [isRestricted]);
-
-  // Clear the detected flag once the server confirms the restriction is lifted,
-  // which also stops the 5-minute polling and unblocks apiFetch.
-  useEffect(() => {
-    if (banDetected && status && !status.is_banned && !status.is_suspended) {
-      setBanDetected(false);
-    }
-  }, [banDetected, status]);
 
   if (isLoading && !banDetected) return null;
   if (isRestricted) return <SuspensionBanModal asPage />;

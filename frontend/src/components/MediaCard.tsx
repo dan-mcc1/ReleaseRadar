@@ -1,4 +1,4 @@
-import { Movie, Show } from "../types/calendar";
+import type { Movie, Show } from "../types/calendar";
 import { BASE_IMAGE_URL } from "../constants";
 import { Link } from "react-router-dom";
 import { parseLocalDate } from "../utils/date";
