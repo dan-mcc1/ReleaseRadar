@@ -27,6 +27,7 @@ from app.services.email_service import (
     send_season_premiere_email,
     format_air_time,
 )
+from app.services.digest_service import _build_items_for_window, _frequency_window
 from app.services.push_service import push_notification
 from app.config import settings
 from app.core.limiter import limiter
@@ -365,83 +366,6 @@ def delete_inbox(
     return {"badge": new_badge, "deleted": deleted}
 
 
-def _build_items_for_window(db: Session, user_id: str, days: int) -> list:
-    """Find watchlisted movies/shows releasing within the next `days` days."""
-    today = date.today()
-    end = today + timedelta(days=days)
-    upcoming = []
-
-    movies = (
-        db.query(Movie)
-        .join(
-            Watchlist,
-            (Watchlist.content_id == Movie.id) & (Watchlist.content_type == "movie"),
-        )
-        .filter(
-            Watchlist.user_id == user_id,
-            Watchlist.notify == True,  # noqa: E712
-            Movie.release_date >= today,
-            Movie.release_date < end,
-        )
-        .all()
-    )
-
-    for m in movies:
-        upcoming.append(
-            {
-                "title": m.title,
-                "date": str(m.release_date),
-                "content_type": "movie",
-                "content_id": m.id,
-                "poster_path": m.poster_path,
-            }
-        )
-
-    # Collect tracked show IDs, respecting per-item notify flag on Watchlist
-    tracked_show_ids = {
-        r.content_id
-        for r in db.query(Watchlist.content_id)
-        .filter(
-            Watchlist.user_id == user_id,
-            Watchlist.content_type == "tv",
-            Watchlist.notify == True,  # noqa: E712
-        )
-        .all()
-    } | {
-        r.content_id
-        for r in db.query(CurrentlyWatching.content_id)
-        .filter_by(user_id=user_id, content_type="tv")
-        .all()
-    }
-
-    if tracked_show_ids:
-        episodes = (
-            db.query(Episode, Show)
-            .join(Show, Show.id == Episode.show_id)
-            .filter(
-                Episode.show_id.in_(tracked_show_ids),
-                Episode.air_date >= today,
-                Episode.air_date < end,
-            )
-            .all()
-        )
-        for ep, show in episodes:
-            upcoming.append(
-                {
-                    "title": f"{show.name} S{ep.season_number:02d}E{ep.episode_number:02d}"
-                    + (f" — {ep.name}" if ep.name else ""),
-                    "date": str(ep.air_date),
-                    "air_time": format_air_time(show.air_time, show.air_timezone),
-                    "content_type": "tv",
-                    "content_id": show.id,
-                    "poster_path": show.poster_path,
-                    "episode_type": ep.episode_type,
-                }
-            )
-
-    return upcoming
-
-
 def _build_items_for_bucket(
     db: Session, user_ids: list[str], days: int
 ) -> dict[str, list]:
@@ -546,23 +470,6 @@ def _build_items_for_bucket(
                 )
 
     return results
-
-
-def _frequency_window(frequency: str) -> int:
-    """Return the number of days to look ahead for a given frequency."""
-    return {"daily": 1, "weekly": 7, "monthly": 30}.get(frequency, 1)
-
-
-def _should_send_today(frequency: str, local_date: date | None = None) -> bool:
-    """Return True if the digest should be sent today for the given frequency."""
-    today = local_date if local_date is not None else date.today()
-    if frequency == "daily":
-        return True
-    if frequency == "weekly":
-        return today.weekday() == 0  # Monday
-    if frequency == "monthly":
-        return today.day == 1
-    return False
 
 
 def _user_local_now(user: User, now_utc: datetime) -> datetime:

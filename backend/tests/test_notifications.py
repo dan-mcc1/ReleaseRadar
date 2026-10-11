@@ -58,14 +58,14 @@ def _make_unsubscribe_token(uid: str) -> str:
 
 class TestShouldSendToday:
     def test_daily_always_true(self):
-        from app.routers.notifications import _should_send_today
+        from app.services.digest_service import _should_send_today
 
         for weekday in range(7):
             d = date(2024, 1, 1) + timedelta(days=weekday)
             assert _should_send_today("daily", d) is True
 
     def test_weekly_only_on_monday(self):
-        from app.routers.notifications import _should_send_today
+        from app.services.digest_service import _should_send_today
 
         monday = date(2024, 1, 1)       # weekday() == 0
         tuesday = date(2024, 1, 2)      # weekday() == 1
@@ -73,7 +73,7 @@ class TestShouldSendToday:
         assert _should_send_today("weekly", tuesday) is False
 
     def test_monthly_only_on_first(self):
-        from app.routers.notifications import _should_send_today
+        from app.services.digest_service import _should_send_today
 
         first = date(2024, 2, 1)
         second = date(2024, 2, 2)
@@ -81,7 +81,7 @@ class TestShouldSendToday:
         assert _should_send_today("monthly", second) is False
 
     def test_unknown_frequency_returns_false(self):
-        from app.routers.notifications import _should_send_today
+        from app.services.digest_service import _should_send_today
 
         assert _should_send_today("hourly", date(2024, 1, 1)) is False
 
