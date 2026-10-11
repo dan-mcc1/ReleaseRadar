@@ -11,7 +11,7 @@ from durable_queue.runner import Runner
 from durable_queue.scheduler import hourly, register_schedule
 from psycopg.errors import UndefinedTable
 
-from app.jobs import maintenance  # noqa: F401
+from app.jobs import maintenance, shows  # noqa: F401
 
 logger = logging.getLogger(__name__)
 

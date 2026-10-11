@@ -8,7 +8,7 @@ patch the Runner; test_job_queue_postgres.py runs a job through a real queue.
 import asyncio
 import json
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from unittest.mock import MagicMock, call, patch
 
 import pytest
@@ -247,3 +247,169 @@ class TestLifespan:
 
         assert "_activity_cleanup_loop" not in started
         assert "_daily_digest_loop" in started  # the other loops still start
+
+
+class _EveningInNewYork(datetime):
+    """10:30pm Eastern on Oct 11, which is already Oct 12 in UTC."""
+
+    @classmethod
+    def now(cls, tz=None):
+        assert tz is not None, "the dispatcher must ask for an aware time"
+        return datetime(2026, 10, 12, 2, 30, tzinfo=timezone.utc).astimezone(tz)
+
+
+def _fake_enqueue_many(calls):
+    """Stands in for durable_queue.sqlalchemy.enqueue_many, whose SQL is
+    Postgres-only. Records the call and writes a marker row through the same
+    session, as the real one writes job rows, so a test can tell the
+    dispatcher committed."""
+    def enqueue_many(session, task, args_list, *, idempotency_keys=None):
+        from app.models.genre import Genre
+
+        calls.append((task, args_list, idempotency_keys))
+        session.add(Genre(id=1, name="queued"))
+        return list(range(len(args_list)))
+
+    return enqueue_many
+
+
+class TestDispatchShowRefreshes:
+    def test_queues_one_refresh_per_show_keyed_by_eastern_date(self, db, seed_users):
+        from app.jobs import shows
+        from app.models.genre import Genre
+        from app.models.show import Show
+        from app.models.watched import Watched
+        from app.models.watchlist import Watchlist
+
+        db.add_all([
+            Show(id=10, name="A", in_production=True, tracking_count=0),
+            Show(id=11, name="B", in_production=True, tracking_count=0),
+            Show(id=12, name="Ended", in_production=False, tracking_count=0),
+        ])
+        db.add_all([
+            Watchlist(user_id="test-uid-1", content_type="tv", content_id=10),
+            Watched(user_id="test-uid-2", content_type="tv", content_id=11),
+            Watched(user_id="test-uid-1", content_type="tv", content_id=12),
+        ])
+        db.commit()
+
+        calls = []
+        with patch.object(shows, "enqueue_many", _fake_enqueue_many(calls)), \
+             patch.object(shows, "datetime", _EveningInNewYork):
+            shows.dispatch_show_refreshes()
+
+        assert calls == [(
+            "refresh_show",
+            [{"show_id": 10}, {"show_id": 11}],
+            ["refresh-show:10:2026-10-11", "refresh-show:11:2026-10-11"],
+        )]
+        db.expire_all()
+        assert db.get(Genre, 1) is not None  # committed
+
+    def test_no_shows_queues_nothing(self, db, caplog):
+        from app.jobs import shows
+
+        calls = []
+        with patch.object(shows, "enqueue_many", _fake_enqueue_many(calls)), \
+             caplog.at_level(logging.INFO):
+            shows.dispatch_show_refreshes()
+
+        assert [args for _, args, _ in calls] == [[]]
+        assert "queued 0 show(s)" in caplog.text
+
+
+def _seed_watched_show(db, show_id, *, episode_name, air_date):
+    """A show in production with one season-1 episode, on test-uid-1's
+    Watched list with nothing marked watched."""
+    from app.models.episode import Episode
+    from app.models.season import Season
+    from app.models.show import Show
+    from app.models.watched import Watched
+
+    db.add(Show(id=show_id, name=f"Show {show_id}", number_of_seasons=1,
+                in_production=True, tracking_count=0))
+    db.flush()
+    db.add(Season(id=show_id * 10, show_id=show_id, season_number=1, episode_count=1))
+    db.add(Episode(id=show_id * 100 + 1, show_id=show_id, season_number=1,
+                   episode_number=1, name=episode_name, air_date=air_date))
+    db.add(Watched(user_id="test-uid-1", content_type="tv", content_id=show_id))
+
+
+def _tmdb_for_show_800(path, params=None):
+    """TMDb for show 800: one season whose pilot now has a name and has aired."""
+    if path == "/tv/800":
+        return {"number_of_seasons": 1, "in_production": True,
+                "seasons": [{"season_number": 1, "id": 8000}]}
+    if path == "/tv/800/season/1":
+        return {"episodes": [{"id": 80001, "episode_number": 1, "name": "Pilot",
+                              "air_date": date(2024, 3, 1)}]}
+    raise AssertionError(f"unexpected TMDb call {path}")
+
+
+class TestRefreshShow:
+    @pytest.fixture
+    def two_watched_shows(self, db, seed_users):
+        from app.models.user import User
+
+        db.get(User, "test-uid-1").email_notifications = True
+        # 800's pilot has no name or air date yet; the refresh fills them in.
+        _seed_watched_show(db, 800, episode_name=None, air_date=None)
+        # 801 already has an aired episode test-uid-1 hasn't watched.
+        _seed_watched_show(db, 801, episode_name="Pilot",
+                           air_date=date.today() - timedelta(days=1))
+        db.commit()
+
+    def test_refreshes_episodes_and_reactivates_only_that_show(self, db, two_watched_shows):
+        from app.jobs.shows import refresh_show
+        from app.models.episode import Episode
+        from app.models.watched import Watched
+        from app.models.watchlist import Watchlist
+
+        with patch("app.services.episode_service.get", side_effect=_tmdb_for_show_800), \
+             patch("app.services.episode_service.send_new_season_available_email") as email:
+            refresh_show(show_id=800)
+
+        db.expire_all()
+        assert db.get(Episode, 80001).name == "Pilot"
+        assert db.query(Watchlist).filter_by(content_id=800).first() is not None
+        assert db.query(Watched).filter_by(content_id=800).first() is None
+        assert db.query(Watched).filter_by(content_id=801).first() is not None
+        assert email.call_count == 1
+
+    def test_running_again_sends_no_second_email(self, db, two_watched_shows):
+        from app.jobs.shows import refresh_show
+
+        with patch("app.services.episode_service.get", side_effect=_tmdb_for_show_800), \
+             patch("app.services.episode_service.send_new_season_available_email") as email:
+            refresh_show(show_id=800)
+            refresh_show(show_id=800)  # a retry after the first run committed
+
+        assert email.call_count == 1
+
+    def test_missing_show_is_skipped(self, db, caplog):
+        from app.jobs.shows import refresh_show
+
+        with patch("app.services.episode_service.get") as tmdb, caplog.at_level(logging.INFO):
+            refresh_show(show_id=424242)
+
+        tmdb.assert_not_called()
+        assert "no longer cached" in caplog.text
+
+    def test_database_error_propagates_for_retry(self, db):
+        from sqlalchemy.exc import OperationalError
+        from app.jobs import shows
+        from app.models.show import Show
+
+        db.add(Show(id=802, name="X", in_production=True, tracking_count=0))
+        db.commit()
+        dropped = OperationalError("SELECT 1", {}, Exception("connection dropped"))
+
+        with patch.object(shows, "refresh_show_data", side_effect=dropped), \
+             pytest.raises(OperationalError):
+            shows.refresh_show(show_id=802)
+
+    def test_registered_under_the_name_the_dispatcher_enqueues(self):
+        from durable_queue.registry import get_registered_task
+        from app.jobs.shows import refresh_show
+
+        assert get_registered_task("refresh_show").fn is refresh_show
