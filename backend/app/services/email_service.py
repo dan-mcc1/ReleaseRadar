@@ -219,6 +219,7 @@ def send_notification_email(
     upcoming_items: list,
     uid: str = "",
     frequency: str = "daily",
+    idempotency_key: str | None = None,
 ):
     if not upcoming_items:
         return
@@ -276,25 +277,30 @@ def send_notification_email(
   </a>
 </div>"""
 
-    send_email(to_email, subject, _email_wrapper(body, uid), uid=uid)
+    send_email(to_email, subject, _email_wrapper(body, uid), uid=uid,
+               idempotency_key=idempotency_key)
 
 
 # ── Season premiere alert ─────────────────────────────────────────────────────
 
 
 def send_season_premiere_email(
-    to_email: str, username: str, alerts: list, uid: str = ""
+    to_email: str, username: str, alerts: list, uid: str = "",
+    idempotency_key: str | None = None,
 ):
     """
     Send an alert email for upcoming season premieres.
-    Each alert dict has: show_name, season_number, season_name, air_date, days_away (7 or 30),
+    Each alert dict has: show_name, season_number, season_name, air_date,
+    days_away, lead_days (30 or 7; defaults to days_away),
     and optionally poster_path, show_id.
     """
     if not alerts:
         return
 
-    thirty_day = [a for a in alerts if a["days_away"] == 30]
-    seven_day = [a for a in alerts if a["days_away"] == 7]
+    # Grouped by the alert's lead: a 30-day alert can go out anywhere from 30
+    # to 8 days ahead. Callers that only pass days_away group by that.
+    thirty_day = [a for a in alerts if a.get("lead_days", a["days_away"]) == 30]
+    seven_day = [a for a in alerts if a.get("lead_days", a["days_away"]) == 7]
 
     def _alert_card(a: dict) -> str:
         season_label = a.get("season_name") or f"Season {a['season_number']}"
@@ -357,7 +363,8 @@ def send_season_premiere_email(
   </a>
 </div>"""
 
-    send_email(to_email, subject, _email_wrapper(body, uid), uid=uid)
+    send_email(to_email, subject, _email_wrapper(body, uid), uid=uid,
+               idempotency_key=idempotency_key)
 
 
 # ── New season alert (reactivation) ──────────────────────────────────────────
@@ -833,8 +840,20 @@ def send_trailer_alert_email(
     send_email(to_email, subject, _email_wrapper(body, uid), uid=uid)
 
 
-def send_email(to_email: str, subject: str, html_body: str, uid: str = ""):
-    """Send one email. Pass the recipient's uid to add one-click unsubscribe."""
+def send_email(
+    to_email: str,
+    subject: str,
+    html_body: str,
+    uid: str = "",
+    idempotency_key: str | None = None,
+):
+    """
+    Send one email. Pass the recipient's uid to add one-click unsubscribe.
+
+    With idempotency_key, Resend delivers at most one email per key (for 24
+    hours) and a failure raises: the caller is a job that retries with the
+    same key. Without one, a failure is logged and swallowed.
+    """
     if not settings.RESEND_API_KEY:
         logger.warning("RESEND_API_KEY not configured, skipping email")
         return
@@ -850,6 +869,9 @@ def send_email(to_email: str, subject: str, html_body: str, uid: str = ""):
         params["headers"] = headers
 
     resend.api_key = settings.RESEND_API_KEY
+    if idempotency_key:
+        resend.Emails.send(params, {"idempotency_key": idempotency_key})
+        return
     try:
         resend.Emails.send(params)
     except Exception:
