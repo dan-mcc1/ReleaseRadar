@@ -5,30 +5,43 @@ Every task module is imported here so its @logged_task functions are
 registered before a worker looks one up by name.
 """
 import logging
+from typing import NamedTuple
 
 from durable_queue.db import get_connection
 from durable_queue.runner import Runner
-from durable_queue.scheduler import daily, hourly, register_schedule
+from durable_queue.scheduler import Clock, daily, hourly, register_schedule
 from psycopg.errors import UndefinedTable
 
 from app.jobs import catalog, maintenance, shows  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
-# (schedule name, task name, args, when). Registered on every startup:
-# re-registering updates a schedule's task, args and timing but leaves its
-# next run alone, so a deploy neither skips nor repeats one. A run missed
-# while the app was down happens once when it's back (no
-# max_lateness_seconds).
+
+class Schedule(NamedTuple):
+    """
+    A recurring job. Registered on every startup: re-registering updates its
+    task, args and timing but leaves its next run alone, so a deploy neither
+    skips nor repeats one. A run missed while the app was down happens once
+    when it's back, unless it would start more than max_lateness_seconds
+    after its time, in which case it's skipped until the next one.
+    """
+
+    name: str
+    task: str
+    args: dict
+    when: int | Clock
+    max_lateness_seconds: int | None = None
+
+
 SCHEDULES = [
     # On the hour, with the digest and episode-alert planning, so Neon
     # wakes once an hour for all three.
-    ("activity-cleanup", "cleanup_activity", {}, hourly(0)),
+    Schedule("activity-cleanup", "cleanup_activity", {}, hourly(0)),
     # Nightly. All at 3am Eastern so Neon wakes once; none depends on another.
-    ("show-refresh", "dispatch_show_refreshes", {}, daily("03:00", "America/New_York")),
-    ("vote-update", "update_vote_averages", {}, daily("03:00", "America/New_York")),
-    ("cache-prune", "prune_cache", {}, daily("03:00", "America/New_York")),
-    ("job-purge", "purge_finished_jobs", {}, daily("03:00", "America/New_York")),
+    Schedule("show-refresh", "dispatch_show_refreshes", {}, daily("03:00", "America/New_York")),
+    Schedule("vote-update", "update_vote_averages", {}, daily("03:00", "America/New_York")),
+    Schedule("cache-prune", "prune_cache", {}, daily("03:00", "America/New_York")),
+    Schedule("job-purge", "purge_finished_jobs", {}, daily("03:00", "America/New_York")),
 ]
 
 
@@ -43,8 +56,11 @@ def start_job_queue(dsn: str | None = None) -> Runner:
     """
     conn = get_connection(dsn)
     try:
-        for name, task_name, args, when in SCHEDULES:
-            register_schedule(conn, name, task_name, args, when)
+        for schedule in SCHEDULES:
+            register_schedule(
+                conn, schedule.name, schedule.task, schedule.args, schedule.when,
+                max_lateness_seconds=schedule.max_lateness_seconds,
+            )
     except UndefinedTable as exc:
         raise RuntimeError(
             "durable-queue's tables are missing; run `alembic upgrade head`"

@@ -95,28 +95,29 @@ class TestCleanupActivity:
 class TestSchedules:
     def test_every_schedule_names_a_registered_task_with_json_args(self):
         from durable_queue.registry import get_registered_task
-        from app.jobs import SCHEDULES
+        from app.jobs import SCHEDULES, Schedule
 
-        for name, task_name, args, when in SCHEDULES:
-            get_registered_task(task_name)  # KeyError names a typo or unimported module
-            json.dumps(args)  # stored as jsonb on every job
+        for schedule in SCHEDULES:
+            assert isinstance(schedule, Schedule)
+            get_registered_task(schedule.task)  # KeyError names a typo or unimported module
+            json.dumps(schedule.args)  # stored as jsonb on every job
 
     def test_schedule_names_are_unique(self):
         from app.jobs import SCHEDULES
 
         # Registering a second entry under a taken name silently replaces it.
-        names = [name for name, *_ in SCHEDULES]
+        names = [schedule.name for schedule in SCHEDULES]
         assert len(names) == len(set(names))
 
     def test_activity_cleanup_runs_at_the_top_of_every_hour(self):
         from durable_queue.scheduler import hourly
-        from app.jobs import SCHEDULES
+        from app.jobs import SCHEDULES, Schedule
 
-        assert ("activity-cleanup", "cleanup_activity", {}, hourly(0)) in SCHEDULES
+        assert Schedule("activity-cleanup", "cleanup_activity", {}, hourly(0)) in SCHEDULES
 
     def test_nightly_jobs_run_at_3am_eastern(self):
         from durable_queue.scheduler import daily
-        from app.jobs import SCHEDULES
+        from app.jobs import SCHEDULES, Schedule
 
         at_3am = daily("03:00", "America/New_York")
         for name, task_name in [
@@ -125,7 +126,7 @@ class TestSchedules:
             ("cache-prune", "prune_cache"),
             ("job-purge", "purge_finished_jobs"),
         ]:
-            assert (name, task_name, {}, at_3am) in SCHEDULES
+            assert Schedule(name, task_name, {}, at_3am) in SCHEDULES
 
 
 class TestStartJobQueue:
@@ -137,20 +138,35 @@ class TestStartJobQueue:
         with patch.object(jobs, "get_connection", return_value=conn) as get_connection, \
              patch.object(jobs, "register_schedule") as register, \
              patch.object(jobs, "Runner") as Runner:
-            register.side_effect = lambda *args: events.append("register")
+            register.side_effect = lambda *args, **kwargs: events.append("register")
             Runner.return_value.start.side_effect = lambda: events.append("start")
             runner = jobs.start_job_queue("postgresql://queue")
 
         get_connection.assert_called_once_with("postgresql://queue")
         assert register.call_args_list == [
-            call(conn, name, task_name, args, when)
-            for name, task_name, args, when in jobs.SCHEDULES
+            call(conn, s.name, s.task, s.args, s.when,
+                 max_lateness_seconds=s.max_lateness_seconds)
+            for s in jobs.SCHEDULES
         ]
         conn.close.assert_called_once()
         Runner.assert_called_once_with(concurrency=4, dsn="postgresql://queue")
         assert runner is Runner.return_value
         # Schedules exist before the scheduler thread first looks.
         assert events == ["register"] * len(jobs.SCHEDULES) + ["start"]
+
+    def test_passes_each_schedules_lateness_to_register_schedule(self):
+        from durable_queue.scheduler import hourly
+        import app.jobs as jobs
+
+        conn = MagicMock()
+        schedules = [
+            jobs.Schedule("skips-late", "cleanup_activity", {}, hourly(0), max_lateness_seconds=60),
+            jobs.Schedule("catches-up", "cleanup_activity", {}, hourly(30)),
+        ]
+        with patch.object(jobs, "SCHEDULES", schedules),              patch.object(jobs, "get_connection", return_value=conn),              patch.object(jobs, "register_schedule") as register,              patch.object(jobs, "Runner"):
+            jobs.start_job_queue()
+
+        assert [c.kwargs["max_lateness_seconds"] for c in register.call_args_list] == [60, None]
 
     def test_missing_queue_tables_say_to_run_migrations(self):
         import app.jobs as jobs
