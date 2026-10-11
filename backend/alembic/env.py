@@ -45,6 +45,7 @@ import app.models.movie_video  # noqa: F401, E402
 import app.models.show_video  # noqa: F401, E402
 import app.models.user_streaming_service  # noqa: F401, E402
 import app.models.feedback  # noqa: F401, E402
+import app.models.sent_premiere_alert  # noqa: F401, E402
 
 target_metadata = Base.metadata
 

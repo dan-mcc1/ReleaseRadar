@@ -83,3 +83,89 @@ class TestDigestDue:
         from app.services.digest_service import digest_due
 
         assert digest_due(_user(**overrides), _utc(2024, 6, 1, 13, 0)) is None
+
+
+def _premiere_migration():
+    import importlib.util
+    from pathlib import Path
+
+    path = (Path(__file__).resolve().parents[1] / "alembic" / "versions"
+            / "c5e8a1f3b2d6_add_sent_premiere_alert.py")
+    spec = importlib.util.spec_from_file_location("premiere_migration", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class TestPremiereBackfill:
+    """The migration marks alerts the old exact-day sweep already sent, so the
+    first run of the new jobs doesn't send them again."""
+
+    TODAY = date(2026, 10, 12)
+
+    def _season(self, db, show_id, *, days_out, number=1):
+        from app.models.season import Season
+        from app.models.show import Show
+
+        if db.get(Show, show_id) is None:
+            db.add(Show(id=show_id, name=f"Show {show_id}", tracking_count=0))
+            db.flush()
+        db.add(Season(id=show_id * 100 + number, show_id=show_id, season_number=number,
+                      air_date=self.TODAY + timedelta(days=days_out)))
+
+    def _backfill(self, db):
+        from app.models.sent_premiere_alert import SentPremiereAlert
+
+        db.commit()
+        _premiere_migration()._backfill(db.connection(), self.TODAY)
+        db.commit()
+        db.expire_all()
+        return sorted(
+            (a.user_id, a.show_id, a.season_number, a.lead_days)
+            for a in db.query(SentPremiereAlert)
+        )
+
+    def test_marks_alerts_whose_old_day_has_passed(self, db, seed_users):
+        from app.models.watchlist import Watchlist
+
+        self._season(db, 1, days_out=29)
+        self._season(db, 2, days_out=6)
+        db.add_all([
+            Watchlist(user_id="test-uid-1", content_type="tv", content_id=1, notify=True),
+            Watchlist(user_id="test-uid-1", content_type="tv", content_id=2, notify=True),
+        ])
+
+        assert self._backfill(db) == [
+            ("test-uid-1", 1, 1, 30),
+            ("test-uid-1", 2, 1, 7),
+            ("test-uid-1", 2, 1, 30),
+        ]
+
+    def test_seasons_exactly_30_or_7_days_out_keep_todays_alert(self, db, seed_users):
+        from app.models.watchlist import Watchlist
+
+        self._season(db, 1, days_out=30)
+        self._season(db, 2, days_out=7)
+        db.add_all([
+            Watchlist(user_id="test-uid-1", content_type="tv", content_id=1, notify=True),
+            Watchlist(user_id="test-uid-1", content_type="tv", content_id=2, notify=True),
+        ])
+
+        # Show 2's 30-day alert went out 23 days ago; its 7-day alert is today's.
+        assert self._backfill(db) == [("test-uid-1", 2, 1, 30)]
+
+    def test_only_trackers_the_old_sweep_alerted(self, db, seed_users):
+        from app.models.watched import Watched
+        from app.models.watchlist import Watchlist
+
+        self._season(db, 1, days_out=10)             # muted on the Watchlist
+        self._season(db, 2, days_out=10)             # on the Watched list
+        self._season(db, 3, days_out=10, number=0)   # specials
+        self._season(db, 4, days_out=10)             # nobody tracks it
+        db.add_all([
+            Watchlist(user_id="test-uid-1", content_type="tv", content_id=1, notify=False),
+            Watched(user_id="test-uid-2", content_type="tv", content_id=2),
+            Watchlist(user_id="test-uid-1", content_type="tv", content_id=3, notify=True),
+        ])
+
+        assert self._backfill(db) == [("test-uid-2", 2, 1, 30)]
