@@ -44,6 +44,7 @@ from app.models.rewatch import Rewatch
 from app.models.season import Season
 from app.models.season_rating import SeasonRating
 from app.models.sent_episode_alert import SentEpisodeAlert
+from app.models.sent_premiere_alert import SentPremiereAlert
 from app.models.shelf_item import ShelfItem
 from app.models.show import Show
 from app.models.show_video import ShowVideo
@@ -58,10 +59,13 @@ PRUNE_AFTER = timedelta(days=90)
 _DELETE_BATCH = 500
 
 # Cached TMDb data that hangs off a title and is deleted with it, in delete
-# order. Deleted explicitly: production's foreign keys predate Alembic and
-# don't all have ON DELETE CASCADE (episode.show_id doesn't).
+# order, plus bookkeeping that only means something while the title exists
+# (sent premiere alerts: they mustn't keep a show nobody tracks cached).
+# Deleted explicitly: production's foreign keys predate Alembic and don't
+# all have ON DELETE CASCADE (episode.show_id doesn't).
 _CHILDREN: dict[str, tuple[tuple[type, str], ...]] = {
     "tv": (
+        (SentPremiereAlert, "show_id"),
         (ShowGenre, "show_id"),
         (ShowProvider, "show_id"),
         (ShowVideo, "show_id"),

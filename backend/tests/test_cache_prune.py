@@ -171,6 +171,20 @@ class TestPruneStaleCache:
         assert 900 not in _ids(db, Show)
         assert result == {"tv": 1, "movie": 0}
 
+    def test_pruning_a_show_drops_its_premiere_alert_records(self, db, prune_enabled):
+        """Sent-alert records mean nothing once the show is gone, and mustn't
+        keep a show nobody tracks cached."""
+        from app.models.sent_premiere_alert import SentPremiereAlert
+
+        db.add(Show(id=901, name="Old", tracking_count=0, updated_at=OLD))
+        db.add(SentPremiereAlert(user_id="someone", show_id=901, season_number=2, lead_days=30))
+        db.commit()
+
+        prune_stale_cache(db)
+
+        assert 901 not in _ids(db, Show)
+        assert db.query(SentPremiereAlert).filter_by(show_id=901).count() == 0
+
     def test_deletes_stale_unreferenced_movie(self, db, prune_enabled):
         db.add(Movie(id=800, title="Old", tracking_count=0, updated_at=OLD))
         db.commit()
