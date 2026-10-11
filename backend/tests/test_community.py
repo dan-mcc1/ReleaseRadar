@@ -641,3 +641,44 @@ class TestLikes:
         client.post(f"/communities/posts/{pid}/like")
         r = client.get(f"/communities/posts/{pid}")
         assert r.json()["post"]["viewer_liked"] is True
+
+
+class TestSilencedMembers:
+    """Silencing removes a user's review and comment privileges; group posts,
+    replies and edits are comments too."""
+
+    def _silence(self, db, uid="test-uid-1"):
+        from app.models.user import User
+
+        db.query(User).filter_by(id=uid).update({"is_silenced": True})
+        db.commit()
+
+    def _group_with_post(self, client):
+        cid = _create_group(client).json()["id"]
+        pid = _create_post(client, cid).json()["id"]
+        rid = client.post(f"/communities/posts/{pid}/replies", json={"body": "hi"}).json()["id"]
+        return cid, pid, rid
+
+    def test_silenced_member_cannot_post(self, client, db, three_users):
+        cid = _create_group(client).json()["id"]
+        self._silence(db)
+        assert _create_post(client, cid).status_code == 403
+
+    def test_silenced_member_cannot_reply(self, client, db, three_users):
+        _, pid, _ = self._group_with_post(client)
+        self._silence(db)
+        r = client.post(f"/communities/posts/{pid}/replies", json={"body": "again"})
+        assert r.status_code == 403
+
+    def test_silenced_member_cannot_edit_a_post(self, client, db, three_users):
+        _, pid, _ = self._group_with_post(client)
+        self._silence(db)
+        r = client.patch(f"/communities/posts/{pid}", json={"body": "edited"})
+        assert r.status_code == 403
+
+    def test_silenced_member_cannot_edit_a_reply(self, client, db, three_users):
+        _, _, rid = self._group_with_post(client)
+        self._silence(db)
+        r = client.patch(f"/communities/replies/{rid}", json={"body": "edited"})
+        assert r.status_code == 403
+

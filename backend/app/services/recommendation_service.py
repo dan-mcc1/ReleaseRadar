@@ -99,7 +99,8 @@ def send_recommendation(
         entry._email_params = {
             "to_email": recipient.email,
             "to_username": recipient.username or "",
-            "from_username": sender.username or sender.email or "Someone",
+            # Never the email address: the recipient would see it.
+            "from_username": sender.username or "Someone",
             "content_type": content_type,
             "content_title": content_title or "something",
             "content_id": content_id,

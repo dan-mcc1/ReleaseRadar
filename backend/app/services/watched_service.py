@@ -1,8 +1,8 @@
 # app/services/watched_service.py
 import logging
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, text
-from datetime import datetime, timezone
+from sqlalchemy import and_, or_, text
+from datetime import date, datetime, timezone
 from app.models.watched import Watched
 from app.models.movie import Movie
 from app.models.show import Show
@@ -86,10 +86,16 @@ def add_to_watched(
 
 def _mark_episodes_watched(db: Session, user_id: str, content_id: int):
     """
-    Mark all episodes currently in the DB for this show as watched.
+    Mark every episode of this show that has aired as watched. Future
+    episodes stay unwatched; an undated episode counts as aired only once the
+    show has ended (old shows often lack per-episode dates on TMDb).
     Called with an existing session (no commit — caller must commit).
     """
-    episodes = db.query(Episode).filter_by(show_id=content_id).all()
+    aired = Episode.air_date <= date.today()  # NULL dates don't match
+    show = db.get(Show, content_id)
+    if show is not None and show.in_production is False:
+        aired = or_(aired, Episode.air_date.is_(None))
+    episodes = db.query(Episode).filter(Episode.show_id == content_id, aired).all()
     existing_keys = {
         (row.season_number, row.episode_number)
         for row in db.query(EpisodeWatched.season_number, EpisodeWatched.episode_number)

@@ -262,3 +262,24 @@ class TestTitleComesFromTheCatalog:
 
         assert r.status_code == 404
         assert db.query(Recommendation).count() == 0
+
+
+class TestSenderPrivacy:
+    def test_email_never_stands_in_for_a_missing_username(self, client, db, seed_movie):
+        # A sender without a username used to be shown to the recipient by
+        # their email address.
+        from unittest.mock import patch
+        from app.models.user import User
+
+        _make_friends(db)
+        db.query(User).filter_by(id="test-uid-1").update({"username": None})
+        db.query(User).filter_by(id="test-uid-2").update({"email_notifications": True})
+        db.commit()
+
+        with patch("app.routers.recommendations.send_recommendation_email") as send:
+            client.post("/recommendations/send", json={
+                "recipient_username": "bob", "content_type": "movie", "content_id": 550,
+            })
+
+        params = send.call_args.kwargs
+        assert "alice@test.com" not in params["from_username"]

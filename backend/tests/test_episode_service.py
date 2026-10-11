@@ -242,6 +242,31 @@ class TestGetOrCreateEpisode:
             ep = get_or_create_episode(db, 1396, 2, 5)
         assert ep is None
 
+    # It used to call db.close() before its TMDb fetch, which detached
+    # everything the caller had loaded and threw away unsaved changes.
+    def test_callers_loaded_objects_stay_attached(self, db, seed_show):
+        from app.models.show import Show
+        from app.services.episode_service import get_or_create_episode
+
+        show = db.query(Show).filter_by(id=1396).one()
+        with patch("app.services.episode_service.get",
+                   return_value={"id": 90002, "name": "New", "air_date": None}):
+            get_or_create_episode(db, 1396, 1, 3)
+
+        assert show in db
+
+    def test_callers_pending_changes_are_kept(self, db, seed_show, seed_users):
+        from app.models.watchlist import Watchlist
+        from app.services.episode_service import get_or_create_episode
+
+        db.add(Watchlist(user_id="test-uid-1", content_type="tv", content_id=1396))
+        with patch("app.services.episode_service.get",
+                   return_value={"id": 90003, "name": "New", "air_date": None}):
+            get_or_create_episode(db, 1396, 1, 4)
+        db.commit()
+
+        assert db.query(Watchlist).filter_by(user_id="test-uid-1").count() == 1
+
 
 # ── _refresh_show_metadata + refresh_episodes_for_show ───────────────────
 
@@ -677,3 +702,59 @@ class TestReactivationDetails:
 
         assert loaded == []
         assert not self._still_watched(db)
+
+
+class TestSyncHandlesReissuedEpisodeIds:
+    """TMDb sometimes reissues an episode under a new id while keeping its
+    (season, episode) position. Inserting it again broke the
+    uq_show_season_episode constraint and failed the whole sync."""
+
+    def _season_payload(self, episodes):
+        return {"episodes": [
+            {"id": eid, "episode_number": num, "name": f"E{num}", "air_date": None}
+            for eid, num in episodes
+        ]}
+
+    def _positions(self, db):
+        from app.models.episode import Episode
+
+        db.expire_all()
+        return sorted(
+            (e.season_number, e.episode_number)
+            for e in db.query(Episode).filter_by(show_id=1396)
+        )
+
+    def test_full_show_sync(self, db, seed_show):
+        from app.services.episode_service import sync_show_episodes
+
+        # S1E1 comes back under a new id; S1E3 is genuinely new.
+        payload = self._season_payload([(999001, 1), (62086, 2), (999003, 3)])
+        with patch("app.services.episode_service.get", return_value=payload):
+            sync_show_episodes(db, 1396)
+
+        assert self._positions(db) == [(1, 1), (1, 2), (1, 3)]
+
+    def test_single_season_sync(self, db, seed_show):
+        from app.services.episode_service import sync_season_episodes
+
+        payload = self._season_payload([(999001, 1), (62086, 2), (999003, 3)])
+        with patch("app.services.episode_service.get", return_value=payload):
+            sync_season_episodes(db, 1396, 1)
+
+        assert self._positions(db) == [(1, 1), (1, 2), (1, 3)]
+
+
+class TestSeasonSyncQueryCount:
+    def test_new_episodes_are_not_looked_up_one_by_one(self, db, seed_show, count_queries):
+        from app.services.episode_service import sync_season_episodes
+
+        payload = {"episodes": [
+            {"id": 800000 + n, "episode_number": n, "name": f"E{n}", "air_date": None}
+            for n in range(3, 23)  # 20 episodes not stored yet
+        ]}
+        with patch("app.services.episode_service.get", return_value=payload), \
+             count_queries() as q:
+            sync_season_episodes(db, 1396, 1)
+
+        # Was one SELECT per episode on top of the fixed queries.
+        assert q.value < 15, f"{q.value} queries for a 20-episode season"

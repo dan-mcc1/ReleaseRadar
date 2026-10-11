@@ -1,10 +1,13 @@
 import asyncio
 import logging
 import time
+
+import httpx
 from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timedelta, timezone as dt_timezone
 from zoneinfo import ZoneInfo
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
 from app.core.limiter import limiter, rate_limit
@@ -363,6 +366,33 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="ReleaseRadar API", lifespan=lifespan, redirect_slashes=True)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+@app.exception_handler(httpx.HTTPStatusError)
+async def upstream_status_error(request: Request, exc: httpx.HTTPStatusError):
+    """An upstream API (TMDb, OMDb, ...) answered with an error status. A
+    missing title is a plain 404, not a server bug for Sentry."""
+    status = exc.response.status_code
+    if status == 404:
+        return JSONResponse({"detail": "Not found."}, status_code=404)
+    # Path only: OMDb carries its API key in the query string.
+    logger.warning(
+        "upstream %s%s returned %s (for %s)",
+        exc.request.url.host, exc.request.url.path, status, request.url.path,
+    )
+    if status == 429:
+        return JSONResponse(
+            {"detail": "Too many requests. Please try again shortly."},
+            status_code=503,
+            headers={"Retry-After": "30"},
+        )
+    return JSONResponse({"detail": "Upstream service error."}, status_code=502)
+
+
+@app.exception_handler(httpx.TransportError)
+async def upstream_unreachable(request: Request, exc: httpx.TransportError):
+    logger.warning("upstream unreachable (%s) for %s", type(exc).__name__, request.url.path)
+    return JSONResponse({"detail": "Upstream service unavailable."}, status_code=502)
 
 setup_logging()
 

@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.limiter import limiter
 from app.db.session import get_db
-from app.dependencies.auth import get_current_user
+from app.dependencies.auth import get_current_user, require_not_silenced
 from app.models.community import Community
 from app.models.user import User
 from app.services import community_service as svc
@@ -364,7 +364,7 @@ def create_post(
     community_id: int,
     body: CreatePostBody,
     db: Session = Depends(get_db),
-    uid: str = Depends(get_current_user),
+    uid: str = Depends(require_not_silenced),
 ):
     return svc.create_post(db, uid, community_id, title=body.title, body=body.body)
 
@@ -395,7 +395,7 @@ def add_reply(
     post_id: int,
     body: ReplyBody,
     db: Session = Depends(get_db),
-    uid: str = Depends(get_current_user),
+    uid: str = Depends(require_not_silenced),
 ):
     return svc.add_reply(db, uid, post_id, body.body)
 
@@ -405,7 +405,7 @@ def update_post(
     post_id: int,
     body: CreatePostBody,
     db: Session = Depends(get_db),
-    uid: str = Depends(get_current_user),
+    uid: str = Depends(require_not_silenced),
 ):
     return svc.update_post(db, uid, post_id, title=body.title, body=body.body)
 
@@ -415,7 +415,7 @@ def update_reply(
     reply_id: int,
     body: ReplyBody,
     db: Session = Depends(get_db),
-    uid: str = Depends(get_current_user),
+    uid: str = Depends(require_not_silenced),
 ):
     return svc.update_reply(db, uid, reply_id, body.body)
 

@@ -246,3 +246,58 @@ class TestWatchedFetch:
         assert len(movies) == 2
         assert any(m["user_rating"] == 7.0 for m in movies)
         assert any(m["user_rating"] is None for m in movies)
+
+
+class TestMarkShowWatchedSkipsUnaired:
+    """Marking a show Watched records the episodes that have aired. Marking
+    future ones too threw off next-episode, stats and reactivation for shows
+    that are still airing."""
+
+    def _add_episodes(self, db, show_id, episodes):
+        from app.models.episode import Episode
+
+        for i, (sn, en, air_date) in enumerate(episodes):
+            db.add(Episode(id=show_id * 1000 + i, show_id=show_id, season_number=sn,
+                           episode_number=en, air_date=air_date))
+        db.commit()
+
+    def _watched(self, db, show_id):
+        from app.models.episode_watched import EpisodeWatched
+
+        db.expire_all()
+        return {
+            (s, e) for s, e in db.query(EpisodeWatched.season_number, EpisodeWatched.episode_number)
+            .filter_by(user_id="test-uid-1", show_id=show_id)
+        }
+
+    def test_airing_show_skips_future_and_undated_episodes(self, db, seed_users):
+        from datetime import date, timedelta
+        from app.models.show import Show
+        from app.services.watched_service import mark_existing_episodes_watched
+
+        today = date.today()
+        db.add(Show(id=5001, name="Airing", in_production=True, tracking_count=0))
+        db.commit()
+        self._add_episodes(db, 5001, [
+            (1, 1, today - timedelta(days=14)),
+            (1, 2, today),
+            (1, 3, today + timedelta(days=7)),
+            (1, 4, None),  # announced, date TBA
+        ])
+
+        mark_existing_episodes_watched(db, "test-uid-1", 5001)
+
+        assert self._watched(db, 5001) == {(1, 1), (1, 2)}
+
+    def test_ended_show_marks_episodes_with_missing_dates(self, db, seed_users):
+        # Older shows often lack per-episode dates on TMDb; they've all aired.
+        from app.models.show import Show
+        from app.services.watched_service import mark_existing_episodes_watched
+
+        db.add(Show(id=5002, name="Old", in_production=False, tracking_count=0))
+        db.commit()
+        self._add_episodes(db, 5002, [(1, 1, None), (1, 2, None)])
+
+        mark_existing_episodes_watched(db, "test-uid-1", 5002)
+
+        assert self._watched(db, 5002) == {(1, 1), (1, 2)}

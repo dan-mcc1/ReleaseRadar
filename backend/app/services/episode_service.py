@@ -110,6 +110,21 @@ def ensure_show_in_db(db: Session, show_id: int) -> bool:
     return True
 
 
+def _stored_episode_keys(db: Session, show_id: int) -> tuple[set[int], set[tuple[int, int]]]:
+    """(ids, (season, episode) positions) already stored for a show. TMDb
+    occasionally reissues an episode under a new id at the same position;
+    skipping known positions as well as ids avoids colliding with
+    uq_show_season_episode."""
+    rows = db.query(Episode.id, Episode.season_number, Episode.episode_number).filter(
+        Episode.show_id == show_id
+    )
+    ids, positions = set(), set()
+    for ep_id, sn, en in rows:
+        ids.add(ep_id)
+        positions.add((sn, en))
+    return ids, positions
+
+
 def sync_season_episodes(db: Session, show_id: int, season_number: int):
     """
     Fetch all episodes for a single season from TMDB and upsert into the
@@ -144,15 +159,14 @@ def sync_season_episodes(db: Session, show_id: int, season_number: int):
         logger.exception("Failed to fetch show %s season %s from TMDB", show_id, season_number)
         return
 
+    existing_ids, existing_positions = _stored_episode_keys(db, show_id)
     for ep in season_data.get("episodes", []):
         ep_id = ep.get("id")
-        if not ep_id:
-            continue
-
-        if db.query(Episode).filter_by(id=ep_id).first():
-            continue
-
         ep_num = ep.get("episode_number")
+        if not ep_id or ep_id in existing_ids or (season_number, ep_num) in existing_positions:
+            continue
+        existing_ids.add(ep_id)
+        existing_positions.add((season_number, ep_num))
         db.add(
             Episode(
                 id=ep_id,
@@ -207,11 +221,7 @@ def sync_show_episodes(db: Session, show_id: int):
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         season_results = dict(executor.map(_fetch_season, season_numbers))
 
-    # Collect IDs already in DB to skip existing episodes efficiently
-    existing_ids = {
-        ep_id
-        for (ep_id,) in db.query(Episode.id).filter(Episode.show_id == show_id).all()
-    }
+    existing_ids, existing_positions = _stored_episode_keys(db, show_id)
 
     for season_number in season_numbers:
         season_data = season_results.get(season_number)
@@ -220,10 +230,14 @@ def sync_show_episodes(db: Session, show_id: int):
 
         for ep in season_data.get("episodes", []):
             ep_id = ep.get("id")
-            if not ep_id or ep_id in existing_ids:
+            ep_num = ep.get("episode_number")
+            if (
+                not ep_id
+                or ep_id in existing_ids
+                or (season_number, ep_num) in existing_positions
+            ):
                 continue
 
-            ep_num = ep.get("episode_number")
             episode = Episode(
                 id=ep_id,
                 show_id=show_id,
@@ -241,6 +255,7 @@ def sync_show_episodes(db: Session, show_id: int):
             )
             db.add(episode)
             existing_ids.add(ep_id)
+            existing_positions.add((season_number, ep_num))
 
     db.flush()
     for sn in season_numbers:
@@ -295,12 +310,7 @@ def get_or_create_episode(
     if episode:
         return episode
 
-    # ensure_show_in_db releases the connection internally before its TMDB
-    # call, so no connection is held during that fetch.
     ensure_show_in_db(db, show_id)
-
-    # Release the connection again before the second TMDB call.
-    db.close()
 
     try:
         ep_data = get(f"/tv/{show_id}/season/{season_number}/episode/{episode_number}")
