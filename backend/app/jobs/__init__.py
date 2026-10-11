@@ -12,7 +12,7 @@ from durable_queue.runner import Runner
 from durable_queue.scheduler import Clock, daily, hourly, register_schedule
 from psycopg.errors import UndefinedTable
 
-from app.jobs import catalog, maintenance, shows  # noqa: F401
+from app.jobs import billing, catalog, maintenance, shows  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +42,15 @@ SCHEDULES = [
     Schedule("vote-update", "update_vote_averages", {}, daily("03:00", "America/New_York")),
     Schedule("cache-prune", "prune_cache", {}, daily("03:00", "America/New_York")),
     Schedule("job-purge", "purge_finished_jobs", {}, daily("03:00", "America/New_York")),
+    # Daily, at the times their old loops used.
+    Schedule("stripe-reconcile", "reconcile_subscriptions", {}, daily("04:00", "America/New_York")),
+    Schedule("collections-sync", "sync_collections", {}, daily("08:30", "UTC")),
+    # These alert users, and an alert in the middle of the night because the
+    # run was missed is worse than none: more than 6 hours late, skip it.
+    Schedule("streaming-refresh", "refresh_streaming", {},
+             daily("11:00", "America/New_York"), max_lateness_seconds=6 * 3600),
+    Schedule("trailer-refresh", "refresh_trailer_videos", {},
+             daily("12:00", "America/New_York"), max_lateness_seconds=6 * 3600),
 ]
 
 

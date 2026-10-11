@@ -128,6 +128,22 @@ class TestSchedules:
         ]:
             assert Schedule(name, task_name, {}, at_3am) in SCHEDULES
 
+    def test_daily_jobs_keep_their_times_and_late_pushes_are_skipped(self):
+        from durable_queue.scheduler import daily
+        from app.jobs import SCHEDULES, Schedule
+
+        six_hours = 6 * 3600
+        for schedule in [
+            Schedule("stripe-reconcile", "reconcile_subscriptions", {},
+                     daily("04:00", "America/New_York")),
+            Schedule("collections-sync", "sync_collections", {}, daily("08:30", "UTC")),
+            Schedule("streaming-refresh", "refresh_streaming", {},
+                     daily("11:00", "America/New_York"), max_lateness_seconds=six_hours),
+            Schedule("trailer-refresh", "refresh_trailer_videos", {},
+                     daily("12:00", "America/New_York"), max_lateness_seconds=six_hours),
+        ]:
+            assert schedule in SCHEDULES
+
 
 class TestStartJobQueue:
     def test_registers_every_schedule_then_starts_the_runner(self):
@@ -515,3 +531,79 @@ class TestPurgeFinishedJobs:
             maintenance.purge_finished_jobs()
 
         conn.close.assert_called_once()
+
+
+class TestDailyJobs:
+    @pytest.mark.parametrize("module_name, job, service", [
+        ("billing", "reconcile_subscriptions", "reconcile_stripe_subscriptions"),
+        ("catalog", "sync_collections", "daily_refresh"),
+    ])
+    def test_runs_its_service_with_a_session(self, module_name, job, service):
+        import importlib
+        from sqlalchemy.orm import Session
+
+        module = importlib.import_module(f"app.jobs.{module_name}")
+        with patch.object(module, service) as run:
+            getattr(module, job)()
+
+        run.assert_called_once()
+        assert isinstance(run.call_args.args[0], Session)
+
+    @pytest.mark.parametrize("task, ceiling", [
+        ("sync_collections", 3600),
+        ("refresh_streaming", 1800),
+        ("refresh_trailer_videos", 1800),
+        ("reconcile_subscriptions", None),
+    ])
+    def test_lease_ceiling(self, task, ceiling):
+        from durable_queue.registry import get_registered_task
+
+        assert get_registered_task(task).max_execution_seconds == ceiling
+
+    def test_streaming_rerun_after_its_commit_emails_no_one_twice(self, db):
+        from app.jobs.catalog import refresh_streaming
+        from app.models.movie import Movie
+        from app.models.user import User
+        from app.models.watchlist import Watchlist
+
+        db.add(Movie(id=1, title="Fight Club", status="Released", tracking_count=0,
+                     vote_average=0.0))
+        db.add(User(id="u1", username="u1", email="u1@t.com", email_notifications=True,
+                    notify_streaming_changes=True))
+        db.flush()
+        db.add(Watchlist(user_id="u1", content_id=1, content_type="movie", notify=True))
+        db.commit()
+        netflix = {
+            "flatrate": [{"provider_id": 8, "provider_name": "Netflix", "logo_path": "/p8.png"}],
+            "rent": [],
+            "buy": [],
+        }
+
+        with patch("app.services.streaming_notification_service._fetch_fresh_us_providers",
+                   return_value=netflix),              patch("app.services.streaming_notification_service.send_streaming_alert_email") as email:
+            refresh_streaming()
+            refresh_streaming()  # a retry after the first run committed
+
+        assert email.call_count == 1
+
+    def test_trailer_rerun_after_its_commit_emails_no_one_twice(self, db):
+        from app.jobs.catalog import refresh_trailer_videos
+        from app.models.movie import Movie
+        from app.models.user import User
+        from app.models.watchlist import Watchlist
+
+        db.add(Movie(id=1, title="Fight Club", status="Released", tracking_count=0,
+                     vote_average=0.0))
+        db.add(User(id="u1", username="u1", email="u@t.com", subscription_tier="premium",
+                    notify_trailers=True, email_notifications=True))
+        db.flush()
+        db.add(Watchlist(user_id="u1", content_id=1, content_type="movie", notify=True))
+        db.commit()
+        trailer = {"key": "vk1", "name": "Trailer 1", "type": "Trailer", "official": True}
+
+        with patch("app.services.trailer_notification_service._fetch_videos",
+                   return_value=[trailer]),              patch("app.services.trailer_notification_service.send_trailer_alert_email") as email:
+            refresh_trailer_videos()
+            refresh_trailer_videos()  # a retry after the first run committed
+
+        assert email.call_count == 1
