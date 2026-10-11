@@ -40,7 +40,9 @@ def pg_sessions(monkeypatch):
     from sqlalchemy.orm import sessionmaker
 
     import app.models  # noqa: F401 — registers all models with Base.metadata
+    import app.jobs.catalog as catalog
     import app.jobs.maintenance as maintenance
+    import app.jobs.shows as shows
     from app.db.base import Base
 
     with psycopg.connect(TEST_URL, autocommit=True) as conn:
@@ -59,7 +61,8 @@ def pg_sessions(monkeypatch):
     # too, never on a database named in a local .env.
     monkeypatch.setenv("DURABLE_QUEUE_DATABASE_URL", TEST_URL)
     sessions = sessionmaker(bind=engine, expire_on_commit=False)
-    monkeypatch.setattr(maintenance, "SessionLocal", sessions)
+    for jobs_module in (catalog, maintenance, shows):
+        monkeypatch.setattr(jobs_module, "SessionLocal", sessions)
     yield sessions
     engine.dispose()
 
@@ -106,3 +109,58 @@ def test_scheduled_cleanup_runs_through_the_queue(pg_sessions):
     assert row is not None and row[0] == "succeeded", row
     with pg_sessions() as db:
         assert db.query(Activity).count() == 0
+
+
+def test_show_refresh_fans_out_once_per_show(pg_sessions, monkeypatch):
+    import psycopg
+    from durable_queue import wakeup
+    from app.jobs import start_job_queue, stop_job_queue
+    from app.jobs.shows import dispatch_show_refreshes
+    from app.models.show import Show
+    from app.models.user import User
+    from app.models.watchlist import Watchlist
+
+    with pg_sessions() as db:
+        db.add(User(id="u1", username="alice", email="alice@test.com"))
+        db.add_all([
+            Show(id=10, name="A", in_production=True, tracking_count=0),
+            Show(id=11, name="B", in_production=True, tracking_count=0),
+        ])
+        db.flush()
+        db.add_all([
+            Watchlist(user_id="u1", content_type="tv", content_id=10),
+            Watchlist(user_id="u1", content_type="tv", content_id=11),
+        ])
+        db.commit()
+    # An empty TMDb answer makes each refresh a quick no-op.
+    monkeypatch.setattr("app.services.episode_service.get", lambda path, params=None: {})
+
+    def refresh_jobs(conn):
+        return conn.execute(
+            "SELECT status FROM jobs WHERE task = 'refresh_show'"
+        ).fetchall()
+
+    rows = []
+    runner = start_job_queue(TEST_URL)
+    try:
+        with psycopg.connect(TEST_URL, autocommit=True) as conn:
+            conn.execute(
+                "UPDATE schedules SET next_run_at = now() - interval '1 minute'"
+                " WHERE name = 'show-refresh'"
+            )
+            wakeup.wake()
+            deadline = time.monotonic() + 20
+            while time.monotonic() < deadline:
+                rows = refresh_jobs(conn)
+                if len(rows) == 2 and all(r[0] in ("succeeded", "dead") for r in rows):
+                    break
+                time.sleep(0.2)
+
+            # A second dispatch the same day (a retry, a late catch-up).
+            dispatch_show_refreshes()
+            again = refresh_jobs(conn)
+    finally:
+        stop_job_queue(runner)
+
+    assert [r[0] for r in rows] == ["succeeded", "succeeded"], rows
+    assert len(again) == 2
