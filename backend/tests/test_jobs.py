@@ -114,6 +114,19 @@ class TestSchedules:
 
         assert ("activity-cleanup", "cleanup_activity", {}, hourly(0)) in SCHEDULES
 
+    def test_nightly_jobs_run_at_3am_eastern(self):
+        from durable_queue.scheduler import daily
+        from app.jobs import SCHEDULES
+
+        at_3am = daily("03:00", "America/New_York")
+        for name, task_name in [
+            ("show-refresh", "dispatch_show_refreshes"),
+            ("vote-update", "update_vote_averages"),
+            ("cache-prune", "prune_cache"),
+            ("job-purge", "purge_finished_jobs"),
+        ]:
+            assert (name, task_name, {}, at_3am) in SCHEDULES
+
 
 class TestStartJobQueue:
     def test_registers_every_schedule_then_starts_the_runner(self):
@@ -413,3 +426,64 @@ class TestRefreshShow:
         from app.jobs.shows import refresh_show
 
         assert get_registered_task("refresh_show").fn is refresh_show
+
+
+class TestUpdateVoteAverages:
+    def test_updates_tracked_shows_vote_average(self, db, seed_users):
+        from app.jobs.catalog import update_vote_averages
+        from app.models.show import Show
+        from app.models.watchlist import Watchlist
+
+        db.add(Show(id=20, name="S", vote_average=5.0, tracking_count=0))
+        db.add(Watchlist(user_id="test-uid-1", content_type="tv", content_id=20))
+        db.commit()
+
+        with patch("app.services.vote_update_service.get", return_value={"vote_average": 7.5}):
+            update_vote_averages()
+
+        db.expire_all()
+        assert db.get(Show, 20).vote_average == 7.5
+
+    def test_registered_with_a_30_minute_ceiling(self):
+        from durable_queue.registry import get_registered_task
+
+        assert get_registered_task("update_vote_averages").max_execution_seconds == 1800
+
+
+class TestPruneCache:
+    def test_runs_the_prune_which_skips_while_disabled(self, db, caplog, monkeypatch):
+        from app.config import settings
+        from app.jobs.maintenance import prune_cache
+
+        monkeypatch.setattr(settings, "CACHE_PRUNE_ENABLED", False)
+        with caplog.at_level(logging.INFO):
+            prune_cache()
+
+        assert "cache prune: skipped" in caplog.text
+
+
+class TestPurgeFinishedJobs:
+    def test_deletes_week_old_jobs_until_a_short_batch(self):
+        from app.jobs import maintenance
+
+        conn = MagicMock()
+        with patch.object(maintenance, "get_connection", return_value=conn), \
+             patch.object(maintenance, "delete_completed_jobs",
+                          side_effect=[1000, 1000, 3]) as delete:
+            maintenance.purge_finished_jobs()
+
+        assert delete.call_args_list == [call(conn, 7 * 24 * 3600.0, batch=1000)] * 3
+        conn.close.assert_called_once()
+
+    def test_closes_its_connection_when_the_delete_fails(self):
+        import psycopg
+        from app.jobs import maintenance
+
+        conn = MagicMock()
+        with patch.object(maintenance, "get_connection", return_value=conn), \
+             patch.object(maintenance, "delete_completed_jobs",
+                          side_effect=psycopg.OperationalError("gone")), \
+             pytest.raises(psycopg.OperationalError):
+            maintenance.purge_finished_jobs()
+
+        conn.close.assert_called_once()
