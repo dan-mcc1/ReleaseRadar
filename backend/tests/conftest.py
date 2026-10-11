@@ -27,6 +27,9 @@ os.environ.setdefault("ENVIRONMENT", "test")
 # Use force-set, not setdefault, since pydantic-settings would otherwise read
 # SENTRY_DSN from a local .env file.
 os.environ["SENTRY_DSN"] = ""
+# The job queue needs Postgres. Forced off (not setdefault) so a test that
+# enters the app's lifespan can't reach a queue database named in a local .env.
+os.environ["RUN_JOB_QUEUE"] = "false"
 
 import pytest
 from datetime import date

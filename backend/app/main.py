@@ -74,8 +74,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from app.db.session import SessionLocal, engine
-from app.services.activity_service import delete_old_activity, lift_expired_moderation
-from app.services.recommendation_service import delete_old_recommendations
+from app.jobs import start_job_queue, stop_job_queue
 from app.routers.notifications import (
     send_daily_digest_to_all,
     send_season_premiere_alerts_to_all,
@@ -101,12 +100,6 @@ from app.services.collection_ingest_service import (
 logger = logging.getLogger(__name__)
 
 
-def _seconds_until_next_hour() -> float:
-    now = datetime.now(dt_timezone.utc)
-    next_hour = now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
-    return (next_hour - now).total_seconds()
-
-
 @contextmanager
 def _db_session():
     db = SessionLocal()
@@ -117,31 +110,6 @@ def _db_session():
         raise
     finally:
         db.close()
-
-
-async def _activity_cleanup_loop():
-    """Delete activity and old recommendations. Runs at startup, then at the
-    top of every hour alongside the digest and episode-alert planning, so the
-    hourly jobs share one database wake-up (Neon bills compute while awake)."""
-    while True:
-        try:
-            with _db_session() as db:
-                deleted_activity = delete_old_activity(db)
-                if deleted_activity:
-                    logger.info(
-                        "activity cleanup: removed %d old activity entries",
-                        deleted_activity,
-                    )
-                deleted_recs = delete_old_recommendations(db)
-                if deleted_recs:
-                    logger.info(
-                        "activity cleanup: removed %d expired recommendations",
-                        deleted_recs,
-                    )
-                lift_expired_moderation(db)
-        except Exception:
-            logger.exception("activity cleanup error")
-        await asyncio.sleep(_seconds_until_next_hour())
 
 
 async def _daily_digest_loop():
@@ -320,10 +288,17 @@ async def lifespan(app: FastAPI):
     # with the migration history. Tests still call create_all in conftest.py.
     import app.models  # noqa: F401 — registers all models with Base.metadata
 
+    runner = None
+    if settings.RUN_JOB_QUEUE:
+        # A connect and a few statements, before any request is served.
+        # Raises if the queue's database is unreachable, failing startup.
+        runner = start_job_queue()
+    else:
+        logger.info("RUN_JOB_QUEUE=false — job queue disabled on this replica")
+
     tasks: list[asyncio.Task] = []
     if settings.RUN_SCHEDULERS:
         tasks = [
-            asyncio.create_task(_activity_cleanup_loop()),
             asyncio.create_task(_daily_digest_loop()),
             asyncio.create_task(_episode_update_loop()),
             asyncio.create_task(_streaming_refresh_loop()),
@@ -339,6 +314,8 @@ async def lifespan(app: FastAPI):
         t.cancel()
     if tasks:
         await asyncio.gather(*tasks, return_exceptions=True)
+    if runner is not None:
+        await asyncio.to_thread(stop_job_queue, runner)
 
 
 app = FastAPI(title="ReleaseRadar API", lifespan=lifespan, redirect_slashes=True)

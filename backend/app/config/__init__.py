@@ -79,6 +79,11 @@ class Settings(BaseSettings):
     # loops will fire N times in parallel.
     RUN_SCHEDULERS: bool = True
 
+    # Whether this process runs durable-queue's worker and scheduler (app/jobs).
+    # Safe on every replica, since jobs and schedules are claimed under row
+    # locks. Set false to stop background jobs here, locally or as a back-out.
+    RUN_JOB_QUEUE: bool = True
+
     # Nightly deletion of cached shows/movies nobody references. Off until the
     # first run has been reviewed with scripts/prune_review.py.
     CACHE_PRUNE_ENABLED: bool = False

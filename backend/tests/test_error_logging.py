@@ -95,7 +95,7 @@ class TestBackgroundFailuresAreLogged:
     def test_scheduler_loop_failure_logs_traceback(self, caplog):
         from app import main
 
-        with patch.object(main, "delete_old_activity", side_effect=RuntimeError("db gone")), \
+        with patch.object(main, "plan_episode_alerts", side_effect=RuntimeError("db gone")), \
              patch.object(main.asyncio, "sleep", side_effect=asyncio.CancelledError), \
              caplog.at_level(logging.ERROR):
             # A private loop: asyncio.run() would clear the main thread's
@@ -103,7 +103,7 @@ class TestBackgroundFailuresAreLogged:
             loop = asyncio.new_event_loop()
             try:
                 with pytest.raises(asyncio.CancelledError):
-                    loop.run_until_complete(main._activity_cleanup_loop())
+                    loop.run_until_complete(main._episode_alert_loop())
             finally:
                 loop.close()
 

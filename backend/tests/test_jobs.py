@@ -5,6 +5,7 @@ The queue's SQL is Postgres-only, so these call task functions directly and
 patch the Runner; test_job_queue_postgres.py runs a job through a real queue.
 """
 
+import asyncio
 import json
 import logging
 from datetime import datetime, timedelta, timezone
@@ -171,3 +172,78 @@ class TestStartJobQueue:
         runner = MagicMock()
         jobs.stop_job_queue(runner)
         runner.stop.assert_called_once_with()
+
+
+def _run_lifespan():
+    """Enter and leave app.main's lifespan on a private event loop."""
+    from app import main
+
+    async def run():
+        async with main.lifespan(main.app):
+            pass
+
+    # A private loop: asyncio.run() would unset the thread's current loop,
+    # which other tests (e.g. test_tmdb_client) rely on.
+    loop = asyncio.new_event_loop()
+    try:
+        loop.run_until_complete(run())
+    finally:
+        loop.close()
+
+
+class TestLifespan:
+    @pytest.fixture(autouse=True)
+    def no_loops(self, monkeypatch):
+        from app.config import settings
+
+        monkeypatch.setattr(settings, "RUN_SCHEDULERS", False)
+
+    def test_suite_runs_with_the_job_queue_off(self):
+        from app.config import settings
+
+        # conftest forces it off, so no test can reach a queue database
+        # named in a local .env.
+        assert settings.RUN_JOB_QUEUE is False
+
+    def test_job_queue_off_starts_nothing(self, monkeypatch):
+        from app import main
+        from app.config import settings
+
+        monkeypatch.setattr(settings, "RUN_JOB_QUEUE", False)
+        with patch.object(main, "start_job_queue") as start, \
+             patch.object(main, "stop_job_queue") as stop:
+            _run_lifespan()
+
+        start.assert_not_called()
+        stop.assert_not_called()
+
+    def test_job_queue_on_starts_then_stops_the_runner(self, monkeypatch):
+        from app import main
+        from app.config import settings
+
+        monkeypatch.setattr(settings, "RUN_JOB_QUEUE", True)
+        with patch.object(main, "start_job_queue") as start, \
+             patch.object(main, "stop_job_queue") as stop:
+            _run_lifespan()
+
+        start.assert_called_once_with()
+        stop.assert_called_once_with(start.return_value)
+
+    def test_scheduler_loops_no_longer_run_the_activity_cleanup(self, monkeypatch):
+        from app import main
+        from app.config import settings
+
+        monkeypatch.setattr(settings, "RUN_SCHEDULERS", True)
+        monkeypatch.setattr(settings, "RUN_JOB_QUEUE", False)
+        started = []
+
+        def fake_create_task(coro):
+            started.append(coro.__name__)
+            coro.close()
+            return asyncio.get_running_loop().create_future()
+
+        with patch.object(main.asyncio, "create_task", fake_create_task):
+            _run_lifespan()
+
+        assert "_activity_cleanup_loop" not in started
+        assert "_daily_digest_loop" in started  # the other loops still start
