@@ -445,6 +445,67 @@ class TestRefreshActiveShows:
             refresh_episodes_for_active_shows(db)
         mock_one.assert_not_called()
 
+    def test_refreshes_each_active_show(self, db, seed_users):
+        from app.models.show import Show
+        from app.models.watchlist import Watchlist
+        from app.services.episode_service import refresh_episodes_for_active_shows
+
+        db.add_all([
+            Show(id=40, name="A", in_production=True, tracking_count=0),
+            Show(id=41, name="B", in_production=True, tracking_count=0),
+        ])
+        db.add_all([
+            Watchlist(user_id="test-uid-1", content_type="tv", content_id=40),
+            Watchlist(user_id="test-uid-1", content_type="tv", content_id=41),
+        ])
+        db.commit()
+
+        with patch("app.services.episode_service._refresh_one_show") as mock_one:
+            refresh_episodes_for_active_shows(db)
+
+        assert sorted(c.args for c in mock_one.call_args_list) == [(40, "A"), (41, "B")]
+
+
+class TestActiveShowIds:
+    def test_tracked_in_production_shows_once_each(self, db, seed_users):
+        from app.models.currently_watching import CurrentlyWatching
+        from app.models.show import Show
+        from app.models.watched import Watched
+        from app.models.watchlist import Watchlist
+        from app.services.episode_service import active_show_ids
+
+        db.add_all([
+            Show(id=20, name="On Watchlist and Watched", in_production=True, tracking_count=0),
+            Show(id=10, name="Currently watching", in_production=True, tracking_count=0),
+        ])
+        db.add_all([
+            Watchlist(user_id="test-uid-1", content_type="tv", content_id=20),
+            Watched(user_id="test-uid-2", content_type="tv", content_id=20),
+            CurrentlyWatching(user_id="test-uid-1", content_type="tv", content_id=10),
+        ])
+        db.commit()
+
+        assert active_show_ids(db) == [10, 20]
+
+    def test_excludes_untracked_ended_and_movie_ids(self, db, seed_users):
+        from app.models.show import Show
+        from app.models.watched import Watched
+        from app.models.watchlist import Watchlist
+        from app.services.episode_service import active_show_ids
+
+        db.add_all([
+            Show(id=30, name="Untracked", in_production=True, tracking_count=0),
+            Show(id=31, name="Ended", in_production=False, tracking_count=0),
+            Show(id=32, name="Shares a movie's id", in_production=True, tracking_count=0),
+        ])
+        db.add_all([
+            Watched(user_id="test-uid-1", content_type="tv", content_id=31),
+            Watchlist(user_id="test-uid-1", content_type="movie", content_id=32),
+        ])
+        db.commit()
+
+        assert active_show_ids(db) == []
+
 
 # ── check_and_reactivate_watched_shows ───────────────────────────────────
 
@@ -596,6 +657,31 @@ class TestReactivateWatchedShows:
         ):
             # Should not raise
             check_and_reactivate_watched_shows(db)
+
+    def test_show_id_limits_reactivation_to_that_show(self, db, seed_users):
+        from app.models.episode import Episode
+        from app.models.show import Show
+        from app.models.watched import Watched
+        from app.models.watchlist import Watchlist
+        from app.services.episode_service import check_and_reactivate_watched_shows
+
+        past = date.today() - timedelta(days=1)
+        for show_id in (50, 51):
+            db.add(Show(id=show_id, name=f"S{show_id}", in_production=True, tracking_count=0))
+            db.flush()
+            db.add(Episode(id=show_id * 100, show_id=show_id, season_number=1,
+                           episode_number=1, name="Pilot", air_date=past))
+            db.add(Watched(user_id="test-uid-1", content_type="tv", content_id=show_id))
+        db.commit()
+
+        with patch("app.services.episode_service.send_new_season_available_email"):
+            check_and_reactivate_watched_shows(db, show_id=50)
+
+        db.expire_all()
+        assert db.query(Watchlist).filter_by(content_id=50).first() is not None
+        assert db.query(Watched).filter_by(content_id=50).first() is None
+        assert db.query(Watched).filter_by(content_id=51).first() is not None
+        assert db.query(Watchlist).filter_by(content_id=51).first() is None
 
 
 class TestReactivationDetails:
