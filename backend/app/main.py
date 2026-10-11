@@ -79,12 +79,6 @@ from app.routers.notifications import (
     send_daily_digest_to_all,
     send_season_premiere_alerts_to_all,
 )
-from app.services.vote_update_service import update_all_vote_averages
-from app.services.episode_service import (
-    refresh_episodes_for_active_shows,
-    check_and_reactivate_watched_shows,
-)
-from app.services.cache_prune_service import prune_stale_cache
 from app.services.streaming_notification_service import refresh_streaming_providers
 from app.services.trailer_notification_service import refresh_trailers
 from app.services.episode_alert_service import (
@@ -140,26 +134,6 @@ async def _daily_digest_loop():
         except Exception:
             logger.exception("daily digest loop error")
             await asyncio.sleep(60)
-
-
-async def _episode_update_loop():
-    """Refresh show's episodes and TMDB vote_average for all shows and movies once a day at 3am."""
-    eastern = ZoneInfo("America/New_York")
-    while True:
-        now = datetime.now(eastern)
-        next_run = now.replace(hour=3, minute=0, second=0, microsecond=0)
-        if now >= next_run:
-            next_run += timedelta(days=1)
-        await asyncio.sleep((next_run - now).total_seconds())
-        logger.info("vote update: starting daily vote_average refresh")
-        try:
-            with _db_session() as db:
-                refresh_episodes_for_active_shows(db)
-                check_and_reactivate_watched_shows(db)
-                await asyncio.to_thread(update_all_vote_averages, db)
-                prune_stale_cache(db)
-        except Exception:
-            logger.exception("vote update error")
 
 
 async def _trailer_refresh_loop():
@@ -300,7 +274,6 @@ async def lifespan(app: FastAPI):
     if settings.RUN_SCHEDULERS:
         tasks = [
             asyncio.create_task(_daily_digest_loop()),
-            asyncio.create_task(_episode_update_loop()),
             asyncio.create_task(_streaming_refresh_loop()),
             asyncio.create_task(_trailer_refresh_loop()),
             asyncio.create_task(_stripe_reconciliation_loop()),

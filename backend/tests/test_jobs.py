@@ -242,7 +242,9 @@ class TestLifespan:
         start.assert_called_once_with()
         stop.assert_called_once_with(start.return_value)
 
-    def test_scheduler_loops_no_longer_run_the_activity_cleanup(self, monkeypatch):
+    @staticmethod
+    def _loops_started(monkeypatch):
+        """Names of the loops lifespan starts with RUN_SCHEDULERS on."""
         from app import main
         from app.config import settings
 
@@ -257,9 +259,19 @@ class TestLifespan:
 
         with patch.object(main.asyncio, "create_task", fake_create_task):
             _run_lifespan()
+        return started
+
+    def test_scheduler_loops_no_longer_run_the_activity_cleanup(self, monkeypatch):
+        started = self._loops_started(monkeypatch)
 
         assert "_activity_cleanup_loop" not in started
         assert "_daily_digest_loop" in started  # the other loops still start
+
+    def test_scheduler_loops_no_longer_run_the_3am_refresh(self, monkeypatch):
+        started = self._loops_started(monkeypatch)
+
+        assert "_episode_update_loop" not in started
+        assert "_streaming_refresh_loop" in started
 
 
 class _EveningInNewYork(datetime):
