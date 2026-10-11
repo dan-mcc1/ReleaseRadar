@@ -552,21 +552,25 @@ def refresh_episodes_for_show(db: Session, show_id: int):
                     row.episode_type = new_type
                     changed = True
             else:
-                db.add(
-                    Episode(
-                        id=ep_id,
-                        show_id=show_id,
-                        season_number=sn,
-                        episode_number=ep_num,
-                        name=new_name,
-                        overview=new_overview,
-                        air_date=new_air_date,
-                        runtime=new_runtime,
-                        still_path=new_still,
-                        vote_average=new_vote,
-                        episode_type=new_type,
-                    )
+                new_episode = Episode(
+                    id=ep_id,
+                    show_id=show_id,
+                    season_number=sn,
+                    episode_number=ep_num,
+                    name=new_name,
+                    overview=new_overview,
+                    air_date=new_air_date,
+                    runtime=new_runtime,
+                    still_path=new_still,
+                    vote_average=new_vote,
+                    episode_type=new_type,
                 )
+                db.add(new_episode)
+                # Tracked like sync_show_episodes does, so a season walked
+                # twice (two Season rows after TMDb reissued its id) or an
+                # episode TMDb lists twice isn't inserted twice.
+                existing[ep_id] = new_episode
+                existing_by_pos[(sn, ep_num)] = new_episode
                 changed = True
 
     if changed:

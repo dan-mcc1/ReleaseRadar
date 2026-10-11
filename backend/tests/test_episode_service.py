@@ -421,6 +421,30 @@ class TestRefreshEpisodesForShow:
         with patch("app.services.episode_service.get", side_effect=Exception("err")):
             refresh_episodes_for_show(db, 802)  # Should not raise
 
+    def test_season_stored_twice_adds_each_new_episode_once(self, db):
+        """TMDb reissued a season under a new id, so the show has two Season
+        rows with the same number (seen for The Rookie's season 9). The refresh
+        walks that season twice; a new episode must still be inserted once."""
+        from app.models.show import Show
+        from app.models.season import Season
+        from app.models.episode import Episode
+        from app.services.episode_service import refresh_episodes_for_show
+
+        db.add(Show(id=803, name="Reissued", number_of_seasons=9, in_production=True,
+                    tracking_count=0))
+        db.flush()
+        db.add(Season(id=512798, show_id=803, season_number=9, episode_count=0))
+        db.add(Season(id=514233, show_id=803, season_number=9, episode_count=0))
+        db.commit()
+
+        data = {"episodes": [{"id": 7708032, "episode_number": 1, "name": "Episode 1",
+                              "air_date": date(2027, 1, 1)}]}
+        with patch("app.services.episode_service.get", return_value=data):
+            refresh_episodes_for_show(db, 803)
+
+        db.expire_all()
+        assert [e.id for e in db.query(Episode).filter_by(show_id=803).all()] == [7708032]
+
 
 # ── refresh_episodes_for_active_shows ────────────────────────────────────
 
