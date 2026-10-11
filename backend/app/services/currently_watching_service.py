@@ -1,22 +1,13 @@
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, func, union_all, select, literal, null
+from app.db.upsert import insert_if_absent
 from app.models.currently_watching import CurrentlyWatching
 from app.models.movie import Movie
 from app.models.show import Show
-from app.models.watchlist import Watchlist
-from app.models.watched import Watched
 from app.models.episode import Episode
 from app.models.episode_watched import EpisodeWatched
-from app.services.watchlist_service import _is_tracked_on_any
-from app.services.media_upsert import ensure_movie_stub_in_db, ensure_show_stub_in_db, decrement_tracking_count
-
-
-def _is_on_other_list(
-    db: Session, user_id: str, content_type: str, content_id: int
-) -> bool:
-    """Return True if the item exists on Watchlist or Watched."""
-    return _is_tracked_on_any(db, user_id, content_type, content_id, Watchlist, Watched)
+from app.services.media_upsert import ensure_movie_stub_in_db, ensure_show_stub_in_db, recount_tracking
 
 
 def _get_currently_watching_items(db: Session, user_id: str, content_type: str):
@@ -113,24 +104,26 @@ def add_to_currently_watching(
     if existing:
         return existing
 
-    already_tracked = _is_on_other_list(db, user_id, content_type, content_id)
-
-    entry = CurrentlyWatching(
-        user_id=user_id,
-        content_type=content_type,
-        content_id=content_id,
+    entry_id = insert_if_absent(
+        db,
+        CurrentlyWatching,
+        {"user_id": user_id, "content_type": content_type, "content_id": content_id},
+        ("user_id", "content_type", "content_id"),
     )
-    db.add(entry)
+    # None: a concurrent request (e.g. double-click) added it first.
+    if entry_id is not None:
+        if content_type == "movie":
+            ensure_movie_stub_in_db(db, content_id)
+        elif content_type == "tv":
+            ensure_show_stub_in_db(db, content_id)
+        recount_tracking(db, content_type, [content_id])
+        db.commit()
 
-    if content_type == "movie":
-        ensure_movie_stub_in_db(db, content_id, already_tracked)
-    elif content_type == "tv":
-        ensure_show_stub_in_db(db, content_id, already_tracked)
-
-    db.commit()
-    db.refresh(entry)
-
-    return entry
+    return (
+        db.query(CurrentlyWatching)
+        .filter_by(user_id=user_id, content_type=content_type, content_id=content_id)
+        .one()
+    )
 
 
 def remove_from_currently_watching(
@@ -144,11 +137,7 @@ def remove_from_currently_watching(
     if not entry:
         return {"message": "Item not found in currently watching"}
     db.delete(entry)
-
-    still_tracked = _is_on_other_list(db, user_id, content_type, content_id)
-
-    if not still_tracked:
-        decrement_tracking_count(db, content_type, content_id)
+    recount_tracking(db, content_type, [content_id])
 
     if commit:
         db.commit()

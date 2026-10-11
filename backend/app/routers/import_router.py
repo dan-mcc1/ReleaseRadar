@@ -13,7 +13,12 @@ from app.services.tmdb_client import get as tmdb_get
 from app.services.tmdb_movies import search_movies, fetch_movie_from_tmdb
 from app.services.tmdb_tv import fetch_show_from_tmdb
 from app.services.tmdb_search import get_tv_search_results
-from app.services.media_upsert import ensure_movie_in_db, ensure_show_in_db, slim_tmdb_payload
+from app.services.media_upsert import (
+    ensure_movie_in_db,
+    ensure_show_in_db,
+    recount_tracking,
+    slim_tmdb_payload,
+)
 from app.services.watchlist_service import add_to_watchlist
 from app.services.episode_service import maybe_sync_show_episodes, sync_season_episodes
 from app.services.watched_episode_service import maybe_auto_complete_show
@@ -295,17 +300,13 @@ async def import_letterboxd(
 
             try:
                 if media_type == "movie":
-                    already_tracked = db.query(Movie).filter_by(id=tmdb_id).first() is not None
                     media = ensure_movie_in_db(
-                        db, tmdb_id, already_tracked,
-                        tmdb_data=prefetched.get(("movie", tmdb_id)),
+                        db, tmdb_id, tmdb_data=prefetched.get(("movie", tmdb_id)),
                     )
                     title = media.title
                 else:
-                    already_tracked = db.query(Show).filter_by(id=tmdb_id).first() is not None
                     media = ensure_show_in_db(
-                        db, tmdb_id, already_tracked,
-                        tmdb_data=prefetched.get(("tv", tmdb_id)),
+                        db, tmdb_id, tmdb_data=prefetched.get(("tv", tmdb_id)),
                     )
                     maybe_sync_show_episodes(db, tmdb_id)
                     title = media.name
@@ -325,6 +326,7 @@ async def import_letterboxd(
                     rating=row["rating"],
                 )
                 db.add(entry)
+                recount_tracking(db, media_type, [media.id])
                 db.commit()
                 imported += 1
                 results.append({
@@ -360,17 +362,13 @@ async def import_letterboxd(
 
             try:
                 if media_type == "movie":
-                    already_tracked = db.query(Movie).filter_by(id=tmdb_id).first() is not None
                     media = ensure_movie_in_db(
-                        db, tmdb_id, already_tracked,
-                        tmdb_data=prefetched.get(("movie", tmdb_id)),
+                        db, tmdb_id, tmdb_data=prefetched.get(("movie", tmdb_id)),
                     )
                     title = media.title
                 else:
-                    already_tracked = db.query(Show).filter_by(id=tmdb_id).first() is not None
                     media = ensure_show_in_db(
-                        db, tmdb_id, already_tracked,
-                        tmdb_data=prefetched.get(("tv", tmdb_id)),
+                        db, tmdb_id, tmdb_data=prefetched.get(("tv", tmdb_id)),
                     )
                     maybe_sync_show_episodes(db, tmdb_id)
                     title = media.name
@@ -1038,18 +1036,12 @@ async def import_tvtime(
     # syncs would both try to insert the same Show row and poison the session.
     for sid in needed_show_ids:
         try:
-            ensure_show_in_db(
-                db, sid, db.query(Show).filter_by(id=sid).first() is not None,
-                tmdb_data=prefetched.get(("tv", sid)),
-            )
+            ensure_show_in_db(db, sid, tmdb_data=prefetched.get(("tv", sid)))
         except Exception:
             db.rollback()
     for mid in needed_movie_ids:
         try:
-            ensure_movie_in_db(
-                db, mid, db.query(Movie).filter_by(id=mid).first() is not None,
-                tmdb_data=prefetched.get(("movie", mid)),
-            )
+            ensure_movie_in_db(db, mid, tmdb_data=prefetched.get(("movie", mid)))
         except Exception:
             db.rollback()
     try:
@@ -1210,10 +1202,7 @@ async def import_tvtime(
             shows_skipped += 1
             continue
         try:
-            ensure_show_in_db(
-                db, sid, db.query(Show).filter_by(id=sid).first() is not None,
-                tmdb_data=prefetched.get(("tv", sid)),
-            )
+            ensure_show_in_db(db, sid, tmdb_data=prefetched.get(("tv", sid)))
             add_to_watchlist(db, uid, "tv", sid)
             shows_watchlisted += 1
         except Exception as e:
@@ -1270,17 +1259,13 @@ async def import_tvtime(
 
         try:
             if media_type == "movie":
-                already_tracked = db.query(Movie).filter_by(id=tmdb_id).first() is not None
                 media = ensure_movie_in_db(
-                    db, tmdb_id, already_tracked,
-                    tmdb_data=prefetched.get(("movie", tmdb_id)),
+                    db, tmdb_id, tmdb_data=prefetched.get(("movie", tmdb_id)),
                 )
                 resolved_title = media.title
             else:
-                already_tracked = db.query(Show).filter_by(id=tmdb_id).first() is not None
                 media = ensure_show_in_db(
-                    db, tmdb_id, already_tracked,
-                    tmdb_data=prefetched.get(("tv", tmdb_id)),
+                    db, tmdb_id, tmdb_data=prefetched.get(("tv", tmdb_id)),
                 )
                 resolved_title = media.name
         except Exception as e:
@@ -1309,6 +1294,7 @@ async def import_tvtime(
                     user_id=uid, content_type=media_type, content_id=tmdb_id,
                     watched_at=watched_at,
                 ))
+                recount_tracking(db, media_type, [tmdb_id])
                 db.commit()
                 movies_imported += 1
                 movie_results_out.append({

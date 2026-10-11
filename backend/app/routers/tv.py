@@ -8,10 +8,11 @@ from app.models.season import Season
 from app.models.show import Show
 from app.services.media_serializers import _show_query_options, serialize_show
 from app.services.provider_utils import normalize_tmdb_watch_providers
-from app.services.tmdb_client import async_get
+from app.services.tmdb_client import normalize_append
 from app.services.tmdb_tv import (
     fetch_season_data_from_tmdb,
     fetch_show_from_tmdb_cached,
+    get_episode_details,
     get_full_season_info,
 )
 from app.core.http_cache import DETAIL_CACHE
@@ -30,7 +31,9 @@ async def get_show_info(
     )
     if show:
         return serialize_show(show)
-    payload = await run_in_threadpool(fetch_show_from_tmdb_cached, id, append)
+    payload = await run_in_threadpool(
+        fetch_show_from_tmdb_cached, id, normalize_append(append)
+    )
     if not payload:
         raise HTTPException(status_code=404, detail="Show not found")
     return payload
@@ -231,13 +234,9 @@ async def full_season_info(id: int, season_number: int, db: Session = Depends(ge
 @router.get("/{id}/season/{season_number}/episode/{episode_number}", dependencies=[DETAIL_CACHE])
 async def get_episode_info(id: int, season_number: int, episode_number: int):
     try:
-        data = await async_get(
-            f"/tv/{id}/season/{season_number}/episode/{episode_number}",
-            params={"append_to_response": "credits,images,videos,external_ids"},
-        )
+        data = await run_in_threadpool(get_episode_details, id, season_number, episode_number)
     except Exception:
         raise HTTPException(status_code=404, detail="Episode not found")
     if not data:
         raise HTTPException(status_code=404, detail="Episode not found")
-    data["show_id"] = id
     return data

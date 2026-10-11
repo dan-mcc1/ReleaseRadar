@@ -286,28 +286,6 @@ class TestAccountDelete:
         rows = db.query(EpisodeWatched).filter_by(user_id="test-uid-1").all()
         assert rows == []
 
-    def test_delete_decrements_tracking_count(self, client, db, seed_movie, seed_users):
-        from app.models.movie import Movie
-        from app.models.watchlist import Watchlist
-        from datetime import datetime
-
-        # Seed movie already has tracking_count 0; add watchlist row
-        db.query(Movie).filter_by(id=550).update({"tracking_count": 1})
-        db.add(
-            Watchlist(
-                user_id="test-uid-1",
-                content_type="movie",
-                content_id=550,
-                added_at=datetime.utcnow(),
-            )
-        )
-        db.commit()
-        client.delete("/user/account")
-        db.expire_all()
-        # tracking_count drops to 0 → movie deleted
-        m = db.query(Movie).filter_by(id=550).first()
-        assert m is None
-
     def test_delete_does_not_remove_content_tracked_by_others(self, db, seed_movie):
         from app.models.movie import Movie
         from app.models.watchlist import Watchlist

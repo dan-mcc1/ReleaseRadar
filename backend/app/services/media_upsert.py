@@ -1,17 +1,22 @@
 # app/services/media_upsert.py
 import logging
+from sqlalchemy import func, select, union, update
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
+from app.models.currently_watching import CurrentlyWatching
 from app.models.movie import Movie
 from app.models.show import Show
 from app.models.genre import Genre, ShowGenre, MovieGenre
 from app.models.provider import Provider, ShowProvider, MovieProvider
 from app.models.season import Season
+from app.models.watched import Watched
+from app.models.watchlist import Watchlist
 from app.services.tmdb_movies import fetch_movie_from_tmdb
 from app.services.tmdb_tv import fetch_show_from_tmdb
 from app.services.provider_utils import canonical_provider_id, canonical_provider_name
 from app.services.tvmaze_service import fetch_show_air_time
 from app.db.session import SessionLocal
+from app.db.upsert import insert_if_absent
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +33,11 @@ def _upsert_genres(db: Session, genres_data: list, link_model, **link_kwargs):
 
     # TMDb occasionally returns the same genre twice on a movie; dedupe by id
     # so we don't try to insert (movie_id, genre_id) twice in one batch.
-    unique_genres = {g["id"]: g for g in genres_data if g.get("id") is not None}
+    # Ascending id order: concurrent ingests then lock rows in the same order
+    # instead of deadlocking.
+    unique_genres = dict(sorted(
+        (g["id"], g) for g in genres_data if g.get("id") is not None
+    ))
     if not unique_genres:
         return
 
@@ -88,6 +97,9 @@ def _upsert_providers(db: Session, us_providers: dict, link_model, **link_kwargs
         return
     from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+    # Ascending id order: concurrent ingests then lock Provider rows in the
+    # same order instead of deadlocking.
+    provider_map = dict(sorted(provider_map.items()))
     pids = list(provider_map.keys())
 
     # Trusted entries (TMDb returned the canonical row itself) overwrite any
@@ -250,18 +262,15 @@ def slim_tmdb_payload(data: dict | None) -> dict | None:
 
 
 def ensure_movie_in_db(
-    db: Session, content_id: int, already_tracked: bool, tmdb_data: dict | None = None
+    db: Session, content_id: int, tmdb_data: dict | None = None
 ) -> Movie:
     """
     Return the Movie row for content_id, creating it from TMDB if absent.
-    Increments tracking_count when the row already exists and isn't tracked elsewhere.
     Pass tmdb_data (e.g. an import's prefetched, slimmed payload) to skip the fetch.
+    Callers that put the title on a list call recount_tracking afterwards.
     """
     movie = db.query(Movie).filter_by(id=content_id).first()
     if movie:
-        if not already_tracked:
-            movie.tracking_count += 1
-            movie.updated_at = datetime.now(timezone.utc)
         return movie
 
     movie_data = tmdb_data or fetch_movie_from_tmdb(
@@ -294,7 +303,7 @@ def ensure_movie_in_db(
         runtime=movie_data.get("runtime"),
         status=movie_data.get("status"),
         title=movie_data.get("title"),
-        tracking_count=1,
+        tracking_count=0,
         vote_average=movie_data.get("vote_average"),
         certification=certification,
         updated_at=datetime.now(timezone.utc),
@@ -364,18 +373,15 @@ def populate_movie_full(
 
 
 def ensure_show_in_db(
-    db: Session, content_id: int, already_tracked: bool, tmdb_data: dict | None = None
+    db: Session, content_id: int, tmdb_data: dict | None = None
 ) -> Show:
     """
     Return the Show row for content_id, creating it from TMDB if absent.
-    Increments tracking_count when the row already exists and isn't tracked elsewhere.
     Pass tmdb_data (e.g. an import's prefetched, slimmed payload) to skip the fetch.
+    Callers that put the title on a list call recount_tracking afterwards.
     """
     show = db.query(Show).filter_by(id=content_id).first()
     if show:
-        if not already_tracked:
-            show.tracking_count += 1
-            show.updated_at = datetime.now(timezone.utc)
         return show
 
     show_data = tmdb_data or fetch_show_from_tmdb(
@@ -396,7 +402,7 @@ def ensure_show_in_db(
         name=show_data["name"],
         backdrop_path=show_data.get("backdrop_path"),
         logo_path=logo,
-        last_air_date=show_data.get("last_air_date"),
+        last_air_date=show_data.get("last_air_date") or None,
         homepage=show_data.get("homepage"),
         in_production=show_data.get("in_production"),
         number_of_seasons=show_data.get("number_of_seasons"),
@@ -405,9 +411,9 @@ def ensure_show_in_db(
         tagline=show_data.get("tagline"),
         overview=show_data.get("overview"),
         type=show_data.get("type"),
-        first_air_date=show_data.get("first_air_date"),
+        first_air_date=show_data.get("first_air_date") or None,
         poster_path=show_data.get("poster_path"),
-        tracking_count=1,
+        tracking_count=0,
         air_time=air_time,
         air_timezone=air_timezone,
         vote_average=show_data.get("vote_average"),
@@ -422,19 +428,31 @@ def ensure_show_in_db(
     return show
 
 
-def decrement_tracking_count(db: Session, content_type: str, content_id: int) -> None:
-    """Decrement tracking_count by one (floored at 0) for a movie or show."""
-    now = datetime.now(timezone.utc)
-    if content_type == "tv":
-        db.query(Show).filter(Show.id == content_id, Show.tracking_count > 0).update(
-            {Show.tracking_count: Show.tracking_count - 1, Show.updated_at: now},
-            synchronize_session=False,
-        )
-    elif content_type == "movie":
-        db.query(Movie).filter(Movie.id == content_id, Movie.tracking_count > 0).update(
-            {Movie.tracking_count: Movie.tracking_count - 1, Movie.updated_at: now},
-            synchronize_session=False,
-        )
+def recount_tracking(db: Session, content_type: str, content_ids) -> None:
+    """Set tracking_count to the number of distinct users that have each title
+    on Watchlist, Currently Watching or Watched.
+
+    Recomputed from the list rows rather than adjusted by +1/-1, so a count
+    that drifted (concurrent adds, older code paths) is corrected the next time
+    anyone adds or removes the title. Flushes first so pending list rows count.
+    """
+    ids = sorted(set(content_ids))
+    if not ids:
+        return
+    model = Show if content_type == "tv" else Movie
+    db.flush()
+    trackers = union(*(
+        select(lst.user_id)
+        .where(lst.content_type == content_type, lst.content_id == model.id)
+        .correlate(model)
+        for lst in (Watchlist, CurrentlyWatching, Watched)
+    )).subquery()
+    db.execute(
+        update(model)
+        .where(model.id.in_(ids))
+        .values(tracking_count=select(func.count()).select_from(trackers).scalar_subquery())
+        .execution_options(synchronize_session=False)
+    )
 
 
 # -------------------------
@@ -442,7 +460,7 @@ def decrement_tracking_count(db: Session, content_type: str, content_id: int) ->
 # -------------------------
 
 
-def ensure_show_stub_in_db(db: Session, content_id: int, already_tracked: bool) -> Show:
+def ensure_show_stub_in_db(db: Session, content_id: int) -> Show:
     """
     Fast-path: return the existing Show row or insert a minimal stub (no TMDB call).
     Call populate_show_bg as a background task after the response to fill in metadata.
@@ -450,17 +468,15 @@ def ensure_show_stub_in_db(db: Session, content_id: int, already_tracked: bool) 
     """
     show = db.query(Show).filter_by(id=content_id).first()
     if show:
-        if not already_tracked:
-            show.tracking_count += 1
-            show.updated_at = datetime.now(timezone.utc)
         return show
-    show = Show(id=content_id, name="", tracking_count=1, updated_at=None)
-    db.add(show)
-    db.flush()
-    return show
+    # ON CONFLICT: another request may insert the same new title concurrently.
+    insert_if_absent(
+        db, Show, {"id": content_id, "name": "", "tracking_count": 0}, ("id",)
+    )
+    return db.query(Show).filter_by(id=content_id).one()
 
 
-def ensure_movie_stub_in_db(db: Session, content_id: int, already_tracked: bool) -> Movie:
+def ensure_movie_stub_in_db(db: Session, content_id: int) -> Movie:
     """
     Fast-path: return the existing Movie row or insert a minimal stub (no TMDB call).
     Call populate_movie_bg as a background task after the response to fill in metadata.
@@ -468,14 +484,10 @@ def ensure_movie_stub_in_db(db: Session, content_id: int, already_tracked: bool)
     """
     movie = db.query(Movie).filter_by(id=content_id).first()
     if movie:
-        if not already_tracked:
-            movie.tracking_count += 1
-            movie.updated_at = datetime.now(timezone.utc)
         return movie
-    movie = Movie(id=content_id, tracking_count=1, updated_at=None)
-    db.add(movie)
-    db.flush()
-    return movie
+    # ON CONFLICT: another request may insert the same new title concurrently.
+    insert_if_absent(db, Movie, {"id": content_id, "tracking_count": 0}, ("id",))
+    return db.query(Movie).filter_by(id=content_id).one()
 
 
 def populate_show_bg(content_id: int) -> None:
@@ -503,7 +515,8 @@ def populate_show_bg(content_id: int) -> None:
         show.name = show_data["name"]
         show.backdrop_path = show_data.get("backdrop_path")
         show.logo_path = logo
-        show.last_air_date = show_data.get("last_air_date")
+        # TMDb sends "" for unknown dates.
+        show.last_air_date = show_data.get("last_air_date") or None
         show.homepage = show_data.get("homepage")
         show.in_production = show_data.get("in_production")
         show.number_of_seasons = show_data.get("number_of_seasons")
@@ -512,7 +525,7 @@ def populate_show_bg(content_id: int) -> None:
         show.tagline = show_data.get("tagline")
         show.overview = show_data.get("overview")
         show.type = show_data.get("type")
-        show.first_air_date = show_data.get("first_air_date")
+        show.first_air_date = show_data.get("first_air_date") or None
         show.poster_path = show_data.get("poster_path")
         show.air_time = air_time
         show.air_timezone = air_timezone

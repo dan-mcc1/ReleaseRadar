@@ -516,3 +516,48 @@ class TestReorderWatchlist:
         )
         # After renorm: 1000, 2000, 3000
         assert all_keys == [1000, 2000, 3000]
+
+
+class TestSeasonFetchesOnAdd:
+    """Every season fetch is a TMDb call; adding a show shouldn't repeat them."""
+
+    def _run_add(self, client, path, show_id, show_data):
+        from unittest.mock import patch
+
+        calls = []
+
+        def fake_get(path_, params=None):
+            calls.append(path_)
+            sn = int(path_.rsplit("/", 1)[1])
+            return {"episodes": [{"id": show_id * 100 + sn, "episode_number": 1,
+                                  "name": f"S{sn}E1", "air_date": None}]}
+
+        with patch("app.services.media_upsert.fetch_show_from_tmdb", return_value=show_data), \
+             patch("app.services.media_upsert.fetch_show_air_time", return_value=(None, None)), \
+             patch("app.services.episode_service.get", side_effect=fake_get), \
+             patch("app.services.streaming_notification_service.fetch_show_from_tmdb", return_value={}), \
+             patch("app.services.trailer_notification_service.fetch_show_from_tmdb", return_value={}):
+            r = client.post(path, json={"content_type": "tv", "content_id": show_id})
+        assert r.status_code == 200
+        return sorted(c for c in calls if "/season/" in c)
+
+    def test_new_show_fetches_each_season_once(self, client, seed_users):
+        show_data = {
+            "id": 777, "name": "New Show", "number_of_seasons": 2,
+            "genres": [], "watch/providers": {"results": {}},
+            "images": {"logos": []}, "content_ratings": {"results": []},
+            "seasons": [
+                {"id": 7771, "season_number": 1, "episode_count": 1},
+                {"id": 7772, "season_number": 2, "episode_count": 1},
+            ],
+        }
+        season_calls = self._run_add(client, "/watchlist/add", 777, show_data)
+        assert season_calls == ["/tv/777/season/1", "/tv/777/season/2"]
+
+    def test_show_with_stored_episodes_is_not_refetched(self, client, db, seed_users, seed_show):
+        from datetime import datetime, timezone
+        seed_show.updated_at = datetime.now(timezone.utc)  # already populated
+        db.commit()
+
+        season_calls = self._run_add(client, "/currently-watching/add", 1396, {})
+        assert season_calls == []

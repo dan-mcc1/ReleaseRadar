@@ -774,13 +774,41 @@ export default function NavBar() {
       esRef.current?.close();
       esRef.current = null;
 
-      if (!auth.currentUser) return;
+      // Signed out or switched accounts since this attempt was scheduled.
+      if (!auth.currentUser || connectedUidRef.current !== uid) return;
 
-      const tokenRes = await apiFetch("/events/token", { method: "POST" });
-      if (!tokenRes.ok) return;
-      const { session_token } = await tokenRes.json();
+      // Exponential backoff with jitter, capped at 30s. Used both when the
+      // stream drops and when /events/token fails (rate limit, deploy), so a
+      // failed attempt never leaves the badges without a live connection.
+      const scheduleReconnect = () => {
+        if (reconnectTimerRef.current !== null) {
+          clearTimeout(reconnectTimerRef.current);
+        }
+        const attempt = reconnectAttemptsRef.current++;
+        const base = Math.min(2000 * 2 ** attempt, 30_000);
+        const delay = base / 2 + Math.random() * (base / 2);
+        reconnectTimerRef.current = setTimeout(() => {
+          reconnectTimerRef.current = null;
+          connectSSE(uid);
+        }, delay);
+      };
+
+      let sessionToken: string;
+      try {
+        const tokenRes = await apiFetch("/events/token", { method: "POST" });
+        if (!tokenRes.ok) {
+          scheduleReconnect();
+          return;
+        }
+        sessionToken = (await tokenRes.json()).session_token;
+      } catch {
+        scheduleReconnect();
+        return;
+      }
+      if (connectedUidRef.current !== uid) return;
+
       const es = new EventSource(
-        `${API_URL}/events/stream?token=${encodeURIComponent(session_token)}`,
+        `${API_URL}/events/stream?token=${encodeURIComponent(sessionToken)}`,
       );
       esRef.current = es;
 
@@ -827,17 +855,7 @@ export default function NavBar() {
         esRef.current = null;
 
         queryClient.invalidateQueries({ queryKey: queryKeys.navCounts(uid) });
-
-        // Exponential backoff with jitter, capped at 30s. Prevents a hammering
-        // reconnect loop if the server (or /events/token) is down.
-        const attempt = reconnectAttemptsRef.current++;
-        const base = Math.min(2000 * 2 ** attempt, 30_000);
-        const delay = base / 2 + Math.random() * (base / 2);
-
-        reconnectTimerRef.current = setTimeout(() => {
-          reconnectTimerRef.current = null;
-          connectSSE(uid);
-        }, delay);
+        scheduleReconnect();
       };
     },
     [queryClient],

@@ -579,7 +579,7 @@ def add_media(
         existing_show = db.query(Show).filter_by(id=content_id).first()
         if not (existing_show and existing_show.name):
             try:
-                ensure_show_in_db(db, content_id, already_tracked=True)
+                ensure_show_in_db(db, content_id)
             except ValueError:
                 raise HTTPException(
                     status_code=404,
@@ -729,7 +729,7 @@ def list_media(db: Session, community_id: int, viewer_id: str) -> dict:
                 _logger.exception("list_media: heal failed for movie %d", mid)
         for sid in missing_shows:
             try:
-                s = ensure_show_in_db(db, sid, already_tracked=True)
+                s = ensure_show_in_db(db, sid)
                 if s and s.name:
                     shows[sid] = s
                     healed = True

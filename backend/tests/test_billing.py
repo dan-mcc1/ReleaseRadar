@@ -52,6 +52,26 @@ def _fake_stripe_sub(status="active", cancel_at_period_end=False) -> dict:
     }
 
 
+def _current_api_stripe_sub(status="active", cancel_at_period_end=False) -> dict:
+    """A Subscription as the pinned API version returns it: no top-level
+    current_period_*; each item carries its own period."""
+    return {
+        "id": "sub_test",
+        "object": "subscription",
+        "status": status,
+        "cancel_at_period_end": cancel_at_period_end,
+        "items": {
+            "object": "list",
+            "data": [{
+                "id": "si_1",
+                "object": "subscription_item",
+                "current_period_start": 1700000000,
+                "current_period_end": 1702678400,
+            }],
+        },
+    }
+
+
 # ── GET /billing/status ───────────────────────────────────────────────────────
 
 
@@ -263,6 +283,61 @@ class TestWebhookHandlers:
         sub = db.query(Subscription).filter_by(user_id="test-uid-1").first()
         assert sub.status == "past_due"
 
+    def test_subscription_updated_reads_period_from_items_on_current_api(self, db):
+        # Since Stripe API 2025-03-31 the billing period lives on each
+        # subscription item; the top-level fields no longer exist.
+        from app.models.user import User
+        from app.models.subscription import Subscription
+        from app.routers.billing import _handle_subscription_updated
+
+        db.add(User(id="test-uid-1", username="alice", email="a@test.com", subscription_tier="free"))
+        db.add(Subscription(user_id="test-uid-1", stripe_subscription_id="sub_test"))
+        db.commit()
+
+        _handle_subscription_updated(_current_api_stripe_sub(status="active"), db)
+        db.commit()
+
+        sub = db.query(Subscription).filter_by(user_id="test-uid-1").first()
+        user = db.query(User).filter_by(id="test-uid-1").first()
+        assert user.subscription_tier == "premium"
+        assert sub.current_period_start.replace(tzinfo=None) == datetime(2023, 11, 14, 22, 13, 20)
+        assert sub.current_period_end.replace(tzinfo=None) == datetime(2023, 12, 15, 22, 13, 20)
+
+    def test_checkout_completed_handles_current_api_subscription(self, db):
+        from app.models.user import User
+        from app.models.subscription import Subscription
+        from app.routers.billing import _handle_checkout_completed
+
+        db.add(User(id="test-uid-1", username="alice", email="a@test.com", subscription_tier="free"))
+        db.add(Subscription(user_id="test-uid-1", stripe_customer_id="cus_test"))
+        db.commit()
+
+        with patch("stripe.Subscription.retrieve", return_value=_current_api_stripe_sub()):
+            _handle_checkout_completed({"customer": "cus_test", "subscription": "sub_test"}, db)
+        db.commit()
+
+        assert db.query(User).filter_by(id="test-uid-1").one().subscription_tier == "premium"
+        assert db.query(Subscription).filter_by(user_id="test-uid-1").one().stripe_subscription_id == "sub_test"
+
+    def test_payment_failed_reads_subscription_from_invoice_parent(self, db):
+        from app.models.subscription import Subscription
+        from app.routers.billing import _handle_payment_failed
+
+        db.add(Subscription(user_id="test-uid-1", stripe_subscription_id="sub_test", status="active"))
+        db.commit()
+
+        _handle_payment_failed({
+            "id": "in_1",
+            "parent": {
+                "type": "subscription_details",
+                "subscription_details": {"subscription": "sub_test", "metadata": {}},
+                "quote_details": None,
+            },
+        }, db)
+        db.commit()
+
+        assert db.query(Subscription).filter_by(user_id="test-uid-1").one().status == "past_due"
+
     def test_handlers_noop_when_subscription_not_found(self, db):
         from app.routers.billing import (
             _handle_subscription_updated,
@@ -299,6 +374,39 @@ class TestStripeWebhook:
                 content=b"{}",
                 headers={"stripe-signature": "t=123,v1=abc"},
             )
+
+    def test_checkout_webhook_with_real_stripe_objects(self, client, db):
+        # construct_event and Subscription.retrieve return StripeObjects, which
+        # (stripe-python 12+) are not dicts and have no .get().
+        import stripe
+        from app.models.subscription import Subscription
+        from app.models.user import User
+
+        _seed_user(db)
+        db.add(Subscription(user_id="test-uid-1", stripe_customer_id="cus_test"))
+        db.commit()
+        event = stripe.Event.construct_from({
+            "id": "evt_real_1",
+            "object": "event",
+            "type": "checkout.session.completed",
+            "data": {"object": {
+                "id": "cs_1", "object": "checkout.session",
+                "customer": "cus_test", "subscription": "sub_test",
+            }},
+        }, "sk_test")
+        retrieved = stripe.Subscription.construct_from(_current_api_stripe_sub(), "sk_test")
+
+        with patch("stripe.Webhook.construct_event", return_value=event), \
+             patch("stripe.Subscription.retrieve", return_value=retrieved):
+            r = client.post(
+                "/billing/webhook",
+                content=b"{}",
+                headers={"stripe-signature": "t=1,v1=x"},
+            )
+
+        assert r.status_code == 200
+        db.expire_all()
+        assert db.query(User).filter_by(id="test-uid-1").one().subscription_tier == "premium"
 
     def test_invalid_signature_returns_400(self, client, db):
         import stripe

@@ -209,3 +209,56 @@ class TestRecommendationDelete:
         db.commit()
         r = client.delete("/recommendations/99999")
         assert r.status_code in (200, 404)
+
+
+class TestTitleComesFromTheCatalog:
+    """The sender's client used to supply the title and poster that land in
+    the recipient's inbox, push and email — so it could say anything."""
+
+    def _send_spoofed(self, client, content_type="movie", content_id=550):
+        return client.post("/recommendations/send", json={
+            "recipient_username": "bob",
+            "content_type": content_type,
+            "content_id": content_id,
+            "content_title": "WIN A PRIZE at evil.example",
+            "content_poster_path": '/x.jpg" onerror="alert(1)',
+        })
+
+    def _stored(self, db):
+        from app.models.recommendation import Recommendation
+
+        db.expire_all()
+        return db.query(Recommendation).filter_by(sender_id="test-uid-1").one()
+
+    def test_cached_title_and_poster_are_used(self, client, db, seed_movie):
+        seed_movie.poster_path = "/fightclub.jpg"
+        db.commit()
+        _make_friends(db)
+
+        assert self._send_spoofed(client).status_code == 200
+
+        rec = self._stored(db)
+        assert (rec.content_title, rec.content_poster_path) == ("Fight Club", "/fightclub.jpg")
+
+    def test_uncached_title_is_looked_up_on_tmdb(self, client, db):
+        from unittest.mock import patch
+
+        _make_friends(db)
+        with patch("app.services.recommendation_service.fetch_movie_from_tmdb_cached",
+                   return_value={"id": 329865, "title": "Arrival", "poster_path": "/arrival.jpg"}):
+            assert self._send_spoofed(client, content_id=329865).status_code == 200
+
+        rec = self._stored(db)
+        assert (rec.content_title, rec.content_poster_path) == ("Arrival", "/arrival.jpg")
+
+    def test_title_tmdb_doesnt_know_is_rejected(self, client, db):
+        from unittest.mock import patch
+        from app.models.recommendation import Recommendation
+
+        _make_friends(db)
+        with patch("app.services.recommendation_service.fetch_show_from_tmdb_cached",
+                   side_effect=RuntimeError("404 Not Found")):
+            r = self._send_spoofed(client, content_type="tv", content_id=99999999)
+
+        assert r.status_code == 404
+        assert db.query(Recommendation).count() == 0

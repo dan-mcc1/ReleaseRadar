@@ -1,8 +1,9 @@
 import json
 import os
+import time
 import firebase_admin
 from firebase_admin import credentials, auth
-from cachetools import TTLCache
+from cachetools import TLRUCache
 from threading import Lock
 from app.config import settings
 
@@ -15,12 +16,25 @@ else:
 
 firebase_admin.initialize_app(cred)
 
-_token_cache = TTLCache(maxsize=10_000, ttl=3600)
+_MAX_CACHE_SECONDS = 3600
+
+
+def _cached_until(_token: str, claims: dict, now: float) -> float:
+    """A verified token stays cached until its own exp — never past it, so an
+    expired token is re-verified (and rejected) — and at most an hour."""
+    exp = claims.get("exp")
+    cap = now + _MAX_CACHE_SECONDS
+    return min(float(exp), cap) if exp else cap
+
+
+# exp is wall-clock epoch seconds, so the cache's timer must be too.
+_token_cache = TLRUCache(maxsize=10_000, ttu=_cached_until, timer=time.time)
 _lock = Lock()
 
 
 def verify_token(token: str):
-    cached = _token_cache.get(token)
+    with _lock:  # cachetools caches aren't thread-safe; reads expire entries
+        cached = _token_cache.get(token)
     if cached is not None:
         return cached
 

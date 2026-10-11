@@ -33,4 +33,5 @@ class CurrentlyWatching(Base):
             "content_type",
             "content_id",
         ),
+        Index("ix_currently_watching_content", "content_type", "content_id"),
     )

@@ -6,9 +6,38 @@ from app.models.recommendation import Recommendation
 from app.models.notification import Notification
 from app.models.user import User
 from app.models.block import Block
+from app.models.movie import Movie
+from app.models.show import Show
 from app.services.friends_service import are_friends
+from app.services.tmdb_movies import fetch_movie_from_tmdb_cached
+from app.services.tmdb_tv import fetch_show_from_tmdb_cached
 
 _REC_TTL_DAYS = 7
+
+
+def _catalog_title(db: Session, content_type: str, content_id: int) -> tuple[str, str | None]:
+    """(title, poster_path) from our cache, else TMDb. Never the sender's
+    client: whatever it sent would reach the recipient's inbox, push and email."""
+    if content_type == "movie":
+        row = db.get(Movie, content_id)
+        if row and row.title:
+            return row.title, row.poster_path
+    else:
+        row = db.get(Show, content_id)
+        if row and row.name:
+            return row.name, row.poster_path
+    try:
+        data = (
+            fetch_movie_from_tmdb_cached(content_id, None)
+            if content_type == "movie"
+            else fetch_show_from_tmdb_cached(content_id, None)
+        )
+    except Exception:
+        data = None
+    title = (data or {}).get("title") or (data or {}).get("name")
+    if not title:
+        raise HTTPException(status_code=404, detail="Title not found.")
+    return title, data.get("poster_path")
 
 
 def send_recommendation(
@@ -17,8 +46,6 @@ def send_recommendation(
     recipient_username: str,
     content_type: str,
     content_id: int,
-    content_title: str,
-    content_poster_path: str | None,
     message: str | None,
 ):
     recipient = db.query(User).filter(User.username == recipient_username).first()
@@ -47,6 +74,8 @@ def send_recommendation(
         raise HTTPException(
             status_code=403, detail="You can only recommend to friends."
         )
+
+    content_title, content_poster_path = _catalog_title(db, content_type, content_id)
 
     entry = Recommendation(
         sender_id=sender_id,

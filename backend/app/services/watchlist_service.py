@@ -1,10 +1,9 @@
 # app/services/watchlist_service.py
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, select, exists, literal, union_all, func
+from sqlalchemy import and_, select, func
 from datetime import datetime, timezone
 from fastapi import HTTPException
 from app.models.watchlist import Watchlist
-from app.models.watched import Watched
 from app.models.currently_watching import CurrentlyWatching
 from app.models.movie import Movie
 from app.models.show import Show
@@ -14,6 +13,7 @@ from app.models.provider import ShowProvider, MovieProvider
 from app.models.user import User
 from app.models.activity import Activity
 from app.db.session import _is_sqlite
+from app.db.upsert import insert_if_absent
 from app.services.media_serializers import (
     serialize_show_list,
     serialize_movie_list,
@@ -21,7 +21,7 @@ from app.services.media_serializers import (
     _show_query_options_list,
     _movie_query_options_list,
 )
-from app.services.media_upsert import ensure_movie_stub_in_db, ensure_show_stub_in_db, decrement_tracking_count
+from app.services.media_upsert import ensure_movie_stub_in_db, ensure_show_stub_in_db, recount_tracking
 from app.services.activity_service import log_activity
 from sqlalchemy import text
 from collections import defaultdict
@@ -65,32 +65,6 @@ def _get_item_title_and_poster(
     return (item.name if item else None), (item.poster_path if item else None)
 
 
-def _is_tracked_on_any(
-    db: Session, user_id: str, content_type: str, content_id: int, *models
-) -> bool:
-    """Return True if the item exists on ANY of the given list models — single UNION ALL query."""
-    subqs = [
-        select(literal(1))
-        .select_from(model)
-        .where(
-            model.user_id == user_id,
-            model.content_type == content_type,
-            model.content_id == content_id,
-        )
-        for model in models
-    ]
-    return db.execute(select(exists(union_all(*subqs).subquery()))).scalar() or False
-
-
-def _is_on_other_list(
-    db: Session, user_id: str, content_type: str, content_id: int
-) -> bool:
-    """Return True if the item exists on CurrentlyWatching or Watched."""
-    return _is_tracked_on_any(
-        db, user_id, content_type, content_id, CurrentlyWatching, Watched
-    )
-
-
 def add_to_watchlist(db: Session, user_id: str, content_type: str, content_id: int, notify: bool = True):
     """
     Add a movie or show to the user's watchlist.
@@ -101,13 +75,6 @@ def add_to_watchlist(db: Session, user_id: str, content_type: str, content_id: i
              WHERE user_id = :uid AND content_type = :ctype AND content_id = :cid
              LIMIT 1) AS existing_id,
             (SELECT COALESCE(MAX(sort_key), 0) FROM watchlist WHERE user_id = :uid) AS max_sort_key,
-            EXISTS(
-                SELECT 1 FROM currently_watching
-                WHERE user_id = :uid AND content_type = :ctype AND content_id = :cid
-                UNION ALL
-                SELECT 1 FROM watched
-                WHERE user_id = :uid AND content_type = :ctype AND content_id = :cid
-            ) AS already_tracked,
             COALESCE((SELECT subscription_tier FROM "user" WHERE id = :uid), 'free') AS subscription_tier,
             (SELECT COUNT(*) FROM watchlist WHERE user_id = :uid) +
             (SELECT COUNT(*) FROM currently_watching WHERE user_id = :uid) AS tracked_count
@@ -127,34 +94,45 @@ def add_to_watchlist(db: Session, user_id: str, content_type: str, content_id: i
             },
         )
 
-    already_tracked = bool(row.already_tracked)
-    max_sort_key = row.max_sort_key or 0
-
-    entry = Watchlist(
-        user_id=user_id,
-        content_type=content_type,
-        content_id=content_id,
-        added_at=datetime.now(timezone.utc),
-        sort_key=max_sort_key + 1000,
-        notify=notify,
+    added_at = datetime.now(timezone.utc)
+    sort_key = (row.max_sort_key or 0) + 1000
+    entry_id = insert_if_absent(
+        db,
+        Watchlist,
+        {
+            "user_id": user_id,
+            "content_type": content_type,
+            "content_id": content_id,
+            "added_at": added_at,
+            "sort_key": sort_key,
+            "notify": notify,
+        },
+        ("user_id", "content_type", "content_id"),
     )
-    db.add(entry)
+    if entry_id is None:  # a concurrent request (e.g. double-click) added it first
+        existing_id = (
+            db.query(Watchlist.id)
+            .filter_by(user_id=user_id, content_type=content_type, content_id=content_id)
+            .scalar()
+        )
+        return {"id": existing_id, "content_type": content_type, "content_id": content_id}
 
     if content_type == "movie":
-        media = ensure_movie_stub_in_db(db, content_id, already_tracked)
+        media = ensure_movie_stub_in_db(db, content_id)
         log_activity(db, user_id, "want_to_watch", content_type, content_id, media.title or None, media.poster_path)
     elif content_type == "tv":
-        media = ensure_show_stub_in_db(db, content_id, already_tracked)
+        media = ensure_show_stub_in_db(db, content_id)
         log_activity(db, user_id, "want_to_watch", content_type, content_id, media.name or None, media.poster_path)
+    recount_tracking(db, content_type, [content_id])
 
     result = {
-        "id": entry.id,
-        "user_id": entry.user_id,
-        "content_type": entry.content_type,
-        "content_id": entry.content_id,
-        "added_at": entry.added_at.isoformat() if entry.added_at else None,
-        "sort_key": entry.sort_key,
-        "notify": entry.notify,
+        "id": entry_id,
+        "user_id": user_id,
+        "content_type": content_type,
+        "content_id": content_id,
+        "added_at": added_at.isoformat(),
+        "sort_key": sort_key,
+        "notify": notify,
     }
     db.commit()
     return result
@@ -269,10 +247,9 @@ def remove_from_watchlist(
         Activity.content_id == content_id,
     ).delete(synchronize_session=False)
 
-    if not bool(row.still_tracked):
-        if content_type == "tv":
-            db.query(EpisodeWatched).filter_by(user_id=user_id, show_id=content_id).delete()
-        decrement_tracking_count(db, content_type, content_id)
+    if not bool(row.still_tracked) and content_type == "tv":
+        db.query(EpisodeWatched).filter_by(user_id=user_id, show_id=content_id).delete()
+    recount_tracking(db, content_type, [content_id])
 
     if commit:
         db.commit()

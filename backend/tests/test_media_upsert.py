@@ -4,9 +4,7 @@ Tests for app.services.media_upsert.
 Covers the parts that run on SQLite:
 - ensure_movie_in_db / ensure_show_in_db cache-hit + cache-miss (with empty
   genres/providers so the PG-only ON CONFLICT path is bypassed)
-- tracking_count increment behaviour
 - populate_movie_full
-- decrement_tracking_count
 - get_us_movie_certification, get_us_show_certification, get_theatrical_release_date
 - ensure_movie_stub_in_db / ensure_show_stub_in_db
 - populate_movie_bg / populate_show_bg (cache-hit early return + missing TMDb data paths)
@@ -131,24 +129,9 @@ class TestEnsureMovieInDb:
         """When the Movie row exists, no TMDb call is made."""
         from app.services.media_upsert import ensure_movie_in_db
         with patch("app.services.media_upsert.fetch_movie_from_tmdb") as fetch:
-            movie = ensure_movie_in_db(db, 550, already_tracked=True)
+            movie = ensure_movie_in_db(db, 550)
             assert movie.id == 550
             fetch.assert_not_called()
-
-    def test_cache_hit_increments_tracking_count(self, db, seed_movie):
-        from app.services.media_upsert import ensure_movie_in_db
-        before = seed_movie.tracking_count
-        with patch("app.services.media_upsert.fetch_movie_from_tmdb"):
-            ensure_movie_in_db(db, 550, already_tracked=False)
-        db.commit()
-        assert seed_movie.tracking_count == before + 1
-        assert seed_movie.updated_at is not None
-
-    def test_cache_hit_already_tracked_does_not_increment(self, db, seed_movie):
-        from app.services.media_upsert import ensure_movie_in_db
-        before = seed_movie.tracking_count
-        ensure_movie_in_db(db, 550, already_tracked=True)
-        assert seed_movie.tracking_count == before
 
     def test_cache_miss_fetches_and_creates(self, db):
         """Cache miss with empty genres/providers — avoids PG-only upsert path."""
@@ -177,12 +160,12 @@ class TestEnsureMovieInDb:
         }
         with patch("app.services.media_upsert.fetch_movie_from_tmdb",
                    return_value=movie_data) as fetch:
-            movie = ensure_movie_in_db(db, 999, already_tracked=False)
+            movie = ensure_movie_in_db(db, 999)
             fetch.assert_called_once()
         db.commit()
         assert movie.id == 999
         assert movie.title == "New Movie"
-        assert movie.tracking_count == 1
+        assert movie.tracking_count == 0
         assert movie.updated_at is not None
         # Verify it actually landed in the DB
         assert db.query(Movie).filter_by(id=999).first() is not None
@@ -202,7 +185,7 @@ class TestEnsureMovieInDb:
         }
         with patch("app.services.media_upsert.fetch_movie_from_tmdb",
                    return_value=movie_data):
-            movie = ensure_movie_in_db(db, 998, already_tracked=False)
+            movie = ensure_movie_in_db(db, 998)
         assert movie.logo_path == "/en.png"
 
     def test_cache_miss_no_english_logo(self, db):
@@ -217,7 +200,7 @@ class TestEnsureMovieInDb:
         }
         with patch("app.services.media_upsert.fetch_movie_from_tmdb",
                    return_value=movie_data):
-            movie = ensure_movie_in_db(db, 997, already_tracked=False)
+            movie = ensure_movie_in_db(db, 997)
         assert movie.logo_path is None
 
     def test_cache_miss_no_title_raises(self, db):
@@ -225,14 +208,14 @@ class TestEnsureMovieInDb:
         with patch("app.services.media_upsert.fetch_movie_from_tmdb",
                    return_value={"id": 996}):
             with pytest.raises(ValueError, match="title"):
-                ensure_movie_in_db(db, 996, already_tracked=False)
+                ensure_movie_in_db(db, 996)
 
     def test_cache_miss_empty_response_raises(self, db):
         from app.services.media_upsert import ensure_movie_in_db
         with patch("app.services.media_upsert.fetch_movie_from_tmdb",
                    return_value=None):
             with pytest.raises(ValueError):
-                ensure_movie_in_db(db, 995, already_tracked=False)
+                ensure_movie_in_db(db, 995)
 
 
 # ── ensure_show_in_db ──────────────────────────────────────────────────────
@@ -242,22 +225,9 @@ class TestEnsureShowInDb:
     def test_cache_hit_no_fetch(self, db, seed_show):
         from app.services.media_upsert import ensure_show_in_db
         with patch("app.services.media_upsert.fetch_show_from_tmdb") as fetch:
-            show = ensure_show_in_db(db, 1396, already_tracked=True)
+            show = ensure_show_in_db(db, 1396)
             assert show.id == 1396
             fetch.assert_not_called()
-
-    def test_cache_hit_increments_tracking_count(self, db, seed_show):
-        from app.services.media_upsert import ensure_show_in_db
-        before = seed_show.tracking_count
-        ensure_show_in_db(db, 1396, already_tracked=False)
-        db.commit()
-        assert seed_show.tracking_count == before + 1
-
-    def test_cache_hit_already_tracked_does_not_increment(self, db, seed_show):
-        from app.services.media_upsert import ensure_show_in_db
-        before = seed_show.tracking_count
-        ensure_show_in_db(db, 1396, already_tracked=True)
-        assert seed_show.tracking_count == before
 
     def test_cache_miss_fetches_and_creates(self, db):
         from app.services.media_upsert import ensure_show_in_db
@@ -289,12 +259,12 @@ class TestEnsureShowInDb:
                    return_value=show_data) as fetch, \
              patch("app.services.media_upsert.fetch_show_air_time",
                    return_value=("20:00", "America/New_York")):
-            show = ensure_show_in_db(db, 8888, already_tracked=False)
+            show = ensure_show_in_db(db, 8888)
             fetch.assert_called_once()
         db.commit()
         assert show.id == 8888
         assert show.name == "New Show"
-        assert show.tracking_count == 1
+        assert show.tracking_count == 0
         assert show.air_time == "20:00"
         assert show.air_timezone == "America/New_York"
         assert show.updated_at is not None
@@ -320,7 +290,7 @@ class TestEnsureShowInDb:
                    return_value=show_data), \
              patch("app.services.media_upsert.fetch_show_air_time",
                    return_value=(None, None)):
-            ensure_show_in_db(db, 8887, already_tracked=False)
+            ensure_show_in_db(db, 8887)
         db.commit()
         seasons = db.query(Season).filter_by(show_id=8887).all()
         assert len(seasons) == 2
@@ -333,14 +303,14 @@ class TestEnsureShowInDb:
              patch("app.services.media_upsert.fetch_show_air_time",
                    return_value=(None, None)):
             with pytest.raises(ValueError, match="name"):
-                ensure_show_in_db(db, 1, already_tracked=False)
+                ensure_show_in_db(db, 1)
 
     def test_cache_miss_empty_response_raises(self, db):
         from app.services.media_upsert import ensure_show_in_db
         with patch("app.services.media_upsert.fetch_show_from_tmdb",
                    return_value=None):
             with pytest.raises(ValueError):
-                ensure_show_in_db(db, 2, already_tracked=False)
+                ensure_show_in_db(db, 2)
 
 
 # ── populate_movie_full ────────────────────────────────────────────────────
@@ -461,46 +431,6 @@ class TestPopulateMovieFull:
         assert result.updated_at is not None
 
 
-# ── decrement_tracking_count ───────────────────────────────────────────────
-
-
-class TestDecrementTrackingCount:
-    def test_decrement_movie(self, db, seed_movie):
-        from app.services.media_upsert import decrement_tracking_count
-        seed_movie.tracking_count = 5
-        db.commit()
-        decrement_tracking_count(db, "movie", 550)
-        db.commit()
-        db.refresh(seed_movie)
-        assert seed_movie.tracking_count == 4
-
-    def test_decrement_show(self, db, seed_show):
-        from app.services.media_upsert import decrement_tracking_count
-        seed_show.tracking_count = 3
-        db.commit()
-        decrement_tracking_count(db, "tv", 1396)
-        db.commit()
-        db.refresh(seed_show)
-        assert seed_show.tracking_count == 2
-
-    def test_decrement_floored_at_zero(self, db, seed_movie):
-        from app.services.media_upsert import decrement_tracking_count
-        seed_movie.tracking_count = 0
-        db.commit()
-        decrement_tracking_count(db, "movie", 550)
-        db.commit()
-        db.refresh(seed_movie)
-        assert seed_movie.tracking_count == 0
-
-    def test_unknown_content_type_no_op(self, db, seed_movie):
-        from app.services.media_upsert import decrement_tracking_count
-        before = seed_movie.tracking_count
-        decrement_tracking_count(db, "bogus", 550)
-        db.commit()
-        db.refresh(seed_movie)
-        assert seed_movie.tracking_count == before
-
-
 # ── ensure_*_stub_in_db ────────────────────────────────────────────────────
 
 
@@ -509,50 +439,36 @@ class TestEnsureStubInDb:
         from app.services.media_upsert import ensure_movie_stub_in_db
         from app.models.movie import Movie
 
-        stub = ensure_movie_stub_in_db(db, 12345, already_tracked=False)
+        stub = ensure_movie_stub_in_db(db, 12345)
         assert stub.id == 12345
-        assert stub.tracking_count == 1
+        assert stub.tracking_count == 0
         assert stub.updated_at is None
         db.commit()
         assert db.query(Movie).filter_by(id=12345).first() is not None
 
     def test_movie_stub_existing_returns_existing(self, db, seed_movie):
         from app.services.media_upsert import ensure_movie_stub_in_db
-        result = ensure_movie_stub_in_db(db, 550, already_tracked=True)
+        result = ensure_movie_stub_in_db(db, 550)
         assert result.id == 550
         assert result.title == "Fight Club"
-
-    def test_movie_stub_increments_tracking_count(self, db, seed_movie):
-        from app.services.media_upsert import ensure_movie_stub_in_db
-        before = seed_movie.tracking_count
-        ensure_movie_stub_in_db(db, 550, already_tracked=False)
-        db.commit()
-        assert seed_movie.tracking_count == before + 1
 
     def test_show_stub_inserts_minimal_row(self, db):
         from app.services.media_upsert import ensure_show_stub_in_db
         from app.models.show import Show
 
-        stub = ensure_show_stub_in_db(db, 54321, already_tracked=False)
+        stub = ensure_show_stub_in_db(db, 54321)
         assert stub.id == 54321
         assert stub.name == ""
-        assert stub.tracking_count == 1
+        assert stub.tracking_count == 0
         assert stub.updated_at is None
         db.commit()
         assert db.query(Show).filter_by(id=54321).first() is not None
 
     def test_show_stub_existing_returns_existing(self, db, seed_show):
         from app.services.media_upsert import ensure_show_stub_in_db
-        result = ensure_show_stub_in_db(db, 1396, already_tracked=True)
+        result = ensure_show_stub_in_db(db, 1396)
         assert result.id == 1396
         assert result.name == "Breaking Bad"
-
-    def test_show_stub_increments_tracking_count(self, db, seed_show):
-        from app.services.media_upsert import ensure_show_stub_in_db
-        before = seed_show.tracking_count
-        ensure_show_stub_in_db(db, 1396, already_tracked=False)
-        db.commit()
-        assert seed_show.tracking_count == before + 1
 
 
 # ── populate_*_bg background tasks ─────────────────────────────────────────
@@ -679,3 +595,100 @@ class TestUpsertGenresAndProvidersPgOnly:
 
     def test_ensure_show_in_db_full_payload(self):
         pass
+
+
+# ── TMDb quirks / write ordering ───────────────────────────────────────────
+
+
+class TestPopulateShowBgEmptyDates:
+    def test_empty_air_dates_still_populate_the_show(self, db):
+        # TMDb sends "" (not null) for unknown dates on unaired shows; writing
+        # "" to a DATE column failed the whole populate and left a nameless stub.
+        from app.services.media_upsert import populate_show_bg
+        from app.models.show import Show
+
+        db.add(Show(id=80002, name="", tracking_count=1, updated_at=None))
+        db.commit()
+        show_data = {
+            "id": 80002, "name": "Untitled Pilot", "first_air_date": "",
+            "last_air_date": "", "genres": [], "seasons": [],
+            "watch/providers": {"results": {}}, "images": {"logos": []},
+            "content_ratings": {"results": []},
+        }
+        with patch("app.services.media_upsert.fetch_show_from_tmdb", return_value=show_data), \
+             patch("app.services.media_upsert.fetch_show_air_time", return_value=(None, None)), \
+             patch("app.services.episode_service.sync_show_episodes"):
+            populate_show_bg(80002)
+
+        db.expire_all()
+        row = db.query(Show).filter_by(id=80002).one()
+        assert row.name == "Untitled Pilot"
+        assert row.first_air_date is None
+
+
+class TestUpsertWriteOrder:
+    """Concurrent ingests that lock the same Provider/Genre rows in different
+    orders deadlock in Postgres. Writing rows in ascending id order means two
+    transactions always take the locks in the same order."""
+
+    def _inserted_ids(self, statements, table):
+        ids = []
+        for sql, params in statements:
+            if sql.lstrip().upper().startswith(f"INSERT INTO {table.upper()} "):
+                ids.extend(p for p in params if isinstance(p, int))
+        return ids
+
+    def _capture(self):
+        from sqlalchemy import event
+        from tests.conftest import engine
+
+        statements = []
+
+        def hook(conn, cursor, statement, parameters, context, executemany):
+            rows = parameters if executemany else [parameters]
+            for row in rows:
+                statements.append((statement, list(row)))
+
+        event.listen(engine, "before_cursor_execute", hook)
+        return statements, lambda: event.remove(engine, "before_cursor_execute", hook)
+
+    def test_providers_written_in_id_order(self, db, seed_movie):
+        from app.services.media_upsert import _upsert_providers
+        from app.models.provider import MovieProvider
+
+        us = {
+            "flatrate": [
+                {"provider_id": 337, "provider_name": "Disney Plus", "logo_path": "/d.png"},
+                {"provider_id": 8, "provider_name": "Netflix", "logo_path": "/n.png"},
+                {"provider_id": 15, "provider_name": "Hulu", "logo_path": "/h.png"},
+            ],
+        }
+        statements, stop = self._capture()
+        try:
+            _upsert_providers(db, us, MovieProvider, movie_id=550)
+            db.flush()
+        finally:
+            stop()
+
+        provider_ids = [i for i in self._inserted_ids(statements, "provider") if i in (8, 15, 337)]
+        link_ids = [i for i in self._inserted_ids(statements, "movie_provider") if i in (8, 15, 337)]
+        assert provider_ids == [8, 15, 337]
+        assert link_ids == [8, 15, 337]
+
+    def test_genres_written_in_id_order(self, db, seed_movie):
+        from app.services.media_upsert import _upsert_genres
+        from app.models.genre import MovieGenre
+
+        statements, stop = self._capture()
+        try:
+            _upsert_genres(
+                db,
+                [{"id": 878, "name": "Science Fiction"}, {"id": 18, "name": "Drama"},
+                 {"id": 53, "name": "Thriller"}],
+                MovieGenre, movie_id=550,
+            )
+        finally:
+            stop()
+
+        genre_ids = [i for i in self._inserted_ids(statements, "genre") if i in (18, 53, 878)]
+        assert genre_ids == [18, 53, 878]

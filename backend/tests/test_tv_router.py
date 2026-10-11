@@ -123,29 +123,22 @@ class TestFullSeasonInfo:
 
 
 class TestEpisodeInfo:
+    # Episode payloads are cached per (show, season, episode); each test uses
+    # its own ids so cached results don't leak between tests.
     def test_returns_episode_with_show_id_injected(self, client):
-        async def _fake_get(*args, **kwargs):
-            return {"id": 99, "name": "Pilot"}
-
-        with patch("app.routers.tv.async_get", side_effect=_fake_get):
-            r = client.get("/tv/123/season/1/episode/1")
+        with patch("app.services.tmdb_tv.get", return_value={"id": 99, "name": "Pilot"}):
+            r = client.get("/tv/980123/season/1/episode/1")
         assert r.status_code == 200
         body = r.json()
-        assert body["show_id"] == 123
+        assert body["show_id"] == 980123
         assert body["id"] == 99
 
     def test_tmdb_exception_returns_404(self, client):
-        async def _raise(*a, **kw):
-            raise RuntimeError("nope")
-
-        with patch("app.routers.tv.async_get", side_effect=_raise):
-            r = client.get("/tv/1/season/1/episode/1")
+        with patch("app.services.tmdb_tv.get", side_effect=RuntimeError("nope")):
+            r = client.get("/tv/980124/season/1/episode/1")
         assert r.status_code == 404
 
     def test_tmdb_empty_returns_404(self, client):
-        async def _empty(*a, **kw):
-            return None
-
-        with patch("app.routers.tv.async_get", side_effect=_empty):
-            r = client.get("/tv/1/season/1/episode/1")
+        with patch("app.services.tmdb_tv.get", return_value=None):
+            r = client.get("/tv/980125/season/1/episode/1")
         assert r.status_code == 404

@@ -199,7 +199,7 @@ def mock_tmdb_and_upsert():
     def fake_find(name, year):
         return config["search"].get(name)
 
-    def fake_ensure_movie(db, tmdb_id, already_tracked, tmdb_data=None):
+    def fake_ensure_movie(db, tmdb_id, tmdb_data=None):
         from app.models.movie import Movie
         existing = db.query(Movie).filter_by(id=tmdb_id).first()
         if existing:
@@ -211,7 +211,7 @@ def mock_tmdb_and_upsert():
         db.flush()
         return m
 
-    def fake_ensure_show(db, tmdb_id, already_tracked, tmdb_data=None):
+    def fake_ensure_show(db, tmdb_id, tmdb_data=None):
         from app.models.show import Show
         existing = db.query(Show).filter_by(id=tmdb_id).first()
         if existing:
@@ -267,6 +267,19 @@ class TestImportEndpoint:
         assert data["summary"]["failed"] == 0
         assert data["results"][0]["status"] == "imported"
         assert data["results"][0]["rating"] == 4.5
+
+    def test_watched_import_counts_the_importer_as_a_tracker(
+        self, client, db, seed_users, seed_movie, mock_tmdb_and_upsert
+    ):
+        from app.models.movie import Movie
+
+        # Fight Club is already cached (tracking_count=0); the import used to
+        # leave the count untouched for titles that already had a row.
+        mock_tmdb_and_upsert["search"]["Fight Club"] = (550, "movie")
+        _csv_upload(client, "Name,Year\nFight Club,1999\n", "watched.csv")
+
+        db.expire_all()
+        assert db.query(Movie).filter_by(id=550).one().tracking_count == 1
 
     def test_imports_tv_show(self, client, seed_users, mock_tmdb_and_upsert):
         mock_tmdb_and_upsert["search"]["Breaking Bad"] = (1396, "tv")

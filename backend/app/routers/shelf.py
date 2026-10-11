@@ -6,7 +6,7 @@ from app.dependencies.subscription import is_premium
 from app.db.session import SessionLocal
 from app.models.shelf import Shelf
 from app.services import shelf_service
-from app.services.episode_service import sync_show_episodes_background
+from app.services.episode_service import maybe_sync_show_episodes_background
 from app.schemas.common import (
     ContentType,
     SHELF_DESC_MAX_LEN,
@@ -104,7 +104,7 @@ def add_item(
 ):
     item = shelf_service.add_to_shelf(db, user_id, shelf_id, body.content_type, body.content_id)
     if body.content_type == "tv":
-        background_tasks.add_task(sync_show_episodes_background, body.content_id)
+        background_tasks.add_task(maybe_sync_show_episodes_background, body.content_id)
     return {"id": item.id, "shelf_id": item.shelf_id, "content_type": item.content_type, "content_id": item.content_id}
 
 

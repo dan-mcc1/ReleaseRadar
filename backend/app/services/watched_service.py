@@ -6,33 +6,23 @@ from datetime import datetime, timezone
 from app.models.watched import Watched
 from app.models.movie import Movie
 from app.models.show import Show
-from app.services.watchlist_service import _get_item_title_and_poster, _is_tracked_on_any
+from app.services.watchlist_service import _get_item_title_and_poster
 from app.services.media_serializers import (
     serialize_show_list,
     serialize_movie_list,
     _show_query_options_list,
     _movie_query_options_list,
 )
-from app.services.media_upsert import ensure_movie_stub_in_db, ensure_show_stub_in_db, decrement_tracking_count
+from app.services.media_upsert import ensure_movie_stub_in_db, ensure_show_stub_in_db, recount_tracking
 from app.services.episode_service import sync_show_episodes
 from app.services.activity_service import log_activity
 from app.models.activity import Activity
 from app.models.episode import Episode
 from app.models.episode_watched import EpisodeWatched
-from app.models.watchlist import Watchlist
-from app.models.currently_watching import CurrentlyWatching
 from app.db.session import SessionLocal, _is_sqlite
+from app.db.upsert import insert_if_absent
 
 logger = logging.getLogger(__name__)
-
-
-def _is_on_other_list(
-    db: Session, user_id: str, content_type: str, content_id: int
-) -> bool:
-    """Return True if the item exists on Watchlist or CurrentlyWatching."""
-    return _is_tracked_on_any(
-        db, user_id, content_type, content_id, Watchlist, CurrentlyWatching
-    )
 
 
 def add_to_watched(
@@ -41,52 +31,53 @@ def add_to_watched(
     """
     Mark a movie or show as watched.
     """
-    # Single round-trip: existing check + other-list check
-    row = db.execute(text("""
-        SELECT
-            (SELECT id FROM watched
-             WHERE user_id = :uid AND content_type = :ctype AND content_id = :cid
-             LIMIT 1) AS existing_id,
-            EXISTS(
-                SELECT 1 FROM watchlist
-                WHERE user_id = :uid AND content_type = :ctype AND content_id = :cid
-                UNION ALL
-                SELECT 1 FROM currently_watching
-                WHERE user_id = :uid AND content_type = :ctype AND content_id = :cid
-            ) AS already_tracked
-    """), {"uid": user_id, "ctype": content_type, "cid": content_id}).first()
+    existing_id = db.execute(text("""
+        SELECT id FROM watched
+        WHERE user_id = :uid AND content_type = :ctype AND content_id = :cid
+        LIMIT 1
+    """), {"uid": user_id, "ctype": content_type, "cid": content_id}).scalar()
 
-    if row.existing_id is not None:
-        return {"id": row.existing_id, "content_type": content_type, "content_id": content_id}
+    if existing_id is not None:
+        return {"id": existing_id, "content_type": content_type, "content_id": content_id}
 
-    already_tracked = bool(row.already_tracked)
-
-    entry = Watched(
-        user_id=user_id,
-        content_type=content_type,
-        content_id=content_id,
-        watched_at=datetime.now(timezone.utc),
-        rating=rating,
+    watched_at = datetime.now(timezone.utc)
+    entry_id = insert_if_absent(
+        db,
+        Watched,
+        {
+            "user_id": user_id,
+            "content_type": content_type,
+            "content_id": content_id,
+            "watched_at": watched_at,
+            "rating": rating,
+        },
+        ("user_id", "content_type", "content_id"),
     )
-    db.add(entry)
+    if entry_id is None:  # a concurrent request (e.g. double-click) added it first
+        existing_id = (
+            db.query(Watched.id)
+            .filter_by(user_id=user_id, content_type=content_type, content_id=content_id)
+            .scalar()
+        )
+        return {"id": existing_id, "content_type": content_type, "content_id": content_id}
 
     if content_type == "movie":
-        media = ensure_movie_stub_in_db(db, content_id, already_tracked)
+        media = ensure_movie_stub_in_db(db, content_id)
         log_activity(db, user_id, "watched", content_type, content_id, media.title or None, media.poster_path)
     elif content_type == "tv":
-        media = ensure_show_stub_in_db(db, content_id, already_tracked)
+        media = ensure_show_stub_in_db(db, content_id)
         log_activity(db, user_id, "watched", content_type, content_id, media.name or None, media.poster_path)
     else:
         log_activity(db, user_id, "watched", content_type, content_id, None, None)
+    recount_tracking(db, content_type, [content_id])
 
-    # entry.id is populated by log_activity's db.flush() — no post-commit SELECT needed
     result = {
-        "id": entry.id,
-        "user_id": entry.user_id,
-        "content_type": entry.content_type,
-        "content_id": entry.content_id,
-        "watched_at": entry.watched_at.isoformat() if entry.watched_at else None,
-        "rating": entry.rating,
+        "id": entry_id,
+        "user_id": user_id,
+        "content_type": content_type,
+        "content_id": content_id,
+        "watched_at": watched_at.isoformat(),
+        "rating": rating,
     }
     if commit:
         db.commit()
@@ -213,10 +204,9 @@ def remove_from_watched(db: Session, user_id: str, content_type: str, content_id
 
     db.execute(text("DELETE FROM watched WHERE id = :id"), {"id": row.watched_id})
 
-    if not bool(row.still_tracked):
-        if content_type == "tv":
-            db.query(EpisodeWatched).filter_by(user_id=user_id, show_id=content_id).delete()
-        decrement_tracking_count(db, content_type, content_id)
+    if not bool(row.still_tracked) and content_type == "tv":
+        db.query(EpisodeWatched).filter_by(user_id=user_id, show_id=content_id).delete()
+    recount_tracking(db, content_type, [content_id])
 
     db.commit()
     return {"message": "Removed from watched"}

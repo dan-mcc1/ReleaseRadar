@@ -4,10 +4,10 @@ import time
 from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timedelta, timezone as dt_timezone
 from zoneinfo import ZoneInfo
-from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
-from app.core.limiter import limiter
+from app.core.limiter import limiter, rate_limit
 from app.core.logging import (
     setup_logging,
     install_query_counter,
@@ -435,16 +435,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(tv.router, prefix="/tv", tags=["tv"])
-app.include_router(movies.router, prefix="/movies", tags=["movies"])
-app.include_router(person.router, prefix="/person", tags=["person"])
+# Unauthenticated routers that proxy TMDb share one per-client budget.
+PUBLIC_RATE_LIMIT = [Depends(rate_limit("public", "PUBLIC_RATE_LIMIT"))]
+
+app.include_router(tv.router, prefix="/tv", tags=["tv"], dependencies=PUBLIC_RATE_LIMIT)
+app.include_router(
+    movies.router, prefix="/movies", tags=["movies"], dependencies=PUBLIC_RATE_LIMIT
+)
+app.include_router(
+    person.router, prefix="/person", tags=["person"], dependencies=PUBLIC_RATE_LIMIT
+)
 app.include_router(user.router, prefix="/user", tags=["user"])
 app.include_router(watchlist.router, prefix="/watchlist", tags=["watchlist"])
 app.include_router(watched.router, prefix="/watched", tags=["watched"])
 app.include_router(
     watched_episode.router, prefix="/watched-episode", tags=["movie-episode"]
 )
-app.include_router(search.router, prefix="/search", tags=["search"])
+app.include_router(
+    search.router, prefix="/search", tags=["search"], dependencies=PUBLIC_RATE_LIMIT
+)
 app.include_router(friends.router, prefix="/friends", tags=["friends"])
 app.include_router(
     currently_watching.router, prefix="/currently-watching", tags=["currently-watching"]
@@ -460,14 +469,26 @@ app.include_router(
 app.include_router(events.router, prefix="/events", tags=["events"])
 app.include_router(reviews.router, prefix="/reviews", tags=["reviews"])
 app.include_router(season_rating.router, prefix="/season-rating", tags=["season-rating"])
-app.include_router(box_office.router, prefix="/box-office", tags=["box-office"])
-app.include_router(collections.router, prefix="/collections", tags=["collections"])
+app.include_router(
+    box_office.router,
+    prefix="/box-office",
+    tags=["box-office"],
+    dependencies=PUBLIC_RATE_LIMIT,
+)
+app.include_router(
+    collections.router,
+    prefix="/collections",
+    tags=["collections"],
+    dependencies=PUBLIC_RATE_LIMIT,
+)
 app.include_router(community.router, prefix="/communities", tags=["communities"])
 app.include_router(calendar.router, prefix="/calendar", tags=["calendar"])
 app.include_router(shelf.router, prefix="/shelf", tags=["shelf"])
 app.include_router(admin.router, prefix="/admin", tags=["admin"])
 app.include_router(billing.router, prefix="/billing", tags=["billing"])
-app.include_router(news.router, prefix="/news", tags=["news"])
+app.include_router(
+    news.router, prefix="/news", tags=["news"], dependencies=PUBLIC_RATE_LIMIT
+)
 app.include_router(rewatch.router, prefix="/rewatch", tags=["rewatch"])
 app.include_router(import_router.router, prefix="/import", tags=["import"])
 app.include_router(moderation.router, prefix="/moderation", tags=["moderation"])

@@ -28,6 +28,7 @@ from app.services.user_service import (
     get_profile_preview_data,
 )
 from app.services.friends_service import get_friends, get_social_preview
+from app.services.account_service import delete_user_data
 from app.models.friendship import Friendship
 from app.services.favorite_service import get_favorites
 from app.services.stats_service import get_user_stats
@@ -35,22 +36,8 @@ from app.services.watch_time_service import get_watch_time_stats
 from datetime import datetime, timezone
 from app.dependencies.auth import get_current_user, get_current_user_strict, get_token_claims, get_token_claims_strict, get_uid_only
 from app.models.appeal import Appeal
-from app.models.shelf_item import ShelfItem
-from app.models.shelf import Shelf
-from app.models.review import Review
-from app.models.report import Report
 from app.dependencies.subscription import feature_gate
 from app.models.user import User
-from app.models.watchlist import Watchlist
-from app.models.watched import Watched
-from app.models.episode_watched import EpisodeWatched
-from app.models.currently_watching import CurrentlyWatching
-from app.models.activity import Activity
-from app.models.favorite import Favorite
-from app.models.recommendation import Recommendation
-from app.models.show import Show
-from app.models.movie import Movie
-from app.models.episode import Episode
 from app.models.block import Block
 from firebase_admin import auth as firebase_auth
 
@@ -609,23 +596,6 @@ def dismiss_letterboxd_prompt(
     return {"letterboxd_prompted": True}
 
 
-@router.post("/subscription/cancel")
-def cancel_subscription(
-    db: Session = Depends(get_db),
-    uid: str = Depends(get_current_user),
-):
-    user = db.query(User).filter(User.id == uid).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    if user.subscription_tier == "admin":
-        raise HTTPException(
-            status_code=403, detail="Admin accounts cannot be modified this way"
-        )
-    user.subscription_tier = "free"
-    db.commit()
-    return {"subscription_tier": "free"}
-
-
 @router.delete("/account")
 def delete_account(
     db: Session = Depends(get_db),
@@ -635,69 +605,7 @@ def delete_account(
     Delete the current user's account and all associated data.
     Call this before deleting the Firebase auth account on the client.
     """
-    # Collect all content being tracked so we can decrement tracking_count.
-    # Watchlist and Watched are mutually exclusive per item, so we can union them.
-    tracked: set[tuple[str, int]] = set()
-
-    for row in (
-        db.query(Watchlist.content_type, Watchlist.content_id)
-        .filter_by(user_id=uid)
-        .all()
-    ):
-        tracked.add((row.content_type, row.content_id))
-    for row in (
-        db.query(Watched.content_type, Watched.content_id).filter_by(user_id=uid).all()
-    ):
-        tracked.add((row.content_type, row.content_id))
-
-    # Decrement tracking counts
-    for content_type, content_id in tracked:
-        if content_type == "movie":
-            movie = db.query(Movie).filter_by(id=content_id).first()
-            if movie:
-                movie.tracking_count = max(0, (movie.tracking_count or 1) - 1)
-        elif content_type == "tv":
-            show = db.query(Show).filter_by(id=content_id).first()
-            if show:
-                show.tracking_count = max(0, (show.tracking_count or 1) - 1)
-
-    db.flush()
-
-    # Delete all user data
-    db.query(ShelfItem).filter(ShelfItem.user_id == uid).delete()
-    db.query(Shelf).filter(Shelf.user_id == uid).delete()
-    db.query(Review).filter(Review.user_id == uid).delete()
-    db.query(Favorite).filter(Favorite.user_id == uid).delete()
-    db.query(Activity).filter(Activity.user_id == uid).delete()
-    db.query(EpisodeWatched).filter(EpisodeWatched.user_id == uid).delete()
-    db.query(CurrentlyWatching).filter(CurrentlyWatching.user_id == uid).delete()
-    db.query(Watched).filter(Watched.user_id == uid).delete()
-    db.query(Watchlist).filter(Watchlist.user_id == uid).delete()
-    db.query(Block).filter(
-        (Block.blocker_id == uid) | (Block.blocked_id == uid)
-    ).delete(synchronize_session=False)
-    db.query(Report).filter(Report.reporter_id == uid).update(
-        {Report.reporter_id: None}, synchronize_session=False
-    )
-
-    # Remove shows/movies no longer tracked by anyone
-    for content_type, content_id in tracked:
-        if content_type == "movie":
-            movie = db.query(Movie).filter_by(id=content_id).first()
-            if movie and movie.tracking_count <= 0:
-                db.delete(movie)
-        elif content_type == "tv":
-            show = db.query(Show).filter_by(id=content_id).first()
-            if show and show.tracking_count <= 0:
-                db.query(EpisodeWatched).filter_by(show_id=content_id).delete()
-                db.query(Episode).filter_by(show_id=content_id).delete()
-                db.delete(show)
-
-    user = db.query(User).filter_by(id=uid).first()
-    if user:
-        db.delete(user)
-
-    db.commit()
+    delete_user_data(db, uid)
 
     try:
         firebase_auth.delete_user(uid)

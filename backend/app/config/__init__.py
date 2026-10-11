@@ -7,7 +7,25 @@ class Settings(BaseSettings):
     CORS_ORIGINS: list[str]
     ENVIRONMENT: str = "production"
 
-    @field_validator("CORS_ORIGINS", mode="before")
+    # Peers whose X-Real-IP / X-Forwarded-For headers are trusted for rate
+    # limiting: loopback (nginx on the same host) and private networks (a
+    # platform load balancer). Requests from anywhere else are keyed by the
+    # connecting address. Set as a JSON list.
+    TRUSTED_PROXY_CIDRS: list[str] = [
+        "127.0.0.0/8",
+        "::1/128",
+        "10.0.0.0/8",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "fc00::/7",
+    ]
+
+    # Per-client budgets (limits syntax) for unauthenticated routes that call
+    # TMDb. Search gets its own, tighter one: each search is four TMDb calls.
+    PUBLIC_RATE_LIMIT: str = "300/minute"
+    SEARCH_RATE_LIMIT: str = "60/minute"
+
+    @field_validator("CORS_ORIGINS", "TRUSTED_PROXY_CIDRS", mode="before")
     def parse_json(cls, v):
         if isinstance(v, str):
             try:

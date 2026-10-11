@@ -309,3 +309,69 @@ class TestEdgeCases:
         send_trailer_alert_email("x@t.com", "alice", [], "uid")
         send_new_season_available_email("x@t.com", "alice", [], "uid")
         assert captured_html == []
+
+
+# ── Poster paths in <img src> and plain-text subjects ─────────────────────
+
+BREAKOUT = '/x.jpg" onerror="alert(1)'
+
+
+class TestPosterPathEscaping:
+    def test_recommendation_poster_cannot_break_out_of_src(self, captured_html):
+        from app.services.email_service import send_recommendation_email
+
+        send_recommendation_email(
+            to_email="x@test.com", to_username="alice", from_username="bob",
+            content_type="movie", content_title="Fight Club", content_id=550,
+            message=None, uid="uid", poster_path=BREAKOUT,
+        )
+        assert '" onerror="' not in captured_html[0]
+        assert "&quot; onerror=&quot;" in captured_html[0]
+
+    def test_digest_poster_cannot_break_out_of_src(self):
+        from app.services.email_service import _digest_item_row
+
+        row = _digest_item_row({
+            "title": "T", "content_type": "movie", "content_id": 1,
+            "poster_path": BREAKOUT, "date": "2026-01-01",
+        })
+        assert '" onerror="' not in row
+
+    def test_poster_helper_cannot_break_out_of_src(self):
+        from app.services.email_service import _poster_img
+
+        assert '" onerror="' not in _poster_img(BREAKOUT, "alt", "https://x")
+
+
+@pytest.fixture
+def captured_subjects():
+    subjects: list[str] = []
+
+    def _capture(to_email, subject, html_body):
+        subjects.append(subject)
+
+    with patch("app.services.email_service.send_email", side_effect=_capture):
+        yield subjects
+
+
+class TestSubjectsArePlainText:
+    """Subjects aren't HTML, so entities show up literally in the inbox."""
+
+    def test_recommendation_subject(self, captured_subjects):
+        from app.services.email_service import send_recommendation_email
+
+        send_recommendation_email(
+            to_email="x@test.com", to_username="alice", from_username="o'brien",
+            content_type="tv", content_title="Grey's Anatomy & Friends",
+            content_id=1416, message=None, uid="uid",
+        )
+        assert captured_subjects == ["@o'brien recommended \"Grey's Anatomy & Friends\" to you"]
+
+    def test_group_invite_subject(self, captured_subjects):
+        from app.services.email_service import send_community_invite_email
+
+        send_community_invite_email(
+            to_email="x@test.com", to_username="alice", from_username="o'brien",
+            group_name="Tom & Jerry's Club", group_slug="tom-jerry", uid="uid",
+        )
+        assert captured_subjects == ["@o'brien invited you to Tom & Jerry's Club"]

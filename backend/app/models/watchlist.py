@@ -29,4 +29,5 @@ class Watchlist(Base):
             "user_id", "content_type", "content_id", name="uq_watchlist_user_content"
         ),
         Index("ix_watchlist_user_content", "user_id", "content_type", "content_id"),
+        Index("ix_watchlist_content", "content_type", "content_id"),
     )

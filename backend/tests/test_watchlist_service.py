@@ -67,53 +67,6 @@ def _add_watchlist(db, uid, ctype, cid, sort_key=1000, notify=True):
     return w
 
 
-# ── _is_tracked_on_any / _is_on_other_list ───────────────────────────────────
-
-
-class TestIsTrackedHelpers:
-    def test_is_tracked_on_any_returns_true_when_in_watchlist(self, db):
-        from app.models.watchlist import Watchlist
-        from app.services.watchlist_service import _is_tracked_on_any
-
-        _add_user(db)
-        _add_movie(db)
-        _add_watchlist(db, "test-uid-1", "movie", 550)
-        assert _is_tracked_on_any(
-            db, "test-uid-1", "movie", 550, Watchlist
-        ) is True
-
-    def test_is_tracked_on_any_returns_false_when_missing(self, db):
-        from app.models.watchlist import Watchlist
-        from app.services.watchlist_service import _is_tracked_on_any
-
-        _add_user(db)
-        assert _is_tracked_on_any(
-            db, "test-uid-1", "movie", 550, Watchlist
-        ) is False
-
-    def test_is_on_other_list_with_currently_watching(self, db):
-        from app.models.currently_watching import CurrentlyWatching
-        from app.services.watchlist_service import _is_on_other_list
-
-        _add_user(db)
-        _add_show(db)
-        db.add(CurrentlyWatching(
-            user_id="test-uid-1", content_type="tv", content_id=1396,
-            added_at=datetime.now(timezone.utc),
-        ))
-        db.commit()
-        assert _is_on_other_list(db, "test-uid-1", "tv", 1396) is True
-
-    def test_is_on_other_list_false_when_in_watchlist_only(self, db):
-        from app.services.watchlist_service import _is_on_other_list
-
-        _add_user(db)
-        _add_movie(db)
-        _add_watchlist(db, "test-uid-1", "movie", 550)
-        # Watchlist isn't an "other" list — it's the *same* list, so this returns False.
-        assert _is_on_other_list(db, "test-uid-1", "movie", 550) is False
-
-
 # ── _get_item_title_and_poster ──────────────────────────────────────────────
 
 

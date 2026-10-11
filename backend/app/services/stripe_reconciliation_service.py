@@ -1,10 +1,10 @@
 import logging
 import stripe
-from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from app.models.subscription import Subscription
 from app.models.user import User
+from app.services.billing_service import as_dict, subscription_period
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ def reconcile_stripe_subscriptions(db: Session) -> None:
     fixed = 0
     for sub in subs:
         try:
-            stripe_sub = stripe.Subscription.retrieve(sub.stripe_subscription_id)
+            stripe_sub = as_dict(stripe.Subscription.retrieve(sub.stripe_subscription_id))
         except stripe.error.InvalidRequestError:
             # Subscription deleted on Stripe side with no webhook delivered
             logger.warning(
@@ -52,16 +52,11 @@ def reconcile_stripe_subscriptions(db: Session) -> None:
             sub.status = stripe_status
             changed = True
 
-        period_start = datetime.fromtimestamp(
-            stripe_sub["current_period_start"], tz=timezone.utc
-        )
-        period_end = datetime.fromtimestamp(
-            stripe_sub["current_period_end"], tz=timezone.utc
-        )
-        if sub.current_period_start != period_start:
+        period_start, period_end = subscription_period(stripe_sub)
+        if period_start and sub.current_period_start != period_start:
             sub.current_period_start = period_start
             changed = True
-        if sub.current_period_end != period_end:
+        if period_end and sub.current_period_end != period_end:
             sub.current_period_end = period_end
             changed = True
         if sub.cancel_at_period_end != stripe_sub["cancel_at_period_end"]:

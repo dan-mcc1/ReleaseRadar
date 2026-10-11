@@ -285,17 +285,15 @@ export function useUpdateAvatar() {
 
 export function useDeleteAccount() {
   return useMutation({
-    mutationFn: () => checkedFetch("/user/account", { method: "DELETE" }),
-  });
-}
-
-export function useCancelSubscription() {
-  const user = useAuthUser();
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: () => checkedFetch("/user/subscription/cancel", { method: "POST" }),
-    onSuccess: () => {
-      if (user) queryClient.invalidateQueries({ queryKey: queryKeys.userMe(user.uid) });
+    mutationFn: async () => {
+      const res = await apiFetch("/user/account", { method: "DELETE" });
+      if (!res.ok) {
+        // e.g. 502 when the Stripe subscription couldn't be cancelled
+        const err = await res.json().catch(() => ({}));
+        throw new Error(
+          typeof err.detail === "string" ? err.detail : `Request failed: ${res.status}`,
+        );
+      }
     },
   });
 }

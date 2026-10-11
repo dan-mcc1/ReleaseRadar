@@ -28,4 +28,5 @@ class Watched(Base):
             "user_id", "content_type", "content_id", name="uq_watched_user_content"
         ),
         Index("ix_watched_user_content", "user_id", "content_type", "content_id"),
+        Index("ix_watched_content", "content_type", "content_id"),
     )

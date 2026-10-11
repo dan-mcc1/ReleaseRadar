@@ -15,6 +15,7 @@ from app.services.episode_service import (
     ensure_show_in_db,
 )
 from app.db.session import SessionLocal
+from app.db.upsert import insert_if_absent
 from app.services.watched_service import add_to_watched
 from app.services.watchlist_service import remove_from_watchlist
 from app.services.currently_watching_service import remove_from_currently_watching
@@ -56,18 +57,33 @@ def add_episode_watched(
     show = db.query(Show).filter_by(id=show_id).first()
     episode = get_or_create_episode(db, show_id, season_number, episode_number)
 
-    entry = EpisodeWatched(
-        user_id=user_id,
-        show_id=show_id,
-        episode_id=episode.id if episode else None,
-        season_number=season_number,
-        episode_number=episode_number,
-        watched_at=datetime.now(timezone.utc),
-        rating=rating,
+    entry_id = insert_if_absent(
+        db,
+        EpisodeWatched,
+        {
+            "user_id": user_id,
+            "show_id": show_id,
+            "episode_id": episode.id if episode else None,
+            "season_number": season_number,
+            "episode_number": episode_number,
+            "watched_at": datetime.now(timezone.utc),
+            "rating": rating,
+        },
+        ("user_id", "show_id", "season_number", "episode_number"),
     )
-    db.add(entry)
     db.commit()
-    db.refresh(entry)
+    entry = (
+        db.query(EpisodeWatched)
+        .filter_by(
+            user_id=user_id,
+            show_id=show_id,
+            season_number=season_number,
+            episode_number=episode_number,
+        )
+        .one()
+    )
+    if entry_id is None:  # a concurrent request (e.g. double-click) added it first
+        return entry
 
     log_activity(
         db,
@@ -134,15 +150,19 @@ def add_season_watched(db: Session, user_id: str, show_id: int, season_number: i
     }
     for ep in episodes:
         if ep.episode_number not in already_watched:
-            db.add(
-                EpisodeWatched(
-                    user_id=user_id,
-                    show_id=show_id,
-                    episode_id=ep.id,
-                    season_number=season_number,
-                    episode_number=ep.episode_number,
-                    watched_at=datetime.now(timezone.utc),
-                )
+            # ON CONFLICT: the same episode may be marked concurrently.
+            insert_if_absent(
+                db,
+                EpisodeWatched,
+                {
+                    "user_id": user_id,
+                    "show_id": show_id,
+                    "episode_id": ep.id,
+                    "season_number": season_number,
+                    "episode_number": ep.episode_number,
+                    "watched_at": datetime.now(timezone.utc),
+                },
+                ("user_id", "show_id", "season_number", "episode_number"),
             )
     db.commit()
 

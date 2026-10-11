@@ -1,5 +1,4 @@
 import stripe
-from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, Body
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
@@ -9,10 +8,13 @@ from app.dependencies.auth import get_current_user
 from app.models.user import User
 from app.models.subscription import Subscription
 from app.models.processed_stripe_event import ProcessedStripeEvent
+from app.services.billing_service import (
+    as_dict,
+    invoice_subscription_id,
+    subscription_period,
+)
 
 router = APIRouter()
-
-stripe.api_key = settings.STRIPE_SECRET_KEY
 
 _INTERVAL_TO_PRICE = {
     "monthly": settings.STRIPE_PREMIUM_MONTHLY_PRICE_ID,
@@ -52,12 +54,11 @@ def _sync_stripe_subscription(sub: Subscription, stripe_sub: dict, db: Session):
     sub.stripe_subscription_id = stripe_sub["id"]
     sub.status = stripe_sub["status"]
     sub.source = "stripe"
-    sub.current_period_start = datetime.fromtimestamp(
-        stripe_sub["current_period_start"], tz=timezone.utc
-    )
-    sub.current_period_end = datetime.fromtimestamp(
-        stripe_sub["current_period_end"], tz=timezone.utc
-    )
+    start, end = subscription_period(stripe_sub)
+    if start:
+        sub.current_period_start = start
+    if end:
+        sub.current_period_end = end
     sub.cancel_at_period_end = stripe_sub["cancel_at_period_end"]
 
     if stripe_sub["status"] in ("active", "trialing"):
@@ -186,7 +187,7 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
         return {"received": True}
 
     event_type = event["type"]
-    data = event["data"]["object"]
+    data = as_dict(event["data"]["object"])
 
     if event_type == "checkout.session.completed":
         _handle_checkout_completed(data, db)
@@ -211,7 +212,7 @@ def _handle_checkout_completed(session: dict, db: Session):
     if not sub:
         return
 
-    stripe_sub = stripe.Subscription.retrieve(subscription_id)
+    stripe_sub = as_dict(stripe.Subscription.retrieve(subscription_id))
     _sync_stripe_subscription(sub, stripe_sub, db)
 
 
@@ -247,7 +248,7 @@ def _handle_subscription_deleted(stripe_sub: dict, db: Session):
 
 
 def _handle_payment_failed(invoice: dict, db: Session):
-    subscription_id = invoice.get("subscription")
+    subscription_id = invoice_subscription_id(invoice)
     if not subscription_id:
         return
     sub = db.query(Subscription).filter_by(

@@ -256,5 +256,17 @@ def fetch_season_data_from_tmdb(show_id: int, season_number: int):
 
 
 @ttl_cached(DETAIL_MAXSIZE, TTL_STD)
+def get_episode_details(show_id: int, season_number: int, episode_number: int):
+    """Episode page payload. Shared between requests — don't modify it."""
+    data = get(
+        f"/tv/{show_id}/season/{season_number}/episode/{episode_number}",
+        params={"append_to_response": "credits,images,videos,external_ids"},
+    )
+    if data:
+        data["show_id"] = show_id
+    return data
+
+
+@ttl_cached(DETAIL_MAXSIZE, TTL_STD)
 def get_full_season_info(id: int, season_number: int):
     return get(f"/tv/{id}/season/{season_number}")

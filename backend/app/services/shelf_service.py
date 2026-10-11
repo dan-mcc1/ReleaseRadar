@@ -125,9 +125,9 @@ def add_to_shelf(
 
     # Ensure media row exists in DB (does not increment tracking_count — shelves are independent)
     if content_type == "movie":
-        ensure_movie_in_db(db, content_id, already_tracked=True)
+        ensure_movie_in_db(db, content_id)
     elif content_type == "tv":
-        ensure_show_in_db(db, content_id, already_tracked=True)
+        ensure_show_in_db(db, content_id)
     else:
         raise HTTPException(status_code=400, detail="content_type must be 'movie' or 'tv'")
 

@@ -6,6 +6,7 @@ from app.db.session import get_db
 from app.models.movie import Movie
 from app.services.media_serializers import _movie_query_options, serialize_movie
 from app.services.provider_utils import normalize_tmdb_watch_providers
+from app.services.tmdb_client import normalize_append
 from app.services.tmdb_movies import fetch_movie_from_tmdb_cached
 from app.core.http_cache import DETAIL_CACHE
 
@@ -23,7 +24,9 @@ async def get_movie_info(
     )
     if movie:
         return serialize_movie(movie)
-    payload = await run_in_threadpool(fetch_movie_from_tmdb_cached, id, append)
+    payload = await run_in_threadpool(
+        fetch_movie_from_tmdb_cached, id, normalize_append(append)
+    )
     if not payload:
         raise HTTPException(status_code=404, detail="Show not found")
     return payload

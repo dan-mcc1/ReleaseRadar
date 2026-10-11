@@ -309,10 +309,8 @@ class TestListAppeals:
 
 
 class TestDeleteUserCleanup:
-    """The delete_user endpoint had two N+1 loops over tracked content
-    (one to decrement tracking_count, one to delete orphans). The refactor
-    issues bulk loads + bulk DELETEs with careful FK ordering so an
-    autoflush mid-cleanup can't violate the episode -> show FK."""
+    """Admin deletion shares delete_user_data with self-service deletion;
+    tests/test_account_deletion.py covers both endpoints."""
 
     def test_delete_user_with_no_tracking_succeeds(
         self, admin_client, db, target_user
@@ -323,27 +321,6 @@ class TestDeleteUserCleanup:
         assert r.status_code == 200
         from app.models.user import User
         assert db.query(User).filter_by(id=target_user.id).first() is None
-
-    def test_orphan_show_cleanup_deletes_episodes(
-        self, admin_client, db, target_user, seed_show
-    ):
-        """Show is tracked only by the deleted user → tracking_count hits 0 →
-        show + its episodes get removed in the right order."""
-        from app.models.watchlist import Watchlist
-        from app.models.show import Show
-        from app.models.episode import Episode
-
-        seed_show.tracking_count = 1
-        db.add(Watchlist(user_id=target_user.id, content_type="tv", content_id=1396))
-        db.commit()
-
-        r = admin_client.delete(f"/admin/users/{target_user.id}")
-        assert r.status_code == 200
-
-        # Show and its episodes should be gone.
-        db.expire_all()
-        assert db.query(Show).filter_by(id=1396).first() is None
-        assert db.query(Episode).filter_by(show_id=1396).count() == 0
 
     def test_shared_show_decrement_only(
         self, admin_client, db, target_user, seed_show, seed_users
@@ -366,22 +343,6 @@ class TestDeleteUserCleanup:
         assert survivor is not None
         assert survivor.tracking_count == 1
 
-    def test_orphan_movie_cleanup(
-        self, admin_client, db, target_user, seed_movie
-    ):
-        from app.models.watched import Watched
-        from app.models.movie import Movie
-
-        seed_movie.tracking_count = 1
-        db.add(Watched(user_id=target_user.id, content_type="movie",
-                       content_id=550))
-        db.commit()
-
-        r = admin_client.delete(f"/admin/users/{target_user.id}")
-        assert r.status_code == 200
-
-        db.expire_all()
-        assert db.query(Movie).filter_by(id=550).first() is None
 
 
 # ── Report actions (accept / reject) ──────────────────────────────────────

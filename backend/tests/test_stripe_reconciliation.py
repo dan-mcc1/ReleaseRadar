@@ -274,6 +274,31 @@ class TestReconcileStripeSubscriptions:
         assert sub.current_period_start.replace(tzinfo=None) == expected_start
         assert sub.current_period_end.replace(tzinfo=None) == expected_end
 
+    def test_period_dates_read_from_items_on_current_api(self, db):
+        from app.models.subscription import Subscription
+        from app.services.stripe_reconciliation_service import (
+            reconcile_stripe_subscriptions,
+        )
+
+        _seed_user(db, tier="premium")
+        _seed_sub(db, status="active")
+        current_api_sub = {
+            "id": "sub_test",
+            "status": "past_due",
+            "cancel_at_period_end": False,
+            "items": {"data": [{
+                "current_period_start": 1710000000,
+                "current_period_end": 1712592000,
+            }]},
+        }
+        with patch("stripe.Subscription.retrieve", return_value=current_api_sub):
+            reconcile_stripe_subscriptions(db)
+
+        db.expire_all()
+        sub = db.query(Subscription).filter_by(stripe_subscription_id="sub_test").one()
+        assert sub.status == "past_due"
+        assert sub.current_period_end.replace(tzinfo=None) == datetime(2024, 4, 8, 16, 0)
+
     def test_in_sync_subscription_is_left_alone(self, db):
         """If everything already matches Stripe, the reconcile is a no-write op."""
         from app.models.subscription import Subscription

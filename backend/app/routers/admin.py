@@ -17,15 +17,11 @@ from app.models.activity import Activity
 from app.models.friendship import Friendship
 from app.models.show import Show
 from app.models.movie import Movie
-from app.models.episode import Episode
 from app.models.report import Report
 from app.models.review import Review
 from app.models.appeal import Appeal
-from app.models.block import Block
 from app.models.banned_email import BannedEmail
-from app.models.favorite import Favorite
-from app.models.shelf import Shelf
-from app.models.shelf_item import ShelfItem
+from app.services.account_service import delete_user_data
 
 router = APIRouter()
 
@@ -763,90 +759,7 @@ def admin_delete_user(
         raise HTTPException(status_code=404, detail="User not found.")
 
     uid = target_user_id
-
-    # Collect all content being tracked so we can decrement tracking_count.
-    # Watchlist and Watched are mutually exclusive per item, so we can union them.
-    tracked: set[tuple[str, int]] = set()
-
-    for row in (
-        db.query(Watchlist.content_type, Watchlist.content_id)
-        .filter_by(user_id=uid)
-        .all()
-    ):
-        tracked.add((row.content_type, row.content_id))
-    for row in (
-        db.query(Watched.content_type, Watched.content_id).filter_by(user_id=uid).all()
-    ):
-        tracked.add((row.content_type, row.content_id))
-
-    # Decrement tracking counts — batch load instead of N queries per item.
-    movie_ids = [cid for ct, cid in tracked if ct == "movie"]
-    show_ids = [cid for ct, cid in tracked if ct == "tv"]
-    movies_by_id = {
-        m.id: m for m in db.query(Movie).filter(Movie.id.in_(movie_ids)).all()
-    } if movie_ids else {}
-    shows_by_id = {
-        s.id: s for s in db.query(Show).filter(Show.id.in_(show_ids)).all()
-    } if show_ids else {}
-
-    for content_type, content_id in tracked:
-        if content_type == "movie":
-            movie = movies_by_id.get(content_id)
-            if movie:
-                movie.tracking_count = max(0, (movie.tracking_count or 1) - 1)
-        elif content_type == "tv":
-            show = shows_by_id.get(content_id)
-            if show:
-                show.tracking_count = max(0, (show.tracking_count or 1) - 1)
-
-    db.flush()
-
-    db.query(ShelfItem).filter(ShelfItem.user_id == uid).delete()
-    db.query(Shelf).filter(Shelf.user_id == uid).delete()
-    db.query(Review).filter(Review.user_id == uid).delete()
-    db.query(Favorite).filter(Favorite.user_id == uid).delete()
-    db.query(Activity).filter(Activity.user_id == uid).delete()
-    db.query(EpisodeWatched).filter(EpisodeWatched.user_id == uid).delete()
-    db.query(CurrentlyWatching).filter(CurrentlyWatching.user_id == uid).delete()
-    db.query(Watched).filter(Watched.user_id == uid).delete()
-    db.query(Watchlist).filter(Watchlist.user_id == uid).delete()
-    db.query(Block).filter(
-        (Block.blocker_id == uid) | (Block.blocked_id == uid)
-    ).delete(synchronize_session=False)
-    db.query(Report).filter(Report.reporter_id == uid).update(
-        {Report.reporter_id: None}, synchronize_session=False
-    )
-
-    # Remove shows/movies no longer tracked by anyone. Re-use the maps loaded
-    # above so we don't requery every row. Bulk deletes are all issued before
-    # any show DELETE so the FK from episode -> show isn't violated by an
-    # autoflush mid-cleanup.
-    orphan_movie_ids = [
-        cid for ct, cid in tracked
-        if ct == "movie" and (m := movies_by_id.get(cid)) and m.tracking_count <= 0
-    ]
-    orphan_show_ids = [
-        cid for ct, cid in tracked
-        if ct == "tv" and (s := shows_by_id.get(cid)) and s.tracking_count <= 0
-    ]
-
-    if orphan_show_ids:
-        db.query(EpisodeWatched).filter(
-            EpisodeWatched.show_id.in_(orphan_show_ids)
-        ).delete(synchronize_session=False)
-        db.query(Episode).filter(Episode.show_id.in_(orphan_show_ids)).delete(
-            synchronize_session=False
-        )
-        db.query(Show).filter(Show.id.in_(orphan_show_ids)).delete(
-            synchronize_session=False
-        )
-    if orphan_movie_ids:
-        db.query(Movie).filter(Movie.id.in_(orphan_movie_ids)).delete(
-            synchronize_session=False
-        )
-
-    db.delete(target)
-    db.commit()
+    delete_user_data(db, uid)
 
     try:
         auth.delete_user(uid)

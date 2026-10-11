@@ -118,10 +118,16 @@ def _email_wrapper(body_html: str, uid: str) -> str:
 </html>"""
 
 
+def _img_src(poster_path: str) -> str:
+    """Poster URL escaped for an HTML attribute, so a path containing a quote
+    can't close src="..." and inject markup."""
+    return escape(f"{TMDB_IMAGE_BASE}{poster_path}")
+
+
 def _poster_img(poster_path: str | None, alt: str, content_url: str) -> str:
     if not poster_path:
         return ""
-    src = f"{TMDB_IMAGE_BASE}{poster_path}"
+    src = _img_src(poster_path)
     return (
         f'<a href="{content_url}" style="display:block;flex-shrink:0;">'
         f'<img src="{src}" alt="{escape(alt)}" width="60" height="90"'
@@ -146,7 +152,7 @@ def _digest_item_row(item: dict) -> str:
     poster_path = item.get("poster_path")
     poster = (
         f'<a href="{content_url}" style="display:inline-block;flex-shrink:0;margin-right:14px;">'
-        f'<img src="{TMDB_IMAGE_BASE}{poster_path}" alt="{escape(item["title"])}" width="60" height="90"'
+        f'<img src="{_img_src(poster_path)}" alt="{escape(item["title"])}" width="60" height="90"'
         f' style="border-radius:8px;object-fit:cover;display:block;box-shadow:0 4px 12px rgba(0,0,0,0.5);" /></a>'
         if poster_path
         else ""
@@ -471,7 +477,7 @@ def send_recommendation_email(
         poster_block = (
             f'<div style="text-align:center;margin-bottom:24px;">'
             f'<a href="{content_url}">'
-            f'<img src="{TMDB_IMAGE_BASE}{poster_path}" alt="{escape(content_title)}"'
+            f'<img src="{_img_src(poster_path)}" alt="{escape(content_title)}"'
             f' width="110" height="165" style="border-radius:12px;object-fit:cover;display:inline-block;'
             f'box-shadow:0 8px 24px rgba(0,0,0,0.6);" />'
             f"</a></div>"
@@ -514,7 +520,7 @@ def send_recommendation_email(
 
     send_email(
         to_email,
-        f'@{escape(from_username)} recommended "{escape(content_title)}" to you',
+        f'@{from_username} recommended "{content_title}" to you',
         _email_wrapper(body, uid),
     )
 
@@ -553,7 +559,7 @@ def send_community_invite_email(
 </div>"""
     send_email(
         to_email,
-        f'@{escape(from_username)} invited you to {escape(group_name)}',
+        f"@{from_username} invited you to {group_name}",
         _email_wrapper(body, uid),
     )
 
@@ -591,7 +597,7 @@ def send_streaming_alert_email(
         has_poster = bool(a.get("poster_path"))
         poster = (
             f'<a href="{content_url}" style="display:inline-block;flex-shrink:0;margin-right:14px;">'
-            f'<img src="{TMDB_IMAGE_BASE}{a["poster_path"]}" alt="{escape(a["title"])}" width="60" height="90"'
+            f'<img src="{_img_src(a["poster_path"])}" alt="{escape(a["title"])}" width="60" height="90"'
             f' style="border-radius:8px;object-fit:cover;display:block;box-shadow:0 4px 12px rgba(0,0,0,0.5);" /></a>'
             if has_poster
             else ""
@@ -744,7 +750,7 @@ def send_trailer_alert_email(
             poster_cell = (
                 f'<td valign="top" width="76" style="width:76px;padding:0 14px 0 0;">'
                 f'<a href="{content_url}" style="text-decoration:none;display:block;">'
-                f'<img src="{TMDB_IMAGE_BASE}{a["poster_path"]}"'
+                f'<img src="{_img_src(a["poster_path"])}"'
                 f' alt="{escape(a["title"])}" width="62" height="93"'
                 f' style="border-radius:8px;display:block;border:0;outline:none;'
                 f'text-decoration:none;-ms-interpolation-mode:bicubic;" />'

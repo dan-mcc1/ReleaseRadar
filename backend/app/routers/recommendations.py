@@ -37,7 +37,8 @@ class RecommendationSend(BaseModel):
     )
     content_type: ContentType
     content_id: int = Field(..., ge=1)
-    content_title: str = Field(..., min_length=1, max_length=RECOMMENDATION_TITLE_MAX_LEN)
+    # Accepted from older clients but ignored: the server looks the title up.
+    content_title: str | None = Field(None, max_length=RECOMMENDATION_TITLE_MAX_LEN)
     content_poster_path: str | None = Field(None, max_length=500)
     message: str | None = Field(None, max_length=RECOMMENDATION_MSG_MAX_LEN)
 
@@ -66,8 +67,6 @@ def send(
         body.recipient_username,
         body.content_type,
         body.content_id,
-        body.content_title,
-        body.content_poster_path,
         body.message,
     )
     notify_counts_changed(db, result.recipient_id)
@@ -76,7 +75,7 @@ def send(
 
     sender = db.query(User).filter_by(id=uid).first()
     sender_name = (sender.username if sender else None) or "Someone"
-    title = body.content_title or "something"
+    title = result.content_title
     try:
         push_notification(
             db,
@@ -87,7 +86,7 @@ def send(
             content_type=body.content_type,
             content_id=body.content_id,
             recommendation_id=result.id,
-            image_url=tmdb_poster_url(body.content_poster_path),
+            image_url=tmdb_poster_url(result.content_poster_path),
         )
     except Exception:
         # Email + inbox are the source of truth; never let push wreck the response.

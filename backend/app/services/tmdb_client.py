@@ -11,6 +11,23 @@ _HEADERS = {
     "Accept": "application/json",
 }
 _RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
+
+# append_to_response values public routes may forward to TMDb.
+_ALLOWED_APPEND = frozenset({
+    "credits", "aggregate_credits", "external_ids", "recommendations", "similar",
+    "images", "videos", "watch/providers", "release_dates", "content_ratings",
+    "keywords", "reviews", "translations", "alternative_titles",
+})
+
+
+def normalize_append(value: str | None) -> str | None:
+    """Keep only known TMDb append fields, deduped and sorted, so a client
+    can't create unbounded cache keys or forward arbitrary values to TMDb.
+    Unknown fields are dropped rather than rejected."""
+    if not value:
+        return None
+    fields = sorted({f.strip() for f in value.split(",")} & _ALLOWED_APPEND)
+    return ",".join(fields) or None
 _MAX_RETRIES = 5
 
 # Sync client — used by background tasks and nightly refresh loops.

@@ -89,7 +89,7 @@ def ensure_show_in_db(db: Session, show_id: int) -> bool:
         name=show_data["name"],
         backdrop_path=show_data.get("backdrop_path"),
         logo_path=None,
-        last_air_date=show_data.get("last_air_date"),
+        last_air_date=show_data.get("last_air_date") or None,
         homepage=show_data.get("homepage"),
         in_production=show_data.get("in_production"),
         number_of_seasons=show_data.get("number_of_seasons"),
@@ -98,7 +98,7 @@ def ensure_show_in_db(db: Session, show_id: int) -> bool:
         tagline=show_data.get("tagline"),
         overview=show_data.get("overview"),
         type=show_data.get("type"),
-        first_air_date=show_data.get("first_air_date"),
+        first_air_date=show_data.get("first_air_date") or None,
         poster_path=show_data.get("poster_path"),
         tracking_count=0,
     )
@@ -258,15 +258,18 @@ def maybe_sync_show_episodes(db: Session, show_id: int):
     sync_show_episodes(db, show_id)
 
 
-def sync_show_episodes_background(show_id: int):
+def maybe_sync_show_episodes_background(show_id: int):
     """
-    Background task: sync all episodes for a show using its own DB session.
+    Background task: sync a show's episodes (own DB session) only if none are
+    stored yet. Stored episodes are kept current by the nightly refresh, and
+    populate_show_bg already syncs brand-new shows, so re-fetching every
+    season on each add only cost TMDb calls.
     """
     from app.db.session import SessionLocal
 
     db = SessionLocal()
     try:
-        sync_show_episodes(db, show_id)
+        maybe_sync_show_episodes(db, show_id)
     except Exception:
         logger.exception("Error syncing episodes for show %s", show_id)
     finally:

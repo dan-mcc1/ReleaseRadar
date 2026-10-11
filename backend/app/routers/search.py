@@ -1,6 +1,6 @@
 import asyncio
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 from fastapi.concurrency import run_in_threadpool
 
 from app.services.tmdb_search import (
@@ -22,11 +22,17 @@ from app.services.tmdb_search import (
     get_tv_upcoming,
 )
 from app.core.http_cache import LIST_CACHE, STATIC_CACHE
+from app.core.limiter import rate_limit
 
 router = APIRouter()
 
 
-@router.get("", dependencies=[LIST_CACHE])
+# Each query fans out to four TMDb searches; it gets a tighter budget on top
+# of the router-wide public one.
+@router.get(
+    "",
+    dependencies=[LIST_CACHE, Depends(rate_limit("search", "SEARCH_RATE_LIMIT"))],
+)
 async def search(
     query: str = "",
     genre_id: int = None,

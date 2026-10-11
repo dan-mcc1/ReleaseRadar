@@ -1,7 +1,7 @@
 # app/dependencies/auth.py
 from datetime import datetime, timezone
 from threading import Lock
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from cachetools import TTLCache
@@ -27,6 +27,7 @@ def _is_email_banned(email: str, db: Session) -> bool:
 
 
 def get_token_claims(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     db: Session = Depends(get_db),
 ) -> dict:
@@ -43,6 +44,7 @@ def get_token_claims(
         raise HTTPException(status_code=403, detail={"code": "account_banned", "message": "Your account has been permanently banned."})
 
     uid = decoded_token["uid"]
+    request.state.uid = uid  # rate limits count per user (core/limiter.py)
     user = db.get(User, uid)
     if user:
         now = datetime.now(timezone.utc)
@@ -69,6 +71,7 @@ def get_current_user(claims: dict = Depends(get_token_claims)) -> str:
 
 
 def get_token_claims_strict(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     db: Session = Depends(get_db),
 ) -> dict:
@@ -84,6 +87,7 @@ def get_token_claims_strict(
 
     from app.models.user import User
     uid = decoded_token["uid"]
+    request.state.uid = uid  # rate limits count per user (core/limiter.py)
     user = db.get(User, uid)
     if user and user.is_banned:
         raise HTTPException(status_code=403, detail={"code": "account_banned", "message": "Your account has been banned."})
@@ -92,6 +96,7 @@ def get_token_claims_strict(
 
 
 def get_current_user_strict(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     db: Session = Depends(get_db),
 ) -> str:
@@ -106,6 +111,7 @@ def get_current_user_strict(
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
     uid = decoded_token["uid"]
+    request.state.uid = uid  # rate limits count per user (core/limiter.py)
     token_email = decoded_token.get("email", "")
     if token_email and _is_email_banned(token_email, db):
         raise HTTPException(status_code=403, detail={"code": "account_banned", "message": "Your account has been permanently banned."})
@@ -119,14 +125,16 @@ def get_current_user_strict(
 
 
 def get_uid_only(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
 ):
     """Verify token only — no suspension/ban/silence check. Use for endpoints banned users must reach."""
     try:
         decoded_token = verify_token(credentials.credentials)
-        return decoded_token["uid"]
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
+    request.state.uid = decoded_token["uid"]
+    return decoded_token["uid"]
 
 
 def require_not_silenced(
