@@ -309,7 +309,7 @@ class TestLifespan:
         started = self._loops_started(monkeypatch)
 
         assert "_activity_cleanup_loop" not in started
-        assert "_daily_digest_loop" in started  # the other loops still start
+        assert "_episode_alert_loop" in started  # the remaining loop still starts
 
     def test_scheduler_loops_no_longer_run_the_3am_refresh(self, monkeypatch):
         started = self._loops_started(monkeypatch)
@@ -317,10 +317,10 @@ class TestLifespan:
         assert "_episode_update_loop" not in started
         assert "_episode_alert_loop" in started
 
-    def test_only_the_digest_and_episode_alert_loops_remain(self, monkeypatch):
+    def test_only_the_episode_alert_loop_remains(self, monkeypatch):
         started = self._loops_started(monkeypatch)
 
-        assert sorted(started) == ["_daily_digest_loop", "_episode_alert_loop"]
+        assert started == ["_episode_alert_loop"]
 
 
 class _EveningInNewYork(datetime):

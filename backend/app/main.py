@@ -4,7 +4,7 @@ import time
 
 import httpx
 from contextlib import asynccontextmanager, contextmanager
-from datetime import datetime, timedelta, timezone as dt_timezone
+from datetime import datetime, timezone as dt_timezone
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
@@ -74,10 +74,6 @@ from fastapi.middleware.gzip import GZipMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from app.db.session import SessionLocal, engine
 from app.jobs import start_job_queue, stop_job_queue
-from app.routers.notifications import (
-    send_daily_digest_to_all,
-    send_season_premiere_alerts_to_all,
-)
 from app.services.episode_alert_service import (
     next_alert_window,
     plan_episode_alerts,
@@ -97,36 +93,6 @@ def _db_session():
         raise
     finally:
         db.close()
-
-
-async def _daily_digest_loop():
-    """Fires at the top of every hour. Each function filters users by their preferred local hour."""
-    while True:
-        try:
-            now = datetime.now(dt_timezone.utc)
-            next_hour = (now + timedelta(hours=1)).replace(
-                minute=0, second=0, microsecond=0
-            )
-            wait_seconds = (next_hour - now).total_seconds()
-            logger.info(
-                "daily digest: sleeping %.0fs until top of next hour", wait_seconds
-            )
-            await asyncio.sleep(wait_seconds)
-
-            now_utc = datetime.now(dt_timezone.utc)
-            logger.info(
-                "daily digest: hourly sweep firing at %s UTC", now_utc.strftime("%H:%M")
-            )
-            with _db_session() as db:
-                await asyncio.to_thread(send_daily_digest_to_all, db, now_utc=now_utc)
-                await asyncio.to_thread(
-                    send_season_premiere_alerts_to_all, db, now_utc=now_utc
-                )
-            logger.info("daily digest: hourly sweep done")
-
-        except Exception:
-            logger.exception("daily digest loop error")
-            await asyncio.sleep(60)
 
 
 async def _episode_alert_loop():
@@ -188,7 +154,6 @@ async def lifespan(app: FastAPI):
     tasks: list[asyncio.Task] = []
     if settings.RUN_SCHEDULERS:
         tasks = [
-            asyncio.create_task(_daily_digest_loop()),
             asyncio.create_task(_episode_alert_loop()),
         ]
     else:
