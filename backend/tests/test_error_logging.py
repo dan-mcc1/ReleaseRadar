@@ -32,19 +32,36 @@ class TestAppLoggerSetup:
         assert "nightly job finished" in err
         assert "app.services.example" in err
 
+    def test_durable_queue_info_lines_are_emitted_formatted(self, capsys):
+        from app.core.logging import setup_logging
+
+        queue_logger = logging.getLogger("durable_queue")
+        saved = queue_logger.handlers[:]
+        try:
+            setup_logging()
+            logging.getLogger("durable_queue.runner").info("worker restarted")
+            err = capsys.readouterr().err
+        finally:
+            queue_logger.handlers[:] = saved
+
+        # Formatted, not bare: logging's last-resort handler would print only
+        # the message, and only at WARNING and above.
+        assert "INFO durable_queue.runner: worker restarted" in err
+
     def test_setup_is_idempotent(self):
         from app.core.logging import setup_logging
 
-        app_logger = logging.getLogger("app")
-        saved = app_logger.handlers[:]
+        loggers = [logging.getLogger("app"), logging.getLogger("durable_queue")]
+        saved = [named.handlers[:] for named in loggers]
         try:
             setup_logging()
             setup_logging()
-            count = len(app_logger.handlers)
+            counts = [len(named.handlers) for named in loggers]
         finally:
-            app_logger.handlers[:] = saved
+            for named, handlers in zip(loggers, saved):
+                named.handlers[:] = handlers
 
-        assert count == 1
+        assert counts == [1, 1]
 
 
 class TestBackgroundFailuresAreLogged:
