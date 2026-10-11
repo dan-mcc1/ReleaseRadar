@@ -5,7 +5,6 @@ import time
 import httpx
 from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timedelta, timezone as dt_timezone
-from zoneinfo import ZoneInfo
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
@@ -79,16 +78,10 @@ from app.routers.notifications import (
     send_daily_digest_to_all,
     send_season_premiere_alerts_to_all,
 )
-from app.services.streaming_notification_service import refresh_streaming_providers
-from app.services.trailer_notification_service import refresh_trailers
 from app.services.episode_alert_service import (
     next_alert_window,
     plan_episode_alerts,
     send_planned_alert,
-)
-from app.services.stripe_reconciliation_service import reconcile_stripe_subscriptions
-from app.services.collection_ingest_service import (
-    daily_refresh as collections_daily_sync,
 )
 
 logger = logging.getLogger(__name__)
@@ -136,63 +129,6 @@ async def _daily_digest_loop():
             await asyncio.sleep(60)
 
 
-async def _trailer_refresh_loop():
-    """Refresh trailers and notify users of new ones once a day at noon Eastern."""
-    eastern = ZoneInfo("America/New_York")
-    while True:
-        try:
-            now = datetime.now(eastern)
-            next_run = now.replace(hour=12, minute=0, second=0, microsecond=0)
-            if now >= next_run:
-                next_run += timedelta(days=1)
-            await asyncio.sleep((next_run - now).total_seconds())
-            logger.info("trailers: starting trailer refresh")
-            with _db_session() as db:
-                await asyncio.to_thread(refresh_trailers, db)
-            logger.info("trailers: done")
-        except Exception:
-            logger.exception("trailers loop error")
-            await asyncio.sleep(60)
-
-
-async def _stripe_reconciliation_loop():
-    """Reconcile local subscription state against Stripe once a day at 4am Eastern."""
-    eastern = ZoneInfo("America/New_York")
-    while True:
-        try:
-            now = datetime.now(eastern)
-            next_run = now.replace(hour=4, minute=0, second=0, microsecond=0)
-            if now >= next_run:
-                next_run += timedelta(days=1)
-            await asyncio.sleep((next_run - now).total_seconds())
-            logger.info("stripe reconcile: starting")
-            with _db_session() as db:
-                await asyncio.to_thread(reconcile_stripe_subscriptions, db)
-            logger.info("stripe reconcile: done")
-        except Exception:
-            logger.exception("stripe reconcile loop error")
-            await asyncio.sleep(60)
-
-
-async def _streaming_refresh_loop():
-    """Refresh streaming providers and notify users of changes once a day at 5am."""
-    eastern = ZoneInfo("America/New_York")
-    while True:
-        try:
-            now = datetime.now(eastern)
-            next_run = now.replace(hour=11, minute=0, second=0, microsecond=0)
-            if now >= next_run:
-                next_run += timedelta(days=1)
-            await asyncio.sleep((next_run - now).total_seconds())
-            logger.info("streaming: starting provider refresh")
-            with _db_session() as db:
-                await asyncio.to_thread(refresh_streaming_providers, db)
-            logger.info("streaming: done")
-        except Exception:
-            logger.exception("streaming loop error")
-            await asyncio.sleep(60)
-
-
 async def _episode_alert_loop():
     """Per-episode air-time pushes.
 
@@ -232,27 +168,6 @@ async def _episode_alert_loop():
             await asyncio.sleep(60)
 
 
-async def _collection_sync_loop():
-    """Daily collection mirror sync at 08:30 UTC. TMDb promises the day's id
-    dump "by 8:00 AM UTC"; the extra half hour clears that edge, and the sync
-    falls back to yesterday's dump if today's still isn't up. Pulls new +
-    changed collections and re-fetches details."""
-    while True:
-        try:
-            now = datetime.now(dt_timezone.utc)
-            next_run = now.replace(hour=8, minute=30, second=0, microsecond=0)
-            if now >= next_run:
-                next_run += timedelta(days=1)
-            await asyncio.sleep((next_run - now).total_seconds())
-            logger.info("collections sync: starting daily mirror sync")
-            with _db_session() as db:
-                await asyncio.to_thread(collections_daily_sync, db)
-            logger.info("collections sync: done")
-        except Exception:
-            logger.exception("collections sync loop error")
-            await asyncio.sleep(60)
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Alembic is the single source of truth for the production schema —
@@ -274,11 +189,7 @@ async def lifespan(app: FastAPI):
     if settings.RUN_SCHEDULERS:
         tasks = [
             asyncio.create_task(_daily_digest_loop()),
-            asyncio.create_task(_streaming_refresh_loop()),
-            asyncio.create_task(_trailer_refresh_loop()),
-            asyncio.create_task(_stripe_reconciliation_loop()),
             asyncio.create_task(_episode_alert_loop()),
-            asyncio.create_task(_collection_sync_loop()),
         ]
     else:
         logger.info("RUN_SCHEDULERS=false — background loops disabled on this replica")

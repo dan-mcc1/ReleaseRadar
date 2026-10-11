@@ -303,7 +303,12 @@ class TestLifespan:
         started = self._loops_started(monkeypatch)
 
         assert "_episode_update_loop" not in started
-        assert "_streaming_refresh_loop" in started
+        assert "_episode_alert_loop" in started
+
+    def test_only_the_digest_and_episode_alert_loops_remain(self, monkeypatch):
+        started = self._loops_started(monkeypatch)
+
+        assert sorted(started) == ["_daily_digest_loop", "_episode_alert_loop"]
 
 
 class _EveningInNewYork(datetime):
