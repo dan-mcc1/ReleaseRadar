@@ -73,6 +73,7 @@ async def full_movie_info(
 
     us_providers = movie_data.get("watch/providers", {}).get("results", {}).get("US")
     if us_providers:
-        normalize_tmdb_watch_providers(us_providers, db=db)
+        # Queries the Provider table — keep it off the event loop.
+        await run_in_threadpool(normalize_tmdb_watch_providers, us_providers, db=db)
 
     return movie_data

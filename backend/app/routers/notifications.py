@@ -827,7 +827,10 @@ def send_digest(
     return {"message": "Digest email queued"}
 
 
-@router.get("/unsubscribe")
+# POST only: mail providers and link scanners prefetch links with GET, which
+# must not unsubscribe anyone. Gmail/Yahoo one-click unsubscribe POSTs here
+# (List-Unsubscribe header); the frontend /unsubscribe page POSTs on confirm.
+@router.post("/unsubscribe")
 def unsubscribe(
     uid: str = Query(...),
     token: str = Query(...),

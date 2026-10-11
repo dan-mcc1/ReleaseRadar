@@ -362,3 +362,39 @@ class TestSeedLimit:
 class TestForYouPgOnly:
     def test_placeholder(self):
         pass
+
+
+class TestFetchConcurrencyIsShared:
+    """Each For You request used to start its own 10-thread pool, so
+    concurrent requests multiplied the threads (and parallel TMDb calls)."""
+
+    def test_concurrent_requests_share_one_bounded_pool(self):
+        import threading
+        import time
+        from unittest.mock import patch
+        from app.services import for_you_service as svc
+
+        lock = threading.Lock()
+        in_flight = {"now": 0, "max": 0}
+
+        def slow_get(path, params=None):
+            with lock:
+                in_flight["now"] += 1
+                in_flight["max"] = max(in_flight["max"], in_flight["now"])
+            time.sleep(0.05)
+            with lock:
+                in_flight["now"] -= 1
+            return {"results": []}
+
+        def request(base):
+            svc._ranked_candidates([("movie", base + i) for i in range(20)])
+
+        with patch.object(svc, "get", side_effect=slow_get):
+            workers = [threading.Thread(target=request, args=(7_100_000 + n * 100,))
+                       for n in range(3)]
+            for w in workers:
+                w.start()
+            for w in workers:
+                w.join()
+
+        assert in_flight["max"] <= svc._MAX_WORKERS

@@ -1101,3 +1101,75 @@ class TestImportTmdbFetching:
         db.expire_all()
         show = db.get(Show, 1399)
         assert (show.logo_path, show.certification) == ("/en-logo.png", "TV-MA")
+
+
+class _ChunkedUpload:
+    """Stands in for UploadFile: hands out bytes on demand and fails the test
+    if anyone asks for the whole thing at once."""
+
+    def __init__(self, total: int, size: int | None = None):
+        self.remaining = total
+        self.bytes_read = 0
+        self.size = size
+
+    async def read(self, size: int = -1) -> bytes:
+        assert size is not None and size > 0, "unbounded read of an upload"
+        n = min(size, self.remaining)
+        self.remaining -= n
+        self.bytes_read += n
+        return b"x" * n
+
+
+def _run(coro):
+    import asyncio
+
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(coro)
+    finally:
+        loop.close()
+
+
+class TestUploadReadIsCapped:
+    """The whole upload used to be read into memory before its size was
+    checked, so a huge file cost that much RAM just to be rejected."""
+
+    def test_oversize_upload_stops_reading_near_the_cap(self):
+        from fastapi import HTTPException
+
+        cap = 1_000_000
+        upload = _ChunkedUpload(total=50 * cap)
+        with pytest.raises(HTTPException) as e:
+            _run(ir._read_upload(upload, cap))
+        assert e.value.status_code == 413
+        assert upload.bytes_read <= 2 * cap
+
+    def test_declared_oversize_is_rejected_without_reading(self):
+        from fastapi import HTTPException
+
+        upload = _ChunkedUpload(total=5_000, size=5_000)
+        with pytest.raises(HTTPException) as e:
+            _run(ir._read_upload(upload, 1_000))
+        assert e.value.status_code == 413
+        assert upload.bytes_read == 0
+
+    def test_upload_within_the_cap_is_returned_whole(self):
+        upload = _ChunkedUpload(total=2_500_000)
+        assert len(_run(ir._read_upload(upload, 3_000_000))) == 2_500_000
+
+
+class TestImportRateLimit:
+    def test_imports_are_rate_limited_per_user(self, client, seed_users, monkeypatch):
+        from app.core.limiter import limiter
+
+        monkeypatch.setattr(limiter, "enabled", True)
+        limiter.reset()
+        try:
+            codes = [
+                client.post("/import/tvtime", files={"file": ("x.png", b"x", "image/png")}).status_code
+                for _ in range(11)
+            ]
+        finally:
+            limiter.reset()
+        assert codes[:10] == [422] * 10
+        assert codes[10] == 429

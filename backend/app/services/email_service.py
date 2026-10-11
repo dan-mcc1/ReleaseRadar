@@ -4,6 +4,7 @@ import hashlib
 from datetime import datetime, timezone
 import resend
 from collections import defaultdict
+from urllib.parse import quote
 from app.config import settings
 from html import escape
 
@@ -12,13 +13,32 @@ logger = logging.getLogger(__name__)
 TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w185"
 
 
-def _unsubscribe_url(uid: str) -> str:
-    token = hmac.new(
+def _unsubscribe_token(uid: str) -> str:
+    return hmac.new(
         settings.UNSUBSCRIBE_SECRET.encode(),
         uid.encode(),
         hashlib.sha256,
     ).hexdigest()
-    return f"{settings.FRONTEND_URL}/unsubscribe?uid={uid}&token={token}"
+
+
+def _unsubscribe_url(uid: str) -> str:
+    return f"{settings.FRONTEND_URL}/unsubscribe?uid={uid}&token={_unsubscribe_token(uid)}"
+
+
+def _list_unsubscribe_headers(uid: str) -> dict:
+    """RFC 8058 one-click unsubscribe, which Gmail and Yahoo require from bulk
+    senders: the provider POSTs to this API URL directly (the frontend page
+    can't take a POST). Omitted until API_PUBLIC_URL is configured."""
+    if not uid or not settings.API_PUBLIC_URL:
+        return {}
+    url = (
+        f"{settings.API_PUBLIC_URL.rstrip('/')}/notifications/unsubscribe"
+        f"?uid={quote(uid, safe='')}&token={_unsubscribe_token(uid)}"
+    )
+    return {
+        "List-Unsubscribe": f"<{url}>",
+        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+    }
 
 
 def _format_date(date_str: str) -> str:
@@ -256,7 +276,7 @@ def send_notification_email(
   </a>
 </div>"""
 
-    send_email(to_email, subject, _email_wrapper(body, uid))
+    send_email(to_email, subject, _email_wrapper(body, uid), uid=uid)
 
 
 # ── Season premiere alert ─────────────────────────────────────────────────────
@@ -337,7 +357,7 @@ def send_season_premiere_email(
   </a>
 </div>"""
 
-    send_email(to_email, subject, _email_wrapper(body, uid))
+    send_email(to_email, subject, _email_wrapper(body, uid), uid=uid)
 
 
 # ── New season alert (reactivation) ──────────────────────────────────────────
@@ -451,7 +471,7 @@ def send_new_season_available_email(
   </a>
 </div>"""
 
-    send_email(to_email, subject, _email_wrapper(body, uid))
+    send_email(to_email, subject, _email_wrapper(body, uid), uid=uid)
 
 
 # ── Recommendation email ──────────────────────────────────────────────────────
@@ -522,6 +542,7 @@ def send_recommendation_email(
         to_email,
         f'@{from_username} recommended "{content_title}" to you',
         _email_wrapper(body, uid),
+        uid=uid,
     )
 
 
@@ -561,6 +582,7 @@ def send_community_invite_email(
         to_email,
         f"@{from_username} invited you to {group_name}",
         _email_wrapper(body, uid),
+        uid=uid,
     )
 
 
@@ -666,7 +688,7 @@ def send_streaming_alert_email(
   </a>
 </div>"""
 
-    send_email(to_email, subject, _email_wrapper(body, uid))
+    send_email(to_email, subject, _email_wrapper(body, uid), uid=uid)
 
 
 def send_trailer_alert_email(
@@ -808,23 +830,27 @@ def send_trailer_alert_email(
   </a>
 </div>"""
 
-    send_email(to_email, subject, _email_wrapper(body, uid))
+    send_email(to_email, subject, _email_wrapper(body, uid), uid=uid)
 
 
-def send_email(to_email: str, subject: str, html_body: str):
+def send_email(to_email: str, subject: str, html_body: str, uid: str = ""):
+    """Send one email. Pass the recipient's uid to add one-click unsubscribe."""
     if not settings.RESEND_API_KEY:
         logger.warning("RESEND_API_KEY not configured, skipping email")
         return
 
+    params = {
+        "from": settings.EMAIL_FROM,
+        "to": to_email,
+        "subject": subject,
+        "html": html_body,
+    }
+    headers = _list_unsubscribe_headers(uid)
+    if headers:
+        params["headers"] = headers
+
     resend.api_key = settings.RESEND_API_KEY
     try:
-        resend.Emails.send(
-            {
-                "from": settings.EMAIL_FROM,
-                "to": to_email,
-                "subject": subject,
-                "html": html_body,
-            }
-        )
+        resend.Emails.send(params)
     except Exception:
         logger.exception("email send failed (subject %r)", subject)

@@ -306,7 +306,7 @@ class TestUnsubscribe:
     def test_valid_token_unsubscribes(self, client, db):
         _seed_user(db, email_notifications=True)
         token = _make_unsubscribe_token("test-uid-1")
-        r = client.get(f"/notifications/unsubscribe?uid=test-uid-1&token={token}")
+        r = client.post(f"/notifications/unsubscribe?uid=test-uid-1&token={token}")
         assert r.status_code == 200
         from app.models.user import User
 
@@ -314,14 +314,39 @@ class TestUnsubscribe:
         db.refresh(user)
         assert user.email_notifications is False
 
+    def test_one_click_post_from_a_mail_provider_unsubscribes(self, client, db):
+        # RFC 8058: Gmail/Yahoo POST this form body to the List-Unsubscribe URL.
+        from app.models.user import User
+
+        _seed_user(db, email_notifications=True)
+        token = _make_unsubscribe_token("test-uid-1")
+        r = client.post(
+            f"/notifications/unsubscribe?uid=test-uid-1&token={token}",
+            content=b"List-Unsubscribe=One-Click",
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        assert r.status_code == 200
+        db.expire_all()
+        assert db.query(User).filter_by(id="test-uid-1").one().email_notifications is False
+
+    def test_get_request_changes_nothing(self, client, db):
+        # Mail scanners prefetch links in emails; a GET must not unsubscribe.
+        from app.models.user import User
+
+        _seed_user(db, email_notifications=True)
+        token = _make_unsubscribe_token("test-uid-1")
+        client.get(f"/notifications/unsubscribe?uid=test-uid-1&token={token}")
+        db.expire_all()
+        assert db.query(User).filter_by(id="test-uid-1").one().email_notifications is True
+
     def test_invalid_token_returns_400(self, client, db):
         _seed_user(db)
-        r = client.get("/notifications/unsubscribe?uid=test-uid-1&token=badtoken")
+        r = client.post("/notifications/unsubscribe?uid=test-uid-1&token=badtoken")
         assert r.status_code == 400
 
     def test_missing_user_returns_404(self, client):
         token = _make_unsubscribe_token("nonexistent-uid")
-        r = client.get(f"/notifications/unsubscribe?uid=nonexistent-uid&token={token}")
+        r = client.post(f"/notifications/unsubscribe?uid=nonexistent-uid&token={token}")
         assert r.status_code == 404
 
 

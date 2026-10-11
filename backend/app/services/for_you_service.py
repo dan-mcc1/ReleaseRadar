@@ -28,6 +28,10 @@ _rec_cache_lock = threading.RLock()
 _ranked_cache: TTLCache = TTLCache(maxsize=2000, ttl=_RANKED_TTL)
 _ranked_cache_lock = threading.RLock()
 
+# One pool shared by every request: concurrent For You loads share these
+# threads (and TMDb's request budget) instead of each starting its own.
+_fetch_pool = ThreadPoolExecutor(max_workers=_MAX_WORKERS, thread_name_prefix="for-you")
+
 
 def _fetch_tmdb_recommendations(content_type: str, content_id: int) -> list[dict]:
     key = (content_type, content_id)
@@ -110,23 +114,19 @@ def _ranked_candidates(seeds: list[tuple[str, int]]) -> list[dict]:
     score_map: dict[tuple[str, int], dict] = {}
     frequency: dict[tuple[str, int], int] = defaultdict(int)
 
-    with ThreadPoolExecutor(max_workers=_MAX_WORKERS) as executor:
-        futures = {
-            executor.submit(_fetch_tmdb_recommendations, ct, cid): (ct, cid)
-            for ct, cid in seeds
-        }
-        for future in as_completed(futures):
-            recs = future.result()
-            for item in recs:
-                ct = "movie" if "title" in item else "tv"
-                cid = item.get("id")
-                if not cid:
-                    continue
-                key_ = (ct, cid)
-                frequency[key_] += 1
-                if key_ not in score_map:
-                    score_map[key_] = {"score": 0, "item": item, "content_type": ct}
-                score_map[key_]["score"] = frequency[key_] * 10 + item.get("popularity", 0)
+    futures = [_fetch_pool.submit(_fetch_tmdb_recommendations, ct, cid) for ct, cid in seeds]
+    for future in as_completed(futures):
+        recs = future.result()
+        for item in recs:
+            ct = "movie" if "title" in item else "tv"
+            cid = item.get("id")
+            if not cid:
+                continue
+            key_ = (ct, cid)
+            frequency[key_] += 1
+            if key_ not in score_map:
+                score_map[key_] = {"score": 0, "item": item, "content_type": ct}
+            score_map[key_]["score"] = frequency[key_] * 10 + item.get("popularity", 0)
 
     ranked = sorted(score_map.values(), key=lambda x: x["score"], reverse=True)
     # Nothing at all usually means TMDb failed; don't pin that for 30 minutes.

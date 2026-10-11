@@ -692,3 +692,35 @@ class TestUpsertWriteOrder:
 
         genre_ids = [i for i in self._inserted_ids(statements, "genre") if i in (18, 53, 878)]
         assert genre_ids == [18, 53, 878]
+
+
+class TestShowAirTimeUsesExternalIds:
+    def test_populate_matches_tvmaze_by_tvdb_id(self, db):
+        from unittest.mock import MagicMock
+        from app.models.show import Show
+        from app.services.media_upsert import populate_show_bg
+
+        db.add(Show(id=80003, name="", tracking_count=1, updated_at=None))
+        db.commit()
+        show_data = {
+            "id": 80003, "name": "Ghosts", "genres": [], "seasons": [],
+            "watch/providers": {"results": {}}, "images": {"logos": []},
+            "content_ratings": {"results": []},
+            "external_ids": {"tvdb_id": 397041, "imdb_id": "tt11379026"},
+        }
+        lookup = MagicMock(ok=True)
+        lookup.json.return_value = {
+            "name": "Ghosts", "schedule": {"time": "20:30"},
+            "network": {"country": {"timezone": "America/New_York"}},
+        }
+        with patch("app.services.media_upsert.fetch_show_from_tmdb",
+                   return_value=show_data) as fetch, \
+             patch("app.services.tvmaze_service.requests.get", return_value=lookup) as tvmaze, \
+             patch("app.services.episode_service.sync_show_episodes"):
+            populate_show_bg(80003)
+
+        assert "external_ids" in fetch.call_args.args[1].split(",")
+        assert tvmaze.call_args.kwargs["params"] == {"thetvdb": 397041}
+        db.expire_all()
+        row = db.query(Show).filter_by(id=80003).one()
+        assert (row.air_time, row.air_timezone) == ("20:30", "America/New_York")

@@ -20,6 +20,10 @@ from app.db.upsert import insert_if_absent
 
 logger = logging.getLogger(__name__)
 
+# What ensure_show_in_db / populate_show_bg need from /tv/{id}. external_ids
+# lets fetch_show_air_time match TVmaze by id rather than by name.
+SHOW_APPEND = "watch/providers,images,content_ratings,external_ids"
+
 
 # -------------------------
 # Genre/provider/season upsert helpers
@@ -384,9 +388,7 @@ def ensure_show_in_db(
     if show:
         return show
 
-    show_data = tmdb_data or fetch_show_from_tmdb(
-        content_id, "watch/providers,images,content_ratings"
-    )
+    show_data = tmdb_data or fetch_show_from_tmdb(content_id, SHOW_APPEND)
     if not show_data or not show_data.get("name"):
         raise ValueError("Cannot add show without a name")
 
@@ -394,7 +396,7 @@ def ensure_show_in_db(
     all_logos = show_data.get("images", {}).get("logos", [])
     english_logos = [l for l in all_logos if l.get("iso_639_1") == "en"]
     logo = english_logos[0]["file_path"] if english_logos else None
-    air_time, air_timezone = fetch_show_air_time(show_data["name"])
+    air_time, air_timezone = fetch_show_air_time(show_data)
     certification = get_us_show_certification(show_data)
 
     show = Show(
@@ -501,7 +503,7 @@ def populate_show_bg(content_id: int) -> None:
         if not show or show.updated_at is not None:
             return
 
-        show_data = fetch_show_from_tmdb(content_id, "watch/providers,images,content_ratings")
+        show_data = fetch_show_from_tmdb(content_id, SHOW_APPEND)
         if not show_data or not show_data.get("name"):
             return
 
@@ -509,7 +511,7 @@ def populate_show_bg(content_id: int) -> None:
         all_logos = show_data.get("images", {}).get("logos", [])
         english_logos = [l for l in all_logos if l.get("iso_639_1") == "en"]
         logo = english_logos[0]["file_path"] if english_logos else None
-        air_time, air_timezone = fetch_show_air_time(show_data["name"])
+        air_time, air_timezone = fetch_show_air_time(show_data)
         certification = get_us_show_certification(show_data)
 
         show.name = show_data["name"]

@@ -5,15 +5,17 @@ import csv
 import io
 import json
 import zipfile
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File
 from sqlalchemy.orm import Session
 from app.db.session import get_db, SessionLocal
+from app.core.limiter import limiter
 from app.dependencies.auth import get_current_user
 from app.services.tmdb_client import get as tmdb_get
 from app.services.tmdb_movies import search_movies, fetch_movie_from_tmdb
 from app.services.tmdb_tv import fetch_show_from_tmdb
 from app.services.tmdb_search import get_tv_search_results
 from app.services.media_upsert import (
+    SHOW_APPEND,
     ensure_movie_in_db,
     ensure_show_in_db,
     recount_tracking,
@@ -37,13 +39,31 @@ router = APIRouter()
 
 _MAX_ROWS = 2000
 _MAX_FILE_BYTES = 20 * 1024 * 1024  # 20 MB
+_UPLOAD_CHUNK = 1024 * 1024
+# Imports are heavy (thousands of TMDb lookups); this is per user.
+_IMPORT_RATE_LIMIT = "10/hour"
+
+
+async def _read_upload(file, limit: int = _MAX_FILE_BYTES) -> bytes:
+    """Read an upload, refusing anything over `limit` while holding at most
+    about limit + one chunk in memory (file.read() with no size loads it all)."""
+    too_large = HTTPException(
+        status_code=413, detail=f"File too large (max {limit // (1024 * 1024)} MB)."
+    )
+    if file.size is not None and file.size > limit:
+        raise too_large
+    buf = bytearray()
+    while chunk := await file.read(_UPLOAD_CHUNK):
+        buf += chunk
+        if len(buf) > limit:
+            raise too_large
+    return bytes(buf)
 _CONCURRENCY = 10  # max concurrent TMDB requests
 
 _WATCHED_CSVS = ["watched.csv", "diary.csv", "ratings.csv", "reviews.csv"]
 _WATCHLIST_CSVS = ["watchlist.csv"]
 
 _MOVIE_APPEND = "watch/providers,release_dates,images"
-_SHOW_APPEND = "watch/providers,images,content_ratings"
 
 
 def _fetch_slim(media_type: str, tmdb_id: int) -> dict | None:
@@ -52,7 +72,7 @@ def _fetch_slim(media_type: str, tmdb_id: int) -> dict | None:
     (~400 KB each for a movie) would cost hundreds of MB."""
     if media_type == "movie":
         return slim_tmdb_payload(fetch_movie_from_tmdb(tmdb_id, _MOVIE_APPEND))
-    return slim_tmdb_payload(fetch_show_from_tmdb(tmdb_id, _SHOW_APPEND))
+    return slim_tmdb_payload(fetch_show_from_tmdb(tmdb_id, SHOW_APPEND))
 
 
 def _parse_letterboxd_rating(raw: str) -> float | None:
@@ -159,7 +179,9 @@ def _collect_rows(texts: list[str], kind: str, max_rows: int) -> list[dict]:
 
 
 @router.post("/letterboxd")
+@limiter.limit(_IMPORT_RATE_LIMIT)
 async def import_letterboxd(
+    request: Request,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
@@ -172,9 +194,7 @@ async def import_letterboxd(
     if not (filename.endswith(".csv") or filename.endswith(".zip")):
         raise HTTPException(status_code=422, detail="Please upload a .csv or .zip file.")
 
-    raw_bytes = await file.read()
-    if len(raw_bytes) > _MAX_FILE_BYTES:
-        raise HTTPException(status_code=413, detail="File too large (max 20 MB).")
+    raw_bytes = await _read_upload(file)
 
     if filename.endswith(".zip"):
         csv_map = _extract_csvs_from_zip(raw_bytes)
@@ -810,7 +830,9 @@ def _extract_tvtime_files_from_zip(raw_bytes: bytes) -> dict[str, str]:
 
 
 @router.post("/tvtime")
+@limiter.limit(_IMPORT_RATE_LIMIT)
 async def import_tvtime(
+    request: Request,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
@@ -831,9 +853,7 @@ async def import_tvtime(
     if not (filename.endswith(".csv") or filename.endswith(".zip") or filename.endswith(".json")):
         raise HTTPException(status_code=422, detail="Please upload a .csv, .json, or .zip file.")
 
-    raw_bytes = await file.read()
-    if len(raw_bytes) > _MAX_FILE_BYTES:
-        raise HTTPException(status_code=413, detail="File too large (max 20 MB).")
+    raw_bytes = await _read_upload(file)
 
     if filename.endswith(".zip"):
         csv_map = _extract_tvtime_files_from_zip(raw_bytes)

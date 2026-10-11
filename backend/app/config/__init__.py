@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     TMDB_BEARER_TOKEN: str
     DATABASE_URL: str
     FRONTEND_URL: str
+    # Public base URL of this API (e.g. https://api.releaseradar.co). Emails
+    # use it for the one-click List-Unsubscribe header; unset = no header.
+    API_PUBLIC_URL: str = ""
     FIREBASE_CREDS_PATH: str
     RESEND_API_KEY: str
     EMAIL_FROM: str

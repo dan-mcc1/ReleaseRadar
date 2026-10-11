@@ -26,7 +26,7 @@ def captured_html():
     the html_body of each call."""
     captured: list[str] = []
 
-    def _capture(to_email, subject, html_body):
+    def _capture(to_email, subject, html_body, **kwargs):
         captured.append(html_body)
 
     with patch("app.services.email_service.send_email", side_effect=_capture):
@@ -347,7 +347,7 @@ class TestPosterPathEscaping:
 def captured_subjects():
     subjects: list[str] = []
 
-    def _capture(to_email, subject, html_body):
+    def _capture(to_email, subject, html_body, **kwargs):
         subjects.append(subject)
 
     with patch("app.services.email_service.send_email", side_effect=_capture):

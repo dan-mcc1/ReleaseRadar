@@ -27,7 +27,7 @@ def captured():
     """Patch send_email and capture (to, subject, html) tuples."""
     calls: list[tuple[str, str, str]] = []
 
-    def _capture(to_email, subject, html_body):
+    def _capture(to_email, subject, html_body, **kwargs):
         calls.append((to_email, subject, html_body))
 
     with patch("app.services.email_service.send_email", side_effect=_capture):
@@ -678,3 +678,53 @@ class TestEmailWrapper:
             assert "Release Radar" in body
             assert "Unsubscribe" in body
             assert "<!DOCTYPE html>" in body
+
+
+class TestOneClickUnsubscribeHeaders:
+    """Gmail and Yahoo require bulk senders to offer RFC 8058 one-click
+    unsubscribe: a List-Unsubscribe URL the provider can POST to."""
+
+    def _send_payload(self, send, monkeypatch, api_url="https://api.example.com"):
+        from app.services import email_service
+
+        monkeypatch.setattr(settings, "API_PUBLIC_URL", api_url)
+        with patch.object(email_service, "resend") as mock_resend:
+            send()
+        return mock_resend.Emails.send.call_args[0][0]
+
+    def test_headers_point_at_the_one_click_endpoint(self, monkeypatch):
+        from app.services.email_service import send_email
+
+        payload = self._send_payload(
+            lambda: send_email("a@b.com", "s", "<p/>", uid="u1"), monkeypatch
+        )
+        token = _expected_unsub_token("u1")
+        assert payload["headers"] == {
+            "List-Unsubscribe": f"<https://api.example.com/notifications/unsubscribe?uid=u1&token={token}>",
+            "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+        }
+
+    def test_no_headers_when_the_api_url_is_not_configured(self, monkeypatch):
+        from app.services.email_service import send_email
+
+        payload = self._send_payload(
+            lambda: send_email("a@b.com", "s", "<p/>", uid="u1"), monkeypatch, api_url=""
+        )
+        assert "headers" not in payload
+
+    @pytest.mark.parametrize("send", [
+        lambda es: es.send_notification_email(
+            "a@b.com", "alice", [{"title": "T", "date": "2026-01-01", "content_type": "movie"}],
+            uid="u2", frequency="daily"),
+        lambda es: es.send_recommendation_email(
+            to_email="a@b.com", to_username="alice", from_username="bob",
+            content_type="movie", content_title="T", content_id=1, message=None, uid="u2"),
+        lambda es: es.send_community_invite_email(
+            to_email="a@b.com", to_username="alice", from_username="bob",
+            group_name="G", group_slug="g", uid="u2"),
+    ])
+    def test_user_emails_carry_the_headers(self, monkeypatch, send):
+        from app.services import email_service
+
+        payload = self._send_payload(lambda: send(email_service), monkeypatch)
+        assert "uid=u2" in payload["headers"]["List-Unsubscribe"]

@@ -1,6 +1,6 @@
 import { useSearchParams, Link } from "react-router-dom";
 import { usePageTitle } from "../hooks/usePageTitle";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { apiFetch } from "../utils/apiFetch";
 
 export default function Unsubscribe() {
@@ -9,31 +9,44 @@ export default function Unsubscribe() {
   const uid = params.get("uid");
   const token = params.get("token");
 
-  const { isLoading, isSuccess } = useQuery({
-    queryKey: ["unsubscribe", uid, token],
-    queryFn: async () => {
+  // Unsubscribing waits for a click: email security scanners open links
+  // (and run their scripts) before the recipient ever sees them.
+  const unsubscribe = useMutation({
+    mutationFn: async () => {
       const res = await apiFetch(
         `/notifications/unsubscribe?uid=${encodeURIComponent(uid!)}&token=${encodeURIComponent(token!)}`,
+        { method: "POST" },
       );
       if (!res.ok) throw new Error("invalid");
-      return true;
     },
-    enabled: !!uid && !!token,
-    retry: false,
-    staleTime: Infinity,
   });
 
   const status =
-    !uid || !token
+    !uid || !token || unsubscribe.isError
       ? "error"
-      : isLoading
+      : unsubscribe.isPending
         ? "loading"
-        : isSuccess
+        : unsubscribe.isSuccess
           ? "success"
-          : "error";
+          : "confirm";
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] px-4 text-center">
+      {status === "confirm" && (
+        <>
+          <h1 className="text-2xl font-bold text-white mb-2">Unsubscribe?</h1>
+          <p className="text-neutral-400 mb-6">
+            You'll stop receiving all Release Radar emails.
+          </p>
+          <button
+            type="button"
+            onClick={() => unsubscribe.mutate()}
+            className="px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white rounded-lg text-sm font-medium transition-colors"
+          >
+            Unsubscribe from all emails
+          </button>
+        </>
+      )}
       {status === "loading" && (
         <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
       )}
