@@ -2,12 +2,16 @@
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from sqlalchemy import select, union
 from sqlalchemy.orm import Session
 
 from app.models.currently_watching import CurrentlyWatching
 from app.models.episode import Episode
 from app.models.movie import Movie
+from app.models.season import Season
+from app.models.sent_premiere_alert import SentPremiereAlert
 from app.models.show import Show
+from app.models.watched import Watched
 from app.models.watchlist import Watchlist
 from app.services.email_service import format_air_time
 
@@ -140,3 +144,84 @@ def digest_due(user, now_utc: datetime) -> date | None:
     if user.last_digest_sent_at is not None and user.last_digest_sent_at >= day:
         return None
     return day
+
+
+def premiere_eligible(user) -> bool:
+    """Premium users who want season-premiere alerts on at least one channel."""
+    if user.subscription_tier not in ("premium", "admin") or not user.notify_new_seasons:
+        return False
+    return bool(
+        (user.email_notifications and user.email)
+        or (user.push_notifications_enabled and user.push_notify_new_seasons)
+    )
+
+
+def pending_premiere_alerts(db: Session, user, alert_date: date) -> list[dict]:
+    """
+    Season-premiere alerts due to the user on alert_date and not sent yet.
+    The 30-day alert covers seasons 30 to 8 days away, the 7-day alert 7 to 1
+    days away; each goes out once. A show counts as tracked from the
+    Watchlist (with notify on) or the Watched list.
+    """
+    tracked = union(
+        select(Watchlist.content_id).where(
+            Watchlist.user_id == user.id,
+            Watchlist.content_type == "tv",
+            Watchlist.notify == True,  # noqa: E712
+        ),
+        select(Watched.content_id).where(
+            Watched.user_id == user.id, Watched.content_type == "tv"
+        ),
+    ).subquery()
+    rows = (
+        db.query(Season, Show)
+        .join(Show, Show.id == Season.show_id)
+        .filter(
+            Season.show_id.in_(select(tracked.c.content_id)),
+            Season.season_number > 0,
+            Season.air_date > alert_date,
+            Season.air_date <= alert_date + timedelta(days=30),
+        )
+        .order_by(Season.show_id, Season.season_number, Season.air_date)
+        .all()
+    )
+    sent = {
+        (a.show_id, a.season_number, a.lead_days)
+        for a in db.query(SentPremiereAlert).filter_by(user_id=user.id)
+    }
+    alerts, seen = [], set()
+    for season, show in rows:
+        if (season.show_id, season.season_number) in seen:
+            continue  # a second Season row for one season (TMDb reissued its id)
+        seen.add((season.show_id, season.season_number))
+        days_away = (season.air_date - alert_date).days
+        lead_days = 30 if days_away >= 8 else 7
+        if (season.show_id, season.season_number, lead_days) in sent:
+            continue
+        alerts.append({
+            "show_name": show.name,
+            "season_number": season.season_number,
+            "season_name": season.name,
+            "air_date": str(season.air_date),
+            "days_away": days_away,
+            "lead_days": lead_days,
+            "show_id": show.id,
+            "poster_path": show.poster_path,
+        })
+    return alerts
+
+
+def premiere_push_text(alert: dict) -> tuple[str, str]:
+    """The push title and body for one premiere alert."""
+    days = alert["days_away"]
+    if days == 0:
+        when = "today"
+    elif days == 1:
+        when = "in 1 day"
+    else:
+        when = f"in {days} days"
+    title = f"A new season of {alert['show_name']} airs {when}"
+    season_label = alert.get("season_name") or f"Season {alert['season_number']}"
+    air_dt = date.fromisoformat(alert["air_date"])
+    body = f"{season_label} releases on {air_dt.strftime('%B')} {air_dt.day}, {air_dt.year}"
+    return title, body

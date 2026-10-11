@@ -169,3 +169,95 @@ class TestPremiereBackfill:
         ])
 
         assert self._backfill(db) == [("test-uid-2", 2, 1, 30)]
+
+
+class TestPremiereEligible:
+    @pytest.mark.parametrize("overrides, eligible", [
+        ({}, True),                                    # premium, email on
+        ({"subscription_tier": "free"}, False),
+        ({"notify_new_seasons": False}, False),
+        ({"email_notifications": False}, False),       # no channel left
+        ({"email_notifications": False, "push_notifications_enabled": True}, True),
+    ])
+    def test_premium_users_with_a_channel(self, overrides, eligible):
+        from app.services.digest_service import premiere_eligible
+
+        assert premiere_eligible(_user(**overrides)) is eligible
+
+
+class TestPendingPremiereAlerts:
+    ALERT_DATE = date(2026, 10, 12)
+
+    def _season(self, db, show_id, *, days_out, season_id=None, number=1):
+        from app.models.season import Season
+        from app.models.show import Show
+
+        if db.get(Show, show_id) is None:
+            db.add(Show(id=show_id, name=f"Show {show_id}", tracking_count=0))
+            db.flush()
+        db.add(Season(id=season_id or show_id * 100 + number, show_id=show_id,
+                      season_number=number, air_date=self.ALERT_DATE + timedelta(days=days_out)))
+
+    def _pending(self, db):
+        from app.models.user import User
+        from app.services.digest_service import pending_premiere_alerts
+
+        db.commit()
+        return pending_premiere_alerts(db, db.get(User, "test-uid-1"), self.ALERT_DATE)
+
+    @pytest.mark.parametrize("days_out, lead", [
+        (30, 30), (20, 30), (8, 30), (7, 7), (1, 7), (31, None), (0, None),
+    ])
+    def test_lead_by_days_away(self, db, seed_users, days_out, lead):
+        from app.models.watchlist import Watchlist
+
+        self._season(db, 10, days_out=days_out)
+        db.add(Watchlist(user_id="test-uid-1", content_type="tv", content_id=10, notify=True))
+
+        alerts = self._pending(db)
+        assert [(a["lead_days"], a["days_away"]) for a in alerts] == (
+            [] if lead is None else [(lead, days_out)]
+        )
+
+    def test_recorded_alerts_are_not_pending(self, db, seed_users):
+        from app.models.sent_premiere_alert import SentPremiereAlert
+        from app.models.watchlist import Watchlist
+
+        self._season(db, 10, days_out=20)
+        db.add(Watchlist(user_id="test-uid-1", content_type="tv", content_id=10, notify=True))
+        db.add(SentPremiereAlert(user_id="test-uid-1", show_id=10, season_number=1, lead_days=30))
+
+        assert self._pending(db) == []
+
+    def test_counts_watched_but_not_a_muted_watchlist(self, db, seed_users):
+        from app.models.watched import Watched
+        from app.models.watchlist import Watchlist
+
+        self._season(db, 10, days_out=20)
+        self._season(db, 11, days_out=20)
+        db.add(Watchlist(user_id="test-uid-1", content_type="tv", content_id=10, notify=False))
+        db.add(Watched(user_id="test-uid-1", content_type="tv", content_id=11))
+
+        assert [a["show_id"] for a in self._pending(db)] == [11]
+
+    def test_two_rows_for_one_season_alert_once(self, db, seed_users):
+        from app.models.watchlist import Watchlist
+
+        # TMDb reissued the season's id, leaving two rows (seen for The Rookie).
+        self._season(db, 10, days_out=20, season_id=512798)
+        self._season(db, 10, days_out=20, season_id=514233)
+        db.add(Watchlist(user_id="test-uid-1", content_type="tv", content_id=10, notify=True))
+
+        assert len(self._pending(db)) == 1
+
+
+def test_push_text_matches_the_old_sweep():
+    from app.services.digest_service import premiere_push_text
+
+    title, body = premiere_push_text({
+        "show_name": "The Rookie", "season_number": 9, "season_name": None,
+        "air_date": "2027-01-05", "days_away": 20,
+    })
+
+    assert title == "A new season of The Rookie airs in 20 days"
+    assert body == "Season 9 releases on January 5, 2027"
