@@ -144,6 +144,12 @@ class TestSchedules:
         ]:
             assert schedule in SCHEDULES
 
+    def test_digests_are_dispatched_every_hour(self):
+        from durable_queue.scheduler import hourly
+        from app.jobs import SCHEDULES, Schedule
+
+        assert Schedule("digests", "dispatch_digests", {}, hourly(0)) in SCHEDULES
+
 
 class TestStartJobQueue:
     def test_registers_every_schedule_then_starts_the_runner(self):
@@ -611,5 +617,110 @@ class TestDailyJobs:
                    return_value=upcoming),              patch("app.services.trailer_notification_service.send_trailer_alert_email") as email:
             refresh_trailer_videos()
             refresh_trailer_videos()  # a retry after the first run committed
+
+        assert email.call_count == 1
+
+
+class _NineAmInNewYork(datetime):
+    """June 1 2024, 13:00 UTC: 9am in New York."""
+
+    @classmethod
+    def now(cls, tz=None):
+        return datetime(2024, 6, 1, 13, 0, tzinfo=timezone.utc).astimezone(tz)
+
+
+def _digest_user(db, uid="u1", **overrides):
+    from app.models.user import User
+
+    fields = dict(id=uid, username=uid, email=f"{uid}@t.com", email_notifications=True,
+                  notification_frequency="daily", digest_hour=9,
+                  digest_timezone="America/New_York")
+    fields.update(overrides)
+    db.add(User(**fields))
+    db.commit()
+
+
+def _movie_out_today_on_watchlist(db, uid="u1"):
+    from app.models.movie import Movie
+    from app.models.watchlist import Watchlist
+
+    db.add(Movie(id=1, title="Dune", status="Released", release_date=date.today(),
+                 tracking_count=0, vote_average=0.0))
+    db.add(Watchlist(user_id=uid, content_type="movie", content_id=1, notify=True))
+    db.commit()
+
+
+class TestDigestJobs:
+    def test_dispatch_queues_users_due_now_keyed_by_day(self, db):
+        from app.jobs import notifications
+
+        _digest_user(db, "u1")                    # 9am: due
+        _digest_user(db, "u2", digest_hour=20)    # 8pm: not yet
+        calls = []
+        with patch.object(notifications, "enqueue_many", _fake_enqueue_many(calls)),              patch.object(notifications, "datetime", _NineAmInNewYork):
+            notifications.dispatch_digests()
+
+        assert calls == [(
+            "send_digest",
+            [{"user_id": "u1", "digest_date": "2024-06-01"}],
+            ["digest:u1:2024-06-01"],
+        )]
+
+    def test_sends_with_the_days_key_then_marks_the_user(self, db):
+        from app.jobs import notifications
+        from app.models.user import User
+
+        _digest_user(db)
+        _movie_out_today_on_watchlist(db)
+        with patch.object(notifications, "send_notification_email") as email:
+            notifications.send_digest(user_id="u1", digest_date="2026-10-12")
+
+        assert email.call_args.kwargs["idempotency_key"] == "digest:u1:2026-10-12"
+        db.expire_all()
+        assert db.get(User, "u1").last_digest_sent_at == date(2026, 10, 12)
+
+    def test_skips_a_user_already_sent_that_day(self, db):
+        from app.jobs import notifications
+
+        _digest_user(db, last_digest_sent_at=date(2026, 10, 12))
+        _movie_out_today_on_watchlist(db)
+        with patch.object(notifications, "send_notification_email") as email:
+            notifications.send_digest(user_id="u1", digest_date="2026-10-12")
+
+        email.assert_not_called()
+
+    def test_nothing_to_send_leaves_the_user_unmarked(self, db):
+        from app.jobs import notifications
+        from app.models.user import User
+
+        _digest_user(db)
+        with patch.object(notifications, "send_notification_email") as email:
+            notifications.send_digest(user_id="u1", digest_date="2026-10-12")
+
+        email.assert_not_called()
+        db.expire_all()
+        assert db.get(User, "u1").last_digest_sent_at is None
+
+    def test_failed_send_raises_and_leaves_the_user_unmarked(self, db):
+        from app.jobs import notifications
+        from app.models.user import User
+
+        _digest_user(db)
+        _movie_out_today_on_watchlist(db)
+        with patch.object(notifications, "send_notification_email",
+                          side_effect=RuntimeError("resend down")),              pytest.raises(RuntimeError):
+            notifications.send_digest(user_id="u1", digest_date="2026-10-12")
+
+        db.expire_all()
+        assert db.get(User, "u1").last_digest_sent_at is None
+
+    def test_running_twice_sends_once(self, db):
+        from app.jobs import notifications
+
+        _digest_user(db)
+        _movie_out_today_on_watchlist(db)
+        with patch.object(notifications, "send_notification_email") as email:
+            notifications.send_digest(user_id="u1", digest_date="2026-10-12")
+            notifications.send_digest(user_id="u1", digest_date="2026-10-12")
 
         assert email.call_count == 1

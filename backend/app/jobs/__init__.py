@@ -12,7 +12,7 @@ from durable_queue.runner import Runner
 from durable_queue.scheduler import Clock, daily, hourly, register_schedule
 from psycopg.errors import UndefinedTable
 
-from app.jobs import billing, catalog, maintenance, shows  # noqa: F401
+from app.jobs import billing, catalog, maintenance, notifications, shows  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +37,9 @@ SCHEDULES = [
     # On the hour, with the digest and episode-alert planning, so Neon
     # wakes once an hour for all three.
     Schedule("activity-cleanup", "cleanup_activity", {}, hourly(0)),
+    # A user's digest goes out at the first hour inside their window (their
+    # digest_hour to 6 hours after); the job's key stops a second that day.
+    Schedule("digests", "dispatch_digests", {}, hourly(0)),
     # Nightly. All at 3am Eastern so Neon wakes once; none depends on another.
     Schedule("show-refresh", "dispatch_show_refreshes", {}, daily("03:00", "America/New_York")),
     Schedule("vote-update", "update_vote_averages", {}, daily("03:00", "America/New_York")),
