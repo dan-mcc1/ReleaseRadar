@@ -5,8 +5,8 @@ scheduler enqueues its job, and the worker runs it and marks it succeeded.
 Skipped unless DURABLE_QUEUE_TEST_URL is set. Every table in that database
 is dropped, so point it at a throwaway container, never at Neon:
 
-    docker run -d --name rr-queue-test-pg -e POSTGRES_PASSWORD=pg -p 55432:5432 postgres:16
-    $env:DURABLE_QUEUE_TEST_URL = "postgresql://postgres:pg@localhost:55432/postgres"
+    docker run -d --name rr-queue-test-pg -e POSTGRES_PASSWORD=pg -p 15432:5432 postgres:16
+    $env:DURABLE_QUEUE_TEST_URL = "postgresql://postgres:pg@localhost:15432/postgres"
     python -m pytest tests/test_job_queue_postgres.py -v
 """
 
@@ -42,6 +42,7 @@ def pg_sessions(monkeypatch):
     import app.models  # noqa: F401 — registers all models with Base.metadata
     import app.jobs.catalog as catalog
     import app.jobs.maintenance as maintenance
+    import app.jobs.notifications as notifications
     import app.jobs.shows as shows
     from app.db.base import Base
 
@@ -61,7 +62,7 @@ def pg_sessions(monkeypatch):
     # too, never on a database named in a local .env.
     monkeypatch.setenv("DURABLE_QUEUE_DATABASE_URL", TEST_URL)
     sessions = sessionmaker(bind=engine, expire_on_commit=False)
-    for jobs_module in (catalog, maintenance, shows):
+    for jobs_module in (catalog, maintenance, notifications, shows):
         monkeypatch.setattr(jobs_module, "SessionLocal", sessions)
     yield sessions
     engine.dispose()
@@ -164,3 +165,22 @@ def test_show_refresh_fans_out_once_per_show(pg_sessions, monkeypatch):
 
     assert [r[0] for r in rows] == ["succeeded", "succeeded"], rows
     assert len(again) == 2
+
+
+def test_episode_alert_jobs_wait_for_their_send_time(pg_sessions, monkeypatch):
+    import psycopg
+    from datetime import datetime, timedelta, timezone
+    from app.jobs import notifications
+    from app.services.episode_alert_service import PlannedAlert
+
+    send_at = (datetime.now(timezone.utc) + timedelta(hours=2)).replace(microsecond=0)
+    alert = PlannedAlert(send_at=send_at, user_id="u1", show_id=10, episode_ids=(1,), lead=0)
+    monkeypatch.setattr(notifications, "plan_episode_alerts", lambda db, start, end: [alert])
+
+    notifications.dispatch_episode_alerts()
+
+    with psycopg.connect(TEST_URL) as conn:
+        rows = conn.execute(
+            "SELECT status, run_at FROM jobs WHERE task = 'send_episode_alert'"
+        ).fetchall()
+    assert rows == [("pending", send_at)]
