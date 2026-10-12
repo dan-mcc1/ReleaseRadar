@@ -22,6 +22,11 @@ from app.services.digest_service import (
     premiere_push_text,
 )
 from app.services.email_service import send_notification_email, send_season_premiere_email
+from app.services.episode_alert_service import (
+    LATE_GRACE_SECONDS,
+    PlannedAlert,
+    send_planned_alert,
+)
 from app.services.push_service import push_notification, tmdb_poster_url
 
 logger = logging.getLogger(__name__)
@@ -174,5 +179,36 @@ def send_premiere_alerts(user_id: str, alert_date: str) -> None:
                         "premiere alerts: push failed for user %s show %s",
                         user.id, alert["show_id"],
                     )
+    finally:
+        db.close()
+
+
+@logged_task
+def send_episode_alert(
+    user_id: str, show_id: int, episode_ids: list[int], lead: int, send_at: str
+) -> None:
+    """
+    Push one planned episode alert at its time (the job's run_at). Skipped if
+    more than LATE_GRACE_SECONDS late: a "starting now" push long after the
+    episode started is worse than none. send_planned_alert re-checks the
+    user's settings and claims each episode first, so a retry never pushes
+    twice.
+    """
+    when = datetime.fromisoformat(send_at)
+    late = (datetime.now(timezone.utc) - when).total_seconds()
+    if late > LATE_GRACE_SECONDS:
+        logger.info(
+            "episode alert: skipped user %s show %s, %.0fs late", user_id, show_id, late
+        )
+        return
+    db = SessionLocal()
+    try:
+        send_planned_alert(db, PlannedAlert(
+            send_at=when,
+            user_id=user_id,
+            show_id=show_id,
+            episode_ids=tuple(episode_ids),
+            lead=lead,
+        ))
     finally:
         db.close()

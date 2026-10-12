@@ -824,3 +824,85 @@ class TestPremiereAlertJobs:
         assert push.call_count == 1
         db.expire_all()
         assert db.query(SentPremiereAlert).count() == 1
+
+
+def _at(*args):
+    """A datetime class whose now() is the given UTC time."""
+    fixed = datetime(*args, tzinfo=timezone.utc)
+
+    class _Fixed(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return fixed.astimezone(tz)
+
+    return _Fixed
+
+
+class TestSendEpisodeAlert:
+    SEND_AT = "2026-10-12T13:00:00+00:00"
+
+    def test_installed_durable_queue_has_delayed_jobs(self):
+        import inspect
+        from durable_queue.sqlalchemy import enqueue_many
+
+        assert "run_ats" in inspect.signature(enqueue_many).parameters
+
+    @pytest.mark.parametrize("now", [_at(2026, 10, 12, 13, 0), _at(2026, 10, 12, 13, 4)])
+    def test_sends_on_time_or_up_to_five_minutes_late(self, now):
+        from app.jobs import notifications
+        from app.services.episode_alert_service import PlannedAlert
+
+        with patch.object(notifications, "datetime", now), \
+             patch.object(notifications, "send_planned_alert") as send:
+            notifications.send_episode_alert(user_id="u1", show_id=300, episode_ids=[400, 401],
+                                             lead=10, send_at=self.SEND_AT)
+
+        alert = send.call_args.args[1]
+        assert alert == PlannedAlert(
+            send_at=datetime(2026, 10, 12, 13, 0, tzinfo=timezone.utc),
+            user_id="u1", show_id=300, episode_ids=(400, 401), lead=10,
+        )
+
+    def test_skips_more_than_five_minutes_late(self, caplog):
+        from app.jobs import notifications
+
+        with patch.object(notifications, "datetime", _at(2026, 10, 12, 13, 6)), \
+             patch.object(notifications, "send_planned_alert") as send, \
+             caplog.at_level(logging.INFO):
+            notifications.send_episode_alert(user_id="u1", show_id=300, episode_ids=[400],
+                                             lead=0, send_at=self.SEND_AT)
+
+        send.assert_not_called()
+        assert "late" in caplog.text
+
+    def test_running_twice_pushes_once(self, db):
+        from app.jobs import notifications
+        from app.models.episode import Episode
+        from app.models.show import Show
+        from app.models.user import User
+        from app.models.watchlist import Watchlist
+
+        db.add(User(id="u1", username="u1", email="u1@t.com", push_notifications_enabled=True,
+                    push_notify_episode_air=True, episode_alert_lead_minutes=0))
+        db.add(Show(id=300, name="Show", air_time="20:00", air_timezone="America/New_York",
+                    tracking_count=0, vote_average=0.0))
+        db.flush()
+        db.add(Episode(id=400, show_id=300, season_number=1, episode_number=1, name="Pilot",
+                       air_date=date.today()))
+        db.add(Watchlist(user_id="u1", content_id=300, content_type="tv", notify=True))
+        db.commit()
+        now = datetime.now(timezone.utc).isoformat()
+
+        with patch("app.services.episode_alert_service.push_notification") as push:
+            notifications.send_episode_alert(user_id="u1", show_id=300, episode_ids=[400],
+                                             lead=0, send_at=now)
+            notifications.send_episode_alert(user_id="u1", show_id=300, episode_ids=[400],
+                                             lead=0, send_at=now)  # a retry
+
+        assert push.call_count == 1
+
+    def test_registered_under_the_name_the_dispatcher_enqueues(self):
+        from durable_queue.registry import get_registered_task
+        from app.jobs.notifications import send_episode_alert
+
+        assert get_registered_task("send_episode_alert").fn is send_episode_alert
