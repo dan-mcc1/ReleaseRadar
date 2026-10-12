@@ -74,9 +74,17 @@ def _diff_and_update_providers(
             p.id
             for p in db.query(Provider).filter(Provider.id.in_(list(fresh_map.keys()))).all()
         }
-        for pid, data in fresh_map.items():
-            if pid not in existing_ids:
-                db.add(Provider(id=pid, name=data["name"], logo_path=data["logo_path"]))
+        new_providers = [
+            Provider(id=pid, name=data["name"], logo_path=data["logo_path"])
+            for pid, data in fresh_map.items()
+            if pid not in existing_ids
+        ]
+        if new_providers:
+            db.add_all(new_providers)
+            # Written now rather than at the caller's commit: sessions don't
+            # autoflush, so the next title in a nightly refresh wouldn't see
+            # them in the query above and would add the same provider again.
+            db.flush()
 
     # Upsert junction rows
     for pid, data in fresh_map.items():

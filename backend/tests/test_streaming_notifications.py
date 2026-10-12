@@ -268,6 +268,27 @@ class TestRefreshStreamingProviders:
                 svc.refresh_streaming_providers(db)
                 mock_email.assert_not_called()
 
+    def test_new_provider_on_two_titles_is_stored_once(self, db):
+        """A provider new to the database (a just-launched service, like the
+        provider 1796 that killed a dev run) on two tracked titles in one run
+        is inserted once, not once per title."""
+        from app.models.provider import Provider
+        from app.services import streaming_notification_service as svc
+
+        _seed_movie(db, mid=1, title="A")
+        _seed_movie(db, mid=2, title="B")
+        _seed_user(db, uid="u1")
+        _watchlist(db, "u1", 1, "movie")
+        _watchlist(db, "u1", 2, "movie")
+
+        fresh = _provider_response(flatrate=[(1796, "New Service")])["watch/providers"]["results"]["US"]
+        with patch.object(svc, "_fetch_fresh_us_providers", return_value=fresh), \
+             patch("app.services.streaming_notification_service.send_streaming_alert_email"):
+            svc.refresh_streaming_providers(db)
+
+        db.expire_all()
+        assert [p.id for p in db.query(Provider).filter_by(id=1796)] == [1796]
+
     def test_emails_watchlist_user_on_added_provider(self, db):
         from app.services import streaming_notification_service as svc
 
