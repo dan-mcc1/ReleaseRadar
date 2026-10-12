@@ -3,8 +3,7 @@ import logging
 import time
 
 import httpx
-from contextlib import asynccontextmanager, contextmanager
-from datetime import datetime, timezone as dt_timezone
+from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
@@ -72,66 +71,10 @@ from app.routers import (
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
-from app.db.session import SessionLocal, engine
+from app.db.session import engine
 from app.jobs import start_job_queue, stop_job_queue
-from app.services.episode_alert_service import (
-    next_alert_window,
-    plan_episode_alerts,
-    send_planned_alert,
-)
 
 logger = logging.getLogger(__name__)
-
-
-@contextmanager
-def _db_session():
-    db = SessionLocal()
-    try:
-        yield db
-    except Exception:
-        db.rollback()
-        raise
-    finally:
-        db.close()
-
-
-async def _episode_alert_loop():
-    """Per-episode air-time pushes.
-
-    Plans the rest of the hour's alerts at the top of each hour (alongside the
-    digest), then sleeps until each one is due. The database is only touched
-    when planning and when a push actually goes out, so Neon can scale to zero
-    in between; polling every 5 minutes kept it awake around the clock.
-    """
-    planned_until = None
-    while True:
-        try:
-            window_start, window_end = next_alert_window(
-                datetime.now(dt_timezone.utc), planned_until
-            )
-            with _db_session() as db:
-                alerts = await asyncio.to_thread(
-                    plan_episode_alerts, db, window_start, window_end
-                )
-            planned_until = window_end
-            for alert in alerts:
-                delay = (alert.send_at - datetime.now(dt_timezone.utc)).total_seconds()
-                if delay > 0:
-                    await asyncio.sleep(delay)
-                with _db_session() as db:
-                    if await asyncio.to_thread(send_planned_alert, db, alert):
-                        logger.info(
-                            "episode alerts: pushed show %s to %s", alert.show_id, alert.user_id
-                        )
-            await asyncio.sleep(
-                max(0.0, (window_end - datetime.now(dt_timezone.utc)).total_seconds())
-            )
-        except Exception:
-            logger.exception("episode alert loop error")
-            # Re-plan from "now" so alerts left in this hour aren't dropped;
-            # SentEpisodeAlert keeps anything already sent from repeating.
-            planned_until = None
-            await asyncio.sleep(60)
 
 
 @asynccontextmanager
@@ -151,18 +94,7 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("RUN_JOB_QUEUE=false — job queue disabled on this replica")
 
-    tasks: list[asyncio.Task] = []
-    if settings.RUN_SCHEDULERS:
-        tasks = [
-            asyncio.create_task(_episode_alert_loop()),
-        ]
-    else:
-        logger.info("RUN_SCHEDULERS=false — background loops disabled on this replica")
     yield
-    for t in tasks:
-        t.cancel()
-    if tasks:
-        await asyncio.gather(*tasks, return_exceptions=True)
     if runner is not None:
         await asyncio.to_thread(stop_job_queue, runner)
 

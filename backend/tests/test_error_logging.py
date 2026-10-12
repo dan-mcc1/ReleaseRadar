@@ -5,11 +5,8 @@ traceback, and the app's own INFO lines must be emitted at all.
 print() never reaches Sentry, and logger.error("...: %s", e) drops the stack.
 """
 
-import asyncio
 import logging
 from unittest.mock import patch
-
-import pytest
 
 
 def _errors_with_traceback(caplog, level=logging.ERROR):
@@ -91,21 +88,3 @@ class TestBackgroundFailuresAreLogged:
 
         logged = _errors_with_traceback(caplog, logging.WARNING)
         assert [str(r.exc_info[1]) for r in logged] == ["tmdb down"]
-
-    def test_scheduler_loop_failure_logs_traceback(self, caplog):
-        from app import main
-
-        with patch.object(main, "plan_episode_alerts", side_effect=RuntimeError("db gone")), \
-             patch.object(main.asyncio, "sleep", side_effect=asyncio.CancelledError), \
-             caplog.at_level(logging.ERROR):
-            # A private loop: asyncio.run() would clear the main thread's
-            # current event loop, which other tests rely on.
-            loop = asyncio.new_event_loop()
-            try:
-                with pytest.raises(asyncio.CancelledError):
-                    loop.run_until_complete(main._episode_alert_loop())
-            finally:
-                loop.close()
-
-        logged = _errors_with_traceback(caplog)
-        assert [str(r.exc_info[1]) for r in logged] == ["db gone"]

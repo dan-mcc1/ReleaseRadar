@@ -255,12 +255,6 @@ def _run_lifespan():
 
 
 class TestLifespan:
-    @pytest.fixture(autouse=True)
-    def no_loops(self, monkeypatch):
-        from app.config import settings
-
-        monkeypatch.setattr(settings, "RUN_SCHEDULERS", False)
-
     def test_suite_runs_with_the_job_queue_off(self):
         from app.config import settings
 
@@ -292,13 +286,12 @@ class TestLifespan:
         start.assert_called_once_with()
         stop.assert_called_once_with(start.return_value)
 
-    @staticmethod
-    def _loops_started(monkeypatch):
-        """Names of the loops lifespan starts with RUN_SCHEDULERS on."""
+    def test_starts_no_background_tasks(self, monkeypatch):
+        """Every background job runs on durable-queue; the lifespan only
+        starts and stops the queue."""
         from app import main
         from app.config import settings
 
-        monkeypatch.setattr(settings, "RUN_SCHEDULERS", True)
         monkeypatch.setattr(settings, "RUN_JOB_QUEUE", False)
         started = []
 
@@ -309,24 +302,8 @@ class TestLifespan:
 
         with patch.object(main.asyncio, "create_task", fake_create_task):
             _run_lifespan()
-        return started
 
-    def test_scheduler_loops_no_longer_run_the_activity_cleanup(self, monkeypatch):
-        started = self._loops_started(monkeypatch)
-
-        assert "_activity_cleanup_loop" not in started
-        assert "_episode_alert_loop" in started  # the remaining loop still starts
-
-    def test_scheduler_loops_no_longer_run_the_3am_refresh(self, monkeypatch):
-        started = self._loops_started(monkeypatch)
-
-        assert "_episode_update_loop" not in started
-        assert "_episode_alert_loop" in started
-
-    def test_only_the_episode_alert_loop_remains(self, monkeypatch):
-        started = self._loops_started(monkeypatch)
-
-        assert started == ["_episode_alert_loop"]
+        assert started == []
 
 
 class _EveningInNewYork(datetime):

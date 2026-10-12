@@ -73,12 +73,6 @@ class Settings(BaseSettings):
     # for catching N+1 patterns in real traffic. Set to 0 to disable.
     QUERY_COUNT_WARN_THRESHOLD: int = 25
 
-    # Whether this process should run the background scheduler loops (daily
-    # digest, episode refresh, trailer/streaming notifications, etc.). Set to
-    # false on every replica except one when scaling out horizontally, or the
-    # loops will fire N times in parallel.
-    RUN_SCHEDULERS: bool = True
-
     # Whether this process runs durable-queue's worker and scheduler (app/jobs).
     # Safe on every replica, since jobs and schedules are claimed under row
     # locks. Set false to stop background jobs here, locally or as a back-out.
