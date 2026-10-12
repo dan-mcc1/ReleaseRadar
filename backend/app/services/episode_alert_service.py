@@ -4,10 +4,11 @@ For each tracked show with a known `air_time`, computes the UTC air datetime
 of upcoming episodes and pushes to each opted-in tracker
 `episode_alert_lead_minutes` ahead of that moment.
 
-The scheduler (main.py) plans once an hour with plan_episode_alerts() and
-sleeps until each alert is due, then calls send_planned_alert(). Polling every
-few minutes instead would keep a scale-to-zero database (Neon) awake 24/7.
-SentEpisodeAlert prevents double-sending across workers and restarts.
+Once an hour the dispatch_episode_alerts job (app/jobs/notifications.py)
+plans the hour with plan_episode_alerts() and queues each alert as a job held
+until its send time, which calls send_planned_alert(). Polling every few
+minutes instead would keep a scale-to-zero database (Neon) awake 24/7.
+SentEpisodeAlert prevents double-sending across retries and restarts.
 """
 
 import logging
@@ -252,7 +253,7 @@ def next_alert_window(
 def dispatch_due_episode_alerts(db: Session, now_utc: datetime | None = None) -> int:
     """Send every alert due in the last LATE_GRACE_SECONDS right now.
 
-    One-shot sweep; the scheduler in main.py plans hourly instead.
+    One-shot sweep; the dispatch_episode_alerts job plans hourly instead.
     Returns the number of pushes sent.
     """
     if now_utc is None:

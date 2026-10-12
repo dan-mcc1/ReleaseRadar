@@ -724,3 +724,26 @@ class TestShowAirTimeUsesExternalIds:
         db.expire_all()
         row = db.query(Show).filter_by(id=80003).one()
         assert (row.air_time, row.air_timezone) == ("20:30", "America/New_York")
+
+
+class TestUpsertSeasonsForShow:
+    def test_reissued_season_id_replaces_the_stale_row(self, db):
+        """TMDb recreated season 9 under a new id: keep one row, TMDb's."""
+        from app.models.season import Season
+        from app.models.show import Show
+        from app.services.media_upsert import _upsert_seasons_for_show
+
+        show = Show(id=79744, name="The Rookie", tracking_count=0)
+        db.add(show)
+        db.flush()
+        db.add(Season(id=512798, show_id=79744, season_number=9, episode_count=0))
+        db.commit()
+
+        _upsert_seasons_for_show(
+            db, show, [{"id": 514233, "season_number": 9, "name": "Season 9", "episode_count": 10}]
+        )
+        db.commit()
+
+        db.expire_all()
+        rows = db.query(Season).filter_by(show_id=79744, season_number=9).all()
+        assert [(s.id, s.episode_count) for s in rows] == [(514233, 10)]

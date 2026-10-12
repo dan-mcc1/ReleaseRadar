@@ -58,14 +58,14 @@ def _make_unsubscribe_token(uid: str) -> str:
 
 class TestShouldSendToday:
     def test_daily_always_true(self):
-        from app.routers.notifications import _should_send_today
+        from app.services.digest_service import _should_send_today
 
         for weekday in range(7):
             d = date(2024, 1, 1) + timedelta(days=weekday)
             assert _should_send_today("daily", d) is True
 
     def test_weekly_only_on_monday(self):
-        from app.routers.notifications import _should_send_today
+        from app.services.digest_service import _should_send_today
 
         monday = date(2024, 1, 1)       # weekday() == 0
         tuesday = date(2024, 1, 2)      # weekday() == 1
@@ -73,7 +73,7 @@ class TestShouldSendToday:
         assert _should_send_today("weekly", tuesday) is False
 
     def test_monthly_only_on_first(self):
-        from app.routers.notifications import _should_send_today
+        from app.services.digest_service import _should_send_today
 
         first = date(2024, 2, 1)
         second = date(2024, 2, 2)
@@ -81,7 +81,7 @@ class TestShouldSendToday:
         assert _should_send_today("monthly", second) is False
 
     def test_unknown_frequency_returns_false(self):
-        from app.routers.notifications import _should_send_today
+        from app.services.digest_service import _should_send_today
 
         assert _should_send_today("hourly", date(2024, 1, 1)) is False
 
@@ -348,93 +348,3 @@ class TestUnsubscribe:
         token = _make_unsubscribe_token("nonexistent-uid")
         r = client.post(f"/notifications/unsubscribe?uid=nonexistent-uid&token={token}")
         assert r.status_code == 404
-
-
-# ── send_daily_digest_to_all ──────────────────────────────────────────────────
-
-
-@pytest.mark.skip(
-    reason="requires PostgreSQL: dialect-specific SQL (AT TIME ZONE / ::cast)"
-)
-class TestSendDailyDigestToAll:
-    def test_sends_to_eligible_user_at_correct_hour(self, db):
-        from app.models.user import User
-        from app.routers.notifications import send_daily_digest_to_all
-
-        db.add(User(
-            id="test-uid-1",
-            username="alice",
-            email="alice@test.com",
-            email_notifications=True,
-            notification_frequency="daily",
-            digest_hour=9,
-            digest_timezone="America/New_York",
-        ))
-        db.commit()
-
-        # Simulate UTC time that maps to 9am Eastern (UTC-4 in summer)
-        now_utc = datetime(2024, 6, 1, 13, 0, 0, tzinfo=timezone.utc)
-        with patch("app.routers.notifications.send_notification_email") as mock_send:
-            with patch("app.routers.notifications._build_items_for_window", return_value=[{"title": "Show"}]):
-                send_daily_digest_to_all(db, now_utc=now_utc)
-        mock_send.assert_called_once()
-
-    def test_skips_user_at_wrong_hour(self, db):
-        from app.models.user import User
-        from app.routers.notifications import send_daily_digest_to_all
-
-        db.add(User(
-            id="test-uid-1",
-            username="alice",
-            email="alice@test.com",
-            email_notifications=True,
-            digest_hour=9,
-            digest_timezone="America/New_York",
-        ))
-        db.commit()
-
-        # UTC 12:00 → 8am Eastern → not 9am yet
-        now_utc = datetime(2024, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
-        with patch("app.routers.notifications.send_notification_email") as mock_send:
-            send_daily_digest_to_all(db, now_utc=now_utc)
-        mock_send.assert_not_called()
-
-    def test_skips_user_already_sent_today(self, db):
-        from app.models.user import User
-        from app.routers.notifications import send_daily_digest_to_all
-
-        today = date(2024, 6, 1)
-        db.add(User(
-            id="test-uid-1",
-            username="alice",
-            email="alice@test.com",
-            email_notifications=True,
-            digest_hour=9,
-            digest_timezone="America/New_York",
-            last_digest_sent_at=today,
-        ))
-        db.commit()
-
-        now_utc = datetime(2024, 6, 1, 13, 0, 0, tzinfo=timezone.utc)
-        with patch("app.routers.notifications.send_notification_email") as mock_send:
-            send_daily_digest_to_all(db, now_utc=now_utc)
-        mock_send.assert_not_called()
-
-    def test_skips_user_with_no_email(self, db):
-        from app.models.user import User
-        from app.routers.notifications import send_daily_digest_to_all
-
-        db.add(User(
-            id="test-uid-1",
-            username="alice",
-            email=None,
-            email_notifications=True,
-            digest_hour=9,
-            digest_timezone="America/New_York",
-        ))
-        db.commit()
-
-        now_utc = datetime(2024, 6, 1, 13, 0, 0, tzinfo=timezone.utc)
-        with patch("app.routers.notifications.send_notification_email") as mock_send:
-            send_daily_digest_to_all(db, now_utc=now_utc)
-        mock_send.assert_not_called()

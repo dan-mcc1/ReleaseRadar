@@ -11,6 +11,7 @@ from app.models.user import User
 from app.models.watchlist import Watchlist
 from app.services.email_service import send_streaming_alert_email
 from app.services.push_service import push_notification, tmdb_poster_url
+from app.services.tmdb_client import is_not_found
 from app.services.tmdb_movies import fetch_movie_from_tmdb
 from app.services.tmdb_tv import fetch_show_from_tmdb
 from app.db.session import SessionLocal
@@ -74,9 +75,17 @@ def _diff_and_update_providers(
             p.id
             for p in db.query(Provider).filter(Provider.id.in_(list(fresh_map.keys()))).all()
         }
-        for pid, data in fresh_map.items():
-            if pid not in existing_ids:
-                db.add(Provider(id=pid, name=data["name"], logo_path=data["logo_path"]))
+        new_providers = [
+            Provider(id=pid, name=data["name"], logo_path=data["logo_path"])
+            for pid, data in fresh_map.items()
+            if pid not in existing_ids
+        ]
+        if new_providers:
+            db.add_all(new_providers)
+            # Written now rather than at the caller's commit: sessions don't
+            # autoflush, so the next title in a nightly refresh wouldn't see
+            # them in the query above and would add the same provider again.
+            db.flush()
 
     # Upsert junction rows
     for pid, data in fresh_map.items():
@@ -163,8 +172,11 @@ def refresh_streaming_providers(db: Session) -> None:
             added, removed = _diff_and_update_providers(db, content_id, content_type, fresh)
             if added or removed:
                 changes[(content_id, content_type)] = {"added": added, "removed": removed}
-        except Exception:
-            logger.exception("streaming: failed to refresh %s %s", content_type, content_id)
+        except Exception as exc:
+            if is_not_found(exc):
+                logger.info("streaming: %s %s is no longer on TMDb; skipped", content_type, content_id)
+            else:
+                logger.exception("streaming: failed to refresh %s %s", content_type, content_id)
 
     db.commit()
 

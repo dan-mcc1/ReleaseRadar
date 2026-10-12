@@ -728,3 +728,64 @@ class TestOneClickUnsubscribeHeaders:
 
         payload = self._send_payload(lambda: send(email_service), monkeypatch)
         assert "uid=u2" in payload["headers"]["List-Unsubscribe"]
+
+
+class TestIdempotencyKey:
+    """Jobs that retry pass a key: Resend delivers a keyed email at most once,
+    so a failure raises and is retried instead of being swallowed."""
+
+    def test_key_reaches_resend(self):
+        from app.services import email_service
+
+        with patch.object(email_service, "resend") as mock_resend:
+            email_service.send_email("a@b.com", "s", "<p/>",
+                                     idempotency_key="digest:u1:2026-10-12")
+
+        assert mock_resend.Emails.send.call_args.args[1] == {
+            "idempotency_key": "digest:u1:2026-10-12"
+        }
+
+    def test_failure_with_a_key_raises(self):
+        from app.services import email_service
+
+        with patch.object(email_service, "resend") as mock_resend:
+            mock_resend.Emails.send.side_effect = RuntimeError("resend down")
+            with pytest.raises(RuntimeError, match="resend down"):
+                email_service.send_email("a@b.com", "s", "<p/>", idempotency_key="k")
+
+    def test_without_a_key_sends_as_before(self):
+        from app.services import email_service
+
+        with patch.object(email_service, "resend") as mock_resend:
+            email_service.send_email("a@b.com", "s", "<p/>")
+
+        assert len(mock_resend.Emails.send.call_args.args) == 1
+
+    @pytest.mark.parametrize("sender, args", [
+        ("send_notification_email",
+         ("a@b.com", "alice", [{"title": "Dune", "date": "2026-10-12",
+                                "content_type": "movie", "content_id": 1}])),
+        ("send_season_premiere_email",
+         ("a@b.com", "alice", [{"show_name": "X", "season_number": 2, "season_name": None,
+                                "air_date": "2026-10-19", "days_away": 7, "show_id": 1}])),
+    ])
+    def test_digest_and_premiere_emails_pass_the_key_on(self, sender, args):
+        from app.services import email_service
+
+        with patch.object(email_service, "send_email") as send:
+            getattr(email_service, sender)(*args, uid="u1", idempotency_key="k")
+
+        assert send.call_args.kwargs["idempotency_key"] == "k"
+
+    def test_premiere_alerts_group_by_lead(self, captured):
+        """A 30-day alert can go out anywhere from 30 to 8 days ahead."""
+        from app.services.email_service import send_season_premiere_email
+
+        send_season_premiere_email("a@b.com", "alice", [
+            {"show_name": "Twenty Days Out", "season_number": 2, "season_name": None,
+             "air_date": "2026-11-01", "days_away": 20, "lead_days": 30, "show_id": 1},
+        ], uid="u1")
+
+        body = captured[0][2]
+        assert "Twenty Days Out" in body
+        assert "Coming in one month" in body

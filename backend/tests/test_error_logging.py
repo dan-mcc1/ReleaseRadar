@@ -5,11 +5,8 @@ traceback, and the app's own INFO lines must be emitted at all.
 print() never reaches Sentry, and logger.error("...: %s", e) drops the stack.
 """
 
-import asyncio
 import logging
 from unittest.mock import patch
-
-import pytest
 
 
 def _errors_with_traceback(caplog, level=logging.ERROR):
@@ -32,19 +29,36 @@ class TestAppLoggerSetup:
         assert "nightly job finished" in err
         assert "app.services.example" in err
 
+    def test_durable_queue_info_lines_are_emitted_formatted(self, capsys):
+        from app.core.logging import setup_logging
+
+        queue_logger = logging.getLogger("durable_queue")
+        saved = queue_logger.handlers[:]
+        try:
+            setup_logging()
+            logging.getLogger("durable_queue.runner").info("worker restarted")
+            err = capsys.readouterr().err
+        finally:
+            queue_logger.handlers[:] = saved
+
+        # Formatted, not bare: logging's last-resort handler would print only
+        # the message, and only at WARNING and above.
+        assert "INFO durable_queue.runner: worker restarted" in err
+
     def test_setup_is_idempotent(self):
         from app.core.logging import setup_logging
 
-        app_logger = logging.getLogger("app")
-        saved = app_logger.handlers[:]
+        loggers = [logging.getLogger("app"), logging.getLogger("durable_queue")]
+        saved = [named.handlers[:] for named in loggers]
         try:
             setup_logging()
             setup_logging()
-            count = len(app_logger.handlers)
+            counts = [len(named.handlers) for named in loggers]
         finally:
-            app_logger.handlers[:] = saved
+            for named, handlers in zip(loggers, saved):
+                named.handlers[:] = handlers
 
-        assert count == 1
+        assert counts == [1, 1]
 
 
 class TestBackgroundFailuresAreLogged:
@@ -74,21 +88,3 @@ class TestBackgroundFailuresAreLogged:
 
         logged = _errors_with_traceback(caplog, logging.WARNING)
         assert [str(r.exc_info[1]) for r in logged] == ["tmdb down"]
-
-    def test_scheduler_loop_failure_logs_traceback(self, caplog):
-        from app import main
-
-        with patch.object(main, "delete_old_activity", side_effect=RuntimeError("db gone")), \
-             patch.object(main.asyncio, "sleep", side_effect=asyncio.CancelledError), \
-             caplog.at_level(logging.ERROR):
-            # A private loop: asyncio.run() would clear the main thread's
-            # current event loop, which other tests rely on.
-            loop = asyncio.new_event_loop()
-            try:
-                with pytest.raises(asyncio.CancelledError):
-                    loop.run_until_complete(main._activity_cleanup_loop())
-            finally:
-                loop.close()
-
-        logged = _errors_with_traceback(caplog)
-        assert [str(r.exc_info[1]) for r in logged] == ["db gone"]

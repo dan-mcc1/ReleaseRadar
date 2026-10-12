@@ -1,5 +1,6 @@
 import logging
 from collections import defaultdict
+from datetime import date
 
 from sqlalchemy.orm import Session
 
@@ -13,6 +14,7 @@ from app.models.watchlist import Watchlist
 from app.db.session import SessionLocal
 from app.services.email_service import send_trailer_alert_email
 from app.services.push_service import push_notification, tmdb_poster_url
+from app.services.tmdb_client import is_not_found
 from app.services.tmdb_movies import fetch_movie_from_tmdb
 from app.services.tmdb_tv import fetch_show_from_tmdb
 
@@ -21,14 +23,52 @@ logger = logging.getLogger(__name__)
 _NOTIFY_TYPES = {"Trailer"}
 
 
-def _fetch_videos(content_id: int, content_type: str) -> list[dict]:
+def _fetch_details(content_id: int, content_type: str) -> dict:
+    """The title's TMDb details with its videos appended."""
     if content_type == "movie":
         data = fetch_movie_from_tmdb(content_id, "videos")
     else:
         data = fetch_show_from_tmdb(content_id, "videos")
-    if not data:
-        return []
-    return data.get("videos", {}).get("results", [])
+    return data or {}
+
+
+def _videos(details: dict) -> list[dict]:
+    return details.get("videos", {}).get("results", [])
+
+
+def _fetch_videos(content_id: int, content_type: str) -> list[dict]:
+    return _videos(_fetch_details(content_id, content_type))
+
+
+def _after(raw: str | None, today: date) -> bool:
+    """Whether a TMDb date ("YYYY-MM-DD") is after today. A blank one is unknown,
+    so it counts as later."""
+    return not raw or date.fromisoformat(raw) > today
+
+
+def _is_upcoming(details: dict, content_type: str, today: date) -> bool:
+    """
+    Whether the title hasn't come out yet, so a new trailer is worth an alert.
+    A movie hasn't come out until its release date, or while it has no date and
+    isn't marked Released. A show counts until it premieres, and again while a
+    season (not specials) is announced but hasn't premiered. Ended and canceled
+    shows never count.
+    """
+    status = details.get("status")
+    if content_type == "movie":
+        if details.get("release_date"):
+            return _after(details["release_date"], today)
+        return status not in ("Released", "Canceled")
+
+    if status in ("Ended", "Canceled"):
+        return False
+    if _after(details.get("first_air_date"), today):
+        return True
+    return any(
+        _after(s.get("air_date"), today)
+        for s in details.get("seasons", [])
+        if (s.get("season_number") or 0) > 0
+    )
 
 
 def _detect_new_videos(
@@ -107,8 +147,12 @@ def ensure_trailers_populated_bg(content_id: int, content_type: str) -> None:
 def refresh_trailers(db: Session) -> None:
     """
     Nightly task: check TMDb for new official trailers/teasers on all tracked
-    content, persist new video rows, and email opted-in users.
+    content, persist new video rows, and email opted-in users about the ones
+    on titles that haven't come out yet. Titles that have come out still have
+    their new videos recorded, so a show that later announces a season alerts
+    only on trailers that arrive after that.
     """
+    today = date.today()
     tracked: set[tuple[int, str]] = set()
     for row in db.query(Watchlist.content_id, Watchlist.content_type).distinct():
         tracked.add((row.content_id, row.content_type))
@@ -121,12 +165,15 @@ def refresh_trailers(db: Session) -> None:
     changes: dict[tuple[int, str], list[dict]] = {}
     for content_id, content_type in tracked:
         try:
-            fresh = _fetch_videos(content_id, content_type)
-            new_vids = _detect_new_videos(db, content_id, content_type, fresh)
-            if new_vids:
+            details = _fetch_details(content_id, content_type)
+            new_vids = _detect_new_videos(db, content_id, content_type, _videos(details))
+            if new_vids and _is_upcoming(details, content_type, today):
                 changes[(content_id, content_type)] = new_vids
-        except Exception:
-            logger.exception("trailers: failed to refresh %s %s", content_type, content_id)
+        except Exception as exc:
+            if is_not_found(exc):
+                logger.info("trailers: %s %s is no longer on TMDb; skipped", content_type, content_id)
+            else:
+                logger.exception("trailers: failed to refresh %s %s", content_type, content_id)
 
     db.commit()
 

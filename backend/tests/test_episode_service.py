@@ -328,6 +328,65 @@ class TestRefreshShowMetadata:
         with patch("app.services.episode_service.get", return_value=None):
             _refresh_show_metadata(db, show)
 
+    @staticmethod
+    def _rookie_with_seasons(db, *season_rows):
+        """Show 79744 with the given (season id, season number) rows stored."""
+        from app.models.season import Season
+        from app.models.show import Show
+
+        show = Show(id=79744, name="The Rookie", number_of_seasons=9,
+                    in_production=True, tracking_count=0)
+        db.add(show)
+        db.flush()
+        for season_id, number in season_rows:
+            db.add(Season(id=season_id, show_id=79744, season_number=number, episode_count=0))
+        db.commit()
+        return show
+
+    @staticmethod
+    def _stored_seasons(db):
+        from app.models.season import Season
+
+        db.expire_all()
+        return sorted(
+            (s.season_number, s.id) for s in db.query(Season).filter_by(show_id=79744)
+        )
+
+    def test_reissued_season_id_replaces_the_stale_row(self, db):
+        """TMDb recreated season 9 under a new id: keep one row, TMDb's."""
+        from app.services.episode_service import _refresh_show_metadata
+
+        show = self._rookie_with_seasons(db, (512798, 9))
+        data = {"number_of_seasons": 9, "in_production": True,
+                "seasons": [{"id": 514233, "season_number": 9, "name": "Season 9"}]}
+        with patch("app.services.episode_service.get", return_value=data):
+            _refresh_show_metadata(db, show)
+
+        assert self._stored_seasons(db) == [(9, 514233)]
+
+    def test_duplicate_season_rows_collapse_to_tmdbs_id(self, db):
+        """Rows already duplicated by an earlier reissue heal on the next refresh."""
+        from app.services.episode_service import _refresh_show_metadata
+
+        show = self._rookie_with_seasons(db, (512798, 9), (514233, 9))
+        data = {"number_of_seasons": 9, "in_production": True,
+                "seasons": [{"id": 514233, "season_number": 9, "name": "Season 9"}]}
+        with patch("app.services.episode_service.get", return_value=data):
+            _refresh_show_metadata(db, show)
+
+        assert self._stored_seasons(db) == [(9, 514233)]
+
+    def test_seasons_tmdb_no_longer_lists_are_kept(self, db):
+        from app.services.episode_service import _refresh_show_metadata
+
+        show = self._rookie_with_seasons(db, (427613, 7), (455290, 8))
+        data = {"number_of_seasons": 9, "in_production": True,
+                "seasons": [{"id": 427613, "season_number": 7}]}
+        with patch("app.services.episode_service.get", return_value=data):
+            _refresh_show_metadata(db, show)
+
+        assert self._stored_seasons(db) == [(7, 427613), (8, 455290)]
+
 
 class TestRefreshEpisodesForShow:
     def test_missing_show_is_noop(self, db):
@@ -421,6 +480,30 @@ class TestRefreshEpisodesForShow:
         with patch("app.services.episode_service.get", side_effect=Exception("err")):
             refresh_episodes_for_show(db, 802)  # Should not raise
 
+    def test_season_stored_twice_adds_each_new_episode_once(self, db):
+        """TMDb reissued a season under a new id, so the show has two Season
+        rows with the same number (seen for The Rookie's season 9). The refresh
+        walks that season twice; a new episode must still be inserted once."""
+        from app.models.show import Show
+        from app.models.season import Season
+        from app.models.episode import Episode
+        from app.services.episode_service import refresh_episodes_for_show
+
+        db.add(Show(id=803, name="Reissued", number_of_seasons=9, in_production=True,
+                    tracking_count=0))
+        db.flush()
+        db.add(Season(id=512798, show_id=803, season_number=9, episode_count=0))
+        db.add(Season(id=514233, show_id=803, season_number=9, episode_count=0))
+        db.commit()
+
+        data = {"episodes": [{"id": 7708032, "episode_number": 1, "name": "Episode 1",
+                              "air_date": date(2027, 1, 1)}]}
+        with patch("app.services.episode_service.get", return_value=data):
+            refresh_episodes_for_show(db, 803)
+
+        db.expire_all()
+        assert [e.id for e in db.query(Episode).filter_by(show_id=803).all()] == [7708032]
+
 
 # ── refresh_episodes_for_active_shows ────────────────────────────────────
 
@@ -444,6 +527,67 @@ class TestRefreshActiveShows:
         with patch("app.services.episode_service._refresh_one_show") as mock_one:
             refresh_episodes_for_active_shows(db)
         mock_one.assert_not_called()
+
+    def test_refreshes_each_active_show(self, db, seed_users):
+        from app.models.show import Show
+        from app.models.watchlist import Watchlist
+        from app.services.episode_service import refresh_episodes_for_active_shows
+
+        db.add_all([
+            Show(id=40, name="A", in_production=True, tracking_count=0),
+            Show(id=41, name="B", in_production=True, tracking_count=0),
+        ])
+        db.add_all([
+            Watchlist(user_id="test-uid-1", content_type="tv", content_id=40),
+            Watchlist(user_id="test-uid-1", content_type="tv", content_id=41),
+        ])
+        db.commit()
+
+        with patch("app.services.episode_service._refresh_one_show") as mock_one:
+            refresh_episodes_for_active_shows(db)
+
+        assert sorted(c.args for c in mock_one.call_args_list) == [(40, "A"), (41, "B")]
+
+
+class TestActiveShowIds:
+    def test_tracked_in_production_shows_once_each(self, db, seed_users):
+        from app.models.currently_watching import CurrentlyWatching
+        from app.models.show import Show
+        from app.models.watched import Watched
+        from app.models.watchlist import Watchlist
+        from app.services.episode_service import active_show_ids
+
+        db.add_all([
+            Show(id=20, name="On Watchlist and Watched", in_production=True, tracking_count=0),
+            Show(id=10, name="Currently watching", in_production=True, tracking_count=0),
+        ])
+        db.add_all([
+            Watchlist(user_id="test-uid-1", content_type="tv", content_id=20),
+            Watched(user_id="test-uid-2", content_type="tv", content_id=20),
+            CurrentlyWatching(user_id="test-uid-1", content_type="tv", content_id=10),
+        ])
+        db.commit()
+
+        assert active_show_ids(db) == [10, 20]
+
+    def test_excludes_untracked_ended_and_movie_ids(self, db, seed_users):
+        from app.models.show import Show
+        from app.models.watched import Watched
+        from app.models.watchlist import Watchlist
+        from app.services.episode_service import active_show_ids
+
+        db.add_all([
+            Show(id=30, name="Untracked", in_production=True, tracking_count=0),
+            Show(id=31, name="Ended", in_production=False, tracking_count=0),
+            Show(id=32, name="Shares a movie's id", in_production=True, tracking_count=0),
+        ])
+        db.add_all([
+            Watched(user_id="test-uid-1", content_type="tv", content_id=31),
+            Watchlist(user_id="test-uid-1", content_type="movie", content_id=32),
+        ])
+        db.commit()
+
+        assert active_show_ids(db) == []
 
 
 # ── check_and_reactivate_watched_shows ───────────────────────────────────
@@ -596,6 +740,31 @@ class TestReactivateWatchedShows:
         ):
             # Should not raise
             check_and_reactivate_watched_shows(db)
+
+    def test_show_id_limits_reactivation_to_that_show(self, db, seed_users):
+        from app.models.episode import Episode
+        from app.models.show import Show
+        from app.models.watched import Watched
+        from app.models.watchlist import Watchlist
+        from app.services.episode_service import check_and_reactivate_watched_shows
+
+        past = date.today() - timedelta(days=1)
+        for show_id in (50, 51):
+            db.add(Show(id=show_id, name=f"S{show_id}", in_production=True, tracking_count=0))
+            db.flush()
+            db.add(Episode(id=show_id * 100, show_id=show_id, season_number=1,
+                           episode_number=1, name="Pilot", air_date=past))
+            db.add(Watched(user_id="test-uid-1", content_type="tv", content_id=show_id))
+        db.commit()
+
+        with patch("app.services.episode_service.send_new_season_available_email"):
+            check_and_reactivate_watched_shows(db, show_id=50)
+
+        db.expire_all()
+        assert db.query(Watchlist).filter_by(content_id=50).first() is not None
+        assert db.query(Watched).filter_by(content_id=50).first() is None
+        assert db.query(Watched).filter_by(content_id=51).first() is not None
+        assert db.query(Watchlist).filter_by(content_id=51).first() is None
 
 
 class TestReactivationDetails:

@@ -45,8 +45,17 @@ import app.models.movie_video  # noqa: F401, E402
 import app.models.show_video  # noqa: F401, E402
 import app.models.user_streaming_service  # noqa: F401, E402
 import app.models.feedback  # noqa: F401, E402
+import app.models.sent_premiere_alert  # noqa: F401, E402
 
 target_metadata = Base.metadata
+
+# durable-queue's tables (migration 7d1e4c2b9a50). They aren't ORM models, so
+# without this autogenerate would propose dropping them.
+QUEUE_TABLES = {"jobs", "effects", "schedules"}
+
+
+def include_object(obj, name, type_, reflected, compare_to):
+    return not (type_ == "table" and name in QUEUE_TABLES)
 
 
 def run_migrations_offline() -> None:
@@ -56,6 +65,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        include_object=include_object,
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -71,6 +81,7 @@ def run_migrations_online() -> None:
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
+            include_object=include_object,
         )
         with context.begin_transaction():
             context.run_migrations()

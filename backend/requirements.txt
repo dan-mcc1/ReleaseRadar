@@ -24,3 +24,12 @@ cachetools==7.0.5
 stripe==15.1.0
 python-multipart==0.0.27
 sentry-sdk[fastapi]==2.60.0
+# Background job queue (github.com/dan-mcc1/durable-queue). Pinned to a commit:
+# to upgrade, change the hash, run `python -m pytest tests/`, then commit.
+# The [cli] extra installs typer for the `durable-queue` command (ls, stats, dead).
+durable-queue[cli] @ git+https://github.com/dan-mcc1/durable-queue@b4a1531a15a05edd67bf88076731aa8f2f41c76b
+# Installed by durable-queue (psycopg 3). Separate from psycopg2, which SQLAlchemy keeps using.
+psycopg[binary,pool]==3.3.6
+psycopg-binary==3.3.6
+psycopg-pool==3.3.3
+typer==0.27.3

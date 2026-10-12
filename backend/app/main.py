@@ -3,9 +3,7 @@ import logging
 import time
 
 import httpx
-from contextlib import asynccontextmanager, contextmanager
-from datetime import datetime, timedelta, timezone as dt_timezone
-from zoneinfo import ZoneInfo
+from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
@@ -73,242 +71,10 @@ from app.routers import (
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
-from app.db.session import SessionLocal, engine
-from app.services.activity_service import delete_old_activity, lift_expired_moderation
-from app.services.recommendation_service import delete_old_recommendations
-from app.routers.notifications import (
-    send_daily_digest_to_all,
-    send_season_premiere_alerts_to_all,
-)
-from app.services.vote_update_service import update_all_vote_averages
-from app.services.episode_service import (
-    refresh_episodes_for_active_shows,
-    check_and_reactivate_watched_shows,
-)
-from app.services.cache_prune_service import prune_stale_cache
-from app.services.streaming_notification_service import refresh_streaming_providers
-from app.services.trailer_notification_service import refresh_trailers
-from app.services.episode_alert_service import (
-    next_alert_window,
-    plan_episode_alerts,
-    send_planned_alert,
-)
-from app.services.stripe_reconciliation_service import reconcile_stripe_subscriptions
-from app.services.collection_ingest_service import (
-    daily_refresh as collections_daily_sync,
-)
+from app.db.session import engine
+from app.jobs import start_job_queue, stop_job_queue
 
 logger = logging.getLogger(__name__)
-
-
-def _seconds_until_next_hour() -> float:
-    now = datetime.now(dt_timezone.utc)
-    next_hour = now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
-    return (next_hour - now).total_seconds()
-
-
-@contextmanager
-def _db_session():
-    db = SessionLocal()
-    try:
-        yield db
-    except Exception:
-        db.rollback()
-        raise
-    finally:
-        db.close()
-
-
-async def _activity_cleanup_loop():
-    """Delete activity and old recommendations. Runs at startup, then at the
-    top of every hour alongside the digest and episode-alert planning, so the
-    hourly jobs share one database wake-up (Neon bills compute while awake)."""
-    while True:
-        try:
-            with _db_session() as db:
-                deleted_activity = delete_old_activity(db)
-                if deleted_activity:
-                    logger.info(
-                        "activity cleanup: removed %d old activity entries",
-                        deleted_activity,
-                    )
-                deleted_recs = delete_old_recommendations(db)
-                if deleted_recs:
-                    logger.info(
-                        "activity cleanup: removed %d expired recommendations",
-                        deleted_recs,
-                    )
-                lift_expired_moderation(db)
-        except Exception:
-            logger.exception("activity cleanup error")
-        await asyncio.sleep(_seconds_until_next_hour())
-
-
-async def _daily_digest_loop():
-    """Fires at the top of every hour. Each function filters users by their preferred local hour."""
-    while True:
-        try:
-            now = datetime.now(dt_timezone.utc)
-            next_hour = (now + timedelta(hours=1)).replace(
-                minute=0, second=0, microsecond=0
-            )
-            wait_seconds = (next_hour - now).total_seconds()
-            logger.info(
-                "daily digest: sleeping %.0fs until top of next hour", wait_seconds
-            )
-            await asyncio.sleep(wait_seconds)
-
-            now_utc = datetime.now(dt_timezone.utc)
-            logger.info(
-                "daily digest: hourly sweep firing at %s UTC", now_utc.strftime("%H:%M")
-            )
-            with _db_session() as db:
-                await asyncio.to_thread(send_daily_digest_to_all, db, now_utc=now_utc)
-                await asyncio.to_thread(
-                    send_season_premiere_alerts_to_all, db, now_utc=now_utc
-                )
-            logger.info("daily digest: hourly sweep done")
-
-        except Exception:
-            logger.exception("daily digest loop error")
-            await asyncio.sleep(60)
-
-
-async def _episode_update_loop():
-    """Refresh show's episodes and TMDB vote_average for all shows and movies once a day at 3am."""
-    eastern = ZoneInfo("America/New_York")
-    while True:
-        now = datetime.now(eastern)
-        next_run = now.replace(hour=3, minute=0, second=0, microsecond=0)
-        if now >= next_run:
-            next_run += timedelta(days=1)
-        await asyncio.sleep((next_run - now).total_seconds())
-        logger.info("vote update: starting daily vote_average refresh")
-        try:
-            with _db_session() as db:
-                refresh_episodes_for_active_shows(db)
-                check_and_reactivate_watched_shows(db)
-                await asyncio.to_thread(update_all_vote_averages, db)
-                prune_stale_cache(db)
-        except Exception:
-            logger.exception("vote update error")
-
-
-async def _trailer_refresh_loop():
-    """Refresh trailers and notify users of new ones once a day at noon Eastern."""
-    eastern = ZoneInfo("America/New_York")
-    while True:
-        try:
-            now = datetime.now(eastern)
-            next_run = now.replace(hour=12, minute=0, second=0, microsecond=0)
-            if now >= next_run:
-                next_run += timedelta(days=1)
-            await asyncio.sleep((next_run - now).total_seconds())
-            logger.info("trailers: starting trailer refresh")
-            with _db_session() as db:
-                await asyncio.to_thread(refresh_trailers, db)
-            logger.info("trailers: done")
-        except Exception:
-            logger.exception("trailers loop error")
-            await asyncio.sleep(60)
-
-
-async def _stripe_reconciliation_loop():
-    """Reconcile local subscription state against Stripe once a day at 4am Eastern."""
-    eastern = ZoneInfo("America/New_York")
-    while True:
-        try:
-            now = datetime.now(eastern)
-            next_run = now.replace(hour=4, minute=0, second=0, microsecond=0)
-            if now >= next_run:
-                next_run += timedelta(days=1)
-            await asyncio.sleep((next_run - now).total_seconds())
-            logger.info("stripe reconcile: starting")
-            with _db_session() as db:
-                await asyncio.to_thread(reconcile_stripe_subscriptions, db)
-            logger.info("stripe reconcile: done")
-        except Exception:
-            logger.exception("stripe reconcile loop error")
-            await asyncio.sleep(60)
-
-
-async def _streaming_refresh_loop():
-    """Refresh streaming providers and notify users of changes once a day at 5am."""
-    eastern = ZoneInfo("America/New_York")
-    while True:
-        try:
-            now = datetime.now(eastern)
-            next_run = now.replace(hour=11, minute=0, second=0, microsecond=0)
-            if now >= next_run:
-                next_run += timedelta(days=1)
-            await asyncio.sleep((next_run - now).total_seconds())
-            logger.info("streaming: starting provider refresh")
-            with _db_session() as db:
-                await asyncio.to_thread(refresh_streaming_providers, db)
-            logger.info("streaming: done")
-        except Exception:
-            logger.exception("streaming loop error")
-            await asyncio.sleep(60)
-
-
-async def _episode_alert_loop():
-    """Per-episode air-time pushes.
-
-    Plans the rest of the hour's alerts at the top of each hour (alongside the
-    digest), then sleeps until each one is due. The database is only touched
-    when planning and when a push actually goes out, so Neon can scale to zero
-    in between; polling every 5 minutes kept it awake around the clock.
-    """
-    planned_until = None
-    while True:
-        try:
-            window_start, window_end = next_alert_window(
-                datetime.now(dt_timezone.utc), planned_until
-            )
-            with _db_session() as db:
-                alerts = await asyncio.to_thread(
-                    plan_episode_alerts, db, window_start, window_end
-                )
-            planned_until = window_end
-            for alert in alerts:
-                delay = (alert.send_at - datetime.now(dt_timezone.utc)).total_seconds()
-                if delay > 0:
-                    await asyncio.sleep(delay)
-                with _db_session() as db:
-                    if await asyncio.to_thread(send_planned_alert, db, alert):
-                        logger.info(
-                            "episode alerts: pushed show %s to %s", alert.show_id, alert.user_id
-                        )
-            await asyncio.sleep(
-                max(0.0, (window_end - datetime.now(dt_timezone.utc)).total_seconds())
-            )
-        except Exception:
-            logger.exception("episode alert loop error")
-            # Re-plan from "now" so alerts left in this hour aren't dropped;
-            # SentEpisodeAlert keeps anything already sent from repeating.
-            planned_until = None
-            await asyncio.sleep(60)
-
-
-async def _collection_sync_loop():
-    """Daily collection mirror sync at 08:30 UTC. TMDb promises the day's id
-    dump "by 8:00 AM UTC"; the extra half hour clears that edge, and the sync
-    falls back to yesterday's dump if today's still isn't up. Pulls new +
-    changed collections and re-fetches details."""
-    while True:
-        try:
-            now = datetime.now(dt_timezone.utc)
-            next_run = now.replace(hour=8, minute=30, second=0, microsecond=0)
-            if now >= next_run:
-                next_run += timedelta(days=1)
-            await asyncio.sleep((next_run - now).total_seconds())
-            logger.info("collections sync: starting daily mirror sync")
-            with _db_session() as db:
-                await asyncio.to_thread(collections_daily_sync, db)
-            logger.info("collections sync: done")
-        except Exception:
-            logger.exception("collections sync loop error")
-            await asyncio.sleep(60)
 
 
 @asynccontextmanager
@@ -320,25 +86,17 @@ async def lifespan(app: FastAPI):
     # with the migration history. Tests still call create_all in conftest.py.
     import app.models  # noqa: F401 — registers all models with Base.metadata
 
-    tasks: list[asyncio.Task] = []
-    if settings.RUN_SCHEDULERS:
-        tasks = [
-            asyncio.create_task(_activity_cleanup_loop()),
-            asyncio.create_task(_daily_digest_loop()),
-            asyncio.create_task(_episode_update_loop()),
-            asyncio.create_task(_streaming_refresh_loop()),
-            asyncio.create_task(_trailer_refresh_loop()),
-            asyncio.create_task(_stripe_reconciliation_loop()),
-            asyncio.create_task(_episode_alert_loop()),
-            asyncio.create_task(_collection_sync_loop()),
-        ]
+    runner = None
+    if settings.RUN_JOB_QUEUE:
+        # A connect and a few statements, before any request is served.
+        # Raises if the queue's database is unreachable, failing startup.
+        runner = start_job_queue()
     else:
-        logger.info("RUN_SCHEDULERS=false — background loops disabled on this replica")
+        logger.info("RUN_JOB_QUEUE=false — job queue disabled on this replica")
+
     yield
-    for t in tasks:
-        t.cancel()
-    if tasks:
-        await asyncio.gather(*tasks, return_exceptions=True)
+    if runner is not None:
+        await asyncio.to_thread(stop_job_queue, runner)
 
 
 app = FastAPI(title="ReleaseRadar API", lifespan=lifespan, redirect_slashes=True)

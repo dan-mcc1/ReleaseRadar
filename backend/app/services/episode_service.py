@@ -2,7 +2,7 @@
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timezone
-from sqlalchemy import and_, exists, func, or_, select
+from sqlalchemy import and_, exists, func, or_, select, union
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased
 from app.models.episode import Episode
@@ -14,6 +14,7 @@ from app.models.user import User
 from app.models.watched import Watched
 from app.models.watchlist import Watchlist
 from app.services.email_service import send_new_season_available_email
+from app.services.season_sync import drop_superseded_seasons
 from app.services.tmdb_client import get
 
 logger = logging.getLogger(__name__)
@@ -412,8 +413,16 @@ def _refresh_show_metadata(db: Session, show: Show):
         show.in_production = new_in_production
         changed = True
 
+    # A season TMDb reissued under a new id replaces its old row rather than
+    # sitting beside it. Specials (season 0) aren't managed here.
+    removed = drop_superseded_seasons(
+        db, show.id, [s for s in data.get("seasons", []) if s.get("season_number", 0) > 0]
+    )
+    if removed:
+        changed = True
+
     # Add Season rows for any seasons TMDB has that we don't yet have stored
-    existing_season_ids = {s.id for s in show.seasons}
+    existing_season_ids = {s.id for s in show.seasons} - removed
     for s in data.get("seasons", []):
         sn = s.get("season_number", 0)
         sid = s.get("id")
@@ -552,21 +561,25 @@ def refresh_episodes_for_show(db: Session, show_id: int):
                     row.episode_type = new_type
                     changed = True
             else:
-                db.add(
-                    Episode(
-                        id=ep_id,
-                        show_id=show_id,
-                        season_number=sn,
-                        episode_number=ep_num,
-                        name=new_name,
-                        overview=new_overview,
-                        air_date=new_air_date,
-                        runtime=new_runtime,
-                        still_path=new_still,
-                        vote_average=new_vote,
-                        episode_type=new_type,
-                    )
+                new_episode = Episode(
+                    id=ep_id,
+                    show_id=show_id,
+                    season_number=sn,
+                    episode_number=ep_num,
+                    name=new_name,
+                    overview=new_overview,
+                    air_date=new_air_date,
+                    runtime=new_runtime,
+                    still_path=new_still,
+                    vote_average=new_vote,
+                    episode_type=new_type,
                 )
+                db.add(new_episode)
+                # Tracked like sync_show_episodes does, so a season walked
+                # twice (two Season rows after TMDb reissued its id) or an
+                # episode TMDb lists twice isn't inserted twice.
+                existing[ep_id] = new_episode
+                existing_by_pos[(sn, ep_num)] = new_episode
                 changed = True
 
     if changed:
@@ -574,6 +587,14 @@ def refresh_episodes_for_show(db: Session, show_id: int):
         for sn in seasons_to_refresh:
             _update_season_end_date(db, show_id, sn)
         db.commit()
+
+
+def refresh_show_data(db: Session, show: Show) -> None:
+    """Refresh one show from TMDb: its metadata (new seasons, in_production),
+    then the episodes of its active seasons. TMDb failures are logged and
+    skipped inside; database errors raise."""
+    _refresh_show_metadata(db, show)
+    refresh_episodes_for_show(db, show.id)
 
 
 def _refresh_one_show(show_id: int, show_name: str) -> None:
@@ -584,46 +605,44 @@ def _refresh_one_show(show_id: int, show_name: str) -> None:
         show = db.query(Show).filter_by(id=show_id).first()
         if not show:
             return
-        _refresh_show_metadata(db, show)
-        refresh_episodes_for_show(db, show_id)
+        refresh_show_data(db, show)
     except Exception:
         logger.exception("Failed to refresh show %s (%s)", show_id, show_name)
     finally:
         db.close()
 
 
+def active_show_ids(db: Session) -> list[int]:
+    """Ids of shows someone is tracking (watchlist, currently watching or
+    watched) that are still in production; finished shows don't change."""
+    tracked = union(
+        select(Watchlist.content_id).where(Watchlist.content_type == "tv"),
+        select(CurrentlyWatching.content_id).where(CurrentlyWatching.content_type == "tv"),
+        select(Watched.content_id).where(Watched.content_type == "tv"),
+    ).subquery()
+    return list(
+        db.execute(
+            select(Show.id)
+            .where(
+                Show.id.in_(select(tracked.c.content_id)),
+                Show.in_production == True,  # noqa: E712
+            )
+            .order_by(Show.id)
+        ).scalars()
+    )
+
+
 def refresh_episodes_for_active_shows(db: Session):
     """
-    Refresh episode data for all tracked shows (watchlist, currently watching,
-    and watched) that are still in production. Intended to run nightly.
-    Runs up to 8 shows in parallel, each with its own DB session.
+    Refresh episode data for every show active_show_ids returns, up to 8 in
+    parallel, each with its own DB session. The nightly run does this one job
+    per show (app/jobs/shows.py); this is the dev endpoint's all-at-once
+    version.
     """
-    tracked_ids = (
-        {
-            r.content_id
-            for r in db.query(Watchlist.content_id).filter_by(content_type="tv").all()
-        }
-        | {
-            r.content_id
-            for r in db.query(CurrentlyWatching.content_id)
-            .filter_by(content_type="tv")
-            .all()
-        }
-        | {
-            r.content_id
-            for r in db.query(Watched.content_id).filter_by(content_type="tv").all()
-        }
-    )
-
-    if not tracked_ids:
+    show_ids = active_show_ids(db)
+    if not show_ids:
         return
-
-    # Only refresh shows that are in production (finished shows don't change)
-    shows = (
-        db.query(Show)
-        .filter(Show.id.in_(tracked_ids), Show.in_production == True)  # noqa: E712
-        .all()
-    )
+    shows = db.query(Show).filter(Show.id.in_(show_ids)).order_by(Show.id).all()
 
     logger.info("Refreshing %d in-production shows...", len(shows))
     with ThreadPoolExecutor(max_workers=8) as pool:
@@ -632,10 +651,12 @@ def refresh_episodes_for_active_shows(db: Session):
     logger.info("Episode refresh done")
 
 
-def _reactivation_candidates(db: Session, today: date):
+def _reactivation_candidates(db: Session, today: date, show_id: int | None = None):
     """One row per Watched, in-production show that now has a new episode for
     that user: (watched_id, user_id, show_id, season_number, air_date) of the
     first new episode (lowest season, then episode number).
+
+    With show_id, only that show's Watched rows are considered.
 
     A new episode is one the user hasn't marked that is either in a season
     past the latest one they've watched, or has already aired. Computed in SQL
@@ -650,8 +671,10 @@ def _reactivation_candidates(db: Session, today: date):
         )
         .join(Show, and_(Show.id == Watched.content_id, Watched.content_type == "tv"))
         .where(Show.in_production == True)  # noqa: E712
-        .cte("pairs")
     )
+    if show_id is not None:
+        pairs = pairs.where(Watched.content_id == show_id)
+    pairs = pairs.cte("pairs")
     max_watched = (
         select(
             EpisodeWatched.user_id,
@@ -703,14 +726,15 @@ def _reactivation_candidates(db: Session, today: date):
     ).all()
 
 
-def check_and_reactivate_watched_shows(db: Session):
+def check_and_reactivate_watched_shows(db: Session, show_id: int | None = None):
     """
     After episode refresh, find users who have a show in Watched status but now
     have unwatched episodes (because new episodes were added). Move those shows
     back to Watchlist and send an email notification.
-    Intended to run nightly after refresh_episodes_for_active_shows.
+    With show_id, only that show is checked (the nightly per-show job);
+    without it, every in-production show (the dev endpoint).
     """
-    rows = _reactivation_candidates(db, date.today())
+    rows = _reactivation_candidates(db, date.today(), show_id)
     if not rows:
         return
 

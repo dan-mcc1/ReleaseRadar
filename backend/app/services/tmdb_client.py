@@ -83,6 +83,13 @@ def _retry_delay(res: httpx.Response, attempt: int) -> float:
     return min(max(delay, 0.0), _MAX_RETRY_DELAY)
 
 
+def is_not_found(exc: BaseException) -> bool:
+    """Whether TMDb answered 404: the title was deleted (or merged into
+    another) on TMDb's side while someone here still tracks it. Nightly jobs
+    skip such titles at INFO rather than logging an error for them daily."""
+    return isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 404
+
+
 def get(path: str, params: dict | None = None):
     """Synchronous TMDb GET — for background tasks and nightly refresh loops."""
     res: httpx.Response | None = None
