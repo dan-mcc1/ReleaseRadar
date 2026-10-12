@@ -41,6 +41,8 @@ SCHEDULES = [
     # digest_hour to 6 hours after); the job's key stops a second that day.
     Schedule("digests", "dispatch_digests", {}, hourly(0)),
     Schedule("premiere-alerts", "dispatch_premiere_alerts", {}, hourly(0)),
+    # Plans the hour's episode pushes; each is a job held until its send time.
+    Schedule("episode-alerts", "dispatch_episode_alerts", {}, hourly(0)),
     # Nightly. All at 3am Eastern so Neon wakes once; none depends on another.
     Schedule("show-refresh", "dispatch_show_refreshes", {}, daily("03:00", "America/New_York")),
     Schedule("vote-update", "update_vote_averages", {}, daily("03:00", "America/New_York")),

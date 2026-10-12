@@ -156,6 +156,12 @@ class TestSchedules:
 
         assert Schedule("premiere-alerts", "dispatch_premiere_alerts", {}, hourly(0)) in SCHEDULES
 
+    def test_episode_alerts_are_dispatched_every_hour(self):
+        from durable_queue.scheduler import hourly
+        from app.jobs import SCHEDULES, Schedule
+
+        assert Schedule("episode-alerts", "dispatch_episode_alerts", {}, hourly(0)) in SCHEDULES
+
 
 class TestStartJobQueue:
     def test_registers_every_schedule_then_starts_the_runner(self):
@@ -332,15 +338,17 @@ class _EveningInNewYork(datetime):
         return datetime(2026, 10, 12, 2, 30, tzinfo=timezone.utc).astimezone(tz)
 
 
-def _fake_enqueue_many(calls):
+def _fake_enqueue_many(calls, recorded_run_ats=None):
     """Stands in for durable_queue.sqlalchemy.enqueue_many, whose SQL is
-    Postgres-only. Records the call and writes a marker row through the same
-    session, as the real one writes job rows, so a test can tell the
-    dispatcher committed."""
-    def enqueue_many(session, task, args_list, *, idempotency_keys=None):
+    Postgres-only. Records the call (and each call's run_ats, if given a list
+    for them) and writes a marker row through the same session, as the real
+    one writes job rows, so a test can tell the dispatcher committed."""
+    def enqueue_many(session, task, args_list, *, idempotency_keys=None, run_ats=None):
         from app.models.genre import Genre
 
         calls.append((task, args_list, idempotency_keys))
+        if recorded_run_ats is not None:
+            recorded_run_ats.append(run_ats)
         session.add(Genre(id=1, name="queued"))
         return list(range(len(args_list)))
 
@@ -906,3 +914,49 @@ class TestSendEpisodeAlert:
         from app.jobs.notifications import send_episode_alert
 
         assert get_registered_task("send_episode_alert").fn is send_episode_alert
+
+
+class TestDispatchEpisodeAlerts:
+    def test_plans_the_hour_and_queues_each_alert_for_its_send_time(self, db):
+        from app.jobs import notifications
+        from app.services.episode_alert_service import PlannedAlert
+
+        nine_ten = datetime(2026, 10, 12, 9, 10, tzinfo=timezone.utc)
+        nine_forty = datetime(2026, 10, 12, 9, 40, tzinfo=timezone.utc)
+        alerts = [
+            PlannedAlert(send_at=nine_ten, user_id="u1", show_id=300, episode_ids=(400,), lead=0),
+            PlannedAlert(send_at=nine_forty, user_id="u2", show_id=301, episode_ids=(410, 411), lead=15),
+        ]
+        windows, calls, run_ats = [], [], []
+
+        def plan(db, start, end):
+            windows.append((start, end))
+            return alerts
+
+        with patch.object(notifications, "plan_episode_alerts", side_effect=plan),              patch.object(notifications, "enqueue_many", _fake_enqueue_many(calls, run_ats)),              patch.object(notifications, "datetime", _at(2026, 10, 12, 9, 0, 30)):
+            notifications.dispatch_episode_alerts()
+
+        # From 5 minutes ago, so consecutive hours overlap, to the next hour.
+        assert windows == [(datetime(2026, 10, 12, 8, 55, 30, tzinfo=timezone.utc),
+                            datetime(2026, 10, 12, 10, 0, tzinfo=timezone.utc))]
+        assert calls == [(
+            "send_episode_alert",
+            [
+                {"user_id": "u1", "show_id": 300, "episode_ids": [400], "lead": 0,
+                 "send_at": "2026-10-12T09:10:00+00:00"},
+                {"user_id": "u2", "show_id": 301, "episode_ids": [410, 411], "lead": 15,
+                 "send_at": "2026-10-12T09:40:00+00:00"},
+            ],
+            ["episode-alert:u1:300:2026-10-12T09:10:00+00:00",
+             "episode-alert:u2:301:2026-10-12T09:40:00+00:00"],
+        )]
+        assert run_ats == [[nine_ten, nine_forty]]
+
+    def test_nothing_planned_queues_nothing(self, db):
+        from app.jobs import notifications
+
+        calls = []
+        with patch.object(notifications, "plan_episode_alerts", return_value=[]),              patch.object(notifications, "enqueue_many", _fake_enqueue_many(calls)):
+            notifications.dispatch_episode_alerts()
+
+        assert [args for _, args, _ in calls] == [[]]

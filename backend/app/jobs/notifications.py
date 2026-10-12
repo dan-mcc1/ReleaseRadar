@@ -25,6 +25,8 @@ from app.services.email_service import send_notification_email, send_season_prem
 from app.services.episode_alert_service import (
     LATE_GRACE_SECONDS,
     PlannedAlert,
+    next_alert_window,
+    plan_episode_alerts,
     send_planned_alert,
 )
 from app.services.push_service import push_notification, tmdb_poster_url
@@ -210,5 +212,42 @@ def send_episode_alert(
             episode_ids=tuple(episode_ids),
             lead=lead,
         ))
+    finally:
+        db.close()
+
+
+@logged_task
+def dispatch_episode_alerts() -> None:
+    """
+    Plan the hour's episode air-time pushes and queue each as a job held
+    until its send time. Planned from 5 minutes ago, so consecutive hours
+    overlap; the key stops an alert being queued twice. Between plan and
+    send the worker sleeps, so Neon can too.
+    """
+    window_start, window_end = next_alert_window(datetime.now(timezone.utc), None)
+    db = SessionLocal()
+    try:
+        alerts = plan_episode_alerts(db, window_start, window_end)
+        enqueue_many(
+            db,
+            "send_episode_alert",
+            [
+                {
+                    "user_id": alert.user_id,
+                    "show_id": alert.show_id,
+                    "episode_ids": list(alert.episode_ids),
+                    "lead": alert.lead,
+                    "send_at": alert.send_at.isoformat(),
+                }
+                for alert in alerts
+            ],
+            idempotency_keys=[
+                f"episode-alert:{alert.user_id}:{alert.show_id}:{alert.send_at.isoformat()}"
+                for alert in alerts
+            ],
+            run_ats=[alert.send_at for alert in alerts],
+        )
+        db.commit()
+        logger.info("episode alerts: queued %d push(es)", len(alerts))
     finally:
         db.close()
