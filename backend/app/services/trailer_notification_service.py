@@ -14,6 +14,7 @@ from app.models.watchlist import Watchlist
 from app.db.session import SessionLocal
 from app.services.email_service import send_trailer_alert_email
 from app.services.push_service import push_notification, tmdb_poster_url
+from app.services.tmdb_client import is_not_found
 from app.services.tmdb_movies import fetch_movie_from_tmdb
 from app.services.tmdb_tv import fetch_show_from_tmdb
 
@@ -168,8 +169,11 @@ def refresh_trailers(db: Session) -> None:
             new_vids = _detect_new_videos(db, content_id, content_type, _videos(details))
             if new_vids and _is_upcoming(details, content_type, today):
                 changes[(content_id, content_type)] = new_vids
-        except Exception:
-            logger.exception("trailers: failed to refresh %s %s", content_type, content_id)
+        except Exception as exc:
+            if is_not_found(exc):
+                logger.info("trailers: %s %s is no longer on TMDb; skipped", content_type, content_id)
+            else:
+                logger.exception("trailers: failed to refresh %s %s", content_type, content_id)
 
     db.commit()
 

@@ -1,7 +1,6 @@
 import logging
 from concurrent.futures import ThreadPoolExecutor
 
-import httpx
 from sqlalchemy import union, select
 from sqlalchemy.orm import Session
 from app.models.currently_watching import CurrentlyWatching
@@ -9,7 +8,7 @@ from app.models.show import Show
 from app.models.movie import Movie
 from app.models.watched import Watched
 from app.models.watchlist import Watchlist
-from app.services.tmdb_client import get
+from app.services.tmdb_client import get, is_not_found
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +17,7 @@ def _log_fetch_failure(kind: str, title_id: int, exc: Exception) -> None:
     """Call from an except block. A 404 means TMDb deleted the title while
     someone here still tracks it, which isn't worth an error every night;
     anything else is."""
-    if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 404:
+    if is_not_found(exc):
         logger.info("vote update: %s %s is no longer on TMDb; skipped", kind, title_id)
     else:
         logger.exception("Failed to fetch vote_average for %s %s from TMDB", kind, title_id)

@@ -541,3 +541,34 @@ class TestRefreshReadsFreshData:
 
         mock_email.assert_called_once()
         assert mock_email.call_args.args[2][0]["videos"][0]["key"] == "vk9"
+
+class TestTitlesTmdbNoLongerHas:
+    def test_deleted_title_is_skipped_quietly_and_the_rest_refresh(self, db, caplog):
+        """TMDb deleted the title (seen for show 297772) while someone still
+        tracks it: skip it at INFO rather than an error every night."""
+        import logging
+
+        import httpx
+        from app.services import trailer_notification_service as svc
+
+        _seed_movie(db, mid=1, title="Gone from TMDb")
+        _seed_movie(db, mid=2, title="Still there")
+        _seed_user(db, uid="u1")
+        _watchlist(db, "u1", 1, "movie")
+        _watchlist(db, "u1", 2, "movie")
+        upcoming = {"release_date": "2999-01-01", "videos": {"results": [_video("vk1")]}}
+
+        def fetch(content_id, content_type):
+            if content_id == 1:
+                request = httpx.Request("GET", "https://api.themoviedb.org/3/movie/1")
+                raise httpx.HTTPStatusError(
+                    "404", request=request, response=httpx.Response(404, request=request)
+                )
+            return upcoming
+
+        with patch.object(svc, "_fetch_details", side_effect=fetch),              patch("app.services.trailer_notification_service.send_trailer_alert_email") as email,              caplog.at_level(logging.INFO, logger="app.services.trailer_notification_service"):
+            svc.refresh_trailers(db)
+
+        assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
+        assert "no longer on TMDb" in caplog.text
+        assert email.call_count == 1  # movie 2's new trailer still went out

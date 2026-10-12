@@ -549,3 +549,36 @@ class TestRefreshReadsFreshData:
         alerts = mock_email.call_args.args[2]
         assert alerts[0]["added"] == ["Hulu"]
         assert alerts[0]["removed"] == ["Netflix"]
+
+class TestTitlesTmdbNoLongerHas:
+    def test_deleted_title_is_skipped_quietly_and_the_rest_refresh(self, db, caplog):
+        """TMDb deleted the title (seen for show 297772) while someone still
+        tracks it: skip it at INFO rather than an error every night."""
+        import logging
+
+        import httpx
+        from app.models.provider import MovieProvider
+        from app.services import streaming_notification_service as svc
+
+        _seed_movie(db, mid=1, title="Gone from TMDb")
+        _seed_movie(db, mid=2, title="Still there")
+        _seed_user(db, uid="u1")
+        _watchlist(db, "u1", 1, "movie")
+        _watchlist(db, "u1", 2, "movie")
+        fresh = _provider_response(flatrate=[(8, "Netflix")])["watch/providers"]["results"]["US"]
+
+        def fetch(content_id, content_type):
+            if content_id == 1:
+                request = httpx.Request("GET", "https://api.themoviedb.org/3/movie/1")
+                raise httpx.HTTPStatusError(
+                    "404", request=request, response=httpx.Response(404, request=request)
+                )
+            return fresh
+
+        with patch.object(svc, "_fetch_fresh_us_providers", side_effect=fetch),              patch("app.services.streaming_notification_service.send_streaming_alert_email"),              caplog.at_level(logging.INFO, logger="app.services.streaming_notification_service"):
+            svc.refresh_streaming_providers(db)
+
+        assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
+        assert "no longer on TMDb" in caplog.text
+        db.expire_all()
+        assert [p.movie_id for p in db.query(MovieProvider)] == [2]
