@@ -103,6 +103,38 @@ def reset_db():
     Base.metadata.drop_all(bind=engine)
 
 
+@pytest.fixture(autouse=True)
+def queued_alert_jobs(monkeypatch):
+    """
+    The streaming and trailer refreshes queue one send job per user through
+    durable_queue's enqueue_many, whose SQL is Postgres-only. Stand-in: run
+    each job right away in the caller's session, skipping a key already
+    queued, as the real queue does. Returns the (task, args) list run.
+    """
+    from app.services import streaming_notification_service as streaming
+    from app.services import trailer_notification_service as trailers
+
+    senders = {
+        "send_streaming_alerts": streaming.send_user_streaming_alerts,
+        "send_trailer_alerts": trailers.send_user_trailer_alerts,
+    }
+    run: list[tuple[str, dict]] = []
+    seen_keys: set[str] = set()
+
+    def enqueue_many(session, task, args_list, *, idempotency_keys=None, run_ats=None):
+        for args, key in zip(args_list, idempotency_keys or [None] * len(args_list)):
+            if key is not None and key in seen_keys:
+                continue
+            seen_keys.add(key)
+            run.append((task, args))
+            senders[task](session, **args)
+        return list(range(len(args_list)))
+
+    monkeypatch.setattr(streaming, "enqueue_many", enqueue_many)
+    monkeypatch.setattr(trailers, "enqueue_many", enqueue_many)
+    return run
+
+
 @pytest.fixture
 def db():
     session = TestingSessionLocal()

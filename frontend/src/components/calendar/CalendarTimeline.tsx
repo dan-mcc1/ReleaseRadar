@@ -5,7 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { BASE_IMAGE_URL } from "../../constants";
 import { apiFetch } from "../../utils/apiFetch";
 import { useAuthUser } from "../../hooks/useAuthUser";
-import { calendarQueryKey } from "../../hooks/useCalendarData";
+import { setCalendarItemWatched } from "../../hooks/useChunkedCalendar";
 import { formatAirTimeToLocal } from "../../utils/calendarUtils";
 import type { CalendarItem, DayItem } from "../../utils/calendarUtils";
 import type { Episode, Show } from "../../types/calendar";
@@ -49,8 +49,8 @@ function TimelineItem({ item }: { item: CalendarItem }) {
   const contentPath = isTv
     ? `/tv/${item.showData.id}/episode/${tvItem!.season_number}/${tvItem!.episode_number}`
     : `/movie/${item.showData.id}`;
-  const airTime = isTv
-    ? formatAirTimeToLocal(item.showData.air_time, item.showData.air_timezone)
+  const airTime = tvItem
+    ? formatAirTimeToLocal(tvItem.showData.air_time, tvItem.showData.air_timezone, tvItem.air_date)
     : null;
   const episodeTag = isTv ? getEpisodeTag(tvItem!.episode_type) : null;
 
@@ -68,18 +68,23 @@ function TimelineItem({ item }: { item: CalendarItem }) {
     setLocalWatched(!wasWatched);
     setMarking(true);
     try {
-      if (wasWatched) {
-        await apiFetch(
-          `/watched-episode/remove?show_id=${tvItem.showData.id}&season_number=${tvItem.season_number}&episode_number=${tvItem.episode_number}`,
-          { method: "DELETE" },
+      const res = await apiFetch(
+        `/watched-episode/${wasWatched ? "remove" : "add"}?show_id=${tvItem.showData.id}&season_number=${tvItem.season_number}&episode_number=${tvItem.episode_number}`,
+        { method: wasWatched ? "DELETE" : "POST" },
+      );
+      if (!res.ok) throw new Error("Failed to update watched");
+      if (user)
+        setCalendarItemWatched(
+          queryClient,
+          user.uid,
+          {
+            type: "tv",
+            showId: tvItem.showData.id,
+            seasonNumber: tvItem.season_number,
+            episodeNumber: tvItem.episode_number,
+          },
+          !wasWatched,
         );
-      } else {
-        await apiFetch(
-          `/watched-episode/add?show_id=${tvItem.showData.id}&season_number=${tvItem.season_number}&episode_number=${tvItem.episode_number}`,
-          { method: "POST" },
-        );
-      }
-      if (user) queryClient.invalidateQueries({ queryKey: calendarQueryKey(user.uid) });
     } catch {
       setLocalWatched(wasWatched);
     } finally {

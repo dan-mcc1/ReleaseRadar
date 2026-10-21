@@ -5,7 +5,7 @@ import { BASE_IMAGE_URL } from "../../constants";
 import { apiFetch } from "../../utils/apiFetch";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuthUser } from "../../hooks/useAuthUser";
-import { calendarQueryKey } from "../../hooks/useCalendarData";
+import { setCalendarItemWatched } from "../../hooks/useChunkedCalendar";
 import { useToggleEpisode } from "../../hooks/api/useEpisodes";
 import {
   formatAirTimeToLocal,
@@ -87,8 +87,12 @@ function SideRailItem({ item }: { item: CalendarItem }) {
   const logo = item.showData.logo_path;
   const seasonNum = tvItem?.season_number;
   const episodeNum = tvItem?.episode_number;
-  const airTime = isTv
-    ? formatAirTimeToLocal(item.showData.air_time, item.showData.air_timezone)
+  const airTime = tvItem
+    ? formatAirTimeToLocal(
+        tvItem.showData.air_time,
+        tvItem.showData.air_timezone,
+        tvItem.air_date,
+      )
     : null;
   const episodeTag = tvItem ? getEpisodeTag(tvItem.episode_type) : null;
 
@@ -106,17 +110,21 @@ function SideRailItem({ item }: { item: CalendarItem }) {
             episodeNumber: tvItem.episode_number,
             watched: wasWatched,
           },
-          {
-            onSuccess: () => {
-              if (user)
-                queryClient.invalidateQueries({
-                  queryKey: calendarQueryKey(user.uid),
-                });
-            },
-          },
         );
+        if (user)
+          setCalendarItemWatched(
+            queryClient,
+            user.uid,
+            {
+              type: "tv",
+              showId: tvItem.showData.id,
+              seasonNumber: tvItem.season_number,
+              episodeNumber: tvItem.episode_number,
+            },
+            !wasWatched,
+          );
       } else {
-        await apiFetch(`/watched/${wasWatched ? "remove" : "add"}`, {
+        const res = await apiFetch(`/watched/${wasWatched ? "remove" : "add"}`, {
           method: wasWatched ? "DELETE" : "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -124,10 +132,14 @@ function SideRailItem({ item }: { item: CalendarItem }) {
             content_id: item.showData.id,
           }),
         });
+        if (!res.ok) throw new Error("Failed to update watched");
         if (user)
-          queryClient.invalidateQueries({
-            queryKey: calendarQueryKey(user.uid),
-          });
+          setCalendarItemWatched(
+            queryClient,
+            user.uid,
+            { type: "movie", movieId: item.showData.id },
+            !wasWatched,
+          );
       }
     } catch {
       setLocalWatched(wasWatched);

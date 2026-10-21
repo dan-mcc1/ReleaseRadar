@@ -226,3 +226,28 @@ class TestIcalFeed:
         token = _get_valid_token(db)
         r = client.get(f"/ical/feed/{token}")
         assert b"movie-550@releaseradar" in r.content
+
+    @pytest.mark.parametrize("air_timezone, utc_start", [
+        # 9 PM Eastern in August (EDT, UTC-4): what the episode alerts use too.
+        (None, b"DTSTART:20300802T010000Z"),
+        ("America/Los_Angeles", b"DTSTART:20300802T040000Z"),
+    ])
+    def test_timed_episode_starts_at_its_air_time(
+        self, client, db, seed_show, air_timezone, utc_start
+    ):
+        """A show with an air time but no zone is read as Eastern, the same
+        zone the push alerts assume, not UTC."""
+        from app.models.episode import Episode
+        from app.models.show import Show
+        from app.models.watchlist import Watchlist
+
+        _seed_user(db)
+        db.query(Show).filter_by(id=1396).update(
+            {"air_time": "21:00", "air_timezone": air_timezone}
+        )
+        db.query(Episode).filter_by(id=62085).update({"air_date": date(2030, 8, 1)})
+        db.add(Watchlist(user_id="test-uid-1", content_type="tv", content_id=1396))
+        db.commit()
+
+        r = client.get(f"/ical/feed/{_get_valid_token(db)}")
+        assert utc_start in r.content

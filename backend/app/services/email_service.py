@@ -598,6 +598,7 @@ def send_streaming_alert_email(
     username: str,
     alerts: list,
     uid: str = "",
+    idempotency_key: str | None = None,
 ):
     """
     Notify a user about streaming availability changes for their tracked content.
@@ -695,7 +696,8 @@ def send_streaming_alert_email(
   </a>
 </div>"""
 
-    send_email(to_email, subject, _email_wrapper(body, uid), uid=uid)
+    send_email(to_email, subject, _email_wrapper(body, uid), uid=uid,
+               idempotency_key=idempotency_key)
 
 
 def send_trailer_alert_email(
@@ -703,6 +705,7 @@ def send_trailer_alert_email(
     username: str,
     alerts: list,
     uid: str = "",
+    idempotency_key: str | None = None,
 ):
     """
     Notify a user about new official trailers/teasers for their tracked content.
@@ -837,7 +840,8 @@ def send_trailer_alert_email(
   </a>
 </div>"""
 
-    send_email(to_email, subject, _email_wrapper(body, uid), uid=uid)
+    send_email(to_email, subject, _email_wrapper(body, uid), uid=uid,
+               idempotency_key=idempotency_key)
 
 
 def send_email(

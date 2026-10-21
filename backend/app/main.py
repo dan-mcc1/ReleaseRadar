@@ -13,7 +13,8 @@ from app.core.logging import (
     setup_logging,
     install_query_counter,
     request_elapsed_ms,
-    request_query_count,
+    request_stats,
+    RequestStats,
 )
 from app.config import settings
 
@@ -161,14 +162,28 @@ async def security_headers(request: Request, call_next):
     return response
 
 
+# Lets the frontend's origins read Server-Timing from the Performance API.
+_TIMING_ALLOW_ORIGIN = ", ".join(settings.CORS_ORIGINS)
+
+
 @app.middleware("http")
 async def log_request_time(request: Request, call_next):
     start = time.perf_counter()
-    request_query_count.set(0)
+    stats = RequestStats()
+    request_stats.set(stats)
     response = await call_next(request)
     elapsed_ms = (time.perf_counter() - start) * 1000
-    queries = request_query_count.get()
+    queries = stats.queries
     request_elapsed_ms.set(elapsed_ms)
+
+    # Shown in the browser's Network tab (Timing): time on the server, and how
+    # much of it was SQL. Whatever else the browser reports is network.
+    response.headers["Server-Timing"] = (
+        f"total;dur={elapsed_ms:.1f}, "
+        f'db;dur={stats.db_ms:.1f};desc="{queries} queries"'
+    )
+    if _TIMING_ALLOW_ORIGIN:
+        response.headers["Timing-Allow-Origin"] = _TIMING_ALLOW_ORIGIN
 
     threshold = settings.QUERY_COUNT_WARN_THRESHOLD
     if threshold and queries > threshold:

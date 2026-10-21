@@ -26,6 +26,10 @@ def get_calendar(
     to_date: str | None = None,
     watched_filter: WatchedFilter = "all",
 ) -> dict:
+    """
+    The user's tracked shows (with their episodes) and movies in the date
+    range.
+    """
     # ── Single UNION ALL replaces 3 separate list queries ────────────────────
     all_rows = db.execute(
         union_all(

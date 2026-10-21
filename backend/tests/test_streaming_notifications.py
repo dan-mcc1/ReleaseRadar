@@ -434,30 +434,75 @@ class TestRefreshStreamingProviders:
                 svc.refresh_streaming_providers(db)
                 mock_push.assert_not_called()
 
-    def test_email_failure_swallowed_and_push_still_runs(self, db):
+    def test_email_failure_fails_the_send_job_before_any_push(self, db):
+        """A failed email raises, so durable-queue retries the user's job with
+        the same Resend key. Nothing is pushed on the failed attempt."""
         from app.services import streaming_notification_service as svc
 
-        _seed_movie(db, mid=1)
         _seed_user(
             db, uid="u1",
             email_notifications=True,
             push_notifications_enabled=True,
             push_notify_streaming_changes=True,
         )
+        alerts = [{"title": "Fight Club", "content_type": "movie", "content_id": 1,
+                   "poster_path": None, "added": ["Netflix"], "removed": []}]
+
+        with patch.object(svc, "send_streaming_alert_email", side_effect=RuntimeError("smtp down")),              patch.object(svc, "push_notification") as mock_push:
+            with pytest.raises(RuntimeError):
+                svc.send_user_streaming_alerts(db, "u1", alerts, "streaming:u1:k")
+            mock_push.assert_not_called()
+
+    def test_queues_one_job_per_user_and_emails_with_its_key(self, db, queued_alert_jobs):
+        from app.services import streaming_notification_service as svc
+
+        _seed_movie(db, mid=1, title="Fight Club")
+        _seed_user(db, uid="u1", email="u1@t.com")
+        _seed_user(db, uid="u2", email="u2@t.com")
         _watchlist(db, "u1", 1, "movie")
+        _watchlist(db, "u2", 1, "movie")
 
         fresh = _provider_response(flatrate=[(8, "Netflix")])["watch/providers"]["results"]["US"]
+        with patch.object(svc, "_fetch_fresh_us_providers", return_value=fresh),              patch.object(svc, "send_streaming_alert_email") as mock_email:
+            svc.refresh_streaming_providers(db)
+
+        assert [(task, args["user_id"]) for task, args in queued_alert_jobs] == [
+            ("send_streaming_alerts", "u1"), ("send_streaming_alerts", "u2"),
+        ]
+        keys = [args["key"] for _, args in queued_alert_jobs]
+        assert len(set(keys)) == 2 and all(k.startswith("streaming:") for k in keys)
+        assert [c.kwargs["idempotency_key"] for c in mock_email.call_args_list] == keys
+
+    def test_alert_key_depends_on_user_and_content(self):
+        from app.services.streaming_notification_service import _alert_key
+
+        a = [{"content_id": 1, "added": ["Netflix"], "removed": []}]
+        b = [{"content_id": 1, "added": ["Hulu"], "removed": []}]
+        assert _alert_key("u1", a) == _alert_key("u1", [dict(a[0])])
+        assert _alert_key("u1", a) != _alert_key("u2", a)
+        assert _alert_key("u1", a) != _alert_key("u1", b)
+
+    def test_provider_changes_roll_back_if_queueing_fails(self, db, monkeypatch):
+        """The changes commit with the queued jobs, so a run that can't queue
+        them leaves the changes for the next run to find and alert on."""
+        from app.models.provider import MovieProvider
+        from app.services import streaming_notification_service as svc
+
+        _seed_movie(db, mid=1)
+        _seed_user(db, uid="u1")
+        _watchlist(db, "u1", 1, "movie")
+
+        def broken_enqueue(*args, **kwargs):
+            raise RuntimeError("queue down")
+
+        monkeypatch.setattr(svc, "enqueue_many", broken_enqueue)
+        fresh = _provider_response(flatrate=[(8, "Netflix")])["watch/providers"]["results"]["US"]
         with patch.object(svc, "_fetch_fresh_us_providers", return_value=fresh):
-            with patch(
-                "app.services.streaming_notification_service.send_streaming_alert_email",
-                side_effect=RuntimeError("smtp down"),
-            ):
-                with patch(
-                    "app.services.streaming_notification_service.push_notification"
-                ) as mock_push:
-                    # Should not raise
-                    svc.refresh_streaming_providers(db)
-                    mock_push.assert_called_once()
+            with pytest.raises(RuntimeError):
+                svc.refresh_streaming_providers(db)
+        db.rollback()
+
+        assert db.query(MovieProvider).count() == 0
 
     def test_push_failure_swallowed(self, db):
         from app.services import streaming_notification_service as svc

@@ -1,7 +1,10 @@
+import hashlib
+import json
 import logging
 from collections import defaultdict
 from datetime import date
 
+from durable_queue.sqlalchemy import enqueue_many
 from sqlalchemy.orm import Session
 
 from app.models.currently_watching import CurrentlyWatching
@@ -144,13 +147,23 @@ def ensure_trailers_populated_bg(content_id: int, content_type: str) -> None:
         db.close()
 
 
+def _alert_key(user_id: str, alerts: list[dict]) -> str:
+    """The send job's idempotency key, also its email's Resend key. It names
+    the alerts' content, so two overlapping runs that find the same trailers
+    queue one job, while new ones later the same day get their own."""
+    digest = hashlib.sha256(json.dumps(alerts, sort_keys=True).encode()).hexdigest()[:16]
+    return f"trailer:{user_id}:{date.today().isoformat()}:{digest}"
+
+
 def refresh_trailers(db: Session) -> None:
     """
-    Nightly task: check TMDb for new official trailers/teasers on all tracked
-    content, persist new video rows, and email opted-in users about the ones
-    on titles that haven't come out yet. Titles that have come out still have
-    their new videos recorded, so a show that later announces a season alerts
-    only on trailers that arrive after that.
+    Daily task: check TMDb for new official trailers/teasers on all tracked
+    content, persist new video rows, and queue a send_trailer_alerts job for
+    each opted-in user tracking a title that hasn't come out yet. Titles that
+    have come out still have their new videos recorded, so a show that later
+    announces a season alerts only on trailers that arrive after that. The
+    video rows and the queued jobs commit together, so a run that dies part
+    way alerts on its trailers next time, and one that finishes never again.
     """
     today = date.today()
     tracked: set[tuple[int, str]] = set()
@@ -163,7 +176,7 @@ def refresh_trailers(db: Session) -> None:
         return
 
     changes: dict[tuple[int, str], list[dict]] = {}
-    for content_id, content_type in tracked:
+    for content_id, content_type in sorted(tracked, key=lambda t: (t[1], t[0])):
         try:
             details = _fetch_details(content_id, content_type)
             new_vids = _detect_new_videos(db, content_id, content_type, _videos(details))
@@ -175,11 +188,28 @@ def refresh_trailers(db: Session) -> None:
             else:
                 logger.exception("trailers: failed to refresh %s %s", content_type, content_id)
 
+    user_alerts = _alerts_by_user(db, changes) if changes else {}
+    jobs = [
+        {"user_id": uid, "alerts": alerts, "key": _alert_key(uid, alerts)}
+        for uid, alerts in sorted(user_alerts.items())
+    ]
+    enqueue_many(
+        db,
+        "send_trailer_alerts",
+        jobs,
+        idempotency_keys=[job["key"] for job in jobs],
+    )
     db.commit()
+    if jobs:
+        logger.info("trailers: queued alerts for %d user(s)", len(jobs))
 
-    if not changes:
-        return
 
+def _opted_in(user: User) -> bool:
+    return bool(user.notify_trailers) and user.subscription_tier in ("premium", "admin")
+
+
+def _alerts_by_user(db: Session, changes: dict[tuple[int, str], list[dict]]) -> dict[str, list[dict]]:
+    """Each opted-in premium tracker's alerts for the titles with new trailers."""
     movie_ids = [cid for (cid, ct) in changes if ct == "movie"]
     show_ids = [cid for (cid, ct) in changes if ct == "tv"]
 
@@ -228,47 +258,50 @@ def refresh_trailers(db: Session) -> None:
             user_alerts[uid].append(alert)
 
     if not user_alerts:
+        return {}
+
+    opted_in = {
+        user.id
+        for user in db.query(User).filter(User.id.in_(list(user_alerts.keys())))
+        if _opted_in(user)
+    }
+    return {uid: alerts for uid, alerts in user_alerts.items() if uid in opted_in}
+
+
+def send_user_trailer_alerts(db: Session, user_id: str, alerts: list[dict], key: str) -> None:
+    """
+    Email and push one user's new trailers; the send_trailer_alerts job. The
+    email carries key as its Resend idempotency key and raises if it fails,
+    so the job retries without emailing twice. Pushes go out after it.
+    """
+    user = db.get(User, user_id)
+    if user is None or not _opted_in(user):
         return
 
-    users = (
-        db.query(User)
-        .filter(
-            User.id.in_(list(user_alerts.keys())),
-            User.notify_trailers == True,  # noqa: E712
-            User.subscription_tier.in_(["premium", "admin"]),
+    if user.email_notifications and user.email:
+        send_trailer_alert_email(
+            user.email,
+            user.username or "",
+            alerts,
+            uid=user.id,
+            idempotency_key=key,
         )
-        .all()
-    )
 
-    for user in users:
-        alerts = user_alerts[user.id]
-
-        if user.email_notifications and user.email:
+    if user.push_notifications_enabled and user.push_notify_trailers:
+        for alert in alerts:
+            video = alert["videos"][0] if alert["videos"] else {}
+            vname = video.get("name") or "New trailer"
             try:
-                send_trailer_alert_email(
-                    user.email,
-                    user.username or "",
-                    alerts,
-                    uid=user.id,
+                push_notification(
+                    db,
+                    user.id,
+                    type="trailer",
+                    title=f"New trailer for {alert['title']}",
+                    body=vname,
+                    content_type=alert["content_type"],
+                    content_id=alert["content_id"],
+                    video_key=video.get("key"),
+                    image_url=tmdb_poster_url(alert.get("poster_path")),
                 )
             except Exception:
-                logger.exception("trailers: failed to email user %s", user.id)
-
-        if user.push_notifications_enabled and user.push_notify_trailers:
-            for alert in alerts:
-                video = alert["videos"][0] if alert["videos"] else {}
-                vname = video.get("name") or "New trailer"
-                try:
-                    push_notification(
-                        db,
-                        user.id,
-                        type="trailer",
-                        title=f"New trailer for {alert['title']}",
-                        body=vname,
-                        content_type=alert["content_type"],
-                        content_id=alert["content_id"],
-                        video_key=video.get("key"),
-                        image_url=tmdb_poster_url(alert.get("poster_path")),
-                    )
-                except Exception:
-                    logger.exception("trailers: failed to push to user %s", user.id)
+                logger.exception("trailers: failed to push to user %s", user.id)

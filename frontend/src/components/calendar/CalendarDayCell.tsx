@@ -19,6 +19,14 @@ function CellItem({ item }: { item: CalendarItem }) {
     "episode_number" in item
       ? `${item.showData.name} - ${item.name}`
       : item.title;
+  const airTime =
+    item.type === "tv"
+      ? formatAirTimeToLocal(
+          item.showData.air_time,
+          item.showData.air_timezone,
+          item.air_date,
+        )
+      : null;
   return (
     <div className="relative mt-1.5 h-10 sm:h-20 rounded-md overflow-hidden group">
       {item.showData.backdrop_path && (
@@ -42,18 +50,11 @@ function CellItem({ item }: { item: CalendarItem }) {
           </span>
         )}
       </div>
-      {item.type === "tv" &&
-        formatAirTimeToLocal(
-          item.showData.air_time,
-          item.showData.air_timezone,
-        ) && (
-          <div className="absolute bottom-0.5 right-1 z-10 hidden sm:block text-white/60 text-[7px] font-mono drop-shadow">
-            {formatAirTimeToLocal(
-              item.showData.air_time,
-              item.showData.air_timezone,
-            )}
-          </div>
-        )}
+      {airTime && (
+        <div className="absolute bottom-0.5 right-1 z-10 hidden sm:block text-white/60 text-[7px] font-mono drop-shadow">
+          {airTime}
+        </div>
+      )}
     </div>
   );
 }
