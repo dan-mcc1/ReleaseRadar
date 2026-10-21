@@ -4,50 +4,24 @@ import { BASE_IMAGE_URL } from "../constants";
 import { apiFetch } from "../utils/apiFetch";
 import { Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import type { CalendarItem } from "../utils/calendarUtils";
-import { calendarQueryKey } from "../hooks/useCalendarData";
+import {
+  airInstant,
+  formatAirTimeToLocal,
+  type CalendarItem,
+} from "../utils/calendarUtils";
+import { setCalendarItemWatched } from "../hooks/useChunkedCalendar";
 import { useAuthUser } from "../hooks/useAuthUser";
 
 interface Props {
   items: CalendarItem[];
 }
 
-// Converts 24-hour time in a given source timezone to user's local time
-function formatAirTimeToLocal(
-  time24: string | null | undefined,
-  sourceTimeZone: string | null | undefined,
-) {
-  if (!time24 || !sourceTimeZone) return null; // nothing to display
-
-  const [hour, minute] = time24.split(":").map(Number);
-
-  // Create a Date in the source timezone
-  const now = new Date();
-
-  const sourceDateStr = new Intl.DateTimeFormat("en-US", {
-    timeZone: sourceTimeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(now);
-
-  const sourceDate = new Date(sourceDateStr);
-  sourceDate.setHours(hour, minute, 0, 0);
-
-  // Convert to user's local timezone automatically
-  return sourceDate.toLocaleTimeString(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
-}
-
-function airTimeToMinutes(time: string): number {
-  const [h, m] = time.split(":").map(Number);
-  return h * 60 + m;
+// When a timed TV item airs, in ms since the epoch (0 if unknown).
+function airMillis(item: CalendarItem): number {
+  if (item.type !== "tv") return 0;
+  return (
+    airInstant(item.air_date, item.showData.air_time, item.showData.air_timezone)?.getTime() ?? 0
+  );
 }
 
 function RuntimeBadge({ minutes }: { minutes: number | null | undefined }) {
@@ -164,24 +138,13 @@ function ItemCard({ item }: ItemCardProps) {
     const todayStr = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD local
     if (airDate < todayStr) return true;
     if (airDate > todayStr) return false;
-    // Same day — check air time in show's timezone if available
-    const airTime = tvItem.showData.air_time;
-    const airTimezone = tvItem.showData.air_timezone;
-    if (!airTime) return true; // no time info, assume it's airing today
-    try {
-      const [h, m] = airTime.split(":").map(Number);
-      const tz = airTimezone ?? "UTC";
-      const nowInTZ = new Date(
-        new Date().toLocaleString("en-US", { timeZone: tz }),
-      );
-      const airInTZ = new Date(
-        new Date().toLocaleString("en-US", { timeZone: tz }),
-      );
-      airInTZ.setHours(h, m, 0, 0);
-      return nowInTZ >= airInTZ;
-    } catch {
-      return true;
-    }
+    // Same day: released once its air time has passed, if it has one.
+    const aired = airInstant(
+      airDate,
+      tvItem.showData.air_time,
+      tvItem.showData.air_timezone,
+    );
+    return !aired || aired.getTime() <= Date.now();
   })();
 
   async function handleMarkWatched(e: React.MouseEvent) {
@@ -191,13 +154,24 @@ function ItemCard({ item }: ItemCardProps) {
     const tvItem = item as Episode & { type: "tv"; showData: Show };
     setMarking(true);
     try {
-      await apiFetch(
+      const res = await apiFetch(
         `/watched-episode/add?show_id=${tvItem.showData.id}&season_number=${tvItem.season_number}&episode_number=${tvItem.episode_number}`,
         { method: "POST" },
       );
+      if (!res.ok) return;
       setLocalWatched(true);
       if (user) {
-        queryClient.invalidateQueries({ queryKey: calendarQueryKey(user.uid) });
+        setCalendarItemWatched(
+          queryClient,
+          user.uid,
+          {
+            type: "tv",
+            showId: tvItem.showData.id,
+            seasonNumber: tvItem.season_number,
+            episodeNumber: tvItem.episode_number,
+          },
+          true,
+        );
       }
     } catch {
       // ignore
@@ -336,11 +310,8 @@ export default function DayScheduleView({ items }: Props) {
     return !!item.showData.air_time;
   });
 
-  timedItems.sort((a, b) => {
-    const aTime = a.type === "tv" ? (a.showData.air_time ?? "") : "";
-    const bTime = b.type === "tv" ? (b.showData.air_time ?? "") : "";
-    return airTimeToMinutes(aTime) - airTimeToMinutes(bTime);
-  });
+  // By when they air, not by clock time: shows in different zones mix.
+  timedItems.sort((a, b) => airMillis(a) - airMillis(b));
 
   const timedGroups: { label: string; items: CalendarItem[] }[] = [];
   for (const item of timedItems) {
@@ -349,6 +320,7 @@ export default function DayScheduleView({ items }: Props) {
         ? (formatAirTimeToLocal(
             item.showData.air_time,
             item.showData.air_timezone,
+            item.air_date,
           ) ?? "")
         : "";
     const existing = timedGroups.find((g) => g.label === label);

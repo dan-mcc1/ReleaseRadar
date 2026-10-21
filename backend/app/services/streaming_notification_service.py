@@ -1,6 +1,10 @@
+import hashlib
+import json
 import logging
 from collections import defaultdict
+from datetime import date
 
+from durable_queue.sqlalchemy import enqueue_many
 from sqlalchemy.orm import Session
 
 from app.models.currently_watching import CurrentlyWatching
@@ -151,10 +155,21 @@ def ensure_providers_populated_bg(content_id: int, content_type: str) -> None:
         db.close()
 
 
+def _alert_key(user_id: str, alerts: list[dict]) -> str:
+    """The send job's idempotency key, also its email's Resend key. It names
+    the alerts' content, so two overlapping runs that find the same changes
+    queue one job, while a different change later the same day gets its own."""
+    digest = hashlib.sha256(json.dumps(alerts, sort_keys=True).encode()).hexdigest()[:16]
+    return f"streaming:{user_id}:{date.today().isoformat()}:{digest}"
+
+
 def refresh_streaming_providers(db: Session) -> None:
     """
-    Nightly task: refresh TMDb watch providers for all tracked content,
-    detect flatrate additions/removals, and email affected opted-in users.
+    Daily task: refresh TMDb watch providers for all tracked content, detect
+    flatrate additions/removals, and queue a send_streaming_alerts job for
+    each opted-in user affected. The provider changes and the queued jobs
+    commit together: a run that dies part way leaves neither, so the next run
+    finds the same changes, and one that finishes never alerts on them again.
     """
     tracked: set[tuple[int, str]] = set()
     for row in db.query(Watchlist.content_id, Watchlist.content_type).distinct():
@@ -166,23 +181,38 @@ def refresh_streaming_providers(db: Session) -> None:
         return
 
     changes: dict[tuple[int, str], dict] = {}
-    for content_id, content_type in tracked:
+    for content_id, content_type in sorted(tracked, key=lambda t: (t[1], t[0])):
         try:
             fresh = _fetch_fresh_us_providers(content_id, content_type)
             added, removed = _diff_and_update_providers(db, content_id, content_type, fresh)
             if added or removed:
-                changes[(content_id, content_type)] = {"added": added, "removed": removed}
+                changes[(content_id, content_type)] = {
+                    "added": sorted(added), "removed": sorted(removed),
+                }
         except Exception as exc:
             if is_not_found(exc):
                 logger.info("streaming: %s %s is no longer on TMDb; skipped", content_type, content_id)
             else:
                 logger.exception("streaming: failed to refresh %s %s", content_type, content_id)
 
+    user_alerts = _alerts_by_user(db, changes) if changes else {}
+    jobs = [
+        {"user_id": uid, "alerts": alerts, "key": _alert_key(uid, alerts)}
+        for uid, alerts in sorted(user_alerts.items())
+    ]
+    enqueue_many(
+        db,
+        "send_streaming_alerts",
+        jobs,
+        idempotency_keys=[job["key"] for job in jobs],
+    )
     db.commit()
+    if jobs:
+        logger.info("streaming: queued alerts for %d user(s)", len(jobs))
 
-    if not changes:
-        return
 
+def _alerts_by_user(db: Session, changes: dict[tuple[int, str], dict]) -> dict[str, list[dict]]:
+    """Each opted-in tracker's alerts for the changed titles."""
     # Bulk-load title/poster info
     movie_ids = [cid for (cid, ct) in changes if ct == "movie"]
     show_ids = [cid for (cid, ct) in changes if ct == "tv"]
@@ -231,53 +261,59 @@ def refresh_streaming_providers(db: Session) -> None:
             user_alerts[uid].append(alert)
 
     if not user_alerts:
-        return
+        return {}
 
-    users = (
-        db.query(User)
-        .filter(
+    opted_in = {
+        uid
+        for (uid,) in db.query(User.id).filter(
             User.id.in_(list(user_alerts.keys())),
             User.notify_streaming_changes == True,  # noqa: E712
         )
-        .all()
-    )
+    }
+    return {uid: alerts for uid, alerts in user_alerts.items() if uid in opted_in}
 
-    for user in users:
-        alerts = user_alerts[user.id]
 
-        if user.email_notifications and user.email:
+def send_user_streaming_alerts(db: Session, user_id: str, alerts: list[dict], key: str) -> None:
+    """
+    Email and push one user's streaming changes; the send_streaming_alerts
+    job. The email carries key as its Resend idempotency key and raises if it
+    fails, so the job retries without emailing twice. Pushes go out after it.
+    """
+    user = db.get(User, user_id)
+    if user is None or not user.notify_streaming_changes:
+        return
+
+    if user.email_notifications and user.email:
+        send_streaming_alert_email(
+            user.email,
+            user.username or "",
+            alerts,
+            uid=user.id,
+            idempotency_key=key,
+        )
+
+    if user.push_notifications_enabled and user.push_notify_streaming_changes:
+        for alert in alerts:
+            title_word = alert["title"]
+            added = alert["added"]
+            removed = alert["removed"]
+            parts = []
+            if added:
+                parts.append("now on " + ", ".join(added))
+            if removed:
+                parts.append("leaving " + ", ".join(removed))
+            if not parts:
+                continue
             try:
-                send_streaming_alert_email(
-                    user.email,
-                    user.username or "",
-                    alerts,
-                    uid=user.id,
+                push_notification(
+                    db,
+                    user.id,
+                    type="streaming_change",
+                    title=f"Streaming update: {title_word}",
+                    body=" — ".join(parts),
+                    content_type=alert["content_type"],
+                    content_id=alert["content_id"],
+                    image_url=tmdb_poster_url(alert.get("poster_path")),
                 )
             except Exception:
-                logger.exception("streaming: failed to email user %s", user.id)
-
-        if user.push_notifications_enabled and user.push_notify_streaming_changes:
-            for alert in alerts:
-                title_word = alert["title"]
-                added = alert["added"]
-                removed = alert["removed"]
-                parts = []
-                if added:
-                    parts.append("now on " + ", ".join(added))
-                if removed:
-                    parts.append("leaving " + ", ".join(removed))
-                if not parts:
-                    continue
-                try:
-                    push_notification(
-                        db,
-                        user.id,
-                        type="streaming_change",
-                        title=f"Streaming update: {title_word}",
-                        body=" — ".join(parts),
-                        content_type=alert["content_type"],
-                        content_id=alert["content_id"],
-                        image_url=tmdb_poster_url(alert.get("poster_path")),
-                    )
-                except Exception:
-                    logger.exception("streaming: failed to push to user %s", user.id)
+                logger.exception("streaming: failed to push to user %s", user.id)

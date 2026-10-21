@@ -85,32 +85,32 @@ def _air_dt_utc(air_date_val, air_time_str, tz_name):
     return local.astimezone(dt_timezone.utc)
 
 
-# ── _parse_air_time ───────────────────────────────────────────────────────
+# ── parse_air_time ────────────────────────────────────────────────────────
 
 
 class TestParseAirTime:
     def test_none(self):
-        from app.services.episode_alert_service import _parse_air_time
+        from app.services.air_time import parse_air_time as _parse_air_time
         assert _parse_air_time(None) is None
         assert _parse_air_time("") is None
 
     def test_hh_mm(self):
-        from app.services.episode_alert_service import _parse_air_time
+        from app.services.air_time import parse_air_time as _parse_air_time
         t = _parse_air_time("20:00")
         assert t.hour == 20 and t.minute == 0
 
     def test_hh_mm_ss(self):
-        from app.services.episode_alert_service import _parse_air_time
+        from app.services.air_time import parse_air_time as _parse_air_time
         t = _parse_air_time("20:00:30")
         assert t.hour == 20 and t.minute == 0
 
     def test_hour_only(self):
-        from app.services.episode_alert_service import _parse_air_time
+        from app.services.air_time import parse_air_time as _parse_air_time
         t = _parse_air_time("20")
         assert t.hour == 20 and t.minute == 0
 
     def test_invalid_returns_none(self):
-        from app.services.episode_alert_service import _parse_air_time
+        from app.services.air_time import parse_air_time as _parse_air_time
         assert _parse_air_time("not-a-time") is None
 
 

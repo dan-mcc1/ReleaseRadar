@@ -13,6 +13,7 @@ import ContinueWatchingStrip from "./ContinueWatchingStrip";
 type ViewMode = "month" | "week";
 import {
   buildAllItems,
+  indexItemsByDate,
   getItemsForDate,
   applyFilters,
   getDaysInMonth,
@@ -41,7 +42,6 @@ export default function CalendarView() {
   const [watchFilter, setWatchFilter] = useState<
     "all" | "watched" | "unwatched"
   >("all");
-  const { shows, movies, isLoading, maybePrefetch } = useCalendarData(watchFilter);
   const { data: cwData } = useCurrentlyWatching();
   const isPremium =
     userMe?.subscription_tier === "premium" ||
@@ -52,6 +52,7 @@ export default function CalendarView() {
   const [selectedDate, setSelectedDate] = useState<Date>(today);
   const [currentMonth, setCurrentMonth] = useState(today.getMonth());
   const [currentYear, setCurrentYear] = useState(today.getFullYear());
+  const { shows, movies, isLoading } = useCalendarData(currentYear, currentMonth);
   const [viewMode, setViewMode] = useState<ViewMode>("month");
   const [filterType, setFilterType] = useState<"all" | "tv" | "movie">("all");
   const [currentlyWatchingFilter, setCurrentlyWatchingFilter] = useState(false);
@@ -64,6 +65,7 @@ export default function CalendarView() {
     () => buildAllItems({ shows, movies }),
     [shows, movies],
   );
+  const itemsByDate = useMemo(() => indexItemsByDate(allItems), [allItems]);
 
   const cwIds = useMemo((): CurrentlyWatchingIds | undefined => {
     if (!currentlyWatchingFilter || !cwData) return undefined;
@@ -78,28 +80,28 @@ export default function CalendarView() {
       getDaysInMonth(
         currentMonth,
         currentYear,
-        allItems,
+        itemsByDate,
         filterType,
         watchFilter,
         cwIds,
       ),
-    [currentMonth, currentYear, allItems, filterType, watchFilter, cwIds],
+    [currentMonth, currentYear, itemsByDate, filterType, watchFilter, cwIds],
   );
 
   const weekDays = useMemo(
-    () => getWeekDays(selectedDate, allItems, filterType, watchFilter, cwIds),
-    [selectedDate, allItems, filterType, watchFilter, cwIds],
+    () => getWeekDays(selectedDate, itemsByDate, filterType, watchFilter, cwIds),
+    [selectedDate, itemsByDate, filterType, watchFilter, cwIds],
   );
 
   const selectedDateItems = useMemo(
     () =>
       applyFilters(
-        getItemsForDate(allItems, selectedDate),
+        getItemsForDate(itemsByDate, selectedDate),
         filterType,
         watchFilter,
         cwIds,
       ),
-    [selectedDate, allItems, filterType, watchFilter, cwIds],
+    [selectedDate, itemsByDate, filterType, watchFilter, cwIds],
   );
 
   useEffect(() => {
@@ -129,7 +131,8 @@ export default function CalendarView() {
     [allItems, currentMonth, currentYear],
   );
 
-  // Navigation handlers — only set date/month/year state + call maybePrefetch
+  // Navigation handlers only set date/month/year state; useCalendarData
+  // loads the months around the one on screen.
   const handlePrev = () => {
     if (viewMode === "month") {
       const newMonth = currentMonth === 0 ? 11 : currentMonth - 1;
@@ -137,14 +140,12 @@ export default function CalendarView() {
       setCurrentMonth(newMonth);
       setCurrentYear(newYear);
       setSelectedDate(new Date(newYear, newMonth, 1));
-      maybePrefetch(newYear, newMonth);
     } else {
       const newDate = new Date(selectedDate);
       newDate.setDate(newDate.getDate() - 7);
       setCurrentMonth(newDate.getMonth());
       setCurrentYear(newDate.getFullYear());
       setSelectedDate(newDate);
-      maybePrefetch(newDate.getFullYear(), newDate.getMonth());
     }
   };
 
@@ -155,14 +156,12 @@ export default function CalendarView() {
       setCurrentMonth(newMonth);
       setCurrentYear(newYear);
       setSelectedDate(new Date(newYear, newMonth, 1));
-      maybePrefetch(newYear, newMonth);
     } else {
       const newDate = new Date(selectedDate);
       newDate.setDate(newDate.getDate() + 7);
       setCurrentMonth(newDate.getMonth());
       setCurrentYear(newDate.getFullYear());
       setSelectedDate(newDate);
-      maybePrefetch(newDate.getFullYear(), newDate.getMonth());
     }
   };
 
@@ -465,7 +464,7 @@ export default function CalendarView() {
         <div>
           <CalendarSideRail
             todayItems={applyFilters(
-              getItemsForDate(allItems, today),
+              getItemsForDate(itemsByDate, today),
               filterType,
               watchFilter,
               cwIds,

@@ -1,18 +1,35 @@
 import logging
+import time
 from contextvars import ContextVar
+from dataclasses import dataclass
 from uvicorn.logging import AccessFormatter
 
 request_elapsed_ms: ContextVar[float | None] = ContextVar(
     "request_elapsed_ms", default=None
 )
-request_query_count: ContextVar[int] = ContextVar("request_query_count", default=0)
+
+
+@dataclass
+class RequestStats:
+    """SQL statements one request ran and the time spent in them."""
+
+    queries: int = 0
+    db_ms: float = 0.0
+
+
+# Set to a fresh RequestStats at the start of each request. It's a mutable
+# object, not a counter, on purpose: sync routes and dependencies run in a
+# threadpool with a copy of the context, so a ContextVar.set() there never
+# reaches the middleware, but the copy still points at the same object.
+request_stats: ContextVar[RequestStats | None] = ContextVar("request_stats", default=None)
 
 
 class TimedAccessFormatter(AccessFormatter):
     def formatMessage(self, record: logging.LogRecord) -> str:
         msg = super().formatMessage(record)
         elapsed = request_elapsed_ms.get()
-        queries = request_query_count.get()
+        stats = request_stats.get()
+        queries = stats.queries if stats else 0
         if elapsed is not None or queries:
             extras = []
             if elapsed is not None:
@@ -53,14 +70,23 @@ def setup_logging():
 
 
 def install_query_counter(engine):
-    """Register a SQLAlchemy listener that increments request_query_count
-    for each statement executed. Idempotent — safe to call once at startup."""
+    """Register SQLAlchemy listeners that add each statement, and the time it
+    took, to the current request's RequestStats. Statements outside a request
+    (jobs, startup) are ignored. Connection checkout, BEGIN and ROLLBACK
+    aren't cursor executions, so they aren't counted. Call once at startup."""
     from sqlalchemy import event
 
     @event.listens_for(engine, "before_cursor_execute")
-    def _count_query(conn, cursor, statement, parameters, context, executemany):
-        try:
-            request_query_count.set(request_query_count.get() + 1)
-        except LookupError:
-            # No request context (background task, startup) — ignore.
-            pass
+    def _start_query(conn, cursor, statement, parameters, context, executemany):
+        stats = request_stats.get()
+        if stats is not None:
+            stats.queries += 1
+            if context is not None:
+                context._rr_started = time.perf_counter()
+
+    @event.listens_for(engine, "after_cursor_execute")
+    def _end_query(conn, cursor, statement, parameters, context, executemany):
+        stats = request_stats.get()
+        started = getattr(context, "_rr_started", None)
+        if stats is not None and started is not None:
+            stats.db_ms += (time.perf_counter() - started) * 1000

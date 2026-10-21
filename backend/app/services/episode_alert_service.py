@@ -14,8 +14,7 @@ SentEpisodeAlert prevents double-sending across retries and restarts.
 import logging
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta, timezone as dt_timezone
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from datetime import date, datetime, timedelta, timezone as dt_timezone
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -26,6 +25,7 @@ from app.models.sent_episode_alert import SentEpisodeAlert
 from app.models.show import Show
 from app.models.user import User
 from app.models.watchlist import Watchlist
+from app.services.air_time import air_datetime_utc
 from app.services.push_service import push_notification, tmdb_poster_url
 
 logger = logging.getLogger(__name__)
@@ -46,29 +46,8 @@ class PlannedAlert:
     lead: int
 
 
-def _parse_air_time(value: str | None) -> time | None:
-    if not value:
-        return None
-    # Stored as "HH:MM" or "HH:MM:SS".
-    parts = value.split(":")
-    try:
-        hour = int(parts[0])
-        minute = int(parts[1]) if len(parts) > 1 else 0
-        return time(hour=hour, minute=minute)
-    except (ValueError, IndexError):
-        return None
-
-
 def _air_datetime_utc(show: Show, air_date: date) -> datetime | None:
-    t = _parse_air_time(show.air_time)
-    if t is None:
-        return None
-    try:
-        tz = ZoneInfo(show.air_timezone) if show.air_timezone else ZoneInfo("America/New_York")
-    except (ZoneInfoNotFoundError, KeyError):
-        tz = ZoneInfo("America/New_York")
-    local = datetime.combine(air_date, t, tzinfo=tz)
-    return local.astimezone(dt_timezone.utc)
+    return air_datetime_utc(show.air_time, show.air_timezone, air_date)
 
 
 def _trackers_by_show(db: Session, show_ids: list[int]) -> dict[int, set[str]]:

@@ -3,7 +3,6 @@ import base64
 import hashlib
 import hmac
 from datetime import datetime, date, timedelta, timezone
-from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
@@ -21,6 +20,7 @@ from app.models.movie import Movie
 from app.models.show import Show
 from app.models.user import User
 from app.models.watchlist import Watchlist
+from app.services.air_time import air_datetime_utc
 from app.core.limiter import limiter
 
 logger = logging.getLogger(__name__)
@@ -192,29 +192,9 @@ def get_ical_feed(request: Request, token: str, db: Session = Depends(get_db)):
                 if ep.name:
                     summary += f" {ep.name}"
 
-                if show.air_time:
-                    hour, minute = map(int, show.air_time.split(":"))
-                    if show.air_timezone:
-                        tz = ZoneInfo(show.air_timezone)
-                        local_dt = datetime(
-                            ep.air_date.year,
-                            ep.air_date.month,
-                            ep.air_date.day,
-                            hour,
-                            minute,
-                            tzinfo=tz,
-                        )
-                        dtstart = local_dt.astimezone(timezone.utc)
-                    else:
-                        dtstart = datetime(
-                            ep.air_date.year,
-                            ep.air_date.month,
-                            ep.air_date.day,
-                            hour,
-                            minute,
-                            tzinfo=timezone.utc,
-                        )
-                    dtstart, dtend = _timed_event(dtstart, ep.runtime)
+                aired_at = air_datetime_utc(show.air_time, show.air_timezone, ep.air_date)
+                if aired_at is not None:
+                    dtstart, dtend = _timed_event(aired_at, ep.runtime)
                 else:
                     dtstart, dtend = _allday_event(ep.air_date)
 
@@ -227,7 +207,7 @@ def get_ical_feed(request: Request, token: str, db: Session = Depends(get_db)):
                 event.add("summary", summary)
                 event.add("dtstart", dtstart)
                 event.add("dtend", dtend)
-                if not show.air_time:
+                if aired_at is None:
                     # Tell Outlook to render this as an all-day event
                     event.add("x-microsoft-cdo-alldayevent", "TRUE")
                 if ep.overview:

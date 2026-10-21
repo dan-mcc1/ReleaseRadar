@@ -6,6 +6,7 @@ import CalendarDayDetail from "./CalendarDayDetail";
 import CalendarSideRail from "./CalendarSideRail";
 import {
   buildAllItems,
+  indexItemsByDate,
   getItemsForDate,
   applyFilters,
   getDaysInMonth,
@@ -26,13 +27,12 @@ interface Props {
 }
 
 export default function ShelfCalendarView({ shelfId, shelfName }: Props) {
-  const { shows, movies, isLoading, maybePrefetch } = useShelfCalendarData(shelfId);
-
   const today = new Date();
 
   const [selectedDate, setSelectedDate] = useState<Date>(today);
   const [currentMonth, setCurrentMonth] = useState(today.getMonth());
   const [currentYear, setCurrentYear] = useState(today.getFullYear());
+  const { shows, movies, isLoading } = useShelfCalendarData(shelfId, currentYear, currentMonth);
   const [viewMode, setViewMode] = useState<ViewMode>(() =>
     typeof window !== "undefined" && window.innerWidth < 640 ? "day" : "month"
   );
@@ -41,20 +41,21 @@ export default function ShelfCalendarView({ shelfId, shelfName }: Props) {
   const [showFilters, setShowFilters] = useState(false);
 
   const allItems = useMemo(() => buildAllItems({ shows, movies }), [shows, movies]);
+  const itemsByDate = useMemo(() => indexItemsByDate(allItems), [allItems]);
 
   const daysOfMonth = useMemo(
-    () => getDaysInMonth(currentMonth, currentYear, allItems, filterType, watchFilter),
-    [currentMonth, currentYear, allItems, filterType, watchFilter]
+    () => getDaysInMonth(currentMonth, currentYear, itemsByDate, filterType, watchFilter),
+    [currentMonth, currentYear, itemsByDate, filterType, watchFilter]
   );
 
   const weekDays = useMemo(
-    () => getWeekDays(selectedDate, allItems, filterType, watchFilter),
-    [selectedDate, allItems, filterType, watchFilter]
+    () => getWeekDays(selectedDate, itemsByDate, filterType, watchFilter),
+    [selectedDate, itemsByDate, filterType, watchFilter]
   );
 
   const selectedDateItems = useMemo(
-    () => applyFilters(getItemsForDate(allItems, selectedDate), filterType, watchFilter),
-    [selectedDate, allItems, filterType, watchFilter]
+    () => applyFilters(getItemsForDate(itemsByDate, selectedDate), filterType, watchFilter),
+    [selectedDate, itemsByDate, filterType, watchFilter]
   );
 
   const upcomingThisMonth = useMemo(
@@ -69,21 +70,18 @@ export default function ShelfCalendarView({ shelfId, shelfName }: Props) {
       setCurrentMonth(newMonth);
       setCurrentYear(newYear);
       setSelectedDate(new Date(newYear, newMonth, 1));
-      maybePrefetch(newYear, newMonth);
     } else if (viewMode === "week") {
       const d = new Date(selectedDate);
       d.setDate(d.getDate() - 7);
       setCurrentMonth(d.getMonth());
       setCurrentYear(d.getFullYear());
       setSelectedDate(d);
-      maybePrefetch(d.getFullYear(), d.getMonth());
     } else {
       const d = new Date(selectedDate);
       d.setDate(d.getDate() - 1);
       setCurrentMonth(d.getMonth());
       setCurrentYear(d.getFullYear());
       setSelectedDate(d);
-      maybePrefetch(d.getFullYear(), d.getMonth());
     }
   };
 
@@ -94,21 +92,18 @@ export default function ShelfCalendarView({ shelfId, shelfName }: Props) {
       setCurrentMonth(newMonth);
       setCurrentYear(newYear);
       setSelectedDate(new Date(newYear, newMonth, 1));
-      maybePrefetch(newYear, newMonth);
     } else if (viewMode === "week") {
       const d = new Date(selectedDate);
       d.setDate(d.getDate() + 7);
       setCurrentMonth(d.getMonth());
       setCurrentYear(d.getFullYear());
       setSelectedDate(d);
-      maybePrefetch(d.getFullYear(), d.getMonth());
     } else {
       const d = new Date(selectedDate);
       d.setDate(d.getDate() + 1);
       setCurrentMonth(d.getMonth());
       setCurrentYear(d.getFullYear());
       setSelectedDate(d);
-      maybePrefetch(d.getFullYear(), d.getMonth());
     }
   };
 
@@ -319,7 +314,7 @@ export default function ShelfCalendarView({ shelfId, shelfName }: Props) {
 
         <div>
           <CalendarSideRail
-            todayItems={applyFilters(getItemsForDate(allItems, today), filterType, watchFilter)}
+            todayItems={applyFilters(getItemsForDate(itemsByDate, today), filterType, watchFilter)}
             selectedDate={selectedDate}
             selectedDateItems={selectedDateItems}
             onResetToToday={goToToday}

@@ -307,20 +307,43 @@ class TestRefreshTrailers:
                 assert kwargs["body"] == "Final Trailer"
                 assert kwargs["video_key"] == "vk1"
 
-    def test_email_failure_swallowed(self, db):
+    def test_email_failure_fails_the_send_job_before_any_push(self, db):
+        """A failed email raises, so durable-queue retries the user's job with
+        the same Resend key. Nothing is pushed on the failed attempt."""
+        from app.services import trailer_notification_service as svc
+
+        _seed_user(db, uid="u1", subscription_tier="premium",
+                   push_notifications_enabled=True, push_notify_trailers=True)
+        alerts = [{"title": "Fight Club", "content_type": "movie", "content_id": 1,
+                   "poster_path": None, "videos": [{"key": "vk1", "name": "Trailer"}]}]
+
+        with patch.object(svc, "send_trailer_alert_email", side_effect=RuntimeError("smtp down")),              patch.object(svc, "push_notification") as mock_push:
+            with pytest.raises(RuntimeError):
+                svc.send_user_trailer_alerts(db, "u1", alerts, "trailer:u1:k")
+            mock_push.assert_not_called()
+
+    def test_emails_with_the_queued_jobs_key(self, db, queued_alert_jobs):
         from app.services import trailer_notification_service as svc
 
         _seed_movie(db, mid=1)
         _seed_user(db, uid="u1", subscription_tier="premium")
         _watchlist(db, "u1", 1, "movie")
 
-        with patch.object(svc, "fetch_movie_from_tmdb", return_value=_movie_details([_video("vk1")])):
-            with patch(
-                "app.services.trailer_notification_service.send_trailer_alert_email",
-                side_effect=RuntimeError("smtp down"),
-            ):
-                # Should not raise
-                svc.refresh_trailers(db)
+        with patch.object(svc, "fetch_movie_from_tmdb", return_value=_movie_details([_video("vk1")])),              patch.object(svc, "send_trailer_alert_email") as mock_email:
+            svc.refresh_trailers(db)
+
+        [(task, args)] = queued_alert_jobs
+        assert task == "send_trailer_alerts"
+        assert args["key"].startswith("trailer:u1:")
+        assert mock_email.call_args.kwargs["idempotency_key"] == args["key"]
+
+    def test_send_job_skips_a_user_who_downgraded_since(self, db):
+        from app.services import trailer_notification_service as svc
+
+        _seed_user(db, uid="u1", subscription_tier="free")
+        with patch.object(svc, "send_trailer_alert_email") as mock_email:
+            svc.send_user_trailer_alerts(db, "u1", [{"videos": []}], "trailer:u1:k")
+        mock_email.assert_not_called()
 
     def test_push_failure_swallowed(self, db):
         from app.services import trailer_notification_service as svc
