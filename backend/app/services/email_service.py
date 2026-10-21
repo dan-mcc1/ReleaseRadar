@@ -325,7 +325,7 @@ def send_season_premiere_email(
   <div style="flex:1;">
     <a href="{content_url}" style="color:#f5f5f5;font-size:15px;font-weight:600;
        text-decoration:none;display:block;margin-bottom:4px;line-height:1.3;">{escape(a["show_name"])}</a>
-    <p style="margin:0 0 2px;color:#10b981;font-size:13px;font-weight:500;">{season_label}</p>
+    <p style="margin:0 0 2px;color:#10b981;font-size:13px;font-weight:500;">{escape(season_label)}</p>
     <p style="margin:0;color:#525252;font-size:12px;">Premieres {_format_date(a["air_date"])}</p>
   </div>
 </div>"""
@@ -725,7 +725,8 @@ def send_trailer_alert_email(
     def _video_rows(videos: list[dict]) -> str:
         rows = ""
         for v in videos[:3]:
-            key = v.get("key", "")
+            # TMDb's value goes into href/src: encode it so it can't end the attribute.
+            key = quote(v.get("key") or "", safe="")
             name = escape(v.get("name") or "Official Trailer")
             thumb = YOUTUBE_THUMB.format(key=key)
             yt_url = f"https://www.youtube.com/watch?v={key}"

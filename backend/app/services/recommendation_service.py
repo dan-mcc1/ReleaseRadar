@@ -112,7 +112,7 @@ def send_recommendation(
     return entry
 
 
-def _serialize(rec: Recommendation, sender_username: str) -> dict:
+def serialize_recommendation(rec: Recommendation, sender_username: str | None) -> dict:
     return {
         "id": rec.id,
         "sender_id": rec.sender_id,
@@ -139,7 +139,7 @@ def get_inbox(db: Session, user_id: str) -> list:
         .order_by(Recommendation.created_at.desc())
         .all()
     )
-    return [_serialize(rec, username) for rec, username in rows]
+    return [serialize_recommendation(rec, username) for rec, username in rows]
 
 
 def mark_read(db: Session, user_id: str, recommendation_id: int):

@@ -49,6 +49,22 @@ class TestRecommendationSend:
         r = _send(client)
         assert r.status_code == 200
 
+    def test_send_response_is_serialized_without_recipient_details(
+        self, client, db, seed_movie
+    ):
+        _make_friends(db)
+        r = _send(client, message="watch this")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["id"]
+        assert data["content_title"] == "Fight Club"
+        assert data["content_id"] == 550
+        assert data["sender_username"] == "alice"
+        assert data["message"] == "watch this"
+        assert not any(k.startswith("_") for k in data)
+        assert "bob@test.com" not in r.text
+        assert "test-uid-2" not in r.text
+
     def test_send_requires_friendship(self, client, db, seed_movie):
         # Users exist but are not friends — should get 403
         _seed_both_users(db)

@@ -4,6 +4,7 @@ from sqlalchemy import or_, func, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from datetime import datetime, timedelta, timezone
 from app.models.activity import Activity
+from app.models.block import Block
 from app.models.friendship import Friendship
 from app.models.user import User
 from app.models.show import Show
@@ -154,8 +155,10 @@ def _build_media_fallback(
 
 def _visible_friend_ids(db: Session, user_id: str) -> list[str]:
     """
-    Return the IDs of accepted friends whose profile_visibility is not "private".
-    Private users' activity is hidden from the feed.
+    Return the IDs of accepted friends whose profile_visibility is not "private"
+    and who haven't blocked, or been blocked by, user_id. Private users'
+    activity is hidden from the feed. Blocking now ends the friendship, but
+    pairs blocked before that still have one.
     """
     friendships = (
         db.query(Friendship)
@@ -174,12 +177,16 @@ def _visible_friend_ids(db: Session, user_id: str) -> list[str]:
     ]
     if not friend_ids:
         return []
+    blocked = db.query(Block.blocked_id).filter(Block.blocker_id == user_id)
+    blockers = db.query(Block.blocker_id).filter(Block.blocked_id == user_id)
     # Exclude friends who have set their profile to private
     visible = (
         db.query(User.id)
         .filter(
             User.id.in_(friend_ids),
             User.profile_visibility != "private",
+            User.id.notin_(blocked),
+            User.id.notin_(blockers),
         )
         .all()
     )

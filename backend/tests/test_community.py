@@ -290,6 +290,21 @@ class TestInviteRemove:
                         json={"username": "ghost"})
         assert r.status_code == 404
 
+    @pytest.mark.parametrize("blocker", ["test-uid-1", "test-uid-2"])
+    def test_invite_blocked_either_direction_404(
+        self, client, three_users, db, blocker
+    ):
+        from app.models.block import Block
+
+        cid = _create_group(client).json()["id"]
+        blocked = "test-uid-2" if blocker == "test-uid-1" else "test-uid-1"
+        db.add(Block(blocker_id=blocker, blocked_id=blocked))
+        db.commit()
+        r = client.post(f"/communities/{cid}/members/invite",
+                        json={"username": "bob"})
+        assert r.status_code == 404
+        assert r.json()["detail"] == "User not found."
+
     def test_cannot_double_invite(self, client, three_users):
         cid = _create_group(client).json()["id"]
         client.post(f"/communities/{cid}/members/invite",
@@ -613,6 +628,27 @@ class TestReplies:
 
 
 # ── Likes ──────────────────────────────────────────────────────────────────
+
+
+class TestEditAfterLeaving:
+    def test_former_member_cannot_edit_post(self, client, client2, three_users):
+        cid = _create_group(client).json()["id"]
+        client2.post(f"/communities/{cid}/join")
+        pid = _create_post(client2, cid).json()["id"]
+        client2.post(f"/communities/{cid}/leave")
+        r = client2.patch(f"/communities/posts/{pid}", json={"body": "edited"})
+        assert r.status_code == 403
+
+    def test_removed_member_cannot_edit_reply(self, client, client2, three_users):
+        cid = _create_group(client).json()["id"]
+        client2.post(f"/communities/{cid}/join")
+        pid = _create_post(client, cid).json()["id"]
+        rid = client2.post(
+            f"/communities/posts/{pid}/replies", json={"body": "v1"}
+        ).json()["id"]
+        client.delete(f"/communities/{cid}/members/test-uid-2")
+        r = client2.patch(f"/communities/replies/{rid}", json={"body": "v2"})
+        assert r.status_code == 403
 
 
 class TestLikes:

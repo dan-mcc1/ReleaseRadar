@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -23,12 +24,25 @@ from app.models.appeal import Appeal
 from app.models.banned_email import BannedEmail
 from app.services.account_service import delete_user_data
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
 
 
 def _add_banned_email(db: Session, user: User):
-    if user.email and not db.query(BannedEmail).filter(BannedEmail.email == user.email).first():
-        db.add(BannedEmail(email=user.email, user_id=user.id))
+    """Put the user's email on the ban list, only if Firebase has verified it.
+    /user/create stores whatever email the token carries, so an unverified
+    one could be someone else's address, which a ban would lock out."""
+    if not user.email or db.query(BannedEmail).filter(BannedEmail.email == user.email).first():
+        return
+    try:
+        record = auth.get_user(user.id)
+    except Exception:
+        logger.warning("ban: couldn't check %s's email with Firebase; not listing it", user.id, exc_info=True)
+        return
+    if not record.email_verified or (record.email or "").lower() != user.email.lower():
+        return
+    db.add(BannedEmail(email=user.email, user_id=user.id))
 
 
 def _remove_banned_email_by_user_id(db: Session, user_id: str):

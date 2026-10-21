@@ -22,10 +22,23 @@ const PRIMARY = "#10b981";
 
 /** Where to go after signing in: the page ProtectedRoute bounced from, if it
  * is a path on this site. Anything else (absolute or protocol-relative URLs)
- * is ignored so the link can't be used to redirect people off-site. */
+ * is ignored so the link can't be used to redirect people off-site.
+ *
+ * next is resolved the way the browser would resolve it, not checked as a
+ * string: the URL parser drops tabs and newlines and reads "\" as "/", so
+ * "/\t/evil.com" is really "//evil.com". Only the parsed, same-origin path is
+ * returned, never the raw string. */
 function safeNextPath(next: string | null): string {
-  if (next && next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\")) {
-    return next;
+  if (next?.startsWith("/")) {
+    try {
+      const url = new URL(next, window.location.origin);
+      const path = url.pathname + url.search + url.hash;
+      if (url.origin === window.location.origin && !path.startsWith("//")) {
+        return path;
+      }
+    } catch {
+      // Not a parseable URL: fall through to the default.
+    }
   }
   return "/calendar";
 }

@@ -10,6 +10,7 @@ from app.services.recommendation_service import (
     mark_read,
     get_unread_count,
     delete_recommendation,
+    serialize_recommendation,
 )
 from app.services.email_service import send_recommendation_email
 from app.services.nav_counts import notify_counts_changed
@@ -91,7 +92,9 @@ def send(
     except Exception:
         # Email + inbox are the source of truth; never let push wreck the response.
         pass
-    return result
+    # Serialized, not the ORM object: _email_params holds the recipient's
+    # email address and UID.
+    return serialize_recommendation(result, sender.username if sender else None)
 
 
 @router.get("/inbox")
