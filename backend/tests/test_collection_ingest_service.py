@@ -700,6 +700,12 @@ class TestDumpUrlFor:
         # Should use 06_14_2024 (previous day)
         assert "06_14_2024" in url
 
+    def test_url_is_https(self):
+        from app.services.collection_ingest_service import _dump_url_for
+
+        url = _dump_url_for(datetime(2024, 6, 15, 10, 0, tzinfo=timezone.utc))
+        assert url.startswith("https://")
+
     def test_after_8am_uses_today(self):
         from app.services.collection_ingest_service import _dump_url_for
 

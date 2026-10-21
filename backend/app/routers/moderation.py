@@ -2,12 +2,14 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.core.limiter import limiter
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.models.block import Block
+from app.models.friendship import Friendship
 from app.models.report import Report
 from app.models.user import User
 from app.models.review import Review
@@ -54,6 +56,15 @@ def block_user(
         raise HTTPException(status_code=409, detail="You have already blocked this user.")
 
     db.add(Block(blocker_id=uid, blocked_id=user_id))
+    # A block ends any friendship, request or follow between the two, so
+    # nothing that checks friendship (feeds, recommendations) still lets them
+    # through. Unblocking doesn't restore it.
+    db.query(Friendship).filter(
+        or_(
+            and_(Friendship.requester_id == uid, Friendship.addressee_id == user_id),
+            and_(Friendship.requester_id == user_id, Friendship.addressee_id == uid),
+        )
+    ).delete(synchronize_session=False)
     db.commit()
     return {"detail": "User blocked."}
 

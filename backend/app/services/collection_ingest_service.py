@@ -16,7 +16,7 @@
   collection without details. Idempotent — safe to re-run.
 
 TMDb's id dump lives at
-http://files.tmdb.org/p/exports/collection_ids_MM_DD_YYYY.json.gz
+https://files.tmdb.org/p/exports/collection_ids_MM_DD_YYYY.json.gz
 and is published around 08:00 UTC.
 """
 
@@ -45,7 +45,8 @@ from app.services.tmdb_collections import fetch_collection
 
 logger = logging.getLogger(__name__)
 
-_DUMP_URL = "http://files.tmdb.org/p/exports/collection_ids_{date}.json.gz"
+# HTTPS: the dump drives the prune, so a spoofed file must not get through.
+_DUMP_URL = "https://files.tmdb.org/p/exports/collection_ids_{date}.json.gz"
 _INDEX_UPSERT_BATCH = 1000
 
 # TMDb caps at 40 req/sec. At typical RTT (~300ms) each worker drives ~3 req/sec,

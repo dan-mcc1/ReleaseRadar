@@ -190,7 +190,9 @@ def members(
 
 
 @router.post("/{community_id}/members/invite")
+@limiter.limit("30/hour")
 def invite(
+    request: Request,
     community_id: int,
     body: InviteMemberBody,
     background_tasks: BackgroundTasks,

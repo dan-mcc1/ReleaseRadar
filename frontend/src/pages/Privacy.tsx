@@ -172,8 +172,9 @@ const SECTIONS = [
       <>
         Your personal iCal calendar URL contains a signed token tied to your
         account. Treat it like a password — anyone with the link can read your
-        upcoming releases. You can rotate the token by toggling the calendar
-        feature in settings. Email unsubscribe links contain a similar signed
+        upcoming releases. You can rotate the token with "Reset URL" under
+        Calendar sync in settings; the old link stops working right away. Email
+        unsubscribe links contain a similar signed
         token scoped only to email preferences.
       </>
     ),

@@ -174,6 +174,27 @@ class TestSeasonPremiereEmail:
         assert body.count(ESCAPED_FRAGMENT) >= 2
 
 
+class TestSeasonPremiereSeasonName:
+    def test_season_name_escaped(self, captured_html):
+        from app.services.email_service import send_season_premiere_email
+
+        alerts = [{
+            "show_name": "Plain Show",
+            "season_number": 2,
+            "season_name": PAYLOAD,
+            "air_date": "2026-06-01",
+            "days_away": 7,
+            "show_id": 1396,
+        }]
+        send_season_premiere_email(
+            to_email="x@test.com",
+            username="alice",
+            alerts=alerts,
+            uid="uid",
+        )
+        _assert_escaped(captured_html[0])
+
+
 # ── New-season-available (reactivation) email ─────────────────────────────
 
 

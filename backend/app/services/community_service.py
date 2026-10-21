@@ -21,6 +21,7 @@ from app.models.community import (
 from app.models.movie import Movie
 from app.models.show import Show
 from app.services.media_upsert import populate_movie_full, ensure_show_in_db
+from app.models.block import Block
 from app.models.user import User
 
 
@@ -343,6 +344,20 @@ def invite_member(
         raise HTTPException(status_code=404, detail="User not found.")
     if target.id == inviter_id:
         raise HTTPException(status_code=400, detail="You can't invite yourself.")
+    # Either side's block hides the user, as recommendations do, so a blocked
+    # admin can't keep emailing and pushing invites.
+    blocked = (
+        db.query(Block)
+        .filter(
+            or_(
+                and_(Block.blocker_id == inviter_id, Block.blocked_id == target.id),
+                and_(Block.blocker_id == target.id, Block.blocked_id == inviter_id),
+            )
+        )
+        .first()
+    )
+    if blocked:
+        raise HTTPException(status_code=404, detail="User not found.")
     if _viewer_role(db, community_id, target.id):
         raise HTTPException(status_code=409, detail="That user is already a member.")
 
@@ -947,6 +962,8 @@ def update_post(
         raise HTTPException(status_code=404, detail="Post not found.")
     if p.user_id != user_id:
         raise HTTPException(status_code=403, detail="You can only edit your own posts.")
+    # Authors who have left or been removed can't edit any more.
+    _require_member(db, p.community_id, user_id)
     body = (body or "").strip()
     if not body:
         raise HTTPException(status_code=422, detail="Post body cannot be empty.")
@@ -971,6 +988,10 @@ def update_reply(db: Session, user_id: str, reply_id: int, body: str) -> dict:
         raise HTTPException(status_code=404, detail="Reply not found.")
     if r.user_id != user_id:
         raise HTTPException(status_code=403, detail="You can only edit your own replies.")
+    # Authors who have left or been removed can't edit any more.
+    post = db.get(CommunityPost, r.post_id)
+    if post:
+        _require_member(db, post.community_id, user_id)
     body = (body or "").strip()
     if not body:
         raise HTTPException(status_code=422, detail="Reply cannot be empty.")

@@ -80,6 +80,24 @@ def _make_report(db, reporter_id, reported_type, reported_id, **snapshot_kwargs)
     return r
 
 
+def _firebase_user(email, verified=True):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(email=email, email_verified=verified)
+
+
+@pytest.fixture
+def firebase_verified(target_user):
+    """Firebase reports the target's email as verified."""
+    from unittest.mock import patch
+
+    with patch(
+        "app.routers.admin.auth.get_user",
+        return_value=_firebase_user(target_user.email),
+    ) as m:
+        yield m
+
+
 # ── Auth gate ──────────────────────────────────────────────────────────────
 
 
@@ -436,7 +454,7 @@ class TestAcceptReport:
         assert u.suspended_until is not None
 
     def test_accept_user_report_ban_creates_banned_email(
-        self, admin_client, db, reporter, target_user
+        self, admin_client, db, reporter, target_user, firebase_verified
     ):
         rpt = _make_report(db, reporter.id, "user", target_user.id)
         r = admin_client.post(
@@ -571,7 +589,9 @@ class TestSuspendUnsuspend:
 
 
 class TestBanUnban:
-    def test_ban_user_creates_banned_email(self, admin_client, db, target_user):
+    def test_ban_user_creates_banned_email(
+        self, admin_client, db, target_user, firebase_verified
+    ):
         r = admin_client.post(
             f"/admin/users/{target_user.id}/ban",
             json={"reason": "abuse"},
@@ -582,6 +602,51 @@ class TestBanUnban:
         db.expire_all()
         assert db.query(User).filter_by(id=target_user.id).first().is_banned is True
         assert db.query(BannedEmail).filter_by(email=target_user.email).first()
+
+    def test_ban_matches_email_case_insensitively(self, admin_client, db, target_user):
+        from unittest.mock import patch
+        from app.models.banned_email import BannedEmail
+
+        with patch("app.routers.admin.auth.get_user",
+                   return_value=_firebase_user(target_user.email.upper())):
+            r = admin_client.post(f"/admin/users/{target_user.id}/ban", json={})
+        assert r.status_code == 200
+        assert db.query(BannedEmail).filter_by(email=target_user.email).first()
+
+    def test_ban_unverified_email_not_listed(self, admin_client, db, target_user):
+        from unittest.mock import patch
+        from app.models.banned_email import BannedEmail
+        from app.models.user import User
+
+        with patch("app.routers.admin.auth.get_user",
+                   return_value=_firebase_user(target_user.email, verified=False)):
+            r = admin_client.post(f"/admin/users/{target_user.id}/ban", json={})
+        assert r.status_code == 200
+        db.expire_all()
+        assert db.query(User).filter_by(id=target_user.id).first().is_banned is True
+        assert db.query(BannedEmail).count() == 0
+
+    def test_ban_email_mismatch_not_listed(self, admin_client, db, target_user):
+        from unittest.mock import patch
+        from app.models.banned_email import BannedEmail
+
+        with patch("app.routers.admin.auth.get_user",
+                   return_value=_firebase_user("someone-else@test.com")):
+            r = admin_client.post(f"/admin/users/{target_user.id}/ban", json={})
+        assert r.status_code == 200
+        assert db.query(BannedEmail).count() == 0
+
+    def test_ban_firebase_error_not_listed(self, admin_client, db, target_user):
+        from unittest.mock import patch
+        from app.models.banned_email import BannedEmail
+        from app.models.user import User
+
+        with patch("app.routers.admin.auth.get_user", side_effect=RuntimeError("down")):
+            r = admin_client.post(f"/admin/users/{target_user.id}/ban", json={})
+        assert r.status_code == 200
+        db.expire_all()
+        assert db.query(User).filter_by(id=target_user.id).first().is_banned is True
+        assert db.query(BannedEmail).count() == 0
 
     def test_admin_cannot_ban_themselves(self, admin_client, db):
         r = admin_client.post("/admin/users/admin-uid/ban", json={})

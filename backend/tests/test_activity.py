@@ -172,6 +172,40 @@ class TestGetFriendsActivity:
         assert result == []
 
 
+class TestBlockedFriendsHidden:
+    """Pairs blocked before blocking ended friendships still have an accepted row."""
+
+    @pytest.mark.parametrize(
+        "blocker,blocked",
+        [("test-uid-1", "test-uid-2"), ("test-uid-2", "test-uid-1")],
+    )
+    def test_friends_activity_skips_blocked_pair(self, db, blocker, blocked):
+        from app.models.block import Block
+        from app.services.activity_service import get_friends_activity
+
+        _make_friends(db)
+        _log(db, "test-uid-2", "watched")
+        db.add(Block(blocker_id=blocker, blocked_id=blocked))
+        db.commit()
+        assert get_friends_activity(db, "test-uid-1") == []
+
+    @pytest.mark.parametrize(
+        "blocker,blocked",
+        [("test-uid-1", "test-uid-2"), ("test-uid-2", "test-uid-1")],
+    )
+    def test_feed_skips_blocked_pair(self, db, blocker, blocked):
+        from app.models.block import Block
+        from app.services.activity_service import get_activity_feed
+
+        _make_friends(db)
+        _log(db, "test-uid-1", "watched")
+        _log(db, "test-uid-2", "want_to_watch")
+        db.add(Block(blocker_id=blocker, blocked_id=blocked))
+        db.commit()
+        result = get_activity_feed(db, "test-uid-1")
+        assert {r["user_id"] for r in result} == {"test-uid-1"}
+
+
 class TestGetActivityFeed:
     def test_includes_own_activity(self, db):
         from app.services.activity_service import get_activity_feed

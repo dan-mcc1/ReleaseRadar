@@ -12,7 +12,7 @@ import {
   API_URL,
 } from "../constants";
 import { usePageTitle } from "../hooks/usePageTitle";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryFetch } from "../hooks/api/queryFetch";
 import { queryKeys } from "../hooks/api/queryKeys";
 import {
@@ -384,7 +384,9 @@ export default function Settings() {
 
   // Calendar sync
   const [calCopied, setCalCopied] = useState(false);
+  const [calResetting, setCalResetting] = useState(false);
   const [openInstructions, setOpenInstructions] = useState<string | null>(null);
+  const queryClient = useQueryClient();
   const { data: calTokenData, isLoading: calLoading } = useQuery({
     queryKey: queryKeys.icalToken(user?.uid ?? ""),
     queryFn: () => queryFetch<{ token: string }>("/ical/token"),
@@ -586,6 +588,28 @@ export default function Settings() {
     navigator.clipboard.writeText(feedUrl);
     setCalCopied(true);
     setTimeout(() => setCalCopied(false), 2000);
+  }
+
+  // New token for the feed URL; the old URL stops working right away.
+  async function resetCalUrl() {
+    if (!user) return;
+    if (
+      !window.confirm(
+        "Reset your calendar feed URL? The current URL stops working, so any calendar app subscribed to it will need the new one.",
+      )
+    )
+      return;
+    setCalResetting(true);
+    try {
+      const data = await queryFetch<{ token: string }>("/ical/revoke", {
+        method: "POST",
+      });
+      queryClient.setQueryData(queryKeys.icalToken(user.uid), data);
+    } catch {
+      window.alert("Couldn't reset the feed URL. Your current URL still works; please try again.");
+    } finally {
+      setCalResetting(false);
+    }
   }
 
   if (!user) {
@@ -1527,7 +1551,15 @@ export default function Settings() {
                 </button>
               </div>
               <p className="mt-1.5 text-xs text-neutral-600">
-                Keep this URL private — it gives read access to your watchlist.
+                Keep this URL private — it gives read access to your watchlist.{" "}
+                <button
+                  type="button"
+                  onClick={resetCalUrl}
+                  disabled={!feedUrl || calLoading || calResetting}
+                  className="text-neutral-400 underline underline-offset-2 hover:text-white transition-colors disabled:opacity-40"
+                >
+                  {calResetting ? "Resetting…" : "Reset URL"}
+                </button>
               </p>
             </div>
 

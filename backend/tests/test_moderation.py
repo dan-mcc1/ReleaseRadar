@@ -95,6 +95,86 @@ class TestBlockUser:
         assert r.status_code == 409
 
 
+class TestBlockEndsFriendship:
+    def _friend(self, db, requester, addressee, status):
+        from app.models.friendship import Friendship
+
+        db.add(Friendship(requester_id=requester, addressee_id=addressee, status=status))
+        db.commit()
+
+    @pytest.mark.parametrize("status", ["accepted", "pending", "following"])
+    def test_block_removes_friendship_either_direction(
+        self, client, two_users, db, status
+    ):
+        from app.models.friendship import Friendship
+
+        # Row created by the blocked user, so the reverse direction is covered
+        self._friend(db, "test-uid-2", "test-uid-1", status)
+        assert client.post("/moderation/block/test-uid-2").status_code == 200
+        db.expire_all()
+        assert db.query(Friendship).count() == 0
+
+    def test_block_removes_friendship_requested_by_blocker(self, client, two_users, db):
+        from app.models.friendship import Friendship
+
+        self._friend(db, "test-uid-1", "test-uid-2", "accepted")
+        client.post("/moderation/block/test-uid-2")
+        db.expire_all()
+        assert db.query(Friendship).count() == 0
+
+    def test_block_leaves_other_friendships(self, client, two_users, db):
+        from app.models.friendship import Friendship
+        from app.models.user import User
+
+        db.add(User(id="carol-uid", username="carol", email="c@test.com"))
+        db.commit()
+        self._friend(db, "test-uid-1", "test-uid-2", "accepted")
+        self._friend(db, "test-uid-1", "carol-uid", "accepted")
+        client.post("/moderation/block/test-uid-2")
+        db.expire_all()
+        rows = db.query(Friendship).all()
+        assert len(rows) == 1
+        assert rows[0].addressee_id == "carol-uid"
+
+
+def _blocked_pairs_migration():
+    import importlib.util
+    from pathlib import Path
+
+    path = (Path(__file__).resolve().parents[1] / "alembic" / "versions"
+            / "a9d4f2c7e1b3_end_friendships_of_blocked_pairs.py")
+    spec = importlib.util.spec_from_file_location("blocked_pairs_migration", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class TestBlockedPairsMigration:
+    """Blocks made before blocking ended friendships still have them; the
+    migration deletes those, either direction, and nothing else."""
+
+    def test_deletes_only_blocked_pairs(self, two_users, db):
+        from app.models.block import Block
+        from app.models.friendship import Friendship
+        from app.models.user import User
+
+        db.add(User(id="carol-uid", username="carol", email="c@test.com"))
+        db.add(Block(blocker_id="test-uid-2", blocked_id="test-uid-1"))
+        db.add_all([
+            Friendship(requester_id="test-uid-1", addressee_id="test-uid-2", status="accepted"),
+            Friendship(requester_id="test-uid-2", addressee_id="test-uid-1", status="following"),
+            Friendship(requester_id="test-uid-1", addressee_id="carol-uid", status="accepted"),
+        ])
+        db.commit()
+
+        db.connection().execute(_blocked_pairs_migration()._DELETE)
+        db.commit()
+        db.expire_all()
+
+        rows = db.query(Friendship).all()
+        assert [(f.requester_id, f.addressee_id) for f in rows] == [("test-uid-1", "carol-uid")]
+
+
 class TestUnblockUser:
     def test_unblock_succeeds(self, client, two_users):
         client.post("/moderation/block/test-uid-2")
