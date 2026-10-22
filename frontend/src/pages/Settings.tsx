@@ -4,6 +4,7 @@ import { isPremiumFeature } from "../config/features";
 import { signOut, GoogleAuthProvider, FacebookAuthProvider, OAuthProvider, linkWithPopup, unlink } from "firebase/auth";
 import { auth } from "../firebase";
 import { useAuthUser } from "../hooks/useAuthUser";
+import { useSubscription } from "../hooks/api/useSubscription";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import {
   AVATAR_PRESETS,
@@ -397,6 +398,18 @@ export default function Settings() {
     ? `${API_URL}/ical/feed/${calTokenData.token}`
     : null;
 
+  // Sync token (read-only export for external services)
+  const [syncCopied, setSyncCopied] = useState(false);
+  const [syncResetting, setSyncResetting] = useState(false);
+  const { isAdmin } = useSubscription();
+  const { data: syncTokenData, isLoading: syncLoading } = useQuery({
+    queryKey: queryKeys.syncToken(user?.uid ?? ""),
+    queryFn: () => queryFetch<{ token: string }>("/sync/token"),
+    enabled: !!user && isAdmin,
+    staleTime: Infinity,
+  });
+  const syncToken = syncTokenData?.token ?? null;
+
   const [exporting, setExporting] = useState(false);
 
   // Scroll to section from URL hash
@@ -609,6 +622,35 @@ export default function Settings() {
       window.alert("Couldn't reset the feed URL. Your current URL still works; please try again.");
     } finally {
       setCalResetting(false);
+    }
+  }
+
+  function copySyncToken() {
+    if (!syncToken) return;
+    navigator.clipboard.writeText(syncToken);
+    setSyncCopied(true);
+    setTimeout(() => setSyncCopied(false), 2000);
+  }
+
+  // New sync token; the old one stops working right away.
+  async function resetSyncToken() {
+    if (!user) return;
+    if (
+      !window.confirm(
+        "Reset your sync token? The current token stops working, so any service using it will need the new one.",
+      )
+    )
+      return;
+    setSyncResetting(true);
+    try {
+      const data = await queryFetch<{ token: string }>("/sync/token/revoke", {
+        method: "POST",
+      });
+      queryClient.setQueryData(queryKeys.syncToken(user.uid), data);
+    } catch {
+      window.alert("Couldn't reset the sync token. Your current token still works; please try again.");
+    } finally {
+      setSyncResetting(false);
     }
   }
 
@@ -1644,6 +1686,50 @@ export default function Settings() {
                 </div>
               ))}
             </div>
+
+            {isAdmin && (
+            <div className="mt-6">
+              <p className="text-[12px] text-neutral-400 font-medium uppercase tracking-wider mb-2">
+                Sync token
+              </p>
+              <div className="flex items-stretch gap-2">
+                <div className="flex-1 min-w-0 bg-neutral-900/70 border border-neutral-700/50 rounded-xl px-3 py-2.5 text-xs text-neutral-300 font-mono truncate flex items-center">
+                  {syncLoading ? (
+                    <span className="text-neutral-500">Generating token…</span>
+                  ) : syncToken ? (
+                    syncToken
+                  ) : (
+                    <span className="text-error-500">
+                      Unavailable — please try again later
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={copySyncToken}
+                  disabled={!syncToken || syncLoading}
+                  className={`shrink-0 px-3 py-2 rounded-xl text-sm font-medium transition-all border ${
+                    syncCopied
+                      ? "bg-emerald-600/20 border-emerald-600/40 text-emerald-400"
+                      : "bg-neutral-700 border-neutral-700/60 text-neutral-200 hover:bg-neutral-600 hover:text-white disabled:opacity-40"
+                  }`}
+                >
+                  {syncCopied ? "Copied" : "Copy"}
+                </button>
+              </div>
+              <p className="mt-1.5 text-xs text-neutral-600">
+                Lets an external service read your watch history. Keep it
+                private.{" "}
+                <button
+                  type="button"
+                  onClick={resetSyncToken}
+                  disabled={!syncToken || syncLoading || syncResetting}
+                  className="text-neutral-400 underline underline-offset-2 hover:text-white transition-colors disabled:opacity-40"
+                >
+                  {syncResetting ? "Resetting…" : "Reset token"}
+                </button>
+              </p>
+            </div>
+            )}
           </SectionCard>
 
           {/* ── Privacy ── */}
