@@ -47,6 +47,7 @@ from app.routers import (
     currently_watching,
     notifications,
     ical,
+    sync,
     favorites,
     recommendations,
     events,
@@ -243,6 +244,7 @@ app.include_router(
     notifications.router, prefix="/notifications", tags=["notifications"]
 )
 app.include_router(ical.router, prefix="/ical", tags=["ical"])
+app.include_router(sync.router, prefix="/sync", tags=["sync"])
 app.include_router(favorites.router, prefix="/favorites", tags=["favorites"])
 app.include_router(
     recommendations.router, prefix="/recommendations", tags=["recommendations"]

@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     # TMDb. Search gets its own, tighter one: each search is four TMDb calls.
     PUBLIC_RATE_LIMIT: str = "300/minute"
     SEARCH_RATE_LIMIT: str = "60/minute"
+    SYNC_AUTH_RATE_LIMIT: str = "30/minute"
 
     @field_validator("CORS_ORIGINS", "TRUSTED_PROXY_CIDRS", mode="before")
     def parse_json(cls, v):
@@ -49,6 +50,8 @@ class Settings(BaseSettings):
     EMAIL_FROM: str
     UNSUBSCRIBE_SECRET: str
     ICAL_SECRET: str
+    # Signs personal sync tokens (routers/sync.py); unset = /sync endpoints return 503.
+    SYNC_TOKEN_SECRET: str = ""
     OMDB_API_KEY: str = (
         ""  # Free key from https://www.omdbapi.com/ (for RT/Metacritic scores)
     )
