@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     # One budget per signed-in user, shared by every route that adds a title or
     # marks something watched (each can trigger a TMDb fetch and bulk inserts).
     TRACK_RATE_LIMIT: str = "120/minute"
+    SYNC_AUTH_RATE_LIMIT: str = "30/minute"
 
     @field_validator("CORS_ORIGINS", "TRUSTED_PROXY_CIDRS", mode="before")
     def parse_json(cls, v):
@@ -59,6 +60,8 @@ class Settings(BaseSettings):
     EMAIL_FROM: str
     UNSUBSCRIBE_SECRET: str
     ICAL_SECRET: str
+    # Signs personal sync tokens (routers/sync.py); unset = /sync endpoints return 503.
+    SYNC_TOKEN_SECRET: str = ""
     OMDB_API_KEY: str = (
         ""  # Free key from https://www.omdbapi.com/ (for RT/Metacritic scores)
     )

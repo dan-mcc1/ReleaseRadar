@@ -42,6 +42,7 @@ class User(Base):
     is_silenced = Column(Boolean, default=False, server_default="false", nullable=False)
     silenced_until = Column(DateTime(timezone=True), nullable=True)
     ical_token_version = Column(Integer, default=1, server_default="1", nullable=False)
+    sync_token_version = Column(Integer, default=0, server_default="0", nullable=False)
     last_digest_sent_at = Column(Date, nullable=True)
 
     # Push notifications (iOS APNs via FCM)

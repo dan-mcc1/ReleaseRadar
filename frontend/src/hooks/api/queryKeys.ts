@@ -104,6 +104,7 @@ export const queryKeys = {
 
   // Calendar sync
   icalToken: (uid: string) => ["ical", "token", uid] as const,
+  syncToken: (uid: string) => ["sync", "token", uid] as const,
 
   // Box office
   boxOffice: (mode: string, year: number, month: number) =>
