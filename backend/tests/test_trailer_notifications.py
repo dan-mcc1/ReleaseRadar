@@ -225,7 +225,7 @@ class TestRefreshTrailers:
                 svc.refresh_trailers(db)
                 mock_email.assert_called_once()
 
-    def test_skips_free_tier(self, db):
+    def test_skips_free_tier(self, db, paywall_on):
         from app.services import trailer_notification_service as svc
 
         _seed_movie(db, mid=1)
@@ -236,6 +236,18 @@ class TestRefreshTrailers:
             with patch("app.services.trailer_notification_service.send_trailer_alert_email") as mock_email:
                 svc.refresh_trailers(db)
                 mock_email.assert_not_called()
+
+    def test_open_beta_emails_free_tier(self, db):
+        from app.services import trailer_notification_service as svc
+
+        _seed_movie(db, mid=1)
+        _seed_user(db, uid="u1", subscription_tier="free")
+        _watchlist(db, "u1", 1, "movie")
+
+        with patch.object(svc, "fetch_movie_from_tmdb", return_value=_movie_details([_video("vk1")])):
+            with patch("app.services.trailer_notification_service.send_trailer_alert_email") as mock_email:
+                svc.refresh_trailers(db)
+                mock_email.assert_called_once()
 
     def test_respects_notify_trailers_off(self, db):
         from app.services import trailer_notification_service as svc
@@ -337,7 +349,7 @@ class TestRefreshTrailers:
         assert args["key"].startswith("trailer:u1:")
         assert mock_email.call_args.kwargs["idempotency_key"] == args["key"]
 
-    def test_send_job_skips_a_user_who_downgraded_since(self, db):
+    def test_send_job_skips_a_user_who_downgraded_since(self, db, paywall_on):
         from app.services import trailer_notification_service as svc
 
         _seed_user(db, uid="u1", subscription_tier="free")

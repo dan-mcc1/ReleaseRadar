@@ -442,3 +442,63 @@ class TestAssertCanTrack:
         _add_user(db)
         # Even with no row matching, this is a no-op now.
         assert assert_can_track(db, "test-uid-1") is None
+
+    def test_open_beta_lets_a_free_user_past_the_limit(self, db):
+        from app.services.watchlist_service import assert_can_track
+        _add_user(db)
+        _fill_watchlist(db, 30)
+        assert assert_can_track(db, "test-uid-1") is None
+
+    def test_paywall_blocks_a_free_user_at_the_limit(self, db, paywall_on):
+        from fastapi import HTTPException
+        from app.services.watchlist_service import assert_can_track
+        _add_user(db)
+        _fill_watchlist(db, 30)
+        with pytest.raises(HTTPException) as exc:
+            assert_can_track(db, "test-uid-1")
+        assert exc.value.status_code == 403
+        assert exc.value.detail["error"] == "tracking_limit_reached"
+
+    def test_paywall_lets_a_free_user_under_the_limit_through(self, db, paywall_on):
+        from app.services.watchlist_service import assert_can_track
+        _add_user(db)
+        _fill_watchlist(db, 29)
+        assert assert_can_track(db, "test-uid-1") is None
+
+    def test_paywall_lets_a_premium_user_past_the_limit(self, db, paywall_on):
+        from app.models.user import User
+        from app.services.watchlist_service import assert_can_track
+        _add_user(db)
+        db.query(User).filter_by(id="test-uid-1").update({"subscription_tier": "premium"})
+        db.commit()
+        _fill_watchlist(db, 30)
+        assert assert_can_track(db, "test-uid-1") is None
+
+
+def _fill_watchlist(db, count, uid="test-uid-1"):
+    from app.models.watchlist import Watchlist
+    db.add_all([
+        Watchlist(user_id=uid, content_type="movie", content_id=i, sort_key=i * 1000)
+        for i in range(1, count + 1)
+    ])
+    db.commit()
+
+
+class TestAddToWatchlistLimit:
+    def test_open_beta_adds_past_the_limit(self, db):
+        from app.services.watchlist_service import add_to_watchlist
+        _add_user(db)
+        _add_movie(db, mid=550)
+        _fill_watchlist(db, 30)
+        assert add_to_watchlist(db, "test-uid-1", "movie", 550)["content_id"] == 550
+
+    def test_paywall_blocks_a_free_user_at_the_limit(self, db, paywall_on):
+        from fastapi import HTTPException
+        from app.services.watchlist_service import add_to_watchlist
+        _add_user(db)
+        _add_movie(db, mid=550)
+        _fill_watchlist(db, 30)
+        with pytest.raises(HTTPException) as exc:
+            add_to_watchlist(db, "test-uid-1", "movie", 550)
+        assert exc.value.status_code == 403
+        assert exc.value.detail["error"] == "tracking_limit_reached"

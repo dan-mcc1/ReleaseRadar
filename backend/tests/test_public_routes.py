@@ -129,3 +129,19 @@ class TestDateParams:
         params = get.call_args.kwargs["params"]
         assert (params["primary_release_date.gte"], params["primary_release_date.lte"]) == (
             "2031-02-03", "2031-03-04")
+
+
+# ── API docs are not served in production ─────────────────────────────────────
+
+
+@pytest.mark.parametrize("is_prod, expected", [(True, 404), (False, 200)])
+@pytest.mark.parametrize("path", ["/docs", "/redoc", "/openapi.json"])
+def test_api_docs_only_outside_production(is_prod, expected, path):
+    # The real app is built once at import, so exercise the function that
+    # chooses its docs URLs on a throwaway app.
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.main import _docs_urls
+
+    assert TestClient(FastAPI(**_docs_urls(is_prod))).get(path).status_code == expected

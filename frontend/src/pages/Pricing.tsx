@@ -31,6 +31,40 @@ const PRO_FEATURES = [
   { text: "Full personalized recommendations", included: true },
 ];
 
+const PAID_FAQ = [
+  {
+    q: "What counts toward the 30-title limit?",
+    a: "Items on your Watchlist and Currently Watching lists count. Titles you've already marked as Watched do not.",
+  },
+  {
+    q: "Can I cancel anytime?",
+    a: "Yes. You can cancel your subscription at any time from your billing settings. You'll keep Premium access until the end of your current billing period.",
+  },
+  {
+    q: "Is there a free trial?",
+    a: "Yes — every new Premium subscription starts with a 7-day free trial. No charge until the trial ends.",
+  },
+  {
+    q: "What payment methods are accepted?",
+    a: "All major credit and debit cards via Stripe. Your payment details are never stored on our servers.",
+  },
+];
+
+const BETA_FAQ = [
+  {
+    q: "Is Release Radar really free right now?",
+    a: "Yes. During the beta every feature is unlocked for every account, with no limits and no card required.",
+  },
+  {
+    q: "What happens when the beta ends?",
+    a: "Paid plans aren't available yet. We'll tell you before anything changes, and your lists and history stay yours either way.",
+  },
+  {
+    q: "Is there a limit on how many titles I can track?",
+    a: "Not during the beta. The 30-title limit shown on the Free plan is planned for after it.",
+  },
+];
+
 function CheckIcon({ included }: { included: boolean }) {
   if (included) {
     return (
@@ -85,23 +119,39 @@ export default function Pricing() {
     <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 py-12 space-y-12">
       {/* Hero */}
       <div className="text-center space-y-4">
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-amber-500/15 border border-amber-400/30 mb-2">
-          <svg
-            className="w-8 h-8 text-amber-400"
-            viewBox="0 0 24 24"
-            fill="currentColor"
-          >
-            <path d="M2.5 7.5L5 14h14l2.5-6.5L17 10l-5-6-5 6-4.5-2.5zm2.5 8h14v2H5v-2z" />
-          </svg>
-        </div>
+        {CHECKOUT_ENABLED && (
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-amber-500/15 border border-amber-400/30 mb-2">
+            <svg
+              className="w-8 h-8 text-amber-400"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+            >
+              <path d="M2.5 7.5L5 14h14l2.5-6.5L17 10l-5-6-5 6-4.5-2.5zm2.5 8h14v2H5v-2z" />
+            </svg>
+          </div>
+        )}
         <h1 className="text-4xl font-bold text-white">
-          Simple, transparent pricing
+          {CHECKOUT_ENABLED ? "Simple, transparent pricing" : "Free during the beta"}
         </h1>
         <p className="text-neutral-400 text-lg max-w-xl mx-auto">
-          Start free, upgrade when you need more. No hidden fees, cancel any
-          time.
+          {CHECKOUT_ENABLED
+            ? "Start free, upgrade when you need more. No hidden fees, cancel any time."
+            : "Every feature is unlocked for everyone while Release Radar is in beta. The plans below are what we're planning for after it. Nothing is for sale yet."}
         </p>
       </div>
+
+      {!CHECKOUT_ENABLED && (
+        <div className="rounded-xl bg-emerald-950/20 border border-emerald-500/30 px-4 py-3 text-center text-sm text-emerald-300">
+          You're on the beta: everything on this page is included for free
+          right now.
+        </div>
+      )}
+
+      {!CHECKOUT_ENABLED && (
+        <div className="-mb-6 text-xs font-semibold uppercase tracking-widest text-neutral-500">
+          Planned pricing
+        </div>
+      )}
 
       {/* Pricing cards */}
       <div className="grid sm:grid-cols-2 gap-6">
@@ -132,17 +182,19 @@ export default function Pricing() {
             ))}
           </ul>
 
-          <div className="mt-8">
-            {isLoading ? null : isPremium ? (
-              <div className="w-full py-3 px-6 rounded-xl text-sm font-semibold text-center text-neutral-500 border border-neutral-700">
-                Your current plan
-              </div>
-            ) : (
-              <div className="w-full py-3 px-6 rounded-xl text-sm font-semibold text-center bg-neutral-800 text-neutral-300 border border-neutral-700">
-                Current plan
-              </div>
-            )}
-          </div>
+          {CHECKOUT_ENABLED && (
+            <div className="mt-8">
+              {isLoading ? null : isPremium ? (
+                <div className="w-full py-3 px-6 rounded-xl text-sm font-semibold text-center text-neutral-500 border border-neutral-700">
+                  Your current plan
+                </div>
+              ) : (
+                <div className="w-full py-3 px-6 rounded-xl text-sm font-semibold text-center bg-neutral-800 text-neutral-300 border border-neutral-700">
+                  Current plan
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Premium card */}
@@ -187,14 +239,18 @@ export default function Pricing() {
           </ul>
 
           <div className="mt-8 space-y-3">
-            {isLoading ? null : isPremium ? (
+            {!CHECKOUT_ENABLED ? (
+              <div className="w-full py-3 px-6 rounded-xl text-sm font-semibold text-center text-neutral-400 border border-neutral-700">
+                Not available yet. Included free during the beta.
+              </div>
+            ) : isLoading ? null : isPremium ? (
               <button
                 onClick={() => navigate("/billing")}
                 className="w-full py-3 px-6 rounded-xl font-semibold text-sm bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:bg-amber-500/30 transition-colors"
               >
                 Manage subscription
               </button>
-            ) : CHECKOUT_ENABLED ? (
+            ) : (
               <>
                 <button
                   onClick={() => handleUpgrade("yearly")}
@@ -223,10 +279,6 @@ export default function Pricing() {
                   7-day free trial · Cancel any time
                 </p>
               </>
-            ) : (
-              <button className="w-full py-3 px-6 rounded-xl font-semibold text-sm bg-amber-500 text-black transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
-                Currently in Beta, upgrading will be available soon
-              </button>
             )}
           </div>
         </div>
@@ -238,24 +290,7 @@ export default function Pricing() {
           Frequently asked questions
         </h2>
         <div className="space-y-3">
-          {[
-            {
-              q: "What counts toward the 30-title limit?",
-              a: "Items on your Watchlist and Currently Watching lists count. Titles you've already marked as Watched do not.",
-            },
-            {
-              q: "Can I cancel anytime?",
-              a: "Yes. You can cancel your subscription at any time from your billing settings. You'll keep Premium access until the end of your current billing period.",
-            },
-            {
-              q: "Is there a free trial?",
-              a: "Yes — every new Premium subscription starts with a 7-day free trial. No charge until the trial ends.",
-            },
-            {
-              q: "What payment methods are accepted?",
-              a: "All major credit and debit cards via Stripe. Your payment details are never stored on our servers.",
-            },
-          ].map(({ q, a }) => (
+          {(CHECKOUT_ENABLED ? PAID_FAQ : BETA_FAQ).map(({ q, a }) => (
             <div
               key={q}
               className="rounded-xl bg-neutral-900 border border-neutral-800 p-4"

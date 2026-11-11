@@ -22,20 +22,22 @@ EASTERN = ZoneInfo("America/New_York")
 @logged_task
 def dispatch_show_refreshes() -> None:
     """
-    Queue one refresh_show job per tracked, in-production show. The jobs are
+    Queue one refresh_show job per tracked show due tonight: every show in
+    production (or of unknown status), plus the ended shows whose weekday it is
+    (see active_show_ids). The jobs are
     enqueued in this session and land with its commit, which also wakes the
     worker. Keyed by show and Eastern date, so running again on the same date
     (a retry, a late catch-up) queues nothing new.
     """
     db = SessionLocal()
     try:
-        show_ids = active_show_ids(db)
-        run_date = datetime.now(EASTERN).date().isoformat()
+        run_date = datetime.now(EASTERN).date()
+        show_ids = active_show_ids(db, run_date)
         enqueue_many(
             db,
             "refresh_show",
             [{"show_id": show_id} for show_id in show_ids],
-            idempotency_keys=[f"refresh-show:{show_id}:{run_date}" for show_id in show_ids],
+            idempotency_keys=[f"refresh-show:{show_id}:{run_date.isoformat()}" for show_id in show_ids],
         )
         db.commit()
         logger.info("show refresh: queued %d show(s)", len(show_ids))

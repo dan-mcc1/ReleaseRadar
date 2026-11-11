@@ -4,6 +4,7 @@ import { isPremiumFeature } from "../config/features";
 import { signOut, GoogleAuthProvider, FacebookAuthProvider, OAuthProvider, linkWithPopup, unlink } from "firebase/auth";
 import { auth } from "../firebase";
 import { useAuthUser } from "../hooks/useAuthUser";
+import { needsEmailVerification } from "../utils/emailVerification";
 import { useSubscription } from "../hooks/api/useSubscription";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import {
@@ -787,7 +788,17 @@ export default function Settings() {
             {/* Fields grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <FieldWrap label="Email">
-                <FieldInput value={user.email ?? ""} readOnly />
+                <FieldInput
+                  value={user.email ?? ""}
+                  readOnly
+                  suffix={
+                    userMe && !userMe.email && needsEmailVerification(user) ? (
+                      <span className="text-[12px] text-warning-300 shrink-0">
+                        (not verified)
+                      </span>
+                    ) : undefined
+                  }
+                />
               </FieldWrap>
 
               <FieldWrap label="Username">

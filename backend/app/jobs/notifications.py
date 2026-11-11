@@ -8,6 +8,8 @@ from datetime import date, datetime, timezone
 
 from durable_queue.sqlalchemy import enqueue_many
 
+from app.config import features
+from app.config.features import PREMIUM_TIERS
 from app.db.session import SessionLocal
 from app.jobs.base import logged_task
 from app.models.sent_premiere_alert import SentPremiereAlert
@@ -80,7 +82,7 @@ def send_digest(user_id: str, digest_date: str) -> None:
         if user.last_digest_sent_at is not None and user.last_digest_sent_at >= day:
             return
         frequency = user.notification_frequency or "daily"
-        items = _build_items_for_window(db, user.id, _frequency_window(frequency))
+        items = _build_items_for_window(db, user.id, _frequency_window(frequency), day)
         if not items:
             return
         send_notification_email(
@@ -99,19 +101,15 @@ def send_digest(user_id: str, digest_date: str) -> None:
 
 @logged_task
 def dispatch_premiere_alerts() -> None:
-    """Queue send_premiere_alerts for every premium user in their digest
-    window. Keyed by user and day."""
+    """Queue send_premiere_alerts for every user with premium access in their
+    digest window. Keyed by user and day."""
     now = datetime.now(timezone.utc)
     db = SessionLocal()
     try:
-        users = (
-            db.query(User)
-            .filter(
-                User.notify_new_seasons == True,  # noqa: E712
-                User.subscription_tier.in_(["premium", "admin"]),
-            )
-            .all()
-        )
+        query = db.query(User).filter(User.notify_new_seasons == True)  # noqa: E712
+        if not features.OPEN_BETA:
+            query = query.filter(User.subscription_tier.in_(PREMIUM_TIERS))
+        users = query.all()
         due = []
         for user in users:
             day = due_date(user, now)

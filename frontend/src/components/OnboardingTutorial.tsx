@@ -5,6 +5,7 @@ import { useUserMe } from "../hooks/api/useUser";
 import { useAuthUser } from "../hooks/useAuthUser";
 import { apiFetch } from "../utils/apiFetch";
 import { queryKeys } from "../hooks/api/queryKeys";
+import { CHECKOUT_ENABLED } from "../config/features";
 
 interface Step {
   icon: string;
@@ -59,7 +60,10 @@ const STEPS: Step[] = [
     icon: "🔔",
     title: "Stay in the loop",
     description:
-      "Turn on email notifications in Settings to get a daily digest, season premiere alerts, and streaming availability updates. Upgrade to Premium for advanced features like Binge Planner, detailed stats, and more.",
+      "Turn on email notifications in Settings to get a daily digest, season premiere alerts, and streaming availability updates." +
+      (CHECKOUT_ENABLED
+        ? " Upgrade to Premium for advanced features like Binge Planner, detailed stats, and more."
+        : ""),
     cta: { label: "Open Settings", path: "/settings" },
   },
 ];

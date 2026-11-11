@@ -374,6 +374,24 @@ def get_reports(
     return {"reports": result, "total": total}
 
 
+def _delete_account(db: Session, uid: str) -> None:
+    """Delete a user's data, then their Firebase account."""
+    delete_user_data(db, uid)
+    try:
+        auth.delete_user(uid)
+    except auth.UserNotFoundError:
+        pass
+    except Exception:
+        # The data is already gone and committed; failing here would leave the
+        # report unresolvable, since the user row no longer exists.
+        logger.error(
+            "admin: deleted user %s's data but Firebase delete failed; "
+            "remove the Firebase account by hand",
+            uid,
+            exc_info=True,
+        )
+
+
 @router.post("/reports/{report_id}/accept")
 def accept_report(
     report_id: int,
@@ -435,7 +453,8 @@ def accept_report(
             _add_banned_email(db, target)
 
         elif action == "delete_user":
-            db.delete(target)
+            # Commits; `target` is gone afterwards, so it isn't touched again.
+            _delete_account(db, target.id)
 
         elif action == "warn":
             target.warning_count = (target.warning_count or 0) + 1
@@ -772,12 +791,6 @@ def admin_delete_user(
     if not target:
         raise HTTPException(status_code=404, detail="User not found.")
 
-    uid = target_user_id
-    delete_user_data(db, uid)
-
-    try:
-        auth.delete_user(uid)
-    except auth.UserNotFoundError:
-        pass
+    _delete_account(db, target_user_id)
 
     return {"detail": "User deleted."}

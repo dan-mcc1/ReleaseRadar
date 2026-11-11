@@ -1,6 +1,6 @@
 from typing import Literal
 from fastapi import APIRouter, Depends, Query, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
@@ -10,7 +10,8 @@ from app.services.favorite_service import (
     get_favorites,
     is_favorited,
 )
-from app.core.limiter import limiter
+from app.core.limiter import limiter, track_budget
+from app.schemas.common import ContentId
 
 router = APIRouter()
 
@@ -19,7 +20,7 @@ FavoriteContentType = Literal["movie", "tv", "collection"]
 
 class FavoriteRef(BaseModel):
     content_type: FavoriteContentType
-    content_id: int = Field(..., ge=1)
+    content_id: ContentId
 
 
 @router.get("")
@@ -40,7 +41,7 @@ def get_favorite_status(
     return {"favorited": is_favorited(db, uid, content_type, content_id)}
 
 
-@router.post("/add")
+@router.post("/add", dependencies=[Depends(track_budget)])
 @limiter.limit("10/minute")
 def add_favorite(
     request: Request,

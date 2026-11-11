@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import "./App.css";
 import NavBar from "./components/NavBar";
 import InstallBanner from "./components/InstallBanner";
+import EmailVerificationBanner from "./components/EmailVerificationBanner";
 import ProtectedRoute from "./components/ProtectedRoute";
 import RouteFallback from "./components/RouteFallback";
 import { useAccountStatus } from "./hooks/api/useUser";
@@ -119,6 +120,7 @@ function AppShell({ children }: { children: ReactNode }) {
     <>
       {!isStripped && <NavBar />}
       {!isStripped && <div className="h-16 shrink-0" />}
+      {!isStripped && <EmailVerificationBanner />}
       <InstallBanner />
       {children}
       {!isStripped && <Footer />}

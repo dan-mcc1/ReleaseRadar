@@ -13,7 +13,8 @@ from app.services.watched_episode_service import (
     remove_season_watched,
 )
 from app.dependencies.auth import get_current_user
-from app.core.limiter import limiter
+from app.core.limiter import limiter, track_budget
+from app.schemas.common import MAX_ID, MAX_SEASON_EPISODE_NUMBER
 from app.models.episode_watched import EpisodeWatched
 from app.services.stats_service import invalidate_stats_cache
 
@@ -28,13 +29,13 @@ class AnnotateEpisodeBody(BaseModel):
 
 
 # Add an episode as watched
-@router.post("/add")
+@router.post("/add", dependencies=[Depends(track_budget)])
 @limiter.limit("60/minute")
 def add_episode(
     request: Request,
-    show_id: int = Query(..., ge=1),
-    season_number: int = Query(..., ge=0),
-    episode_number: int = Query(..., ge=0),
+    show_id: int = Query(..., ge=1, le=MAX_ID),
+    season_number: int = Query(..., ge=0, le=MAX_SEASON_EPISODE_NUMBER),
+    episode_number: int = Query(..., ge=0, le=MAX_SEASON_EPISODE_NUMBER),
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
@@ -46,9 +47,9 @@ def add_episode(
 # Remove an episode from watched
 @router.delete("/remove")
 def remove_episode(
-    show_id: int = Query(..., ge=1),
-    season_number: int = Query(..., ge=0),
-    episode_number: int = Query(..., ge=0),
+    show_id: int = Query(..., ge=1, le=MAX_ID),
+    season_number: int = Query(..., ge=0, le=MAX_SEASON_EPISODE_NUMBER),
+    episode_number: int = Query(..., ge=0, le=MAX_SEASON_EPISODE_NUMBER),
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
@@ -59,12 +60,12 @@ def remove_episode(
 
 # Get all watched episodes for the current user
 # Mark all episodes in a season as watched
-@router.post("/season/add")
+@router.post("/season/add", dependencies=[Depends(track_budget)])
 @limiter.limit("30/minute")
 def add_season(
     request: Request,
-    show_id: int = Query(..., ge=1),
-    season_number: int = Query(..., ge=0),
+    show_id: int = Query(..., ge=1, le=MAX_ID),
+    season_number: int = Query(..., ge=0, le=MAX_SEASON_EPISODE_NUMBER),
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
@@ -74,8 +75,8 @@ def add_season(
 # Remove all episodes in a season from watched
 @router.delete("/season/remove")
 def remove_season(
-    show_id: int = Query(..., ge=1),
-    season_number: int = Query(..., ge=0),
+    show_id: int = Query(..., ge=1, le=MAX_ID),
+    season_number: int = Query(..., ge=0, le=MAX_SEASON_EPISODE_NUMBER),
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
@@ -118,9 +119,9 @@ def get_next_episode(
 @router.patch("/annotate")
 def annotate_episode(
     body: AnnotateEpisodeBody,
-    show_id: int = Query(..., ge=1),
-    season_number: int = Query(..., ge=0),
-    episode_number: int = Query(..., ge=0),
+    show_id: int = Query(..., ge=1, le=MAX_ID),
+    season_number: int = Query(..., ge=0, le=MAX_SEASON_EPISODE_NUMBER),
+    episode_number: int = Query(..., ge=0, le=MAX_SEASON_EPISODE_NUMBER),
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):

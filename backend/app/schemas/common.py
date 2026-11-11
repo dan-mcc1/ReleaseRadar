@@ -4,7 +4,7 @@ Single source of truth for input limits used across routers. The frontend
 should mirror these where it enforces client-side limits.
 """
 
-from typing import Literal
+from typing import Annotated, Literal
 from pydantic import BaseModel, Field
 
 # ── Regex patterns ────────────────────────────────────────────────────────
@@ -43,6 +43,12 @@ REPORT_MESSAGE_MAX_LEN = 1000
 POSTER_PATH_MAX_LEN = 500
 ISO_DATE_PATTERN = r"^\d{4}-\d{2}-\d{2}$"
 
+# ── Numeric bounds ───────────────────────────────────────────────────────
+# Ids are Postgres integer columns: anything larger is a 500, not a 404.
+MAX_ID = 2_147_483_647
+MAX_SEASON_EPISODE_NUMBER = 10_000
+ContentId = Annotated[int, Field(ge=1, le=MAX_ID)]
+
 # ── Literal types ────────────────────────────────────────────────────────
 ContentType = Literal["movie", "tv"]
 Visibility = Literal["public", "private"]
@@ -64,4 +70,4 @@ ReportTargetType = Literal[
 class ContentRef(BaseModel):
     """Body model for any endpoint that references a piece of content."""
     content_type: ContentType
-    content_id: int = Field(..., ge=1)
+    content_id: ContentId

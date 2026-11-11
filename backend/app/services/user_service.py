@@ -1,6 +1,6 @@
 # app/services/user_service.py
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_, func, literal, text
+from sqlalchemy import and_, case, or_, func, literal, text
 from datetime import datetime, timezone
 from app.models.user import User
 from app.models.watchlist import Watchlist
@@ -8,6 +8,7 @@ from app.models.watched import Watched
 from app.models.movie import Movie
 from app.models.show import Show
 from app.models.block import Block
+from app.models.friendship import Friendship
 
 
 def create_user(
@@ -490,23 +491,76 @@ def search_users_by_username(
     db: Session, query: str, current_user_id: str, limit: int = 10
 ):
     """
-    Search users by partial username match, excluding the current user and any blocked relationships.
+    Search for someone to add as a friend. Not a way to list users.
+
+    - `%`, `_` and `\\` in the query match literally (escaped, ESCAPE '\\').
+    - A 2-character query matches the start of a name; 3 or more match anywhere.
+    - Strangers are matched on username only; display name (often a real name)
+      is matched only for the searcher's accepted friends.
+    - Private profiles are returned only to accepted friends, to users with a
+      pending request in either direction, and for an exact username (so
+      someone who was told the handle can send a request).
+    - Order: exact username, then prefix matches, then the rest, alphabetical
+      within each group; the limit applies after ordering.
+    - Excludes the searcher, blocked users either way and users with no username.
     """
+    query = query.strip()
+    if len(query) < 2:
+        return []
     blocked_subquery = db.query(Block.blocked_id).filter(Block.blocker_id == current_user_id)
     blocker_subquery = db.query(Block.blocker_id).filter(Block.blocked_id == current_user_id)
-    pattern = f"%{query}%"
+
+    accepted = Friendship.status == "accepted"
+    friend_ids = db.query(Friendship.addressee_id).filter(
+        Friendship.requester_id == current_user_id, accepted
+    ).union(
+        db.query(Friendship.requester_id).filter(
+            Friendship.addressee_id == current_user_id, accepted
+        )
+    )
+    pending_ids = db.query(Friendship.addressee_id).filter(
+        Friendship.requester_id == current_user_id, Friendship.status == "pending"
+    ).union(
+        db.query(Friendship.requester_id).filter(
+            Friendship.addressee_id == current_user_id, Friendship.status == "pending"
+        )
+    )
+
+    escaped = (
+        query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    )
+    prefix_pattern = f"{escaped}%"
+    pattern = prefix_pattern if len(query) == 2 else f"%{escaped}%"
+
+    name_match = or_(
+        User.username.ilike(pattern, escape="\\"),
+        and_(
+            User.id.in_(friend_ids),
+            User.display_name.ilike(pattern, escape="\\"),
+        ),
+    )
+    rank = case(
+        (func.lower(User.username) == query.lower(), 0),
+        (User.username.ilike(prefix_pattern, escape="\\"), 1),
+        else_=2,
+    )
     return (
         db.query(User)
         .filter(
+            name_match,
             or_(
-                User.username.ilike(pattern),
-                User.display_name.ilike(pattern),
+                User.profile_visibility != "private",
+                User.id.in_(friend_ids),
+                User.id.in_(pending_ids),
+                # Someone who knows the exact handle can still add them.
+                func.lower(User.username) == query.lower(),
             ),
             User.id != current_user_id,
             User.username.isnot(None),
             User.id.notin_(blocked_subquery),
             User.id.notin_(blocker_subquery),
         )
+        .order_by(rank, func.lower(User.username), User.username)
         .limit(limit)
         .all()
     )

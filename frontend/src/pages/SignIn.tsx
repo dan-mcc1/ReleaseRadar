@@ -7,6 +7,8 @@ import {
   signInWithPopup,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
+  sendEmailVerification,
+  signOut,
   fetchSignInMethodsForEmail,
   linkWithCredential,
   AuthCredential,
@@ -15,6 +17,8 @@ import { auth } from "../firebase";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { apiFetch } from "../utils/apiFetch";
 import { usePageTitle } from "../hooks/usePageTitle";
+import { isAccountRestricted } from "../utils/accountState";
+import { needsEmailVerification } from "../utils/emailVerification";
 
 const USERNAME_RE = /^[a-zA-Z0-9_]{3,30}$/;
 
@@ -41,6 +45,28 @@ function safeNextPath(next: string | null): string {
     }
   }
   return "/calendar";
+}
+
+/** A failed /user/create call, carrying the HTTP status so callers can tell a
+ * taken username (409) from anything else without matching on message text. */
+class BackendError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
+/** True when the API refused because the account is banned or suspended: either
+ * a 403 carrying one of those codes, or apiFetch's own 403 for a session already
+ * marked restricted. Such people must stay signed in so BanGate can show the
+ * notice and the appeal form. */
+async function isRestrictedResponse(res: Response): Promise<boolean> {
+  if (res.status !== 403) return false;
+  if (isAccountRestricted()) return true;
+  const body = await res.json().catch(() => null);
+  const code = body?.detail?.code;
+  return code === "account_banned" || code === "account_suspended";
 }
 
 function RadarSVG() {
@@ -214,8 +240,63 @@ const SignIn: React.FC = () => {
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail ?? "Backend registration failed.");
+      throw new BackendError(
+        err.detail ?? "Backend registration failed.",
+        res.status,
+      );
     }
+  }
+
+  async function signOutQuietly() {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error("Error signing out:", error);
+    }
+  }
+
+  // Undo a Firebase account whose app account could not be created, so the same
+  // email can sign up again. If the delete fails, at least sign out.
+  async function discardFirebaseUser(user: import("firebase/auth").User) {
+    try {
+      await user.delete();
+    } catch (error) {
+      console.error("Error deleting Firebase user:", error);
+      await signOutQuietly();
+    }
+  }
+
+  // Make sure the signed-in Firebase user has an app account, then either
+  // navigate on or ask for a username. On any failure, sign out and stop.
+  // Never deletes the Firebase user: it may be an existing account.
+  async function finishSignIn(user: import("firebase/auth").User) {
+    let appUsername: string | null;
+    try {
+      const res = await apiFetch("/user/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: user.email }),
+      });
+      if (!res.ok) {
+        if (await isRestrictedResponse(res)) {
+          navigate(afterSignIn);
+          return;
+        }
+        throw new BackendError("User create failed.", res.status);
+      }
+      const data = await res.json();
+      appUsername = data.username ?? null;
+    } catch (error) {
+      console.error("Error creating app account:", error);
+      await signOutQuietly();
+      setErrorMessage("We couldn't finish signing you in. Please try again.");
+      return;
+    }
+    if (!appUsername) {
+      setPendingOAuth({ uid: user.uid, email: user.email });
+      return;
+    }
+    navigate(afterSignIn);
   }
 
   async function handleForgotPassword() {
@@ -245,14 +326,19 @@ const SignIn: React.FC = () => {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isLoading) return;
     setErrorMessage(null);
     setIsLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      navigate(afterSignIn);
-    } catch (error) {
-      console.error("Error logging in:", error);
-      setErrorMessage("Invalid email or password.");
+      let credential;
+      try {
+        credential = await signInWithEmailAndPassword(auth, email, password);
+      } catch (error) {
+        console.error("Error logging in:", error);
+        setErrorMessage("Invalid email or password.");
+        return;
+      }
+      await finishSignIn(credential.user);
     } finally {
       setIsLoading(false);
     }
@@ -274,6 +360,7 @@ const SignIn: React.FC = () => {
   }
 
   const handleRegister = async () => {
+    if (isLoading) return;
     setErrorMessage(null);
     if (!USERNAME_RE.test(username)) {
       setErrorMessage(
@@ -285,6 +372,10 @@ const SignIn: React.FC = () => {
       setErrorMessage("That username is already taken.");
       return;
     }
+    if (password.length < 8) {
+      setErrorMessage("Password must be at least 8 characters.");
+      return;
+    }
     setIsLoading(true);
     try {
       if (await isEmailBanned(email)) {
@@ -292,7 +383,28 @@ const SignIn: React.FC = () => {
         return;
       }
       const res = await createUserWithEmailAndPassword(auth, email, password);
-      await registerUserInBackend(res.user, username);
+      try {
+        await registerUserInBackend(res.user, username);
+      } catch (error) {
+        console.error("Error creating app account:", error);
+        await discardFirebaseUser(res.user);
+        const usernameTaken =
+          error instanceof BackendError && error.status === 409;
+        if (usernameTaken) setUsernameAvailable(false);
+        setErrorMessage(
+          usernameTaken
+            ? "That username was just taken. Choose another one."
+            : "We couldn't finish creating your account. Please try again.",
+        );
+        return;
+      }
+      // Registration is done. A failed send must not fail sign-up: the
+      // verification banner offers a resend.
+      try {
+        await sendEmailVerification(res.user);
+      } catch (error) {
+        console.error("Error sending verification email:", error);
+      }
       navigate(afterSignIn);
     } catch (err: unknown) {
       console.error("Error registering:", err);
@@ -300,7 +412,7 @@ const SignIn: React.FC = () => {
       let msg = e.message ?? "Registration failed.";
       if (e.code === "auth/invalid-email") msg = "Invalid email address.";
       else if (e.code === "auth/weak-password")
-        msg = "Password should be at least 6 characters.";
+        msg = "Password must be at least 8 characters.";
       else if (e.code === "auth/email-already-in-use")
         msg = "Email is already in use.";
       setErrorMessage(msg);
@@ -314,23 +426,7 @@ const SignIn: React.FC = () => {
       setErrorMessage("This account is not permitted to register.");
       return;
     }
-    try {
-      const res = await apiFetch("/user/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: user.email }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (!data.username) {
-          setPendingOAuth({ uid: user.uid, email: user.email });
-          return;
-        }
-      }
-    } catch {
-      // non-critical
-    }
-    navigate(afterSignIn);
+    await finishSignIn(user);
   }
 
   async function handleOAuthUsernameSubmit(e: React.FormEvent) {
@@ -358,6 +454,17 @@ const SignIn: React.FC = () => {
         const err = await res.json().catch(() => ({}));
         setErrorMessage(err.detail ?? "Failed to set username.");
         return;
+      }
+      // Some providers (Facebook, some Microsoft accounts) don't vouch for the
+      // address, so a new account from one of them verifies it like a
+      // password sign-up does. A failed send is not fatal: the banner resends.
+      const current = auth.currentUser;
+      if (current && needsEmailVerification(current)) {
+        try {
+          await sendEmailVerification(current);
+        } catch (error) {
+          console.error("Error sending verification email:", error);
+        }
       }
       navigate(afterSignIn);
     } catch {
@@ -798,7 +905,7 @@ const SignIn: React.FC = () => {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder={
                   isRegistering
-                    ? "At least 6 characters"
+                    ? "At least 8 characters"
                     : "Enter your password"
                 }
                 required

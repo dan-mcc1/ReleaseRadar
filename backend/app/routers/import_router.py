@@ -22,8 +22,13 @@ from app.services.media_upsert import (
     slim_tmdb_payload,
 )
 from app.services.watchlist_service import add_to_watchlist
-from app.services.episode_service import maybe_sync_show_episodes, sync_season_episodes
+from app.services.episode_service import (
+    maybe_sync_show_episodes,
+    sync_season_episodes,
+    sync_show_episodes,
+)
 from app.services.watched_episode_service import maybe_auto_complete_show
+from app.services.watched_service import _mark_episodes_watched
 from app.models.watched import Watched
 from app.models.watchlist import Watchlist
 from app.models.currently_watching import CurrentlyWatching
@@ -36,6 +41,17 @@ from datetime import datetime, timezone
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _sync_episodes_for_watched_import(db, show):
+    """Store the show's episodes before they're all marked watched. A cached
+    show that isn't ended can have a stale episode list (nothing refreshes it
+    unless someone tracks it), so it gets a full sync; an ended show only needs
+    episodes if it has none."""
+    if show.in_production is False:
+        maybe_sync_show_episodes(db, show.id)
+    else:
+        sync_show_episodes(db, show.id)
 
 _MAX_ROWS = 2000
 _MAX_FILE_BYTES = 20 * 1024 * 1024  # 20 MB
@@ -328,7 +344,7 @@ async def import_letterboxd(
                     media = ensure_show_in_db(
                         db, tmdb_id, tmdb_data=prefetched.get(("tv", tmdb_id)),
                     )
-                    maybe_sync_show_episodes(db, tmdb_id)
+                    _sync_episodes_for_watched_import(db, media)
                     title = media.name
             except Exception as e:
                 db.rollback()
@@ -346,6 +362,10 @@ async def import_letterboxd(
                     rating=row["rating"],
                 )
                 db.add(entry)
+                if media_type == "tv":
+                    # Same as marking a show Watched by hand: without episode
+                    # rows the nightly check would see every episode as new.
+                    _mark_episodes_watched(db, uid, media.id)
                 recount_tracking(db, media_type, [media.id])
                 db.commit()
                 imported += 1
@@ -1288,6 +1308,8 @@ async def import_tvtime(
                     db, tmdb_id, tmdb_data=prefetched.get(("tv", tmdb_id)),
                 )
                 resolved_title = media.name
+                if row["is_watched"]:
+                    _sync_episodes_for_watched_import(db, media)
         except Exception as e:
             db.rollback()
             failed += 1
@@ -1314,6 +1336,8 @@ async def import_tvtime(
                     user_id=uid, content_type=media_type, content_id=tmdb_id,
                     watched_at=watched_at,
                 ))
+                if media_type == "tv":
+                    _mark_episodes_watched(db, uid, tmdb_id)
                 recount_tracking(db, media_type, [tmdb_id])
                 db.commit()
                 movies_imported += 1

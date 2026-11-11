@@ -13,7 +13,7 @@ from app.services.watched_service import (
     update_watched_rating,
 )
 from app.dependencies.auth import get_current_user
-from app.core.limiter import limiter
+from app.core.limiter import limiter, track_budget
 from app.services.stats_service import invalidate_stats_cache
 from app.services.media_upsert import populate_show_bg, populate_movie_bg
 
@@ -24,7 +24,7 @@ class RateWatchedBody(ContentRef):
     rating: float | None = Field(None, ge=0.5, le=5.0)
 
 
-@router.post("/add")
+@router.post("/add", dependencies=[Depends(track_budget)])
 @limiter.limit("30/minute")
 def add_item(
     request: Request,

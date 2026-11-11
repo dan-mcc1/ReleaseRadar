@@ -17,8 +17,9 @@ from app.services.nav_counts import notify_counts_changed
 from app.services.for_you_service import get_for_you_recommendations
 from app.services.push_service import push_notification, tmdb_poster_url
 from app.models.user import User
-from app.core.limiter import limiter
+from app.core.limiter import limiter, track_budget
 from app.schemas.common import (
+    ContentId,
     ContentType,
     RECOMMENDATION_MSG_MAX_LEN,
     RECOMMENDATION_TITLE_MAX_LEN,
@@ -37,7 +38,7 @@ class RecommendationSend(BaseModel):
         ..., min_length=USERNAME_MIN_LEN, max_length=USERNAME_MAX_LEN, pattern=USERNAME_PATTERN
     )
     content_type: ContentType
-    content_id: int = Field(..., ge=1)
+    content_id: ContentId
     # Accepted from older clients but ignored: the server looks the title up.
     content_title: str | None = Field(None, max_length=RECOMMENDATION_TITLE_MAX_LEN)
     content_poster_path: str | None = Field(None, max_length=500)
@@ -53,7 +54,7 @@ def for_you(
     return get_for_you_recommendations(db, uid, mode)
 
 
-@router.post("/send")
+@router.post("/send", dependencies=[Depends(track_budget)])
 @limiter.limit("10/minute")
 def send(
     request: Request,

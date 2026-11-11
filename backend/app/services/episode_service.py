@@ -612,9 +612,18 @@ def _refresh_one_show(show_id: int, show_name: str) -> None:
         db.close()
 
 
-def active_show_ids(db: Session) -> list[int]:
+ENDED_SHOW_REFRESH_DAYS = 7
+
+
+def active_show_ids(db: Session, run_date: date) -> list[int]:
     """Ids of shows someone is tracking (watchlist, currently watching or
-    watched) that are still in production; finished shows don't change."""
+    watched) that should be refreshed on run_date.
+
+    Shows in production, or whose status TMDb never told us (NULL), are
+    refreshed every night. Ended shows are refreshed once a week, on the
+    weekday matching their id modulo 7, which spreads them evenly across the
+    week: TMDb revives shows and corrects episode data after they end, and a
+    show that is never looked at again would silently miss its new season."""
     tracked = union(
         select(Watchlist.content_id).where(Watchlist.content_type == "tv"),
         select(CurrentlyWatching.content_id).where(CurrentlyWatching.content_type == "tv"),
@@ -625,7 +634,14 @@ def active_show_ids(db: Session) -> list[int]:
             select(Show.id)
             .where(
                 Show.id.in_(select(tracked.c.content_id)),
-                Show.in_production == True,  # noqa: E712
+                or_(
+                    Show.in_production.is_(None),
+                    Show.in_production == True,  # noqa: E712
+                    and_(
+                        Show.in_production == False,  # noqa: E712
+                        Show.id % ENDED_SHOW_REFRESH_DAYS == run_date.weekday(),
+                    ),
+                ),
             )
             .order_by(Show.id)
         ).scalars()
@@ -639,12 +655,12 @@ def refresh_episodes_for_active_shows(db: Session):
     per show (app/jobs/shows.py); this is the dev endpoint's all-at-once
     version.
     """
-    show_ids = active_show_ids(db)
+    show_ids = active_show_ids(db, date.today())
     if not show_ids:
         return
     shows = db.query(Show).filter(Show.id.in_(show_ids)).order_by(Show.id).all()
 
-    logger.info("Refreshing %d in-production shows...", len(shows))
+    logger.info("Refreshing %d shows...", len(shows))
     with ThreadPoolExecutor(max_workers=8) as pool:
         for show in shows:
             pool.submit(_refresh_one_show, show.id, show.name)
@@ -658,16 +674,24 @@ def _reactivation_candidates(db: Session, today: date, show_id: int | None = Non
 
     With show_id, only that show's Watched rows are considered.
 
-    A new episode is one the user hasn't marked that is either in a season
-    past the latest one they've watched, or has already aired. Computed in SQL
-    so the nightly run doesn't load every episode of every watched show, and
-    every user's watched-episode rows, into Python.
+    A new episode is one the user hasn't marked that is either
+    - in a season past the latest one they've marked (a newly announced season
+      counts even before it airs); this needs at least one marked episode, as
+      with none there is no latest season to be past, or
+    - already aired (air_date <= today) on or after the day the show entered
+      their Watched list (date of Watched.watched_at). Episodes that aired
+      before that day are old news, so un-ticking one or importing a show with
+      no episode history doesn't count. With no watched_at there is no
+      baseline and any aired, unmarked episode counts.
+    Computed in SQL so the nightly run doesn't load every episode of every
+    watched show, and every user's watched-episode rows, into Python.
     """
     pairs = (
         select(
             Watched.id.label("watched_id"),
             Watched.user_id.label("user_id"),
             Watched.content_id.label("show_id"),
+            Watched.watched_at.label("watched_at"),
         )
         .join(Show, and_(Show.id == Watched.content_id, Watched.content_type == "tv"))
         .where(Show.in_production == True)  # noqa: E712
@@ -712,8 +736,18 @@ def _reactivation_candidates(db: Session, today: date, show_id: int | None = Non
                 marked.episode_number == Episode.episode_number,
             ),
             or_(
-                Episode.season_number > func.coalesce(max_watched.c.max_season, 0),
-                and_(Episode.air_date.isnot(None), Episode.air_date <= today),
+                and_(
+                    max_watched.c.max_season.isnot(None),
+                    Episode.season_number > max_watched.c.max_season,
+                ),
+                and_(
+                    Episode.air_date.isnot(None),
+                    Episode.air_date <= today,
+                    or_(
+                        pairs.c.watched_at.is_(None),
+                        Episode.air_date >= func.date(pairs.c.watched_at),
+                    ),
+                ),
             ),
         )
         .subquery("new_episodes")

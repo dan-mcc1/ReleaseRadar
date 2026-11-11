@@ -2,9 +2,9 @@ from fastapi import Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
+from app.config import features
+from app.config.features import PREMIUM_TIERS, tier_has_premium  # noqa: F401
 from app.models.user import User
-
-PREMIUM_TIERS = {"premium", "admin"}
 
 
 def _get_tier(user_id: str, db: Session) -> str:
@@ -13,8 +13,9 @@ def _get_tier(user_id: str, db: Session) -> str:
 
 
 def is_premium(user_id: str, db: Session) -> bool:
-    return True  # open beta: all users get premium access
-    # return _get_tier(user_id, db) in PREMIUM_TIERS
+    if features.OPEN_BETA:
+        return True
+    return tier_has_premium(_get_tier(user_id, db))
 
 
 def require_premium(

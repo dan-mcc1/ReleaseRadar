@@ -2,7 +2,7 @@ from typing import Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
-from app.core.limiter import limiter
+from app.core.limiter import limiter, track_budget
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case
 from app.db.session import get_db
@@ -14,19 +14,19 @@ from app.models.user import User
 from app.models.watched import Watched
 from app.models.block import Block
 from app.services.omdb_service import get_omdb_scores
-from app.schemas.common import ContentType, REVIEW_TEXT_MAX_LEN
+from app.schemas.common import ContentId, ContentType, REVIEW_TEXT_MAX_LEN
 
 
 class ReviewUpsert(BaseModel):
     content_type: ContentType
-    content_id: int = Field(..., ge=1)
+    content_id: ContentId
     review_text: str = Field(..., min_length=1, max_length=REVIEW_TEXT_MAX_LEN)
     is_spoiler: bool = False
 
 
 class ReviewDelete(BaseModel):
     content_type: ContentType
-    content_id: int = Field(..., ge=1)
+    content_id: ContentId
 
 
 SortOrder = Literal["newest", "top"]
@@ -147,7 +147,7 @@ def get_aggregate_ratings(
 @limiter.limit("30/minute")
 def get_external_scores(
     request: Request,
-    imdb_id: str = Query(..., min_length=1, max_length=20, pattern=r"^tt\d+$"),
+    imdb_id: str = Query(..., min_length=1, max_length=20, pattern=r"^tt\d{1,10}$"),
     uid: str = Depends(get_current_user),
 ):
     """Fetch RT, Metacritic, and IMDb scores from OMDB."""
@@ -181,7 +181,7 @@ def toggle_like(
     return {"liked": liked, "like_count": count}
 
 
-@router.post("")
+@router.post("", dependencies=[Depends(track_budget)])
 def add_or_update_review(
     body: ReviewUpsert,
     db: Session = Depends(get_db),

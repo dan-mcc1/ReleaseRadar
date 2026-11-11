@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
@@ -16,9 +16,16 @@ from app.services.collection_service import (
     search_collections,
     set_rankings,
 )
+from app.core.limiter import track_budget
+from app.schemas.common import MAX_ID, ContentId
 from app.core.http_cache import DETAIL_CACHE, LIST_CACHE, STATIC_CACHE
 
 router = APIRouter()
+
+# The largest TMDb collections run to a few dozen films; 500 is far past any real one.
+RANKING_MAX_MOVIES = 500
+# Bulk status lookups use the first 200 ids; this only bounds what we parse.
+COLLECTION_BULK_PARSE_MAX = 1000
 
 
 @router.get("/mine")
@@ -104,7 +111,7 @@ async def collection_stats(collection_id: int, db: Session = Depends(get_db)):
 
 @router.post("/status/bulk")
 def collection_status_bulk(
-    collection_ids: list[int] = Body(..., embed=True),
+    collection_ids: list[ContentId] = Body(..., embed=True, max_length=COLLECTION_BULK_PARSE_MAX),
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
@@ -141,13 +148,17 @@ def collection_ranking(
     return {"ranking": get_rankings(db, uid, collection_id)}
 
 
-@router.put("/{collection_id}/ranking")
+@router.put("/{collection_id}/ranking", dependencies=[Depends(track_budget)])
 def update_collection_ranking(
-    collection_id: int,
-    ordered_movie_ids: list[int] = Body(..., embed=True),
+    collection_id: int = Path(..., ge=1, le=MAX_ID),
+    ordered_movie_ids: list[ContentId] = Body(
+        ..., embed=True, max_length=RANKING_MAX_MOVIES
+    ),
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
+    if len(set(ordered_movie_ids)) != len(ordered_movie_ids):
+        raise HTTPException(status_code=422, detail="Each movie can be ranked once.")
     try:
         ranking = set_rankings(db, uid, collection_id, ordered_movie_ids)
     except ValueError as e:

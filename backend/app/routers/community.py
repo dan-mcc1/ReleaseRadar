@@ -3,7 +3,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.core.limiter import limiter
+from app.core.limiter import limiter, track_budget
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user, require_not_silenced
 from app.models.community import Community
@@ -23,6 +23,7 @@ from app.schemas.common import (
     USERNAME_PATTERN,
     HEX_COLOR_PATTERN,
     CommunityRole,
+    ContentId,
     ContentType,
     Visibility,
 )
@@ -49,7 +50,7 @@ class UpdateCommunityBody(BaseModel):
 
 class AddMediaBody(BaseModel):
     content_type: ContentType
-    content_id: int = Field(..., ge=1)
+    content_id: ContentId
 
 
 class CreatePostBody(BaseModel):
@@ -325,7 +326,7 @@ def media(
     return svc.list_media(db, community_id, viewer_id=uid)
 
 
-@router.post("/{community_id}/media")
+@router.post("/{community_id}/media", dependencies=[Depends(track_budget)])
 def add_media(
     community_id: int,
     body: AddMediaBody,

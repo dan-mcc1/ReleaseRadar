@@ -1,10 +1,11 @@
 """Who gets the daily digest and season-premiere alerts, and when."""
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import select, union
 from sqlalchemy.orm import Session
 
+from app.config.features import tier_has_premium
 from app.models.currently_watching import CurrentlyWatching
 from app.models.episode import Episode
 from app.models.movie import Movie
@@ -22,9 +23,11 @@ DUE_WINDOW = timedelta(hours=6)
 DEFAULT_TIMEZONE = "America/New_York"
 
 
-def _build_items_for_window(db: Session, user_id: str, days: int) -> list:
-    """Find watchlisted movies/shows releasing within the next `days` days."""
-    today = date.today()
+def _build_items_for_window(db: Session, user_id: str, days: int, today: date | None = None) -> list:
+    """Find watchlisted movies/shows releasing in the `days` days starting on
+    `today`, the user's local date (the server's date if not given)."""
+    if today is None:
+        today = date.today()
     end = today + timedelta(days=days)
     upcoming = []
 
@@ -123,6 +126,13 @@ def _user_tz(user) -> ZoneInfo:
         return ZoneInfo(DEFAULT_TIMEZONE)
 
 
+def local_today(user, now_utc: datetime | None = None) -> date:
+    """Today's date on the user's clock (their digest timezone)."""
+    if now_utc is None:
+        now_utc = datetime.now(timezone.utc)
+    return now_utc.astimezone(_user_tz(user)).date()
+
+
 def due_date(user, now_utc: datetime) -> date | None:
     """The local date whose digest window now_utc falls in: from the user's
     digest_hour until DUE_WINDOW after it, on their clock. None outside it."""
@@ -147,8 +157,8 @@ def digest_due(user, now_utc: datetime) -> date | None:
 
 
 def premiere_eligible(user) -> bool:
-    """Premium users who want season-premiere alerts on at least one channel."""
-    if user.subscription_tier not in ("premium", "admin") or not user.notify_new_seasons:
+    """Users with premium access who want season-premiere alerts on at least one channel."""
+    if not tier_has_premium(user.subscription_tier) or not user.notify_new_seasons:
         return False
     return bool(
         (user.email_notifications and user.email)

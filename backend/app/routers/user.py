@@ -89,7 +89,10 @@ def create_user_route(
     claims: dict = Depends(get_token_claims),
 ):
     uid = claims["uid"]
-    email = claims.get("email")  # always use the Firebase-verified email
+    # Only a Firebase-verified address is stored (and so emailed); an
+    # unverified one could be someone else's. Google/Apple arrive verified;
+    # password sign-ups get it once they click the link and call this again.
+    email = claims.get("email") if claims.get("email_verified") else None
     # Apple only returns the display name on the very first sign-in; Firebase
     # surfaces it via the `name` claim. Capture it here so accounts created
     # via Apple aren't stuck with a blank display name.
@@ -99,7 +102,14 @@ def create_user_route(
         if not is_username_available(db, username):
             raise HTTPException(status_code=409, detail="Username already taken.")
     avatar = random.choice(VALID_AVATAR_KEYS) if username is not None else None
-    return create_user(db, uid, email, username, avatar, display_name=display_name)
+    user = create_user(db, uid, email, username, avatar, display_name=display_name)
+    if email and not user.email:
+        # Row made before the address was verified: fill it in now. A stored
+        # email is never overwritten or cleared here.
+        user.email = email
+        db.commit()
+        db.refresh(user)
+    return user
 
 
 @router.get("/me")
@@ -169,7 +179,8 @@ def sync_from_firebase(
         raise HTTPException(status_code=404, detail="User not found.")
 
     changed = False
-    if record.email and record.email != user.email:
+    # Only a verified address is copied; an existing email is never cleared.
+    if record.email and record.email_verified and record.email != user.email:
         user.email = record.email
         changed = True
     if record.display_name and not user.display_name:

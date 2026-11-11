@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     # TMDb. Search gets its own, tighter one: each search is four TMDb calls.
     PUBLIC_RATE_LIMIT: str = "300/minute"
     SEARCH_RATE_LIMIT: str = "60/minute"
+    # One budget per signed-in user, shared by every route that adds a title or
+    # marks something watched (each can trigger a TMDb fetch and bulk inserts).
+    TRACK_RATE_LIMIT: str = "120/minute"
     SYNC_AUTH_RATE_LIMIT: str = "30/minute"
 
     @field_validator("CORS_ORIGINS", "TRUSTED_PROXY_CIDRS", mode="before")
@@ -33,6 +36,13 @@ class Settings(BaseSettings):
                 return json.loads(v)
             except json.JSONDecodeError:
                 return [origin.strip() for origin in v.split(",")]
+        return v
+
+    @field_validator("RESEND_API_KEY", "ICAL_SECRET", "UNSUBSCRIBE_SECRET")
+    def require_in_production(cls, v, info):
+        # Empty values would silently stop emails or make signed links forgeable.
+        if info.data.get("ENVIRONMENT") == "production" and not v.strip():
+            raise ValueError(f"{info.field_name} must be set in production")
         return v
 
     TMDB_BEARER_TOKEN: str

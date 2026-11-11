@@ -45,11 +45,14 @@ class FriendRespondBody(BaseModel):
 @limiter.limit("30/minute")
 def search_users(
     request: Request,
-    q: str = Query(..., min_length=1, max_length=50),
+    q: str = Query(..., min_length=2, max_length=50),
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
-    """Search users by partial username to find someone to add."""
+    """Search users by username to find someone to add (at least 2 characters)."""
+    q = q.strip()
+    if len(q) < 2:
+        return []
     users = search_users_by_username(db, q, current_user_id=uid)
     return [
         {
