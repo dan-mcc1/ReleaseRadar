@@ -391,16 +391,115 @@ class TestImportEndpoint:
         self, client, db, seed_users, seed_show, mock_tmdb_and_upsert
     ):
         mock_tmdb_and_upsert["search"]["Breaking Bad"] = (1396, "tv")  # seed_show has ended
+        # TMDb still lists the one stored season, and the show is still ended.
+        details = {"in_production": False, "number_of_seasons": 5,
+                   "seasons": [{"id": 3572, "season_number": 1}]}
 
         with (
-            patch("app.services.episode_service.get") as tmdb,
+            patch("app.services.episode_service.get", return_value=details) as tmdb,
             patch.object(ir, "sync_show_episodes") as full_sync,
         ):
             r = _csv_upload(client, "Name,Year\nBreaking Bad,2008\n", "watched.csv")
         assert r.json()["summary"]["imported"] == 1
 
-        tmdb.assert_not_called()
+        # One call for the show's season list; no season is fetched.
+        assert [c.args for c in tmdb.call_args_list] == [("/tv/1396",)]
         full_sync.assert_not_called()
+
+    def test_cached_show_that_gained_a_season_has_it_marked(
+        self, client, db, seed_users, seed_show, mock_tmdb_and_upsert
+    ):
+        """Nobody tracks the cached show, so nothing stored the season TMDb
+        added since. The import fetches it; otherwise the nightly refresh would
+        store it later and it would read as a new season."""
+        from datetime import date, timedelta
+        from app.models.episode import Episode
+        from app.models.episode_watched import EpisodeWatched
+        from app.models.season import Season
+        from app.models.watched import Watched
+        from app.services.episode_service import check_and_reactivate_watched_shows
+
+        mock_tmdb_and_upsert["search"]["Breaking Bad"] = (1396, "tv")
+        last_month = date.today() - timedelta(days=30)
+        details = {"in_production": True, "number_of_seasons": 2, "seasons": [
+            {"id": 3572, "season_number": 1},
+            {"id": 3573, "season_number": 2, "name": "Season 2"},
+        ]}
+        seasons = {
+            "/tv/1396/season/1": {"episodes": []},
+            "/tv/1396/season/2": {"episodes": [
+                {"id": 99811, "episode_number": 1, "name": "Back", "air_date": last_month},
+            ]},
+        }
+
+        def tmdb(path, *args, **kwargs):
+            return details if path == "/tv/1396" else seasons[path]
+
+        with patch("app.services.episode_service.get", side_effect=tmdb):
+            r = _csv_upload(
+                client, "Name,Year,Watched Date\nBreaking Bad,2008,2015-03-01\n", "watched.csv"
+            )
+        assert r.json()["summary"]["imported"] == 1
+
+        db.expire_all()
+        assert db.get(Season, 3573) is not None
+        assert db.get(Episode, 99811) is not None
+        marked = {
+            (e.season_number, e.episode_number)
+            for e in db.query(EpisodeWatched).filter_by(user_id="test-uid-1", show_id=1396)
+        }
+        assert marked == {(1, 1), (1, 2), (2, 1)}
+
+        with patch("app.services.episode_service.send_new_season_available_email") as mock_email:
+            check_and_reactivate_watched_shows(db)
+        db.expire_all()
+        assert db.query(Watched).filter_by(user_id="test-uid-1", content_id=1396).first() is not None
+        mock_email.assert_not_called()
+
+    def test_ended_cached_show_that_gained_a_season_is_fully_synced(
+        self, client, db, seed_users, seed_show, mock_tmdb_and_upsert
+    ):
+        """An ended show with stored episodes normally needs no season fetch,
+        but not when TMDb has a season the cache never had."""
+        from datetime import date
+        from app.models.episode import Episode
+        from app.models.episode_watched import EpisodeWatched
+
+        mock_tmdb_and_upsert["search"]["Breaking Bad"] = (1396, "tv")
+        details = {"in_production": False, "number_of_seasons": 2, "seasons": [
+            {"id": 3572, "season_number": 1},
+            {"id": 3573, "season_number": 2, "name": "Season 2"},
+        ]}
+        seasons = {
+            "/tv/1396/season/1": {"episodes": []},
+            "/tv/1396/season/2": {"episodes": [
+                {"id": 99812, "episode_number": 1, "name": "Finale", "air_date": date(2013, 9, 29)},
+            ]},
+        }
+
+        def tmdb(path, *args, **kwargs):
+            return details if path == "/tv/1396" else seasons[path]
+
+        with patch("app.services.episode_service.get", side_effect=tmdb):
+            r = _csv_upload(client, "Name,Year\nBreaking Bad,2008\n", "watched.csv")
+        assert r.json()["summary"]["imported"] == 1
+
+        db.expire_all()
+        assert db.get(Episode, 99812) is not None
+        assert db.query(EpisodeWatched).filter_by(
+            user_id="test-uid-1", show_id=1396, season_number=2, episode_number=1
+        ).first() is not None
+
+    def test_new_show_makes_no_extra_metadata_fetch(
+        self, client, seed_users, mock_tmdb_and_upsert
+    ):
+        """A show created by this import is already current."""
+        mock_tmdb_and_upsert["search"]["Severance"] = (95396, "tv")
+
+        with patch.object(ir, "_refresh_show_metadata") as refresh:
+            r = _csv_upload(client, "Name,Year\nSeverance,2022\n", "watched.csv")
+        assert r.json()["summary"]["imported"] == 1
+        refresh.assert_not_called()
 
     def test_imports_to_watchlist(self, client, seed_users, mock_tmdb_and_upsert):
         mock_tmdb_and_upsert["search"]["Dune"] = (438631, "movie")

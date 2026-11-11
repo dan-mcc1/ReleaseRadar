@@ -94,6 +94,13 @@ def create_checkout_session(
             status_code=409, detail="You already have an active subscription."
         )
 
+    # An email is stored only once it is verified. Without one the Stripe
+    # customer has no address, so no receipts or failed-payment emails.
+    if not user.email:
+        raise HTTPException(
+            status_code=409, detail="Verify your email address before subscribing."
+        )
+
     customer_id = _get_or_create_stripe_customer(user, db)
 
     params = {}
