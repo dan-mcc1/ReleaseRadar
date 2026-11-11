@@ -7,7 +7,7 @@ import { isAccountRestricted } from "../../utils/accountState";
 
 interface DBUser {
   id: string;
-  email: string;
+  email: string | null;
   username: string;
   display_name: string | null;
   avatar_key: string | null;

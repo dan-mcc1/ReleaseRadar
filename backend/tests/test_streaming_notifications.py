@@ -20,10 +20,11 @@ def _seed_user(db, uid="user-1", email_notifications=True,
                notify_streaming_changes=True,
                push_notifications_enabled=False,
                push_notify_streaming_changes=True,
-               email="u@t.com"):
+               email="u@t.com", subscription_tier="free"):
     from app.models.user import User
     u = User(
         id=uid, username=f"u-{uid}", email=email,
+        subscription_tier=subscription_tier,
         email_notifications=email_notifications,
         notify_streaming_changes=notify_streaming_changes,
         push_notifications_enabled=push_notifications_enabled,
@@ -128,11 +129,11 @@ class TestDiffAndUpdateProviders:
 
         _seed_movie(db, mid=1)
         db.add(Provider(id=8, name="Netflix"))
-        db.add(Provider(id=9, name="Hulu"))
+        db.add(Provider(id=15, name="Hulu"))
         db.add(MovieProvider(movie_id=1, provider_id=8, flatrate=True))
         db.commit()
 
-        fresh = _provider_response(flatrate=[(9, "Hulu")])["watch/providers"]["results"]["US"]
+        fresh = _provider_response(flatrate=[(15, "Hulu")])["watch/providers"]["results"]["US"]
         added, removed = _diff_and_update_providers(db, 1, "movie", fresh)
         db.commit()
         assert added == ["Hulu"]
@@ -177,6 +178,238 @@ class TestDiffAndUpdateProviders:
         added, removed = _diff_and_update_providers(db, 1, "movie", {})
         assert added == []
         assert removed == []
+
+
+# ── _diff_and_update_providers: provider variants ─────────────────────────
+
+
+def _us(**kwargs):
+    return _provider_response(**kwargs)["watch/providers"]["results"]["US"]
+
+
+def _stored_ids(db, movie_id=1):
+    from app.models.provider import MovieProvider
+    return sorted(
+        r.provider_id for r in db.query(MovieProvider).filter_by(movie_id=movie_id).all()
+    )
+
+
+class TestDiffCanonicalProviders:
+    def test_netflix_variant_alongside_netflix_is_not_an_arrival(self, db):
+        from app.services.streaming_notification_service import _diff_and_update_providers
+        from app.models.provider import Provider, MovieProvider
+
+        _seed_movie(db, mid=1)
+        db.add(Provider(id=8, name="Netflix"))
+        db.add(MovieProvider(movie_id=1, provider_id=8, flatrate=True))
+        db.commit()
+
+        fresh = _us(flatrate=[(8, "Netflix"), (1796, "Netflix Standard with Ads")])
+        added, removed = _diff_and_update_providers(db, 1, "movie", fresh)
+        db.commit()
+        assert added == []
+        assert removed == []
+        assert _stored_ids(db) == [8]
+        assert db.query(Provider).filter_by(id=1796).first() is None
+
+    def test_paramount_variants_match_ingested_canonical_row(self, db):
+        from app.services.streaming_notification_service import _diff_and_update_providers
+        from app.models.provider import Provider, MovieProvider
+
+        _seed_movie(db, mid=1)
+        db.add(Provider(id=2616, name="Paramount+"))
+        db.add(MovieProvider(movie_id=1, provider_id=2616, flatrate=True))
+        db.commit()
+
+        fresh = _us(flatrate=[
+            (531, "Paramount+"),
+            (582, "Paramount+ Amazon Channel"),
+            (2303, "Paramount Plus Premium"),
+        ])
+        added, removed = _diff_and_update_providers(db, 1, "movie", fresh)
+        db.commit()
+        assert added == []
+        assert removed == []
+        assert _stored_ids(db) == [2616]
+
+    def test_legacy_variant_rows_are_cleaned_without_an_alert(self, db):
+        from app.services.streaming_notification_service import _diff_and_update_providers
+        from app.models.provider import Provider, MovieProvider
+
+        _seed_movie(db, mid=1)
+        db.add(Provider(id=8, name="Netflix"))
+        db.add(Provider(id=1796, name="Netflix Standard with Ads"))
+        db.add(MovieProvider(movie_id=1, provider_id=8, flatrate=True))
+        db.add(MovieProvider(movie_id=1, provider_id=1796, flatrate=True))
+        db.commit()
+
+        fresh = _us(flatrate=[(8, "Netflix"), (1796, "Netflix Standard with Ads")])
+        added, removed = _diff_and_update_providers(db, 1, "movie", fresh)
+        db.commit()
+        assert added == []
+        assert removed == []
+        assert _stored_ids(db) == [8]
+
+    def test_legacy_variant_only_row_is_replaced_by_canonical_without_an_alert(self, db):
+        from app.services.streaming_notification_service import _diff_and_update_providers
+        from app.models.provider import Provider, MovieProvider
+
+        _seed_movie(db, mid=1)
+        db.add(Provider(id=1796, name="Netflix Standard with Ads"))
+        db.add(MovieProvider(movie_id=1, provider_id=1796, flatrate=True))
+        db.commit()
+
+        fresh = _us(flatrate=[(8, "Netflix"), (1796, "Netflix Standard with Ads")])
+        added, removed = _diff_and_update_providers(db, 1, "movie", fresh)
+        db.commit()
+        assert added == []
+        assert removed == []
+        assert _stored_ids(db) == [8]
+
+    def test_real_arrival_via_variant_uses_canonical_name(self, db):
+        from app.services.streaming_notification_service import _diff_and_update_providers
+        from app.models.provider import Provider, MovieProvider
+
+        _seed_movie(db, mid=1)
+        db.add(Provider(id=8, name="Netflix"))
+        db.add(MovieProvider(movie_id=1, provider_id=8, flatrate=True))
+        db.commit()
+
+        fresh = _us(flatrate=[(8, "Netflix"), (1825, "HBO Max Amazon Channel")])
+        added, removed = _diff_and_update_providers(db, 1, "movie", fresh)
+        db.commit()
+        assert added == ["Max"]
+        assert removed == []
+        assert _stored_ids(db) == [8, 384]
+
+    def test_real_departure_uses_canonical_name(self, db):
+        from app.services.streaming_notification_service import _diff_and_update_providers
+        from app.models.provider import Provider, MovieProvider
+
+        _seed_movie(db, mid=1)
+        db.add(Provider(id=8, name="Netflix"))
+        db.add(Provider(id=384, name="Max"))
+        db.add(MovieProvider(movie_id=1, provider_id=8, flatrate=True))
+        db.add(MovieProvider(movie_id=1, provider_id=384, flatrate=True))
+        db.commit()
+
+        added, removed = _diff_and_update_providers(
+            db, 1, "movie", _us(flatrate=[(8, "Netflix")])
+        )
+        db.commit()
+        assert added == []
+        assert removed == ["Max"]
+        assert _stored_ids(db) == [8]
+
+    def test_variant_disappearing_while_service_stays_is_silent(self, db):
+        from app.services.streaming_notification_service import _diff_and_update_providers
+        from app.models.provider import Provider, MovieProvider
+
+        _seed_movie(db, mid=1)
+        db.add(Provider(id=8, name="Netflix"))
+        db.add(MovieProvider(movie_id=1, provider_id=8, flatrate=True))
+        db.commit()
+
+        both = _us(flatrate=[(8, "Netflix"), (1796, "Netflix Standard with Ads")])
+        assert _diff_and_update_providers(db, 1, "movie", both) == ([], [])
+        db.commit()
+        only_netflix = _us(flatrate=[(8, "Netflix")])
+        assert _diff_and_update_providers(db, 1, "movie", only_netflix) == ([], [])
+        db.commit()
+        assert _stored_ids(db) == [8]
+
+    def test_rent_and_buy_via_variant_set_flags_on_canonical_row(self, db):
+        from app.services.streaming_notification_service import _diff_and_update_providers
+        from app.models.provider import Provider, MovieProvider
+
+        _seed_movie(db, mid=1)
+        db.add(Provider(id=9, name="Amazon Prime Video"))
+        db.commit()
+
+        fresh = _us(
+            rent=[(10, "Amazon Video")],
+            buy=[(10, "Amazon Video")],
+        )
+        added, removed = _diff_and_update_providers(db, 1, "movie", fresh)
+        db.commit()
+        assert added == []
+        assert removed == []
+        row = db.query(MovieProvider).filter_by(movie_id=1).one()
+        assert row.provider_id == 9
+        assert (row.flatrate, row.rent, row.buy) == (False, True, True)
+
+    def test_flags_are_ored_across_variants(self, db):
+        from app.services.streaming_notification_service import _diff_and_update_providers
+        from app.models.provider import MovieProvider
+
+        _seed_movie(db, mid=1)
+        fresh = _us(
+            flatrate=[(1796, "Netflix Standard with Ads")],
+            rent=[(8, "Netflix")],
+        )
+        added, _ = _diff_and_update_providers(db, 1, "movie", fresh)
+        db.commit()
+        assert added == ["Netflix"]
+        row = db.query(MovieProvider).filter_by(movie_id=1).one()
+        assert (row.provider_id, row.flatrate, row.rent, row.buy) == (8, True, True, False)
+
+    def test_existing_provider_name_and_logo_not_overwritten_by_variant(self, db):
+        from app.services.streaming_notification_service import _diff_and_update_providers
+        from app.models.provider import Provider
+
+        _seed_movie(db, mid=1)
+        db.add(Provider(id=8, name="Netflix", logo_path="/good.png"))
+        db.commit()
+
+        _diff_and_update_providers(
+            db, 1, "movie", _us(flatrate=[(1796, "Netflix Standard with Ads")])
+        )
+        db.commit()
+        p = db.query(Provider).filter_by(id=8).one()
+        assert (p.name, p.logo_path) == ("Netflix", "/good.png")
+
+    def test_tv_variants_collapse_too(self, db):
+        from app.services.streaming_notification_service import _diff_and_update_providers
+        from app.models.provider import Provider, ShowProvider
+
+        _seed_show(db, sid=10)
+        db.add(Provider(id=2616, name="Paramount+"))
+        db.add(ShowProvider(show_id=10, provider_id=2616, flatrate=True))
+        db.commit()
+
+        fresh = _us(flatrate=[(531, "Paramount+"), (582, "Paramount+ Amazon Channel")])
+        assert _diff_and_update_providers(db, 10, "tv", fresh) == ([], [])
+        db.commit()
+        ids = [r.provider_id for r in db.query(ShowProvider).filter_by(show_id=10)]
+        assert ids == [2616]
+
+    def test_ingest_then_refresh_does_not_alert(self, db):
+        # The regression: ingest stores canonical ids, and the next day's
+        # refresh of the same payload used to report the variants as arrivals.
+        from app.services.media_upsert import _upsert_providers
+        from app.services.streaming_notification_service import _diff_and_update_providers
+        from app.models.provider import MovieProvider
+
+        _seed_movie(db, mid=1)
+        fresh = _us(
+            flatrate=[
+                (8, "Netflix"),
+                (1796, "Netflix Standard with Ads"),
+                (531, "Paramount+"),
+                (582, "Paramount+ Amazon Channel"),
+                (2303, "Paramount Plus Premium"),
+            ],
+            rent=[(10, "Amazon Video")],
+        )
+        _upsert_providers(db, fresh, MovieProvider, movie_id=1)
+        db.commit()
+        assert _stored_ids(db) == [8, 9, 2616]
+
+        added, removed = _diff_and_update_providers(db, 1, "movie", fresh)
+        db.commit()
+        assert added == []
+        assert removed == []
+        assert _stored_ids(db) == [8, 9, 2616]
 
 
 # ── ensure_providers_populated ────────────────────────────────────────────
@@ -269,8 +502,8 @@ class TestRefreshStreamingProviders:
                 mock_email.assert_not_called()
 
     def test_new_provider_on_two_titles_is_stored_once(self, db):
-        """A provider new to the database (a just-launched service, like the
-        provider 1796 that killed a dev run) on two tracked titles in one run
+        """A provider new to the database (a just-launched service; 9999 stands
+        in for the one that killed a dev run) on two tracked titles in one run
         is inserted once, not once per title."""
         from app.models.provider import Provider
         from app.services import streaming_notification_service as svc
@@ -281,13 +514,13 @@ class TestRefreshStreamingProviders:
         _watchlist(db, "u1", 1, "movie")
         _watchlist(db, "u1", 2, "movie")
 
-        fresh = _provider_response(flatrate=[(1796, "New Service")])["watch/providers"]["results"]["US"]
+        fresh = _provider_response(flatrate=[(9999, "New Service")])["watch/providers"]["results"]["US"]
         with patch.object(svc, "_fetch_fresh_us_providers", return_value=fresh), \
              patch("app.services.streaming_notification_service.send_streaming_alert_email"):
             svc.refresh_streaming_providers(db)
 
         db.expire_all()
-        assert [p.id for p in db.query(Provider).filter_by(id=1796)] == [1796]
+        assert [p.id for p in db.query(Provider).filter_by(id=9999)] == [9999]
 
     def test_emails_watchlist_user_on_added_provider(self, db):
         from app.services import streaming_notification_service as svc
@@ -308,6 +541,55 @@ class TestRefreshStreamingProviders:
                 assert len(alerts) == 1
                 assert alerts[0]["title"] == "Fight Club"
                 assert alerts[0]["added"] == ["Netflix"]
+
+    def test_open_beta_emails_a_free_user(self, db):
+        from app.services import streaming_notification_service as svc
+
+        _seed_movie(db, mid=1)
+        _seed_user(db, uid="u1", subscription_tier="free")
+        _watchlist(db, "u1", 1, "movie")
+
+        fresh = _provider_response(flatrate=[(8, "Netflix")])["watch/providers"]["results"]["US"]
+        with patch.object(svc, "_fetch_fresh_us_providers", return_value=fresh):
+            with patch("app.services.streaming_notification_service.send_streaming_alert_email") as mock_email:
+                svc.refresh_streaming_providers(db)
+                mock_email.assert_called_once()
+
+    def test_paywall_skips_a_free_user(self, db, paywall_on):
+        from app.services import streaming_notification_service as svc
+
+        _seed_movie(db, mid=1)
+        _seed_user(db, uid="u1", subscription_tier="free")
+        _watchlist(db, "u1", 1, "movie")
+
+        fresh = _provider_response(flatrate=[(8, "Netflix")])["watch/providers"]["results"]["US"]
+        with patch.object(svc, "_fetch_fresh_us_providers", return_value=fresh):
+            with patch("app.services.streaming_notification_service.send_streaming_alert_email") as mock_email:
+                svc.refresh_streaming_providers(db)
+                mock_email.assert_not_called()
+
+    def test_paywall_send_job_skips_a_free_user(self, db, paywall_on):
+        from app.services import streaming_notification_service as svc
+
+        _seed_user(db, uid="u1", subscription_tier="free")
+        alerts = [{"title": "T", "content_type": "movie", "content_id": 1,
+                   "poster_path": None, "added": ["Netflix"], "removed": []}]
+        with patch.object(svc, "send_streaming_alert_email") as mock_email:
+            svc.send_user_streaming_alerts(db, "u1", alerts, "k")
+        mock_email.assert_not_called()
+
+    def test_paywall_still_emails_a_premium_user(self, db, paywall_on):
+        from app.services import streaming_notification_service as svc
+
+        _seed_movie(db, mid=1)
+        _seed_user(db, uid="u1", subscription_tier="premium")
+        _watchlist(db, "u1", 1, "movie")
+
+        fresh = _provider_response(flatrate=[(8, "Netflix")])["watch/providers"]["results"]["US"]
+        with patch.object(svc, "_fetch_fresh_us_providers", return_value=fresh):
+            with patch("app.services.streaming_notification_service.send_streaming_alert_email") as mock_email:
+                svc.refresh_streaming_providers(db)
+                mock_email.assert_called_once()
 
     def test_emails_currently_watching_users_too(self, db):
         from app.services import streaming_notification_service as svc

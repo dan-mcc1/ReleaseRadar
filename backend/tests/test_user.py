@@ -47,6 +47,200 @@ class TestUserCreate:
         assert r.status_code in (200, 409)
 
 
+def _claims_client(uid, email, verified):
+    """A client whose token carries the given email and email_verified claim."""
+    from app.dependencies.auth import get_token_claims
+    from app.main import app
+
+    c = make_client(uid)
+
+    async def _claims():
+        claims = {"uid": uid, "email": email}
+        if verified is not None:
+            claims["email_verified"] = verified
+        return claims
+
+    app.dependency_overrides[get_token_claims] = _claims
+    return c
+
+
+class TestVerifiedEmailOnly:
+    def test_create_unverified_stores_no_email(self, db):
+        c = _claims_client("uv-1", "stranger@test.com", False)
+        assert c.post("/user/create", json={"username": "uv_one"}).status_code == 200
+        assert c.get("/user/me").json()["email"] is None
+
+    def test_create_missing_claim_stores_no_email(self, db):
+        c = _claims_client("uv-2", "stranger@test.com", None)
+        assert c.post("/user/create", json={}).status_code == 200
+        assert c.get("/user/me").json()["email"] is None
+
+    def test_create_verified_stores_email(self, db):
+        c = _claims_client("uv-3", "real@test.com", True)
+        assert c.post("/user/create", json={}).status_code == 200
+        assert c.get("/user/me").json()["email"] == "real@test.com"
+
+    def test_create_again_after_verifying_fills_email(self, db):
+        c = _claims_client("uv-4", "later@test.com", False)
+        c.post("/user/create", json={})
+        assert c.get("/user/me").json()["email"] is None
+        c = _claims_client("uv-4", "later@test.com", True)
+        r = c.post("/user/create", json={})
+        assert r.status_code == 200
+        assert r.json()["email"] == "later@test.com"
+        assert c.get("/user/me").json()["email"] == "later@test.com"
+
+    def test_create_unverified_keeps_existing_email(self, db):
+        from app.models.user import User
+
+        db.add(User(id="uv-5", username="uv_five", email="old@test.com"))
+        db.commit()
+        c = _claims_client("uv-5", "other@test.com", False)
+        r = c.post("/user/create", json={})
+        assert r.status_code == 200
+        assert r.json()["email"] == "old@test.com"
+
+    def test_create_verified_does_not_overwrite_existing_email(self, db):
+        from app.models.user import User
+
+        db.add(User(id="uv-6", username="uv_six", email="old@test.com"))
+        db.commit()
+        c = _claims_client("uv-6", "new@test.com", True)
+        assert c.post("/user/create", json={}).json()["email"] == "old@test.com"
+
+    def _sync(self, db, uid, stored_email, record):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        from app.models.user import User
+
+        db.add(User(id=uid, username=uid.replace("-", "_"), email=stored_email))
+        db.commit()
+        c = make_client(uid)
+        rec = SimpleNamespace(display_name=None, **record)
+        with patch("app.routers.user.firebase_auth.get_user", return_value=rec):
+            return c.post("/user/sync-from-firebase")
+
+    def test_sync_unverified_does_not_copy_email(self, db):
+        r = self._sync(
+            db, "sy-1", None, {"email": "x@test.com", "email_verified": False}
+        )
+        assert r.status_code == 200
+        assert r.json()["email"] is None
+
+    def test_sync_unverified_does_not_clear_or_replace_email(self, db):
+        r = self._sync(
+            db, "sy-2", "old@test.com", {"email": "x@test.com", "email_verified": False}
+        )
+        assert r.json()["email"] == "old@test.com"
+        r = self._sync(
+            db, "sy-3", "old@test.com", {"email": None, "email_verified": False}
+        )
+        assert r.json()["email"] == "old@test.com"
+
+    def test_sync_verified_copies_email(self, db):
+        r = self._sync(
+            db, "sy-4", None, {"email": "x@test.com", "email_verified": True}
+        )
+        assert r.json()["email"] == "x@test.com"
+
+    def test_user_without_email_is_skipped_by_the_senders(self):
+        from datetime import datetime, timezone
+        from types import SimpleNamespace
+        from app.services.digest_service import digest_due, premiere_eligible
+
+        user = SimpleNamespace(
+            email=None,
+            email_notifications=True,
+            notification_frequency="daily",
+            digest_hour=9,
+            digest_timezone="UTC",
+            last_digest_sent_at=None,
+            subscription_tier="premium",
+            notify_new_seasons=True,
+            push_notifications_enabled=False,
+            push_notify_new_seasons=False,
+        )
+        now = datetime(2026, 1, 1, 9, 30, tzinfo=timezone.utc)
+        assert digest_due(user, now) is None
+        assert not premiere_eligible(user)
+        user.email = "real@test.com"
+        assert digest_due(user, now) is not None
+
+    def test_push_only_user_without_email_is_premiere_eligible(self):
+        from types import SimpleNamespace
+        from app.services.digest_service import premiere_eligible
+
+        user = SimpleNamespace(
+            email=None,
+            email_notifications=True,
+            subscription_tier="premium",
+            notify_new_seasons=True,
+            push_notifications_enabled=True,
+            push_notify_new_seasons=True,
+        )
+        assert premiere_eligible(user)
+
+    def _streaming_user(self, db, uid, push):
+        from app.models.user import User
+
+        db.add(
+            User(
+                id=uid,
+                username=uid.replace("-", "_"),
+                email=None,
+                subscription_tier="premium",
+                email_notifications=True,
+                notify_streaming_changes=True,
+                push_notifications_enabled=push,
+                push_notify_streaming_changes=push,
+            )
+        )
+        db.commit()
+
+    _ALERT = {
+        "content_type": "movie",
+        "content_id": 1,
+        "title": "Fight Club",
+        "poster_path": None,
+        "added": ["Netflix"],
+        "removed": [],
+    }
+
+    def test_streaming_sender_sends_no_email_without_stored_email(self, db):
+        from unittest.mock import patch
+        from app.services.streaming_notification_service import (
+            send_user_streaming_alerts,
+        )
+
+        self._streaming_user(db, "ne-1", push=False)
+        with patch(
+            "app.services.streaming_notification_service.send_streaming_alert_email"
+        ) as mail:
+            with patch(
+                "app.services.streaming_notification_service.push_notification"
+            ) as push:
+                send_user_streaming_alerts(db, "ne-1", [self._ALERT], "k")
+        mail.assert_not_called()
+        push.assert_not_called()
+
+    def test_streaming_sender_still_pushes_without_stored_email(self, db):
+        from unittest.mock import patch
+        from app.services.streaming_notification_service import (
+            send_user_streaming_alerts,
+        )
+
+        self._streaming_user(db, "ne-2", push=True)
+        with patch(
+            "app.services.streaming_notification_service.send_streaming_alert_email"
+        ) as mail:
+            with patch(
+                "app.services.streaming_notification_service.push_notification"
+            ) as push:
+                send_user_streaming_alerts(db, "ne-2", [self._ALERT], "k")
+        mail.assert_not_called()
+        push.assert_called_once()
+
+
 class TestUserGet:
     def test_get_me(self, client, seed_users):
         r = client.get("/user/me")

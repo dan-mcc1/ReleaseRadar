@@ -7,6 +7,18 @@
 # (via feature_gate() in app/dependencies/subscription.py) and should be
 # mirrored in frontend/src/config/features.ts so the UI gates match.
 
+# Open beta: every user gets premium access. Set to False at paywall launch,
+# together with CHECKOUT_ENABLED in frontend/src/config/features.ts.
+OPEN_BETA = True
+
+PREMIUM_TIERS = frozenset({"premium", "admin"})
+
+
+def tier_has_premium(tier: str | None) -> bool:
+    """Whether a user with this stored subscription tier has premium access."""
+    return OPEN_BETA or tier in PREMIUM_TIERS
+
+
 PREMIUM_FEATURES: dict[str, bool] = {
     "shelves": False,
     "rewatch": False,

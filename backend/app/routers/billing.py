@@ -1,3 +1,5 @@
+import logging
+
 import stripe
 from fastapi import APIRouter, Depends, HTTPException, Request, Body
 from sqlalchemy.orm import Session
@@ -13,6 +15,8 @@ from app.services.billing_service import (
     invoice_subscription_id,
     subscription_period,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -84,7 +88,19 @@ def create_checkout_session(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    existing = db.query(Subscription).filter_by(user_id=uid).first()
+    if existing and existing.status in ("active", "trialing"):
+        raise HTTPException(
+            status_code=409, detail="You already have an active subscription."
+        )
+
     customer_id = _get_or_create_stripe_customer(user, db)
+
+    params = {}
+    # One trial per customer: stripe_subscription_id is set on the first
+    # completed checkout and never cleared.
+    if not (existing and existing.stripe_subscription_id):
+        params["subscription_data"] = {"trial_period_days": 7}
 
     session = stripe.checkout.Session.create(
         customer=customer_id,
@@ -92,8 +108,8 @@ def create_checkout_session(
         line_items=[{"price": price_id, "quantity": 1}],
         success_url=f"{settings.FRONTEND_URL}/billing?success=1",
         cancel_url=f"{settings.FRONTEND_URL}/pricing",
-        subscription_data={"trial_period_days": 7},
         allow_promotion_codes=True,
+        **params,
     )
 
     return {"url": session.url}
@@ -168,13 +184,23 @@ def cancel_subscription(
 
 @router.post("/webhook")
 async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
+    # An empty secret would make the signature check pass for anyone who can
+    # compute an HMAC with an empty key.
+    if not settings.STRIPE_WEBHOOK_SECRET:
+        logger.error("STRIPE_WEBHOOK_SECRET is not set; rejecting Stripe webhook")
+        raise HTTPException(status_code=503, detail="Billing not configured")
+
     payload = await request.body()
     sig_header = request.headers.get("stripe-signature")
+    if not sig_header:
+        raise HTTPException(status_code=400, detail="Missing signature")
 
     try:
         event = stripe.Webhook.construct_event(
             payload, sig_header, settings.STRIPE_WEBHOOK_SECRET
         )
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid payload")
     except stripe.error.SignatureVerificationError:
         raise HTTPException(status_code=400, detail="Invalid signature")
 

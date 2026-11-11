@@ -4,7 +4,9 @@ from app.db.session import get_db
 from app.models.currently_watching import CurrentlyWatching
 from app.models.watched import Watched
 from app.models.watchlist import Watchlist
+from app.core.limiter import track_budget
 from app.dependencies.auth import get_current_user
+from app.schemas.common import MAX_ID
 from app.services.watchlist_service import add_to_watchlist, remove_from_watchlist, assert_can_track
 from app.services.watched_service import (
     add_to_watched,
@@ -45,11 +47,11 @@ def _lists_holding(db: Session, uid: str, content_type: str, content_id: int) ->
     }
 
 
-@router.post("/set")
+@router.post("/set", dependencies=[Depends(track_budget)])
 def set_watch_status(
     background_tasks: BackgroundTasks,
     content_type: str = Body(...),
-    content_id: int = Body(..., ge=1),
+    content_id: int = Body(..., ge=1, le=MAX_ID),
     target: str = Body(...),
     # Still accepted from older clients but ignored: it can be stale (another
     # tab, auto-complete, nightly reactivation), so the server looks it up.

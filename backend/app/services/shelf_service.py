@@ -23,6 +23,10 @@ from app.services.media_serializers import (
 )
 from collections import defaultdict
 
+SHELF_MAX_ITEMS = 5_000
+MAX_SHELVES_PER_USER = 200
+
+
 def _assert_shelf_owned(db: Session, user_id: str, shelf_id: int) -> Shelf:
     shelf = db.query(Shelf).filter_by(id=shelf_id, user_id=user_id).first()
     if not shelf:
@@ -31,6 +35,11 @@ def _assert_shelf_owned(db: Session, user_id: str, shelf_id: int) -> Shelf:
 
 
 def create_shelf(db: Session, user_id: str, name: str, description: str | None) -> Shelf:
+    if db.query(Shelf).filter_by(user_id=user_id).count() >= MAX_SHELVES_PER_USER:
+        raise HTTPException(
+            status_code=400,
+            detail=f"You can have up to {MAX_SHELVES_PER_USER} shelves.",
+        )
     shelf = Shelf(user_id=user_id, name=name, description=description)
     db.add(shelf)
     db.commit()
@@ -122,6 +131,12 @@ def add_to_shelf(
     )
     if existing:
         return existing
+
+    if db.query(ShelfItem).filter_by(shelf_id=shelf_id).count() >= SHELF_MAX_ITEMS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"A shelf can hold up to {SHELF_MAX_ITEMS:,} titles.",
+        )
 
     # Ensure media row exists in DB (does not increment tracking_count — shelves are independent)
     if content_type == "movie":

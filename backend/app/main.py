@@ -100,7 +100,27 @@ async def lifespan(app: FastAPI):
         await asyncio.to_thread(stop_job_queue, runner)
 
 
-app = FastAPI(title="ReleaseRadar API", lifespan=lifespan, redirect_slashes=True)
+_IS_PROD = settings.ENVIRONMENT == "production"
+
+
+def _docs_urls(is_prod: bool) -> dict[str, str | None]:
+    """Interactive docs and the OpenAPI schema list every admin and billing
+    route, so production doesn't serve them."""
+    if is_prod:
+        return {"docs_url": None, "redoc_url": None, "openapi_url": None}
+    return {"docs_url": "/docs", "redoc_url": "/redoc", "openapi_url": "/openapi.json"}
+
+
+_DOCS_URLS = _docs_urls(_IS_PROD)
+
+app = FastAPI(
+    title="ReleaseRadar API",
+    lifespan=lifespan,
+    redirect_slashes=True,
+    docs_url=_DOCS_URLS["docs_url"],
+    redoc_url=_DOCS_URLS["redoc_url"],
+    openapi_url=_DOCS_URLS["openapi_url"],
+)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -135,9 +155,6 @@ setup_logging()
 
 
 install_query_counter(engine)
-
-
-_IS_PROD = settings.ENVIRONMENT == "production"
 
 
 # Order matters: each @app.middleware("http") prepends to the user middleware

@@ -514,19 +514,39 @@ class TestRefreshActiveShows:
         # No watchlist/cw/watched entries → early return
         refresh_episodes_for_active_shows(db)
 
-    def test_skips_finished_shows(self, db, seed_users, seed_show):
-        """Show.in_production=False (not set) → no work scheduled."""
+    @staticmethod
+    def _pin_today(day):
+        """Make episode_service's date.today() return day."""
+        class _Pinned(date):
+            @classmethod
+            def today(cls):
+                return day
+        return patch("app.services.episode_service.date", _Pinned)
+
+    def _watch_ended_show(self, db):
         from app.models.watchlist import Watchlist
-        from app.services.episode_service import refresh_episodes_for_active_shows
 
         db.add(Watchlist(user_id="test-uid-1", content_type="tv", content_id=1396,
                          added_at=datetime.now(timezone.utc)))
         db.commit()
-        # seed_show has no in_production=True → filtered out
-        # Patch _refresh_one_show to confirm it isn't called
-        with patch("app.services.episode_service._refresh_one_show") as mock_one:
-            refresh_episodes_for_active_shows(db)
-        mock_one.assert_not_called()
+
+    def test_skips_ended_show_except_on_its_day(self, db, seed_users, seed_show):
+        """seed_show (id 1396, in_production False) is due only when
+        weekday == 1396 % 7 == 3 (Thursday); every other day it is skipped."""
+        from app.services.episode_service import refresh_episodes_for_active_shows
+
+        self._watch_ended_show(db)
+        monday = date(2026, 10, 12)
+        for day in (monday + timedelta(days=i) for i in range(7)):
+            with (
+                self._pin_today(day),
+                patch("app.services.episode_service._refresh_one_show") as mock_one,
+            ):
+                refresh_episodes_for_active_shows(db)
+            if day.weekday() == 1396 % 7:
+                assert [c.args for c in mock_one.call_args_list] == [(1396, seed_show.name)]
+            else:
+                mock_one.assert_not_called()
 
     def test_refreshes_each_active_show(self, db, seed_users):
         from app.models.show import Show
@@ -549,7 +569,21 @@ class TestRefreshActiveShows:
         assert sorted(c.args for c in mock_one.call_args_list) == [(40, "A"), (41, "B")]
 
 
+def _null_in_production(db, *show_ids):
+    """The column's insert default turns an explicit None into False, so a
+    NULL (unknown) status has to be written afterwards."""
+    from app.models.show import Show
+
+    db.query(Show).filter(Show.id.in_(show_ids)).update(
+        {Show.in_production: None}, synchronize_session=False
+    )
+    db.commit()
+
+
 class TestActiveShowIds:
+    # 2026-10-12 is a Monday (weekday 0); the seven dates below cover each weekday.
+    WEEK = [date(2026, 10, 12) + timedelta(days=i) for i in range(7)]
+
     def test_tracked_in_production_shows_once_each(self, db, seed_users):
         from app.models.currently_watching import CurrentlyWatching
         from app.models.show import Show
@@ -568,26 +602,83 @@ class TestActiveShowIds:
         ])
         db.commit()
 
-        assert active_show_ids(db) == [10, 20]
+        for day in self.WEEK:
+            assert active_show_ids(db, day) == [10, 20]
 
-    def test_excludes_untracked_ended_and_movie_ids(self, db, seed_users):
+    def test_unknown_production_status_is_returned_every_day(self, db, seed_users):
+        from app.models.show import Show
+        from app.models.watchlist import Watchlist
+        from app.services.episode_service import active_show_ids
+
+        db.add(Show(id=33, name="Unknown", tracking_count=0))
+        db.add(Watchlist(user_id="test-uid-1", content_type="tv", content_id=33))
+        db.commit()
+        _null_in_production(db, 33)
+
+        for day in self.WEEK:
+            assert active_show_ids(db, day) == [33]
+
+    def test_ended_show_is_returned_on_exactly_one_day_a_week(self, db, seed_users):
+        from app.models.show import Show
+        from app.models.watched import Watched
+        from app.services.episode_service import ENDED_SHOW_REFRESH_DAYS, active_show_ids
+
+        assert ENDED_SHOW_REFRESH_DAYS == 7
+        db.add(Show(id=31, name="Ended", in_production=False, tracking_count=0))
+        db.add(Watched(user_id="test-uid-1", content_type="tv", content_id=31))
+        db.commit()
+
+        days = [d for d in self.WEEK if active_show_ids(db, d) == [31]]
+        assert days == [d for d in self.WEEK if d.weekday() == 31 % 7]
+
+    def test_ended_shows_are_spread_across_the_week(self, db, seed_users):
+        from app.models.show import Show
+        from app.models.watchlist import Watchlist
+        from app.services.episode_service import active_show_ids
+
+        db.add_all([Show(id=i, name=f"Ended {i}", in_production=False, tracking_count=0)
+                    for i in range(1, 15)])
+        db.add_all([Watchlist(user_id="test-uid-1", content_type="tv", content_id=i)
+                    for i in range(1, 15)])
+        db.commit()
+
+        assert [len(active_show_ids(db, d)) for d in self.WEEK] == [2] * 7
+
+    def test_each_kind_of_tracking_counts(self, db, seed_users):
+        from app.models.currently_watching import CurrentlyWatching
         from app.models.show import Show
         from app.models.watched import Watched
         from app.models.watchlist import Watchlist
         from app.services.episode_service import active_show_ids
 
+        db.add_all([Show(id=i, name=f"S{i}", tracking_count=0) for i in (1, 2, 3)])
         db.add_all([
-            Show(id=30, name="Untracked", in_production=True, tracking_count=0),
-            Show(id=31, name="Ended", in_production=False, tracking_count=0),
-            Show(id=32, name="Shares a movie's id", in_production=True, tracking_count=0),
-        ])
-        db.add_all([
-            Watched(user_id="test-uid-1", content_type="tv", content_id=31),
-            Watchlist(user_id="test-uid-1", content_type="movie", content_id=32),
+            Watched(user_id="test-uid-1", content_type="tv", content_id=1),
+            Watchlist(user_id="test-uid-1", content_type="tv", content_id=2),
+            CurrentlyWatching(user_id="test-uid-1", content_type="tv", content_id=3),
         ])
         db.commit()
+        _null_in_production(db, 1, 2, 3)
 
-        assert active_show_ids(db) == []
+        assert active_show_ids(db, self.WEEK[0]) == [1, 2, 3]
+
+    def test_excludes_untracked_and_movie_ids_whatever_the_flag(self, db, seed_users):
+        from app.models.show import Show
+        from app.models.watchlist import Watchlist
+        from app.services.episode_service import active_show_ids
+
+        db.add_all([
+            Show(id=30, name="Untracked", in_production=True, tracking_count=0),
+            Show(id=31, name="Untracked ended", in_production=False, tracking_count=0),
+            Show(id=34, name="Untracked unknown", tracking_count=0),
+            Show(id=32, name="Shares a movie's id", in_production=True, tracking_count=0),
+        ])
+        db.add(Watchlist(user_id="test-uid-1", content_type="movie", content_id=32))
+        db.commit()
+        _null_in_production(db, 34)
+
+        for day in self.WEEK:
+            assert active_show_ids(db, day) == []
 
 
 # ── check_and_reactivate_watched_shows ───────────────────────────────────
@@ -754,7 +845,10 @@ class TestReactivateWatchedShows:
             db.flush()
             db.add(Episode(id=show_id * 100, show_id=show_id, season_number=1,
                            episode_number=1, name="Pilot", air_date=past))
-            db.add(Watched(user_id="test-uid-1", content_type="tv", content_id=show_id))
+            db.add(Watched(
+                user_id="test-uid-1", content_type="tv", content_id=show_id,
+                watched_at=datetime.now(timezone.utc) - timedelta(days=10),
+            ))
         db.commit()
 
         with patch("app.services.episode_service.send_new_season_available_email"):
@@ -871,6 +965,131 @@ class TestReactivationDetails:
 
         assert loaded == []
         assert not self._still_watched(db)
+
+
+class TestReactivationBaseline:
+    """An already-aired episode only counts as new if it aired on or after the
+    day the show entered the user's Watched list, so un-ticking an old episode
+    or importing a show with no episode history doesn't bring it back."""
+
+    WATCHED_DAY = date.today() - timedelta(days=30)
+
+    def _setup(self, db, *, watched_at="default", marked=(1, 2)):
+        from app.models.episode_watched import EpisodeWatched
+        from app.models.show import Show
+        from app.models.user import User
+        from app.models.watched import Watched
+
+        if watched_at == "default":
+            watched_at = datetime.combine(
+                self.WATCHED_DAY, datetime.min.time(), tzinfo=timezone.utc
+            ) + timedelta(hours=15)
+        db.query(Show).filter_by(id=1396).first().in_production = True
+        db.query(User).filter_by(id="test-uid-1").first().email_notifications = True
+        for ep_num in marked:
+            db.add(EpisodeWatched(
+                user_id="test-uid-1", show_id=1396, season_number=1,
+                episode_number=ep_num, watched_at=datetime.now(timezone.utc),
+            ))
+        db.add(Watched(
+            user_id="test-uid-1", content_type="tv", content_id=1396,
+            watched_at=watched_at,
+        ))
+
+    def _candidates(self, db):
+        from app.services.episode_service import _reactivation_candidates
+        db.commit()
+        return _reactivation_candidates(db, date.today())
+
+    def _add_episode(self, db, eid, season, number, air_date):
+        from app.models.episode import Episode
+        db.add(Episode(id=eid, show_id=1396, season_number=season,
+                       episode_number=number, air_date=air_date))
+
+    def test_unmarking_an_episode_that_aired_before_watching_is_not_new(
+        self, db, seed_users, seed_show
+    ):
+        """S1E2 aired in 2008; un-ticking it must not bring the show back."""
+        from app.models.watched import Watched
+        from app.models.watchlist import Watchlist
+        from app.services.episode_service import check_and_reactivate_watched_shows
+
+        self._setup(db, marked=(1,))  # S1E2 is the un-ticked one
+        db.commit()
+
+        with patch("app.services.episode_service.send_new_season_available_email") as mock_email:
+            check_and_reactivate_watched_shows(db)
+
+        db.expire_all()
+        assert db.query(Watched).filter_by(content_id=1396).first() is not None
+        assert db.query(Watchlist).filter_by(content_id=1396).first() is None
+        mock_email.assert_not_called()
+
+    def test_episode_aired_after_watching_is_new(self, db, seed_users, seed_show):
+        self._setup(db)
+        self._add_episode(db, 99701, 1, 3, self.WATCHED_DAY + timedelta(days=5))
+
+        assert [(c.season_number, c.air_date) for c in self._candidates(db)] == [
+            (1, self.WATCHED_DAY + timedelta(days=5))
+        ]
+
+    def test_episode_aired_on_the_day_of_watching_is_new(self, db, seed_users, seed_show):
+        """watched_at carries a time of day; only the date is compared."""
+        self._setup(db)
+        self._add_episode(db, 99702, 1, 3, self.WATCHED_DAY)
+
+        assert len(self._candidates(db)) == 1
+
+    def test_episode_aired_the_day_before_watching_is_not_new(self, db, seed_users, seed_show):
+        self._setup(db)
+        self._add_episode(db, 99703, 1, 3, self.WATCHED_DAY - timedelta(days=1))
+
+        assert self._candidates(db) == []
+
+    def test_unaired_episode_in_a_later_season_is_new(self, db, seed_users, seed_show):
+        self._setup(db)
+        premiere = date.today() + timedelta(days=60)
+        self._add_episode(db, 99704, 2, 1, premiere)
+
+        assert [(c.season_number, c.air_date) for c in self._candidates(db)] == [(2, premiere)]
+
+    def test_no_marked_episodes_and_everything_aired_before_watching_is_not_new(
+        self, db, seed_users, seed_show
+    ):
+        """A show added to Watched with no episode history (e.g. an import)."""
+        self._setup(db, marked=())
+
+        assert self._candidates(db) == []
+
+    def test_no_marked_episodes_future_season_does_not_count_as_a_new_season(
+        self, db, seed_users, seed_show
+    ):
+        """With nothing marked there's no latest season to be past; only the
+        baseline rule applies, and an unaired episode never meets it."""
+        self._setup(db, marked=())
+        self._add_episode(db, 99705, 2, 1, date.today() + timedelta(days=60))
+
+        assert self._candidates(db) == []
+
+    def test_no_marked_episodes_episode_aired_after_watching_is_new(
+        self, db, seed_users, seed_show
+    ):
+        self._setup(db, marked=())
+        self._add_episode(db, 99706, 2, 1, self.WATCHED_DAY + timedelta(days=3))
+
+        assert [c.season_number for c in self._candidates(db)] == [2]
+
+    def test_null_watched_at_keeps_the_old_rule(self, db, seed_users, seed_show):
+        from app.models.watched import Watched
+
+        self._setup(db)
+        db.commit()
+        db.query(Watched).update({Watched.watched_at: None})
+        self._add_episode(db, 99707, 1, 3, date(2010, 1, 1))
+
+        assert [(c.season_number, c.air_date) for c in self._candidates(db)] == [
+            (1, date(2010, 1, 1))
+        ]
 
 
 class TestSyncHandlesReissuedEpisodeIds:

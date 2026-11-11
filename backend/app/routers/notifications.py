@@ -12,7 +12,7 @@ from app.models.user import User
 from app.models.notification import Notification as NotificationModel
 from app.services import push_service
 from app.services.email_service import send_notification_email
-from app.services.digest_service import _build_items_for_window, _frequency_window
+from app.services.digest_service import _build_items_for_window, _frequency_window, local_today
 from app.config import settings
 from app.core.limiter import limiter
 
@@ -369,7 +369,7 @@ def send_digest(
 
     freq = user.notification_frequency or "daily"
     window = _frequency_window(freq)
-    upcoming = _build_items_for_window(db, uid, window)
+    upcoming = _build_items_for_window(db, uid, window, local_today(user))
 
     background_tasks.add_task(
         send_notification_email,

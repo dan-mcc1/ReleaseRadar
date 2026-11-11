@@ -13,7 +13,7 @@ from app.models.watched import Watched
 from app.models.watchlist import Watchlist
 from app.services.tmdb_movies import fetch_movie_from_tmdb
 from app.services.tmdb_tv import fetch_show_from_tmdb
-from app.services.provider_utils import canonical_provider_id, canonical_provider_name
+from app.services.provider_utils import collapse_us_providers
 from app.services.season_sync import drop_superseded_seasons
 from app.services.tvmaze_service import fetch_show_air_time
 from app.db.session import SessionLocal
@@ -73,30 +73,7 @@ def _upsert_providers(db: Session, us_providers: dict, link_model, **link_kwargs
     Provider variants are collapsed to their canonical ID before storing so the
     DB stays clean and the optimizer/watchlist filter always see canonical IDs.
     """
-    provider_map: dict[int, dict] = {}
-    for ptype in ("flatrate", "rent", "buy"):
-        for p in us_providers.get(ptype, []):
-            raw_pid = p["provider_id"]
-            cpid = canonical_provider_id(raw_pid)
-            # Variants ship branded "X on Prime Video"-style logos under their
-            # own provider_id. Prefer the canonical TMDb entry's logo/name when
-            # both are present so the stored Provider row reflects the real service.
-            is_canonical_entry = raw_pid == cpid
-            existing = provider_map.get(cpid)
-            if existing is None:
-                provider_map[cpid] = {
-                    "name": canonical_provider_name(raw_pid, p["provider_name"]),
-                    "logo_path": p.get("logo_path"),
-                    "trusted": is_canonical_entry,
-                    "flatrate": False,
-                    "rent": False,
-                    "buy": False,
-                }
-            elif is_canonical_entry and not existing["trusted"]:
-                existing["name"] = canonical_provider_name(raw_pid, p["provider_name"])
-                existing["logo_path"] = p.get("logo_path")
-                existing["trusted"] = True
-            provider_map[cpid][ptype] = True
+    provider_map = collapse_us_providers(us_providers)
 
     if not provider_map:
         return

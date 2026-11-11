@@ -193,6 +193,41 @@ def canonical_provider_name(provider_id: int, fallback_name: str) -> str:
     return CANONICAL_PROVIDER_NAMES.get(cpid, fallback_name)
 
 
+def collapse_us_providers(us_providers: dict) -> dict[int, dict]:
+    """
+    Collapse TMDb's US provider dict ({"flatrate": [...], "rent": [...],
+    "buy": [...]}) to one entry per canonical provider id: its display name, a
+    logo, a "trusted" flag (TMDb returned the canonical entry itself) and the
+    flatrate/rent/buy flags OR-ed across the variants.
+
+    Variants ship branded "X on Prime Video"-style logos under their own
+    provider_id, so the canonical TMDb entry's name and logo win over a
+    variant's when both are present.
+    """
+    collapsed: dict[int, dict] = {}
+    for ptype in ("flatrate", "rent", "buy"):
+        for p in us_providers.get(ptype, []):
+            raw_pid = p["provider_id"]
+            cpid = canonical_provider_id(raw_pid)
+            is_canonical_entry = raw_pid == cpid
+            existing = collapsed.get(cpid)
+            if existing is None:
+                collapsed[cpid] = {
+                    "name": canonical_provider_name(raw_pid, p["provider_name"]),
+                    "logo_path": p.get("logo_path"),
+                    "trusted": is_canonical_entry,
+                    "flatrate": False,
+                    "rent": False,
+                    "buy": False,
+                }
+            elif is_canonical_entry and not existing["trusted"]:
+                existing["name"] = canonical_provider_name(raw_pid, p["provider_name"])
+                existing["logo_path"] = p.get("logo_path")
+                existing["trusted"] = True
+            collapsed[cpid][ptype] = True
+    return collapsed
+
+
 def is_canonical(provider_id: int) -> bool:
     """Return True if this provider_id is the canonical form (not a variant)."""
     return provider_id not in CANONICAL_PROVIDER_MAP

@@ -144,6 +144,40 @@ class TestCreateCheckoutSession:
         assert r.status_code == 200
         assert r.json()["url"] == "https://checkout.stripe.com/test"
 
+    def _checkout(self, client):
+        mock_customer = MagicMock()
+        mock_customer.id = "cus_new"
+        mock_session = MagicMock()
+        mock_session.url = "https://checkout.stripe.com/test"
+        prices = {"monthly": "price_test", "yearly": "price_yearly"}
+        with patch("app.routers.billing._INTERVAL_TO_PRICE", prices):
+            with patch("stripe.Customer.create", return_value=mock_customer):
+                with patch("stripe.checkout.Session.create", return_value=mock_session) as create:
+                    r = client.post("/billing/create-checkout-session", json={"interval": "monthly"})
+        return r, create
+
+    def test_first_checkout_gets_seven_day_trial(self, client, db):
+        _seed_user(db)
+        r, create = self._checkout(client)
+        assert r.status_code == 200
+        assert create.call_args.kwargs["subscription_data"] == {"trial_period_days": 7}
+
+    def test_returning_customer_gets_no_trial(self, client, db):
+        _seed_user(db)
+        _seed_subscription(db, status="canceled", subscription_id="sub_old")
+        r, create = self._checkout(client)
+        assert r.status_code == 200
+        assert "subscription_data" not in create.call_args.kwargs
+
+    @pytest.mark.parametrize("status", ["active", "trialing"])
+    def test_existing_subscription_returns_409(self, client, db, status):
+        _seed_user(db, tier="premium")
+        _seed_subscription(db, status=status)
+        r, create = self._checkout(client)
+        assert r.status_code == 409
+        assert r.json()["detail"] == "You already have an active subscription."
+        create.assert_not_called()
+
 
 # ── POST /billing/create-portal-session ──────────────────────────────────────
 
@@ -355,6 +389,11 @@ class TestWebhookHandlers:
 
 
 class TestStripeWebhook:
+    @pytest.fixture(autouse=True)
+    def _webhook_secret(self):
+        with patch("app.routers.billing.settings.STRIPE_WEBHOOK_SECRET", "whsec_test"):
+            yield
+
     def _post_webhook(self, client, event_type, event_data):
         event = {
             "id": "evt_test_001",
@@ -407,6 +446,39 @@ class TestStripeWebhook:
         assert r.status_code == 200
         db.expire_all()
         assert db.query(User).filter_by(id="test-uid-1").one().subscription_tier == "premium"
+
+    def test_empty_webhook_secret_returns_503_and_processes_nothing(self, client, db):
+        from app.models.processed_stripe_event import ProcessedStripeEvent
+
+        _seed_user(db)
+        event = {
+            "id": "evt_forged",
+            "type": "customer.subscription.updated",
+            "data": {"object": {"id": "sub_x", "status": "active"}},
+        }
+        with patch("app.routers.billing.settings.STRIPE_WEBHOOK_SECRET", ""):
+            with patch("stripe.Webhook.construct_event", return_value=event) as construct:
+                r = client.post(
+                    "/billing/webhook",
+                    content=json.dumps(event).encode(),
+                    headers={"stripe-signature": "t=1,v1=forged"},
+                )
+        assert r.status_code == 503
+        assert r.json()["detail"] == "Billing not configured"
+        construct.assert_not_called()
+        assert db.query(ProcessedStripeEvent).count() == 0
+
+    def test_missing_signature_header_returns_400(self, client):
+        r = client.post("/billing/webhook", content=b"{}")
+        assert r.status_code == 400
+
+    def test_garbage_body_returns_400(self, client):
+        r = client.post(
+            "/billing/webhook",
+            content=b"not json",
+            headers={"stripe-signature": "t=1,v1=x"},
+        )
+        assert r.status_code == 400
 
     def test_invalid_signature_returns_400(self, client, db):
         import stripe

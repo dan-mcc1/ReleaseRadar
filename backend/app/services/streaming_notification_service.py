@@ -7,6 +7,7 @@ from datetime import date
 from durable_queue.sqlalchemy import enqueue_many
 from sqlalchemy.orm import Session
 
+from app.config.features import tier_has_premium
 from app.models.currently_watching import CurrentlyWatching
 from app.models.movie import Movie
 from app.models.provider import MovieProvider, Provider, ShowProvider
@@ -14,6 +15,11 @@ from app.models.show import Show
 from app.models.user import User
 from app.models.watchlist import Watchlist
 from app.services.email_service import send_streaming_alert_email
+from app.services.provider_utils import (
+    CANONICAL_PROVIDER_NAMES,
+    canonical_provider_id,
+    collapse_us_providers,
+)
 from app.services.push_service import push_notification, tmdb_poster_url
 from app.services.tmdb_client import is_not_found
 from app.services.tmdb_movies import fetch_movie_from_tmdb
@@ -39,41 +45,43 @@ def _diff_and_update_providers(
     """
     Diffs fresh TMDb flatrate providers against stored ones, updates the DB,
     and returns (added_names, removed_names) for flatrate-only changes.
+
+    Works on canonical provider ids, the same ones ingest stores, so TMDb's
+    variants (Netflix Standard with Ads, "Paramount+ Amazon Channel") never
+    read as a service arriving or leaving. Stored rows may still be raw
+    variants from earlier runs; they are compared by their canonical id and
+    deleted in favour of one canonical row per service.
     """
     link_model = ShowProvider if content_type == "tv" else MovieProvider
     id_kwarg = {"show_id": content_id} if content_type == "tv" else {"movie_id": content_id}
 
-    fresh_map: dict[int, dict] = {}
-    for ptype in ("flatrate", "rent", "buy"):
-        for p in fresh_us.get(ptype, []):
-            pid = p["provider_id"]
-            if pid not in fresh_map:
-                fresh_map[pid] = {
-                    "name": p["provider_name"],
-                    "logo_path": p.get("logo_path"),
-                    "flatrate": False,
-                    "rent": False,
-                    "buy": False,
-                }
-            fresh_map[pid][ptype] = True
+    fresh_map = collapse_us_providers(fresh_us)
 
     stored_rows = {
         row.provider_id: row
         for row in db.query(link_model).filter_by(**id_kwarg).all()
     }
 
-    old_flatrate = {pid for pid, row in stored_rows.items() if row.flatrate}
+    old_flatrate = {
+        canonical_provider_id(pid) for pid, row in stored_rows.items() if row.flatrate
+    }
     new_flatrate = {pid for pid, data in fresh_map.items() if data["flatrate"]}
     added_ids = new_flatrate - old_flatrate
     removed_ids = old_flatrate - new_flatrate
 
-    # Build a name lookup — fresh data takes priority, fall back to DB for removed providers
+    # Build a name lookup: fresh data first, then the canonical overrides, then
+    # the Provider row for providers that left.
     provider_names: dict[int, str] = {pid: d["name"] for pid, d in fresh_map.items()}
-    if removed_ids:
-        for p in db.query(Provider).filter(Provider.id.in_(list(removed_ids))).all():
+    for pid in removed_ids:
+        if pid in CANONICAL_PROVIDER_NAMES:
+            provider_names.setdefault(pid, CANONICAL_PROVIDER_NAMES[pid])
+    missing_names = [pid for pid in removed_ids if pid not in provider_names]
+    if missing_names:
+        for p in db.query(Provider).filter(Provider.id.in_(missing_names)).all():
             provider_names.setdefault(p.id, p.name)
 
-    # Upsert Provider master rows
+    # Insert Provider master rows for canonical ids we haven't seen; an
+    # existing row keeps its name and logo.
     if fresh_map:
         existing_ids = {
             p.id
@@ -109,7 +117,7 @@ def _diff_and_update_providers(
             row.rent = data["rent"]
             row.buy = data["buy"]
 
-    # Delete stale junction rows
+    # Delete stale junction rows, including legacy variant rows
     for pid in set(stored_rows.keys()) - set(fresh_map.keys()):
         db.delete(stored_rows[pid])
 
@@ -265,10 +273,11 @@ def _alerts_by_user(db: Session, changes: dict[tuple[int, str], dict]) -> dict[s
 
     opted_in = {
         uid
-        for (uid,) in db.query(User.id).filter(
+        for uid, tier in db.query(User.id, User.subscription_tier).filter(
             User.id.in_(list(user_alerts.keys())),
             User.notify_streaming_changes == True,  # noqa: E712
         )
+        if tier_has_premium(tier)
     }
     return {uid: alerts for uid, alerts in user_alerts.items() if uid in opted_in}
 
@@ -280,7 +289,11 @@ def send_user_streaming_alerts(db: Session, user_id: str, alerts: list[dict], ke
     fails, so the job retries without emailing twice. Pushes go out after it.
     """
     user = db.get(User, user_id)
-    if user is None or not user.notify_streaming_changes:
+    if (
+        user is None
+        or not user.notify_streaming_changes
+        or not tier_has_premium(user.subscription_tier)
+    ):
         return
 
     if user.email_notifications and user.email:

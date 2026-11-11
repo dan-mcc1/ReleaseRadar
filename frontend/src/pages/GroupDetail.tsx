@@ -38,7 +38,7 @@ import {
 import { useSearch } from "../hooks/api/useSearch";
 import { useBulkWatchStatus } from "../hooks/api/useWatchStatus";
 import type { Movie, Show } from "../types/calendar";
-import { useFriendSearch } from "../hooks/api/useFriends";
+import { useFriends } from "../hooks/api/useFriends";
 import ReportModal from "../components/ReportModal";
 import MiniWatchButton from "../components/MiniWatchButton";
 import MiniWatchedButton from "../components/MiniWatchedButton";
@@ -48,7 +48,6 @@ interface UserSearchResult {
   id: string;
   username: string;
   display_name: string | null;
-  profile_visibility: "public" | "friends_only" | "private";
 }
 
 type Tab = "discussion" | "titles" | "members" | "settings";
@@ -1325,8 +1324,19 @@ function MembersTab({
     return () => clearTimeout(t);
   }, [inviteQuery]);
 
-  const { data: searchResultsRaw = [] } = useFriendSearch(debouncedInviteQuery);
-  const searchResults = searchResultsRaw as UserSearchResult[];
+  // Only friends can be invited, so the picker searches the friends list.
+  const { data: friendsRaw } = useFriends();
+  const searchResults = useMemo(() => {
+    const q = debouncedInviteQuery.toLowerCase();
+    if (!q) return [];
+    return ((friendsRaw ?? []) as { friend: UserSearchResult }[])
+      .map((f) => f.friend)
+      .filter(
+        (f) =>
+          f.username?.toLowerCase().includes(q) ||
+          f.display_name?.toLowerCase().includes(q),
+      );
+  }, [friendsRaw, debouncedInviteQuery]);
 
   // Pre-compute membership + pending sets to grey out already-handled users.
   const memberIds = useMemo(
@@ -1355,7 +1365,7 @@ function MembersTab({
       {isAdmin && group.visibility === "private" && (
         <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4">
           <p className="text-[12px] font-medium text-neutral-300 mb-2">
-            Invite people to this group
+            Invite friends to this group
           </p>
           <input
             value={inviteQuery}
@@ -1363,12 +1373,14 @@ function MembersTab({
               setInviteQuery(e.target.value);
               setInviteError(null);
             }}
-            placeholder="Search by username or display name…"
+            placeholder="Search your friends…"
             // text-base on mobile (>=16px) prevents iOS Safari from auto-zooming on focus
             className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2.5 text-base sm:text-sm text-white placeholder-neutral-600 outline-none focus:border-neutral-600"
           />
           {debouncedInviteQuery && searchResults.length === 0 && (
-            <p className="text-neutral-500 text-xs mt-3">No matching users.</p>
+            <p className="text-neutral-500 text-xs mt-3">
+              No friends match. You can only invite friends.
+            </p>
           )}
           {searchResults.length > 0 && (
             <div className="mt-3 flex flex-col gap-1.5">

@@ -3,21 +3,25 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.core.limiter import limiter
+from app.core.limiter import limiter, track_budget
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
+from app.models.episode import Episode
+from app.models.season import Season
 from app.models.season_rating import SeasonRating
+from app.models.show import Show
+from app.schemas.common import ContentId, MAX_SEASON_EPISODE_NUMBER
 
 
 class SeasonRatingUpsert(BaseModel):
-    show_id: int = Field(..., ge=1)
-    season_number: int = Field(..., ge=1)
+    show_id: ContentId
+    season_number: int = Field(..., ge=1, le=MAX_SEASON_EPISODE_NUMBER)
     rating: float = Field(..., ge=0.5, le=5.0)
 
 
 class SeasonRatingDelete(BaseModel):
-    show_id: int = Field(..., ge=1)
-    season_number: int = Field(..., ge=1)
+    show_id: ContentId
+    season_number: int = Field(..., ge=1, le=MAX_SEASON_EPISODE_NUMBER)
 
 
 router = APIRouter()
@@ -74,13 +78,27 @@ def get_aggregate(
     }
 
 
-@router.put("")
+@router.put("", dependencies=[Depends(track_budget)])
 def upsert_rating(
     body: SeasonRatingUpsert,
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
     """Create or update the current user's rating for a season."""
+    if db.get(Show, body.show_id) is None:
+        raise HTTPException(status_code=404, detail="Show not found.")
+    # Some shows are cached with episodes but no season rows (or the reverse),
+    # so either one is enough to say the season is real.
+    season_known = (
+        db.query(Season.id)
+        .filter_by(show_id=body.show_id, season_number=body.season_number)
+        .first()
+        or db.query(Episode.id)
+        .filter_by(show_id=body.show_id, season_number=body.season_number)
+        .first()
+    )
+    if not season_known:
+        raise HTTPException(status_code=404, detail="Season not found.")
     existing = (
         db.query(SeasonRating)
         .filter_by(

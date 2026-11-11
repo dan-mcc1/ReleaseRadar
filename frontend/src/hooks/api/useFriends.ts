@@ -155,6 +155,6 @@ export function useFriendSearch(query: string) {
     queryKey: ["friends", "search", query],
     queryFn: ({ signal }) =>
       queryFetch(`/friends/search?q=${encodeURIComponent(query)}`, { signal }),
-    enabled: !!user && query.trim().length >= 1,
+    enabled: !!user && query.trim().length >= 2,
   });
 }

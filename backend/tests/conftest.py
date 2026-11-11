@@ -136,6 +136,14 @@ def queued_alert_jobs(monkeypatch):
 
 
 @pytest.fixture
+def paywall_on(monkeypatch):
+    """Turn the open beta off, so premium checks look at the stored tier."""
+    import app.config.features as features
+
+    monkeypatch.setattr(features, "OPEN_BETA", False)
+
+
+@pytest.fixture
 def db():
     session = TestingSessionLocal()
     try:

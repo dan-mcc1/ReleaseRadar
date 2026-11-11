@@ -3,17 +3,19 @@ from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 from app.db.session import get_db
+from app.core.limiter import track_budget
 from app.dependencies.auth import get_current_user
 from app.dependencies.subscription import feature_gate
 from app.models.rewatch import Rewatch
+from app.schemas.common import MAX_ID
 
 router = APIRouter()
 
 
-@router.post("/add")
+@router.post("/add", dependencies=[Depends(track_budget)])
 def add_rewatch(
     content_type: str = Body(...),
-    content_id: int = Body(...),
+    content_id: int = Body(..., ge=1, le=MAX_ID),
     rating: float | None = Body(None),
     notes: str | None = Body(None),
     would_rewatch: bool | None = Body(None),

@@ -7,6 +7,7 @@ from datetime import date
 from durable_queue.sqlalchemy import enqueue_many
 from sqlalchemy.orm import Session
 
+from app.config.features import tier_has_premium
 from app.models.currently_watching import CurrentlyWatching
 from app.models.movie import Movie
 from app.models.movie_video import MovieVideo
@@ -205,7 +206,7 @@ def refresh_trailers(db: Session) -> None:
 
 
 def _opted_in(user: User) -> bool:
-    return bool(user.notify_trailers) and user.subscription_tier in ("premium", "admin")
+    return bool(user.notify_trailers) and tier_has_premium(user.subscription_tier)
 
 
 def _alerts_by_user(db: Session, changes: dict[tuple[int, str], list[dict]]) -> dict[str, list[dict]]:

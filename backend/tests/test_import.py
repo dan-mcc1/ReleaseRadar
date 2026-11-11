@@ -289,6 +289,119 @@ class TestImportEndpoint:
         r = _csv_upload(client, csv_text, "watched.csv")
         assert r.json()["summary"]["imported"] == 1
 
+    def test_imported_tv_show_gets_its_aired_episodes_marked_and_stays_watched(
+        self, client, db, seed_users, seed_show, mock_tmdb_and_upsert
+    ):
+        from datetime import date, timedelta
+        from app.models.episode import Episode
+        from app.models.episode_watched import EpisodeWatched
+        from app.models.show import Show
+        from app.models.watched import Watched
+        from app.services.episode_service import check_and_reactivate_watched_shows
+
+        db.query(Show).filter_by(id=1396).one().in_production = True
+        db.add(Episode(id=99801, show_id=1396, season_number=1, episode_number=3,
+                       air_date=date.today() + timedelta(days=30)))
+        db.commit()
+        mock_tmdb_and_upsert["search"]["Breaking Bad"] = (1396, "tv")
+
+        with patch("app.services.episode_service.get", return_value={"episodes": []}):
+            r = _csv_upload(client, "Name,Year\nBreaking Bad,2008\n", "watched.csv")
+        assert r.json()["summary"]["imported"] == 1
+
+        db.expire_all()
+        marked = {
+            (e.season_number, e.episode_number)
+            for e in db.query(EpisodeWatched).filter_by(user_id="test-uid-1", show_id=1396)
+        }
+        assert marked == {(1, 1), (1, 2)}  # the two aired; the unaired S1E3 is left
+
+        # Without those rows every episode looked new and the show bounced back.
+        with patch("app.services.episode_service.send_new_season_available_email") as mock_email:
+            check_and_reactivate_watched_shows(db)
+        db.expire_all()
+        assert db.query(Watched).filter_by(user_id="test-uid-1", content_id=1396).first() is not None
+        mock_email.assert_not_called()
+
+    def test_old_watched_date_does_not_leave_a_recent_episode_unmarked(
+        self, client, db, seed_users, seed_show, mock_tmdb_and_upsert
+    ):
+        """The file's date says 2010, but the show is caught up as of the import,
+        so an episode that aired since then is marked and isn't "new" tonight."""
+        from datetime import date, timedelta
+        from app.models.episode import Episode
+        from app.models.episode_watched import EpisodeWatched
+        from app.models.show import Show
+        from app.models.watched import Watched
+        from app.services.episode_service import check_and_reactivate_watched_shows
+
+        db.query(Show).filter_by(id=1396).one().in_production = True
+        db.add(Episode(id=99802, show_id=1396, season_number=1, episode_number=3,
+                       air_date=date.today() - timedelta(days=1)))
+        db.commit()
+        mock_tmdb_and_upsert["search"]["Breaking Bad"] = (1396, "tv")
+
+        with patch("app.services.episode_service.get", return_value={"episodes": []}):
+            r = _csv_upload(
+                client, "Name,Year,Watched Date\nBreaking Bad,2008,2010-01-15\n", "watched.csv"
+            )
+        assert r.json()["summary"]["imported"] == 1
+
+        db.expire_all()
+        assert db.query(EpisodeWatched).filter_by(
+            user_id="test-uid-1", show_id=1396, season_number=1, episode_number=3
+        ).first() is not None
+        with patch("app.services.episode_service.send_new_season_available_email") as mock_email:
+            check_and_reactivate_watched_shows(db)
+        db.expire_all()
+        assert db.query(Watched).filter_by(user_id="test-uid-1", content_id=1396).first() is not None
+        mock_email.assert_not_called()
+
+    def test_stale_cached_show_is_fully_synced_before_marking(
+        self, client, db, seed_users, seed_show, mock_tmdb_and_upsert
+    ):
+        """A cached, in-production show nobody tracks isn't refreshed nightly,
+        so its stored episodes can be behind TMDb; the import fetches the rest."""
+        from datetime import date, timedelta
+        from app.models.episode import Episode
+        from app.models.episode_watched import EpisodeWatched
+        from app.models.show import Show
+
+        db.query(Show).filter_by(id=1396).one().in_production = True
+        db.commit()
+        mock_tmdb_and_upsert["search"]["Breaking Bad"] = (1396, "tv")
+        yesterday = date.today() - timedelta(days=1)
+        season = {"episodes": [
+            {"id": 62085, "episode_number": 1, "name": "Pilot", "air_date": date(2008, 1, 20)},
+            {"id": 62086, "episode_number": 2, "name": "Cat's in the Bag", "air_date": date(2008, 1, 27)},
+            {"id": 99803, "episode_number": 3, "name": "New", "air_date": yesterday},
+        ]}
+
+        with patch("app.services.episode_service.get", return_value=season):
+            r = _csv_upload(client, "Name,Year\nBreaking Bad,2008\n", "watched.csv")
+        assert r.json()["summary"]["imported"] == 1
+
+        db.expire_all()
+        assert db.get(Episode, 99803) is not None
+        assert db.query(EpisodeWatched).filter_by(
+            user_id="test-uid-1", show_id=1396, season_number=1, episode_number=3
+        ).first() is not None
+
+    def test_ended_show_with_episodes_makes_no_season_fetch(
+        self, client, db, seed_users, seed_show, mock_tmdb_and_upsert
+    ):
+        mock_tmdb_and_upsert["search"]["Breaking Bad"] = (1396, "tv")  # seed_show has ended
+
+        with (
+            patch("app.services.episode_service.get") as tmdb,
+            patch.object(ir, "sync_show_episodes") as full_sync,
+        ):
+            r = _csv_upload(client, "Name,Year\nBreaking Bad,2008\n", "watched.csv")
+        assert r.json()["summary"]["imported"] == 1
+
+        tmdb.assert_not_called()
+        full_sync.assert_not_called()
+
     def test_imports_to_watchlist(self, client, seed_users, mock_tmdb_and_upsert):
         mock_tmdb_and_upsert["search"]["Dune"] = (438631, "movie")
 
@@ -768,6 +881,44 @@ class TestExtFormatEndpoint:
         assert db.query(WL).filter_by(
             user_id="test-uid-1", content_type="movie", content_id=438631
         ).first() is not None
+
+    def test_movies_file_tv_row_marks_aired_episodes_and_stays_watched(
+        self, client, seed_users, seed_show, mock_ext_tvtime, db
+    ):
+        from datetime import date, timedelta
+        from app.models.episode import Episode
+        from app.models.episode_watched import EpisodeWatched
+        from app.models.show import Show
+        from app.models.watched import Watched
+        from app.services.episode_service import check_and_reactivate_watched_shows
+
+        db.query(Show).filter_by(id=1396).one().in_production = True
+        db.add(Episode(id=99811, show_id=1396, season_number=1, episode_number=3,
+                       air_date=date.today() + timedelta(days=30)))
+        db.commit()
+        mock_ext_tvtime["ext"][("tt0903747", "imdb_id")] = (1396, "tv")
+
+        content = (
+            '[{"id":{"tvdb":1,"imdb":"tt0903747"},"title":"Breaking Bad","year":2008,'
+            '"is_watched":true,"watched_at":"2010-01-15T00:00:00Z"}]'
+        )
+        with patch("app.services.episode_service.get", return_value={"episodes": []}):
+            r = _ext_upload_single(client, content, "tvtime-movies.json")
+        assert r.status_code == 200, r.json()
+        assert r.json()["summary"]["movies_imported"] == 1
+
+        db.expire_all()
+        marked = {
+            (e.season_number, e.episode_number)
+            for e in db.query(EpisodeWatched).filter_by(user_id="test-uid-1", show_id=1396)
+        }
+        assert marked == {(1, 1), (1, 2)}  # the two aired; the unaired S1E3 is left
+
+        with patch("app.services.episode_service.send_new_season_available_email") as mock_email:
+            check_and_reactivate_watched_shows(db)
+        db.expire_all()
+        assert db.query(Watched).filter_by(user_id="test-uid-1", content_id=1396).first() is not None
+        mock_email.assert_not_called()
 
     def test_movies_json_falls_back_to_name_when_no_ids_resolve(
         self, client, seed_users, mock_ext_tvtime, db

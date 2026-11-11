@@ -344,12 +344,19 @@ class TestDispatchShowRefreshes:
             Show(id=10, name="A", in_production=True, tracking_count=0),
             Show(id=11, name="B", in_production=True, tracking_count=0),
             Show(id=12, name="Ended", in_production=False, tracking_count=0),
+            Show(id=13, name="Ended, due today", in_production=False, tracking_count=0),
+            Show(id=14, name="Unknown", tracking_count=0),
         ])
         db.add_all([
             Watchlist(user_id="test-uid-1", content_type="tv", content_id=10),
             Watched(user_id="test-uid-2", content_type="tv", content_id=11),
             Watched(user_id="test-uid-1", content_type="tv", content_id=12),
+            Watched(user_id="test-uid-1", content_type="tv", content_id=13),
+            Watched(user_id="test-uid-1", content_type="tv", content_id=14),
         ])
+        db.commit()
+        # The column's insert default turns an explicit None into False.
+        db.query(Show).filter_by(id=14).update({Show.in_production: None})
         db.commit()
 
         calls = []
@@ -359,8 +366,8 @@ class TestDispatchShowRefreshes:
 
         assert calls == [(
             "refresh_show",
-            [{"show_id": 10}, {"show_id": 11}],
-            ["refresh-show:10:2026-10-11", "refresh-show:11:2026-10-11"],
+            [{"show_id": 10}, {"show_id": 11}, {"show_id": 13}, {"show_id": 14}],
+            [f"refresh-show:{i}:2026-10-11" for i in (10, 11, 13, 14)],
         )]
         db.expire_all()
         assert db.get(Genre, 1) is not None  # committed
@@ -379,7 +386,8 @@ class TestDispatchShowRefreshes:
 
 def _seed_watched_show(db, show_id, *, episode_name, air_date):
     """A show in production with one season-1 episode, on test-uid-1's
-    Watched list with nothing marked watched."""
+    Watched list with nothing marked watched. It entered Watched before any
+    episode aired, so an aired episode counts as new."""
     from app.models.episode import Episode
     from app.models.season import Season
     from app.models.show import Show
@@ -391,7 +399,8 @@ def _seed_watched_show(db, show_id, *, episode_name, air_date):
     db.add(Season(id=show_id * 10, show_id=show_id, season_number=1, episode_count=1))
     db.add(Episode(id=show_id * 100 + 1, show_id=show_id, season_number=1,
                    episode_number=1, name=episode_name, air_date=air_date))
-    db.add(Watched(user_id="test-uid-1", content_type="tv", content_id=show_id))
+    db.add(Watched(user_id="test-uid-1", content_type="tv", content_id=show_id,
+                   watched_at=datetime(2024, 1, 1, tzinfo=timezone.utc)))
 
 
 def _tmdb_for_show_800(path, params=None):
@@ -635,7 +644,7 @@ def _movie_out_today_on_watchlist(db, uid="u1"):
     from app.models.movie import Movie
     from app.models.watchlist import Watchlist
 
-    db.add(Movie(id=1, title="Dune", status="Released", release_date=date.today(),
+    db.add(Movie(id=1, title="Dune", status="Released", release_date=date(2026, 10, 12),
                  tracking_count=0, vote_average=0.0))
     db.add(Watchlist(user_id=uid, content_type="movie", content_id=1, notify=True))
     db.commit()
@@ -669,6 +678,24 @@ class TestDigestJobs:
         assert email.call_args.kwargs["idempotency_key"] == "digest:u1:2026-10-12"
         db.expire_all()
         assert db.get(User, "u1").last_digest_sent_at == date(2026, 10, 12)
+
+    def test_builds_the_digest_for_its_own_date_not_the_servers(self, db):
+        from app.jobs import notifications
+        from app.models.movie import Movie
+        from app.models.watchlist import Watchlist
+
+        # The job runs for Oct 12 (the user's day) with the server on another
+        # date: only Oct 12's movie goes out, not the next day's.
+        _digest_user(db, digest_timezone="America/Los_Angeles")
+        _movie_out_today_on_watchlist(db)
+        db.add(Movie(id=2, title="Tomorrow", status="Released",
+                     release_date=date(2026, 10, 13), tracking_count=0, vote_average=0.0))
+        db.add(Watchlist(user_id="u1", content_type="movie", content_id=2, notify=True))
+        db.commit()
+        with patch.object(notifications, "send_notification_email") as email:
+            notifications.send_digest(user_id="u1", digest_date="2026-10-12")
+
+        assert [i["title"] for i in email.call_args.args[2]] == ["Dune"]
 
     def test_skips_a_user_already_sent_that_day(self, db):
         from app.jobs import notifications
@@ -739,7 +766,27 @@ def _season_on_watchlist(db, uid="u1", *, alert_date=date(2026, 10, 12), days_ou
 
 
 class TestPremiereAlertJobs:
-    def test_dispatch_queues_eligible_users_in_their_window(self, db):
+    def test_open_beta_alerts_a_free_user(self, db):
+        from app.jobs import notifications
+
+        _premium_user(db, "u1", subscription_tier="free")
+        _season_on_watchlist(db)
+        calls = []
+        with (
+            patch.object(notifications, "enqueue_many", _fake_enqueue_many(calls)),
+            patch.object(notifications, "datetime", _NineAmInNewYork),
+        ):
+            notifications.dispatch_premiere_alerts()
+        assert [c[1] for c in calls] == [[{"user_id": "u1", "alert_date": "2024-06-01"}]]
+
+        with (
+            patch.object(notifications, "send_season_premiere_email") as email,
+            patch.object(notifications, "push_notification") as push,
+        ):
+            notifications.send_premiere_alerts(user_id="u1", alert_date="2026-10-12")
+        assert (email.call_count, push.call_count) == (1, 1)
+
+    def test_dispatch_queues_eligible_users_in_their_window(self, db, paywall_on):
         from app.jobs import notifications
 
         _premium_user(db, "u1")                                  # due

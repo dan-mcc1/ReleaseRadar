@@ -157,7 +157,7 @@ export default function FriendSearch({ onRequestSent, friendIds }: Props) {
           )}
         </div>
 
-        {debouncedQuery.trim() && (
+        {debouncedQuery.trim().length >= 2 && (
           <div
             className="mt-2.5 font-mono text-[10.5px] text-neutral-500 flex items-center gap-3"
             style={{ letterSpacing: "0.05em" }}
@@ -167,7 +167,10 @@ export default function FriendSearch({ onRequestSent, friendIds }: Props) {
               <span className="text-neutral-300">"{debouncedQuery}"</span>
             </span>
             <span className="text-neutral-700">·</span>
-            <span>CASE-INSENSITIVE · PARTIAL MATCH</span>
+            <span>
+              CASE-INSENSITIVE ·{" "}
+              {debouncedQuery.trim().length < 3 ? "STARTS WITH" : "PARTIAL MATCH"}
+            </span>
           </div>
         )}
       </div>
@@ -506,7 +509,11 @@ export default function FriendSearch({ onRequestSent, friendIds }: Props) {
 
       {/* Empty state */}
       {debouncedQuery.trim() && typedResults.length === 0 && (
-        <p className="text-neutral-500 text-[14px] mt-2">No users found.</p>
+        <p className="text-neutral-500 text-[14px] mt-2">
+          {debouncedQuery.trim().length < 2
+            ? "Type at least 2 characters."
+            : "No users found."}
+        </p>
       )}
 
       {/* About visibility tip */}

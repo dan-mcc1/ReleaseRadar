@@ -2,7 +2,7 @@ import ipaddress
 import math
 import time
 
-from fastapi import HTTPException
+from fastapi import Depends, HTTPException
 from limits import parse
 from limits.storage import MemoryStorage
 from limits.strategies import FixedWindowRateLimiter
@@ -10,6 +10,7 @@ from slowapi import Limiter
 from starlette.requests import Request
 
 from app.config import settings
+from app.dependencies.auth import get_current_user
 
 _TRUSTED_PROXIES = [
     ipaddress.ip_network(cidr.strip(), strict=False)
@@ -61,24 +62,45 @@ _public_storage = MemoryStorage()
 _public_window = FixedWindowRateLimiter(_public_storage)
 
 
+def _enforce(scope: str, setting: str, key: str) -> None:
+    item = parse(getattr(settings, setting))
+    if _public_window.hit(item, scope, key):
+        return
+    reset_at, _ = _public_window.get_window_stats(item, scope, key)
+    retry_after = max(1, math.ceil(reset_at - time.time()))
+    raise HTTPException(
+        status_code=429,
+        detail="Too many requests. Please slow down.",
+        headers={"Retry-After": str(retry_after)},
+    )
+
+
 def rate_limit(scope: str, setting: str):
     """Router/route dependency enforcing settings.<setting> (e.g. "300/minute")
     per client within `scope`. Follows limiter.enabled, like slowapi."""
 
     def check_rate_limit(request: Request) -> None:
-        if not limiter.enabled:
-            return
-        item = parse(getattr(settings, setting))
-        key = get_rate_limit_key(request)
-        if _public_window.hit(item, scope, key):
-            return
-        reset_at, _ = _public_window.get_window_stats(item, scope, key)
-        retry_after = max(1, math.ceil(reset_at - time.time()))
-        raise HTTPException(
-            status_code=429,
-            detail="Too many requests. Please slow down.",
-            headers={"Retry-After": str(retry_after)},
-        )
+        if limiter.enabled:
+            _enforce(scope, setting, get_rate_limit_key(request))
 
     check_rate_limit.rate_limit_scope = scope
     return check_rate_limit
+
+
+def user_rate_limit(scope: str, setting: str):
+    """Like rate_limit, but counted per signed-in user (never per IP) and
+    shared by every route that depends on it. It depends on the auth
+    dependency, so the user is known before the budget is checked."""
+
+    def check_user_rate_limit(uid: str = Depends(get_current_user)) -> None:
+        if limiter.enabled:
+            _enforce(scope, setting, f"user:{uid}")
+
+    check_user_rate_limit.rate_limit_scope = scope
+    check_user_rate_limit.rate_limit_per_user = True
+    return check_user_rate_limit
+
+
+# One budget for everything that adds a title or marks something watched,
+# since each can make us fetch it from TMDb and insert rows for it.
+track_budget = user_rate_limit("track", "TRACK_RATE_LIMIT")

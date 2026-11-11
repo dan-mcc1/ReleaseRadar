@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+from app.core.limiter import track_budget
 from app.dependencies.auth import get_current_user
 from app.dependencies.subscription import is_premium
 from app.db.session import SessionLocal
@@ -8,6 +9,7 @@ from app.models.shelf import Shelf
 from app.services import shelf_service
 from app.services.episode_service import maybe_sync_show_episodes_background
 from app.schemas.common import (
+    ContentId,
     ContentType,
     SHELF_DESC_MAX_LEN,
     SHELF_NAME_MAX_LEN,
@@ -39,7 +41,7 @@ class ShelfUpdate(BaseModel):
 
 class ShelfItemAdd(BaseModel):
     content_type: ContentType
-    content_id: int = Field(..., ge=1)
+    content_id: ContentId
 
 
 class ShelfNotifyUpdate(BaseModel):
@@ -94,7 +96,9 @@ def delete_shelf(
     shelf_service.delete_shelf(db, user_id, shelf_id)
 
 
-@router.post("/{shelf_id}/items", status_code=201)
+@router.post(
+    "/{shelf_id}/items", status_code=201, dependencies=[Depends(track_budget)]
+)
 def add_item(
     shelf_id: int,
     body: ShelfItemAdd,

@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_, select, func
 from datetime import datetime, timezone
 from fastapi import HTTPException
+from app.config import features
 from app.models.watchlist import Watchlist
 from app.models.currently_watching import CurrentlyWatching
 from app.models.movie import Movie
@@ -32,7 +33,8 @@ _TRACKING_LIMIT = 30
 
 def assert_can_track(db: Session, uid: str) -> None:
     """Raise 403 if a free-tier user has hit the tracking limit."""
-    return  # open beta: no tracking limit enforced
+    if features.OPEN_BETA:
+        return
     user = db.query(User).filter(User.id == uid).first()
     if user and user.subscription_tier != "free":
         return
@@ -83,7 +85,11 @@ def add_to_watchlist(db: Session, user_id: str, content_type: str, content_id: i
     if row.existing_id is not None:
         return {"id": row.existing_id, "content_type": content_type, "content_id": content_id}
 
-    if False and row.subscription_tier == "free" and row.tracked_count >= _TRACKING_LIMIT:  # open beta: no tracking limit
+    if (
+        not features.OPEN_BETA
+        and row.subscription_tier == "free"
+        and row.tracked_count >= _TRACKING_LIMIT
+    ):
         raise HTTPException(
             status_code=403,
             detail={

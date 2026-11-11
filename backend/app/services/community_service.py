@@ -337,11 +337,24 @@ def invite_member(
 
     Returns the invitation object. The router fires email + push on the way
     out so notifications can stamp the invitation_id correctly.
+
+    Friends only: the invite emails and pushes the invitee with the group's
+    name, which the inviter picks freely, so inviting strangers would turn the
+    product's own sending domain into a phishing and spam relay. A missing
+    username, a non-friend and a blocked pair all get the same 404 so the
+    endpoint can't be used to find which usernames exist. The membership and
+    pending-invitation 409s are checked after, so only a friend can see them.
     """
+    from app.services.friends_service import are_friends
+
     c, _ = _require_role(db, community_id, inviter_id, ("owner", "admin"))
+    not_a_friend = HTTPException(
+        status_code=404,
+        detail="No friend with that username. You can only invite friends.",
+    )
     target = db.query(User).filter(User.username == username).first()
     if not target:
-        raise HTTPException(status_code=404, detail="User not found.")
+        raise not_a_friend
     if target.id == inviter_id:
         raise HTTPException(status_code=400, detail="You can't invite yourself.")
     # Either side's block hides the user, as recommendations do, so a blocked
@@ -356,8 +369,8 @@ def invite_member(
         )
         .first()
     )
-    if blocked:
-        raise HTTPException(status_code=404, detail="User not found.")
+    if blocked or not are_friends(db, inviter_id, target.id):
+        raise not_a_friend
     if _viewer_role(db, community_id, target.id):
         raise HTTPException(status_code=409, detail="That user is already a member.")
 

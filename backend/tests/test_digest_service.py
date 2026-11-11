@@ -179,7 +179,7 @@ class TestPremiereEligible:
         ({"email_notifications": False}, False),       # no channel left
         ({"email_notifications": False, "push_notifications_enabled": True}, True),
     ])
-    def test_premium_users_with_a_channel(self, overrides, eligible):
+    def test_premium_users_with_a_channel(self, overrides, eligible, paywall_on):
         from app.services.digest_service import premiere_eligible
 
         assert premiere_eligible(_user(**overrides)) is eligible
@@ -261,3 +261,108 @@ def test_push_text_matches_the_old_sweep():
 
     assert title == "A new season of The Rookie airs in 20 days"
     assert body == "Season 9 releases on January 5, 2027"
+
+
+class TestLocalToday:
+    def test_either_side_of_local_midnight(self):
+        from app.services.digest_service import local_today
+
+        user = _user(digest_timezone="America/Los_Angeles")  # UTC-7 in June
+        assert local_today(user, _utc(2024, 6, 2, 6, 59)) == date(2024, 6, 1)
+        assert local_today(user, _utc(2024, 6, 2, 7, 0)) == date(2024, 6, 2)
+
+    def test_evening_in_the_us_is_still_the_same_local_day(self):
+        from app.services.digest_service import local_today
+
+        # 8pm Eastern on June 1 is 00:00 UTC on June 2.
+        assert local_today(_user(), _utc(2024, 6, 2, 0, 0)) == date(2024, 6, 1)
+
+    def test_unknown_timezone_falls_back_to_new_york(self):
+        from app.services.digest_service import local_today
+
+        user = _user(digest_timezone="Not/AZone")
+        assert local_today(user, _utc(2024, 6, 2, 3, 59)) == date(2024, 6, 1)
+        assert local_today(user, _utc(2024, 6, 2, 4, 0)) == date(2024, 6, 2)
+
+    def test_defaults_to_now(self):
+        from app.services.digest_service import local_today
+
+        got = local_today(_user(digest_timezone="Pacific/Kiritimati"))
+        assert abs((got - datetime.now(timezone.utc).date()).days) <= 1
+
+
+class TestBuildItemsForWindow:
+    TODAY = date(2026, 10, 12)
+
+    def _episode(self, db, ep_id, air_date, show_id=20):
+        from app.models.episode import Episode
+        from app.models.show import Show
+
+        if db.get(Show, show_id) is None:
+            db.add(Show(id=show_id, name=f"Show {show_id}", tracking_count=0))
+            db.flush()
+        db.add(Episode(id=ep_id, show_id=show_id, season_number=1,
+                       episode_number=ep_id, air_date=air_date))
+
+    def _movie(self, db, movie_id, release_date):
+        from app.models.movie import Movie
+        from app.models.watchlist import Watchlist
+
+        db.add(Movie(id=movie_id, title=f"Movie {movie_id}", status="Released",
+                     release_date=release_date, tracking_count=0, vote_average=0.0))
+        db.add(Watchlist(user_id="test-uid-1", content_type="movie",
+                         content_id=movie_id, notify=True))
+
+    def _build(self, db, days, today):
+        from app.services.digest_service import _build_items_for_window
+
+        db.commit()
+        return _build_items_for_window(db, "test-uid-1", days, today)
+
+    def _track_show(self, db, show_id=20):
+        from app.models.watchlist import Watchlist
+
+        db.add(Watchlist(user_id="test-uid-1", content_type="tv",
+                         content_id=show_id, notify=True))
+
+    def test_window_starts_on_the_given_date_and_end_is_exclusive(self, db, seed_users):
+        self._track_show(db)
+        self._episode(db, 1, self.TODAY - timedelta(days=1))
+        self._episode(db, 2, self.TODAY)
+        self._episode(db, 3, self.TODAY + timedelta(days=6))
+        self._episode(db, 4, self.TODAY + timedelta(days=7))
+
+        items = self._build(db, 7, self.TODAY)
+
+        assert sorted(i["date"] for i in items) == ["2026-10-12", "2026-10-18"]
+
+    def test_movies_follow_the_same_window(self, db, seed_users):
+        self._movie(db, 1, self.TODAY - timedelta(days=1))
+        self._movie(db, 2, self.TODAY)
+        self._movie(db, 3, self.TODAY + timedelta(days=1))
+
+        items = self._build(db, 1, self.TODAY)
+
+        assert [i["content_id"] for i in items] == [2]
+
+    def test_server_date_a_day_ahead_does_not_shift_the_window(self, db, seed_users):
+        # A Los Angeles user's digest for Oct 12 runs while the UTC server is
+        # already on Oct 13. The window must still start on their Oct 12.
+        self._track_show(db)
+        self._episode(db, 1, self.TODAY)
+        self._episode(db, 2, self.TODAY + timedelta(days=1))
+
+        items = self._build(db, 1, self.TODAY)
+
+        assert [i["date"] for i in items] == ["2026-10-12"]
+
+    def test_without_a_date_it_starts_on_the_servers_today(self, db, seed_users):
+        from app.services.digest_service import _build_items_for_window
+
+        self._movie(db, 1, date.today())
+        self._movie(db, 2, date.today() - timedelta(days=1))
+        db.commit()
+
+        items = _build_items_for_window(db, "test-uid-1", 1)
+
+        assert [i["content_id"] for i in items] == [1]

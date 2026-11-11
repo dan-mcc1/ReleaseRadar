@@ -7,7 +7,7 @@ from app.services import currently_watching_service, activity_service
 from app.services.currently_watching_service import _get_currently_watching_items
 from app.services.watchlist_service import _get_item_title_and_poster, assert_can_track
 from app.services.episode_service import maybe_sync_show_episodes_background
-from app.core.limiter import limiter
+from app.core.limiter import limiter, track_budget
 
 router = APIRouter()
 
@@ -36,7 +36,7 @@ def get_currently_watching_movie(
     return _get_currently_watching_items(db, uid, "movie")
 
 
-@router.post("/add")
+@router.post("/add", dependencies=[Depends(track_budget)])
 @limiter.limit("10/minute")
 def add_currently_watching(
     request: Request,

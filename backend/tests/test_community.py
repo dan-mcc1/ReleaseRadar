@@ -163,7 +163,7 @@ class TestBrowse:
         assert "Two" not in names  # private hidden from non-members
 
     def test_browse_shows_private_groups_to_members(
-        self, client, client2, three_users
+        self, client, client2, friends
     ):
         cid = _create_group(client, name="Secret", visibility="private").json()["id"]
         # Owner invites bob, bob accepts → bob is now a member
@@ -232,8 +232,156 @@ class TestJoinLeave:
         assert db.query(Community).filter_by(id=cid).first().member_count == 1
 
 
+NOT_FRIEND_DETAIL = "No friend with that username. You can only invite friends."
+
+
+def _befriend(db, a="test-uid-1", b="test-uid-2", status="accepted"):
+    from app.models.friendship import Friendship
+
+    db.add(Friendship(requester_id=a, addressee_id=b, status=status))
+    db.commit()
+
+
+@pytest.fixture
+def friends(db, three_users):
+    """alice is friends with bob and carol (the usual invitees)."""
+    _befriend(db, "test-uid-1", "test-uid-2")
+    _befriend(db, "carol-uid", "test-uid-1")
+
+
+class TestInviteFriendsOnly:
+    @pytest.fixture
+    def sent(self, monkeypatch):
+        """Capture the email and push the invite route would send."""
+        from app.routers import community as router
+
+        calls = {"email": [], "push": []}
+        monkeypatch.setattr(
+            router, "send_community_invite_email",
+            lambda **kw: calls["email"].append(kw),
+        )
+        monkeypatch.setattr(
+            router, "push_notification",
+            lambda *a, **kw: calls["push"].append(kw),
+        )
+        return calls
+
+    def _invite(self, client, cid, username):
+        return client.post(
+            f"/communities/{cid}/members/invite", json={"username": username}
+        )
+
+    def test_friend_invite_sends_email_and_push(
+        self, client, three_users, db, sent
+    ):
+        _befriend(db)
+        three_users[1].email_notifications = True
+        db.commit()
+        cid = _create_group(client, visibility="private").json()["id"]
+        r = self._invite(client, cid, "bob")
+        assert r.status_code == 200
+        assert len(sent["email"]) == 1
+        assert sent["email"][0]["to_email"] == "b@test.com"
+        assert len(sent["push"]) == 1
+
+    def test_friend_in_reverse_direction_can_be_invited(
+        self, client, three_users, db, sent
+    ):
+        _befriend(db, "test-uid-2", "test-uid-1")  # bob requested alice
+        cid = _create_group(client).json()["id"]
+        assert self._invite(client, cid, "bob").status_code == 200
+
+    def test_non_friend_gets_404_and_nothing_is_sent(
+        self, client, three_users, db, sent
+    ):
+        from app.models.community import CommunityInvitation
+
+        cid = _create_group(client, visibility="private").json()["id"]
+        r = self._invite(client, cid, "bob")
+        assert r.status_code == 404
+        assert r.json()["detail"] == NOT_FRIEND_DETAIL
+        assert db.query(CommunityInvitation).count() == 0
+        assert sent == {"email": [], "push": []}
+
+    @pytest.mark.parametrize("requester", ["test-uid-1", "test-uid-2"])
+    def test_pending_friend_request_does_not_count(
+        self, client, three_users, db, sent, requester
+    ):
+        other = "test-uid-2" if requester == "test-uid-1" else "test-uid-1"
+        _befriend(db, requester, other, status="pending")
+        cid = _create_group(client).json()["id"]
+        r = self._invite(client, cid, "bob")
+        assert r.status_code == 404
+        assert r.json()["detail"] == NOT_FRIEND_DETAIL
+        assert sent == {"email": [], "push": []}
+
+    def test_following_does_not_count(self, client, three_users, db, sent):
+        _befriend(db, "test-uid-1", "test-uid-2", status="following")
+        cid = _create_group(client).json()["id"]
+        assert self._invite(client, cid, "bob").status_code == 404
+
+    def test_unknown_username_matches_non_friend_response(
+        self, client, three_users, sent
+    ):
+        cid = _create_group(client).json()["id"]
+        real = self._invite(client, cid, "bob")
+        ghost = self._invite(client, cid, "ghost")
+        assert (real.status_code, real.json()) == (ghost.status_code, ghost.json())
+        assert ghost.status_code == 404
+        assert ghost.json()["detail"] == NOT_FRIEND_DETAIL
+
+    @pytest.mark.parametrize("blocker", ["test-uid-1", "test-uid-2"])
+    def test_blocked_friends_get_the_same_404(
+        self, client, three_users, db, sent, blocker
+    ):
+        from app.models.block import Block
+
+        _befriend(db)
+        blocked = "test-uid-2" if blocker == "test-uid-1" else "test-uid-1"
+        db.add(Block(blocker_id=blocker, blocked_id=blocked))
+        db.commit()
+        cid = _create_group(client).json()["id"]
+        r = self._invite(client, cid, "bob")
+        assert r.status_code == 404
+        assert r.json()["detail"] == NOT_FRIEND_DETAIL
+        assert sent == {"email": [], "push": []}
+
+    def test_friend_already_invited_gets_409(self, client, friends, sent):
+        cid = _create_group(client).json()["id"]
+        assert self._invite(client, cid, "bob").status_code == 200
+        assert self._invite(client, cid, "bob").status_code == 409
+
+    def test_friend_already_member_gets_409(self, client, client2, friends, sent):
+        cid = _create_group(client).json()["id"]
+        client2.post(f"/communities/{cid}/join")
+        assert self._invite(client, cid, "bob").status_code == 409
+
+    def test_non_friend_member_gets_404_not_409(
+        self, client, client2, three_users, sent
+    ):
+        cid = _create_group(client).json()["id"]
+        client2.post(f"/communities/{cid}/join")
+        r = self._invite(client, cid, "bob")
+        assert r.status_code == 404
+        assert r.json()["detail"] == NOT_FRIEND_DETAIL
+
+    def test_non_friend_already_invited_gets_404_not_409(
+        self, client, three_users, db, sent
+    ):
+        from app.models.community import CommunityInvitation
+
+        cid = _create_group(client).json()["id"]
+        db.add(CommunityInvitation(
+            community_id=cid, user_id="test-uid-2", invited_by="test-uid-1"
+        ))
+        db.commit()
+        r = self._invite(client, cid, "bob")
+        assert r.status_code == 404
+        assert r.json()["detail"] == NOT_FRIEND_DETAIL
+
+
 class TestInviteRemove:
-    def test_owner_invites_creates_pending_invitation(self, client, three_users):
+    def test_owner_invites_creates_pending_invitation(self, client, friends):
         cid = _create_group(client, visibility="private").json()["id"]
         r = client.post(f"/communities/{cid}/members/invite",
                         json={"username": "bob"})
@@ -245,7 +393,7 @@ class TestInviteRemove:
         # No "role" key — bob isn't a member yet.
         assert "role" not in body
 
-    def test_invitee_accepts_and_becomes_member(self, client, client2, three_users):
+    def test_invitee_accepts_and_becomes_member(self, client, client2, friends):
         cid = _create_group(client, visibility="private").json()["id"]
         inv = client.post(
             f"/communities/{cid}/members/invite", json={"username": "bob"}
@@ -260,7 +408,7 @@ class TestInviteRemove:
         assert cid in {c["id"] for c in mine}
 
     def test_invitee_declines_and_invitation_disappears(
-        self, client, client2, three_users
+        self, client, client2, friends
     ):
         cid = _create_group(client, visibility="private").json()["id"]
         inv = client.post(
@@ -276,7 +424,7 @@ class TestInviteRemove:
         # Invitation is gone from bob's pending list
         assert client2.get("/communities/invitations/mine").json() == []
 
-    def test_pending_invitations_lists_for_invitee(self, client, client2, three_users):
+    def test_pending_invitations_lists_for_invitee(self, client, client2, friends):
         cid = _create_group(client, name="Secret", visibility="private").json()["id"]
         client.post(f"/communities/{cid}/members/invite", json={"username": "bob"})
         items = client2.get("/communities/invitations/mine").json()
@@ -290,22 +438,7 @@ class TestInviteRemove:
                         json={"username": "ghost"})
         assert r.status_code == 404
 
-    @pytest.mark.parametrize("blocker", ["test-uid-1", "test-uid-2"])
-    def test_invite_blocked_either_direction_404(
-        self, client, three_users, db, blocker
-    ):
-        from app.models.block import Block
-
-        cid = _create_group(client).json()["id"]
-        blocked = "test-uid-2" if blocker == "test-uid-1" else "test-uid-1"
-        db.add(Block(blocker_id=blocker, blocked_id=blocked))
-        db.commit()
-        r = client.post(f"/communities/{cid}/members/invite",
-                        json={"username": "bob"})
-        assert r.status_code == 404
-        assert r.json()["detail"] == "User not found."
-
-    def test_cannot_double_invite(self, client, three_users):
+    def test_cannot_double_invite(self, client, friends):
         cid = _create_group(client).json()["id"]
         client.post(f"/communities/{cid}/members/invite",
                     json={"username": "bob"})
@@ -313,7 +446,7 @@ class TestInviteRemove:
                         json={"username": "bob"})
         assert r.status_code == 409
 
-    def test_cannot_invite_existing_member(self, client, client2, three_users):
+    def test_cannot_invite_existing_member(self, client, client2, friends):
         cid = _create_group(client).json()["id"]
         client2.post(f"/communities/{cid}/join")
         r = client.post(f"/communities/{cid}/members/invite",
@@ -327,7 +460,7 @@ class TestInviteRemove:
                         json={"username": "carol"})
         assert r.status_code == 403
 
-    def test_admin_can_see_pending_invitations_for_group(self, client, three_users):
+    def test_admin_can_see_pending_invitations_for_group(self, client, friends):
         cid = _create_group(client, visibility="private").json()["id"]
         client.post(f"/communities/{cid}/members/invite", json={"username": "bob"})
         r = client.get(f"/communities/{cid}/invitations")
@@ -335,7 +468,7 @@ class TestInviteRemove:
         assert len(r.json()) == 1
         assert r.json()[0]["user"]["username"] == "bob"
 
-    def test_admin_can_revoke_invitation(self, client, client2, three_users):
+    def test_admin_can_revoke_invitation(self, client, client2, friends):
         cid = _create_group(client, visibility="private").json()["id"]
         inv = client.post(
             f"/communities/{cid}/members/invite", json={"username": "bob"}

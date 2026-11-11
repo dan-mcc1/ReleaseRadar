@@ -4,15 +4,17 @@ from fastapi import (
     Body,
     Depends,
     HTTPException,
+    Path,
     Request,
     Query,
 )
 from datetime import date
+from typing import Annotated
 from pydantic import BaseModel, Field
 from sqlalchemy import tuple_, union_all, select, literal, null, Float
 from sqlalchemy.orm import Session
 from app.db.session import get_db
-from app.schemas.common import ContentRef, ContentType, ISO_DATE_PATTERN
+from app.schemas.common import MAX_ID, ContentId, ContentRef, ContentType, ISO_DATE_PATTERN
 from app.services.watchlist_service import (
     add_to_watchlist,
     get_watchlist,
@@ -29,7 +31,7 @@ from app.models.show import Show
 from app.models.movie import Movie
 from app.dependencies.auth import get_current_user
 from app.dependencies.subscription import feature_gate
-from app.core.limiter import limiter
+from app.core.limiter import limiter, track_budget
 from app.services.episode_service import maybe_sync_show_episodes_background
 from app.services.media_upsert import populate_show_bg, populate_movie_bg
 from app.services.streaming_notification_service import ensure_providers_populated_bg
@@ -49,8 +51,8 @@ class WatchlistAdd(ContentRef):
 
 
 class ReorderBody(ContentRef):
-    before_id: int | None = Field(None, ge=1)
-    after_id: int | None = Field(None, ge=1)
+    before_id: ContentId | None = None
+    after_id: ContentId | None = None
 
 
 class BulkStatusItem(ContentRef):
@@ -60,7 +62,7 @@ class BulkStatusItem(ContentRef):
 BULK_STATUS_MAX = 500
 
 
-@router.post("/add")
+@router.post("/add", dependencies=[Depends(track_budget)])
 def add_item(
     background_tasks: BackgroundTasks,
     body: WatchlistAdd,
@@ -322,19 +324,21 @@ class FinishByBody(BaseModel):
 
 @router.post("/progress/{show_id}/finish-by")
 def set_finish_by(
-    show_id: int,
+    show_id: Annotated[int, Path(ge=1, le=MAX_ID)],
     body: FinishByBody,
     db: Session = Depends(get_db),
     uid: str = Depends(feature_gate("finish_by_goal")),
 ):
     """Set (or update) a finish-by goal date for a show."""
+    if db.get(Show, show_id) is None:
+        raise HTTPException(status_code=404, detail="Show not found.")
     set_finish_by_goal(db, uid, show_id, body.target_date)
     return {"show_id": show_id, "target_date": body.target_date.isoformat()}
 
 
 @router.delete("/progress/{show_id}/finish-by")
 def delete_finish_by(
-    show_id: int,
+    show_id: Annotated[int, Path(ge=1, le=MAX_ID)],
     db: Session = Depends(get_db),
     uid: str = Depends(feature_gate("finish_by_goal")),
 ):
