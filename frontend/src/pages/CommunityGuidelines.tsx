@@ -1,4 +1,4 @@
-import { usePageTitle } from "../hooks/usePageTitle";
+import { usePageMeta } from "../hooks/usePageMeta";
 import { PageHeader, SectionHeader } from "../components/ui";
 
 const RULES = [
@@ -78,7 +78,7 @@ const ENFORCEMENT = [
 ];
 
 export default function CommunityGuidelines() {
-  usePageTitle("Community Guidelines");
+  usePageMeta({ title: "Community Guidelines", description: "How to take part in Release Radar reviews, groups and friend features respectfully." });
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-12">

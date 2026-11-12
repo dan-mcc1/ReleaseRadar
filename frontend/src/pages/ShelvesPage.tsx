@@ -22,6 +22,7 @@ import {
   BookmarkIcon,
   Button,
   IconButton,
+  Modal,
   PageHeader,
   PlusIcon,
 } from "../components/ui";
@@ -192,7 +193,7 @@ function ShelfCard({
               className="rounded-md bg-neutral-700 border border-neutral-600 flex items-center justify-center"
               style={{ width: 52, height: 78 }}
             >
-              <BookmarkIcon className="w-5 h-5 text-neutral-600" />
+              <BookmarkIcon className="w-5 h-5 text-neutral-500" />
             </div>
           )}
         </div>
@@ -221,6 +222,7 @@ export default function ShelvesPage() {
   // const atFreeLimit = isPremium === false && shelves.length >= FREE_SHELF_LIMIT;
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
+  const nameInputRef = useRef<HTMLInputElement>(null);
   const [newName, setNewName] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
@@ -364,74 +366,74 @@ export default function ShelvesPage() {
       )}
 
       {/* Create modal */}
-      {showCreate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-neutral-800 border border-neutral-700 rounded-surface p-6 max-w-sm w-full mx-4 shadow-2xl">
-            <h2 className="text-title font-semibold text-neutral-100 mb-4">
-              New shelf
-            </h2>
-            <input
-              autoFocus
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleCreate();
-                if (e.key === "Escape") {
-                  setShowCreate(false);
-                  setNewName("");
-                }
+      <Modal
+        open={showCreate}
+        onClose={() => {
+          setShowCreate(false);
+          setNewName("");
+        }}
+        size="sm"
+        title="New shelf"
+        initialFocus={nameInputRef}
+        footer={
+          <>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setShowCreate(false);
+                setNewName("");
               }}
-              placeholder="Shelf name…"
-              className="w-full bg-neutral-700 border border-neutral-600 rounded-control px-3 py-2.5 text-body text-neutral-100 placeholder-neutral-500 outline-none focus:border-primary-500 mb-4"
-            />
-            <div className="flex gap-3 justify-end">
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  setShowCreate(false);
-                  setNewName("");
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                onClick={handleCreate}
-                disabled={!newName.trim() || createShelf.isPending}
-              >
-                {createShelf.isPending ? "Creating…" : "Create"}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleCreate}
+              disabled={!newName.trim() || createShelf.isPending}
+            >
+              {createShelf.isPending ? "Creating…" : "Create"}
+            </Button>
+          </>
+        }
+      >
+        <input
+          ref={nameInputRef}
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleCreate();
+          }}
+          placeholder="Shelf name…"
+          className="w-full bg-neutral-700 border border-neutral-600 rounded-control px-3 py-2.5 text-body text-neutral-100 placeholder-neutral-500 outline-none focus:border-primary-500"
+        />
+      </Modal>
 
       {/* Delete confirmation modal */}
-      {confirmDeleteId !== null && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-neutral-800 border border-neutral-700 rounded-surface p-6 max-w-sm w-full mx-4 shadow-2xl">
-            <h2 className="text-title font-semibold text-neutral-100 mb-2">
-              Delete shelf?
-            </h2>
-            <p className="text-body text-neutral-400 mb-6">
-              This will permanently delete the shelf and remove all its items.
-              This cannot be undone.
-            </p>
-            <div className="flex gap-3 justify-end">
-              <Button variant="ghost" onClick={() => setConfirmDeleteId(null)}>
-                Cancel
-              </Button>
-              <Button
-                variant="danger"
-                onClick={() => handleDelete(confirmDeleteId)}
-                disabled={deleteShelf.isPending}
-              >
-                {deleteShelf.isPending ? "Deleting…" : "Delete"}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      <Modal
+        open={confirmDeleteId !== null}
+        onClose={() => setConfirmDeleteId(null)}
+        size="sm"
+        title="Delete shelf?"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setConfirmDeleteId(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => confirmDeleteId !== null && handleDelete(confirmDeleteId)}
+              disabled={deleteShelf.isPending}
+            >
+              {deleteShelf.isPending ? "Deleting…" : "Delete"}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-body text-neutral-400">
+          This will permanently delete the shelf and remove all its items.
+          This cannot be undone.
+        </p>
+      </Modal>
 
       {showUpgradeModal && (
         <ProUpgradeModal

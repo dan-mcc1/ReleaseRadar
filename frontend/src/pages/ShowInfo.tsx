@@ -8,7 +8,7 @@ import CastBar from "../components/CastBar";
 import WatchButton from "../components/WatchButton";
 import ReviewsSection from "../components/ReviewsSection";
 import { useAuthLoading, useAuthUser } from "../hooks/useAuthUser";
-import { usePageTitle } from "../hooks/usePageTitle";
+import { usePageMeta } from "../hooks/usePageMeta";
 import { useMediaInfo } from "../hooks/useMediaInfo";
 import RatingsRow from "../components/media/RatingsRow";
 import ExternalLinksSection from "../components/media/ExternalLinksSection";
@@ -82,7 +82,7 @@ export default function ShowInfo() {
   const authLoading = useAuthLoading();
   // Only once auth has answered, so signed-in visitors never see it flash.
   const signedOut = !user && !authLoading;
-  usePageTitle(show?.name);
+  usePageMeta({ title: show?.name, description: show?.overview });
 
   if (loading)
     return (

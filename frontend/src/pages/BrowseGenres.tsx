@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
-import { usePageTitle } from "../hooks/usePageTitle";
+import { usePageMeta } from "../hooks/usePageMeta";
 import { useBrowsePage, useGenres } from "../hooks/api/useSearch";
 import { useBulkWatchStatus } from "../hooks/api/useWatchStatus";
 import { useUpdateWatchStatus } from "../hooks/api/useWatchActions";
@@ -151,7 +151,7 @@ const GRID =
   "grid grid-cols-2 min-[480px]:grid-cols-3 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-posters gap-x-4 gap-y-6";
 
 export default function BrowseGenres() {
-  usePageTitle("Browse");
+  usePageMeta({ title: "Browse", description: "Browse movies and TV shows by genre and add the ones you want to follow to your Release Radar calendar." });
   const user = useAuthUser();
   const [searchParams, setSearchParams] = useSearchParams();
 

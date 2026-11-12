@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { createPortal } from "react-dom";
-import { CloseIcon, PlayIcon, PlusIcon, SectionHeader } from "../ui";
+import { Modal, PlayIcon, PlusIcon, SectionHeader } from "../ui";
 import type { MediaVideo } from "../../types/media";
 
 const TYPE_ORDER: Record<string, number> = {
@@ -23,32 +22,19 @@ function sortVideos(videos: MediaVideo[]): MediaVideo[] {
 }
 
 function VideoModal({ video, onClose }: { video: MediaVideo; onClose: () => void }) {
-  return createPortal(
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
-      onClick={onClose}
-    >
-      <div className="relative w-full max-w-4xl" onClick={(e) => e.stopPropagation()}>
-        <button
-          onClick={onClose}
-          className="absolute -top-10 right-0 text-neutral-400 hover:text-white transition-colors flex items-center gap-1.5 text-sm"
-        >
-          <CloseIcon />
-          Close
-        </button>
-        <div className="aspect-video rounded-xl overflow-hidden shadow-2xl">
-          <iframe
-            src={`https://www.youtube.com/embed/${video.key}?autoplay=1&rel=0`}
-            title={video.name}
-            className="w-full h-full"
-            allowFullScreen
-            allow="autoplay; encrypted-media"
-          />
-        </div>
-        <p className="mt-3 text-sm text-neutral-300 text-center truncate">{video.name}</p>
+  return (
+    <Modal open onClose={onClose} title={video.name} hideTitle variant="bare" size="xl">
+      <div className="aspect-video rounded-xl overflow-hidden shadow-2xl">
+        <iframe
+          src={`https://www.youtube.com/embed/${video.key}?autoplay=1&rel=0`}
+          title={video.name}
+          className="w-full h-full"
+          allowFullScreen
+          allow="autoplay; encrypted-media"
+        />
       </div>
-    </div>,
-    document.body,
+      <p className="mt-3 text-sm text-neutral-300 text-center truncate">{video.name}</p>
+    </Modal>
   );
 }
 

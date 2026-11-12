@@ -8,12 +8,15 @@ import { useAuthUser } from "../hooks/useAuthUser";
 import { apiFetch } from "../utils/apiFetch";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "../hooks/api/queryKeys";
+import SetupFlow from "./onboarding/SetupFlow";
 
 const SESSION_KEY = "rr_tour_group";
 const LB_IMPORTING_KEY = "rr_lb_importing";
 
 interface TourGroup {
   path: string;
+  /** Query string the page must have, e.g. "?tab=currently_watching". */
+  search?: string;
   hash?: string;
   steps: { element?: string; title: string; description: string }[];
 }
@@ -25,76 +28,45 @@ const TOUR_GROUPS: TourGroup[] = [
     path: "/calendar",
     steps: [
       {
-        title: "👋 Welcome to ReleaseRadar!",
+        title: "Welcome to Release Radar",
         description:
-          "Let's take a quick tour of all the features. Click Next to continue, or close to explore on your own.",
+          "A quick look at the places you'll use most. Click Next to continue, or close to explore on your own.",
       },
       {
         element: "[data-tour='continue-watching']",
-        title: "📺 Continue Watching",
+        title: "Continue Watching",
         description:
-          "Shows and movies you're actively watching appear here. Pick up right where you left off.",
+          "Shows you're in the middle of, with the next episode to watch. Pick up right where you left off.",
       },
       {
         element: "[data-tour='calendar-episode-list']",
-        title: "📅 What's on Today",
+        title: "Your calendar",
         description:
-          "This panel shows today's episodes and any date you click on the calendar. You can also sync your schedule to Google Calendar or Apple Calendar.",
+          "Everything airing for the titles you track. This panel shows today, or any day you click. You can also sync it to Google or Apple Calendar.",
       },
     ],
   },
   {
     path: "/watchlist",
+    search: "?tab=currently_watching",
     steps: [
       {
         element: "[data-tour='watchlist-header']",
-        title: "📋 Your Watchlist",
+        title: "Watching",
         description:
-          "Save anything you want to watch later. Sort, filter by type, or drag to re-order your queue.",
+          "Everything you're watching now. Mark episodes as you go; when you finish the last one, the show moves to Watched on its own.",
       },
     ],
   },
   {
-    path: "/shelves",
+    path: "/watchlist",
+    search: "?tab=all",
     steps: [
       {
-        element: "[data-tour='shelves-header']",
-        title: "🗂️ Shelves",
+        element: "[data-tour='watchlist-header']",
+        title: "Your Watchlist",
         description:
-          "Organize your movies and shows into custom shelves — like themed collections, personal rankings, or gift lists. Create as many as you want.",
-      },
-    ],
-  },
-  {
-    path: "/trending",
-    steps: [
-      {
-        element: "[data-tour='trending-header']",
-        title: "🔥 Discover Content",
-        description:
-          "Scroll down to browse trending titles, what's coming soon, airing today, and more. For You surfaces personalized picks based on your taste.",
-      },
-    ],
-  },
-  {
-    path: "/box-office",
-    steps: [
-      {
-        element: "[data-tour='box-office-header']",
-        title: "🎬 Box Office",
-        description:
-          "Track top-grossing movies by year or month. See budgets, revenue, and profit at a glance.",
-      },
-    ],
-  },
-  {
-    path: "/news",
-    steps: [
-      {
-        element: "[data-tour='news-header']",
-        title: "📰 Entertainment News",
-        description:
-          "Stay up to date with the latest headlines — cancellations, renewals, casting news, and more.",
+          "Everything you want to watch later. Sort, filter by type, or drag to re-order your queue. Finished shows come back here when a new season appears.",
       },
     ],
   },
@@ -104,9 +76,9 @@ const TOUR_GROUPS: TourGroup[] = [
     steps: [
       {
         element: "[data-tour='notifications-toggle']",
-        title: "🔔 Notifications",
+        title: "Notifications",
         description:
-          "Turn on email notifications to get a daily digest, season premiere alerts, trailer drops, and streaming availability updates. You can also customize what time you receive your daily digest.",
+          "Turn on email to get a daily digest, season premiere alerts, trailer drops and streaming arrivals. You can choose the hour your digest arrives.",
       },
     ],
   },
@@ -116,9 +88,9 @@ const TOUR_GROUPS: TourGroup[] = [
     steps: [
       {
         element: "[data-tour='streaming-settings']",
-        title: "📡 Streaming Services",
+        title: "Streaming services",
         description:
-          "Tell ReleaseRadar which streaming services you subscribe to. Use the Watchlist Optimizer to see which services cover the most of your watchlist — and which ones you might not need.",
+          "The services you subscribe to. We'll tell you when something on your list arrives on one, and the Watchlist Optimizer shows which services cover the most of it.",
       },
     ],
   },
@@ -127,9 +99,9 @@ const TOUR_GROUPS: TourGroup[] = [
     steps: [
       {
         element: "[data-tour='friends-header']",
-        title: "👥 Friends",
+        title: "Friends",
         description:
-          "Search for friends, follow their watchlists, and see what they're watching. Compare taste, share recommendations, and track what everyone's into.",
+          "Find friends, see what they're watching, and share recommendations.",
       },
     ],
   },
@@ -175,16 +147,30 @@ export default function SpotlightTourImpl() {
     }
   }
 
+  // A failed request re-enables the setup buttons so the user isn't stuck.
   async function handleLbImportNow() {
     setLbDismissing(true);
     sessionStorage.setItem(LB_IMPORTING_KEY, "1");
-    await dismissLbPrompt();
-    navigate("/import");
+    try {
+      await dismissLbPrompt();
+      navigate("/import");
+    } catch (error) {
+      console.error("Couldn't finish setup:", error);
+      sessionStorage.removeItem(LB_IMPORTING_KEY);
+    } finally {
+      setLbDismissing(false);
+    }
   }
 
   async function handleLbSkip() {
     setLbDismissing(true);
-    await dismissLbPrompt();
+    try {
+      await dismissLbPrompt();
+    } catch (error) {
+      console.error("Couldn't finish setup:", error);
+    } finally {
+      setLbDismissing(false);
+    }
   }
 
   // Destroy driver on unmount
@@ -202,7 +188,7 @@ export default function SpotlightTourImpl() {
       return;
     }
 
-    // Wait for Letterboxd prompt to be dismissed before starting the tour
+    // Wait for the setup flow to be finished or skipped before starting the tour
     if (!dbUser.letterboxd_prompted) return;
 
     // If user is actively on /import from the Letterboxd prompt, don't interfere.
@@ -229,9 +215,14 @@ export default function SpotlightTourImpl() {
 
     // Navigate to the correct page if needed
     const expectedHash = group.hash ?? "";
-    if (location.pathname !== group.path || location.hash !== expectedHash) {
+    const expectedSearch = group.search ?? "";
+    if (
+      location.pathname !== group.path ||
+      location.hash !== expectedHash ||
+      (expectedSearch && location.search !== expectedSearch)
+    ) {
       navigatingRef.current = true;
-      navigate(group.path + expectedHash);
+      navigate(group.path + expectedSearch + expectedHash);
       return;
     }
 
@@ -274,7 +265,7 @@ export default function SpotlightTourImpl() {
             } else {
               sessionStorage.setItem(SESSION_KEY, String(nextGroupIdx));
               const nextGroup = TOUR_GROUPS[nextGroupIdx];
-              navigate(nextGroup.path + (nextGroup.hash ?? ""));
+              navigate(nextGroup.path + (nextGroup.search ?? "") + (nextGroup.hash ?? ""));
             }
           }
         },
@@ -302,54 +293,12 @@ export default function SpotlightTourImpl() {
     return () => {
       clearTimeout(timer);
     };
-  }, [location.pathname, location.hash, dbUser?.onboarding_completed, dbUser?.letterboxd_prompted, isLoading]);
+  }, [location.pathname, location.search, location.hash, dbUser?.onboarding_completed, dbUser?.letterboxd_prompted, isLoading]);
 
-  // Show the Letterboxd import prompt before the tour begins
+  // First-run setup (titles, favorites, services, Letterboxd) before the tour.
+  // Finishing or skipping it sets letterboxd_prompted, which starts the tour.
   if (!isLoading && authUser && dbUser && !dbUser.onboarding_completed && !dbUser.letterboxd_prompted) {
-    return (
-      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/75 backdrop-blur-sm">
-        <div className="bg-neutral-900 border border-neutral-700 rounded-2xl p-8 max-w-sm w-full mx-4 shadow-2xl">
-          <div className="flex flex-col items-center text-center gap-5">
-            {/* Icon */}
-            <div className="w-16 h-16 rounded-2xl bg-[#00b020]/10 border border-[#00b020]/25 flex items-center justify-center">
-              <svg className="w-8 h-8 text-[#00b020]" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm-3.5 6.5a1.5 1.5 0 110 3 1.5 1.5 0 010-3zm7 0a1.5 1.5 0 110 3 1.5 1.5 0 010-3zM12 17c-2.21 0-4-1.343-4-3h8c0 1.657-1.79 3-4 3z"/>
-              </svg>
-            </div>
-
-            {/* Text */}
-            <div>
-              <h2 className="text-lg font-bold text-white">Import from Letterboxd</h2>
-              <p className="text-sm text-neutral-400 mt-2 leading-relaxed">
-                Already tracking films on Letterboxd? Import your watch history and watchlist in seconds — ratings and watch dates included.
-              </p>
-            </div>
-
-            {/* Buttons */}
-            <div className="flex flex-col gap-2.5 w-full">
-              <button
-                onClick={handleLbImportNow}
-                disabled={lbDismissing}
-                className="w-full py-2.5 px-4 rounded-xl bg-[#00b020] hover:bg-[#00961b] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-sm transition-colors"
-              >
-                Import from Letterboxd
-              </button>
-              <button
-                onClick={handleLbSkip}
-                disabled={lbDismissing}
-                className="w-full py-2.5 px-4 rounded-xl bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 disabled:cursor-not-allowed text-neutral-300 font-medium text-sm transition-colors"
-              >
-                Skip for now
-              </button>
-            </div>
-
-            <p className="text-xs text-neutral-600">
-              You can always import later from Settings, under Account
-            </p>
-          </div>
-        </div>
-      </div>
-    );
+    return <SetupFlow onFinish={handleLbSkip} onImport={handleLbImportNow} busy={lbDismissing} />;
   }
 
   return null;

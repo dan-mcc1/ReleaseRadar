@@ -1,0 +1,22 @@
+User-agent: *
+Allow: /
+Disallow: /calendar
+Disallow: /settings
+Disallow: /watchlist
+Disallow: /watched
+Disallow: /profile
+Disallow: /friends
+Disallow: /activity
+Disallow: /stats
+Disallow: /import
+Disallow: /admin
+Disallow: /shelves
+Disallow: /billing
+Disallow: /my-collections
+Disallow: /my-groups
+Disallow: /for-you
+Disallow: /search
+Disallow: /signIn
+Disallow: /unsubscribe
+
+Sitemap: https://releaseradar.co/sitemap.xml

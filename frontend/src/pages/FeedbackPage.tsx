@@ -125,7 +125,7 @@ export default function FeedbackPage() {
                   ? "e.g. Add ability to export watchlist to CSV"
                   : "e.g. Love the calendar view!"
               }
-              className="w-full rounded-control border border-neutral-700 bg-neutral-900 px-3 py-2.5 text-label text-white placeholder-neutral-600 focus:border-primary-600 focus:outline-none focus:ring-1 focus:ring-primary-600"
+              className="w-full rounded-control border border-neutral-700 bg-neutral-900 px-3 py-2.5 text-label text-white placeholder-neutral-500 focus:border-primary-600 focus:outline-none focus:ring-1 focus:ring-primary-600"
             />
           </div>
 
@@ -148,7 +148,7 @@ export default function FeedbackPage() {
                   ? "Describe the feature and why it would be useful…"
                   : "Share your thoughts…"
               }
-              className="w-full rounded-control border border-neutral-700 bg-neutral-900 px-3 py-2.5 text-label text-white placeholder-neutral-600 focus:border-primary-600 focus:outline-none focus:ring-1 focus:ring-primary-600 resize-y"
+              className="w-full rounded-control border border-neutral-700 bg-neutral-900 px-3 py-2.5 text-label text-white placeholder-neutral-500 focus:border-primary-600 focus:outline-none focus:ring-1 focus:ring-primary-600 resize-y"
             />
             <div className="text-right text-caption text-neutral-500 mt-1 tabular">
               {description.length}/5000

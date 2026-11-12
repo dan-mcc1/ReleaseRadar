@@ -220,7 +220,7 @@ function RatingStars({
                 ? preview !== null
                   ? "text-warning-300"
                   : "text-warning-400"
-                : "text-neutral-600"
+                : "text-neutral-500"
             }`}
           />
         </button>

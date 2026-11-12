@@ -232,9 +232,9 @@ export default function ListFilterPanel({
               placeholder="From"
               min={1900}
               max={currentYear + 5}
-              className="w-20 bg-neutral-700 border border-neutral-600 text-neutral-200 placeholder-neutral-600 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-neutral-500"
+              className="w-20 bg-neutral-700 border border-neutral-600 text-neutral-200 placeholder-neutral-500 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-neutral-500"
             />
-            <span className="text-neutral-600 text-xs">–</span>
+            <span className="text-neutral-500 text-xs">–</span>
             <input
               type="number"
               value={filters.yearMax}
@@ -242,7 +242,7 @@ export default function ListFilterPanel({
               placeholder="To"
               min={1900}
               max={currentYear + 5}
-              className="w-20 bg-neutral-700 border border-neutral-600 text-neutral-200 placeholder-neutral-600 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-neutral-500"
+              className="w-20 bg-neutral-700 border border-neutral-600 text-neutral-200 placeholder-neutral-500 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-neutral-500"
             />
           </div>
         </div>

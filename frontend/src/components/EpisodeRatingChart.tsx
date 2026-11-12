@@ -84,7 +84,7 @@ export default function EpisodeRatingChart({ showId }: { showId: number }) {
           {Array.from({ length: maxEps }, (_, i) => (
             <div
               key={i}
-              className="text-neutral-600 text-center flex-shrink-0"
+              className="text-neutral-500 text-center flex-shrink-0"
               style={{ width: 44, fontSize: 10 }}
             >
               {i + 1}

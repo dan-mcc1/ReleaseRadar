@@ -1,6 +1,6 @@
 import { useRef, useState, useCallback, useEffect } from "react";
 import type { Movie, Show } from "../types/calendar";
-import { usePageTitle } from "../hooks/usePageTitle";
+import { usePageMeta } from "../hooks/usePageMeta";
 import { useTrendingMulti, useUpcoming, useAiringToday, useNowPlaying, usePopularMulti, useTopRatedMulti } from "../hooks/api/useSearch";
 import { BASE_IMAGE_URL } from "../constants";
 import { useBulkWatchStatus } from "../hooks/api/useWatchStatus";
@@ -328,7 +328,7 @@ function FilteredScrollRow({
 }
 
 export default function Trending() {
-  usePageTitle("Discover");
+  usePageMeta({ title: "Discover", description: "See what is trending in movies and TV right now, then add anything you want to follow to your Release Radar calendar." });
   const { data: multiData, isPending: multiLoading } = useTrendingMulti();
   const { data: airingTodayData, isPending: airingTodayLoading } = useAiringToday();
   const { data: nowPlayingData, isPending: nowPlayingLoading } = useNowPlaying();

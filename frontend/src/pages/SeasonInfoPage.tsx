@@ -256,7 +256,7 @@ export default function SeasonInfoPage() {
             >
               {showQuery.data.name}
             </Link>
-            <span className="text-neutral-600">/</span>
+            <span className="text-neutral-500">/</span>
           </>
         )}
         <span className="text-neutral-200 font-medium">

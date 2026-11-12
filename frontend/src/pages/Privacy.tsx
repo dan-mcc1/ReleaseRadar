@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { usePageTitle } from "../hooks/usePageTitle";
+import { usePageMeta } from "../hooks/usePageMeta";
 import { PageHeader } from "../components/ui";
 
 const EFFECTIVE_DATE = "June 2, 2026";
@@ -274,7 +274,7 @@ const SECTIONS = [
 ];
 
 export default function Privacy() {
-  usePageTitle("Privacy Policy");
+  usePageMeta({ title: "Privacy Policy", description: "What Release Radar collects, how it is used, and the choices you have over your data." });
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-12">

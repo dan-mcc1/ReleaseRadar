@@ -193,7 +193,7 @@ function FieldInput({
   suffix?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center bg-neutral-900/70 border border-neutral-700/50 rounded-xl px-3 gap-1">
+    <div className="flex items-center bg-neutral-900/70 border border-neutral-700/50 rounded-xl px-3 gap-1 focus-within:border-primary-500 transition-colors">
       {prefix && (
         <span className="text-neutral-500 text-body shrink-0">{prefix}</span>
       )}
@@ -205,7 +205,7 @@ function FieldInput({
           placeholder={placeholder}
           maxLength={maxLength}
           rows={2}
-          className="flex-1 bg-transparent text-neutral-100 placeholder-neutral-600 text-body py-2.5 outline-none resize-none"
+          className="flex-1 bg-transparent text-neutral-100 placeholder-neutral-500 text-body py-2.5 outline-none resize-none"
         />
       ) : (
         <input
@@ -214,7 +214,7 @@ function FieldInput({
           readOnly={readOnly}
           placeholder={placeholder}
           maxLength={maxLength}
-          className="flex-1 bg-transparent text-neutral-100 placeholder-neutral-600 text-body py-2.5 outline-none min-w-0"
+          className="flex-1 bg-transparent text-neutral-100 placeholder-neutral-500 text-body py-2.5 outline-none min-w-0"
         />
       )}
       {suffix}
@@ -669,7 +669,7 @@ export default function Settings() {
 
   if (!user) {
     return (
-      <div className="p-6 text-center text-neutral-600">
+      <div className="p-6 text-center text-neutral-500">
         You must be signed in to view this page.
       </div>
     );
@@ -902,7 +902,7 @@ export default function Settings() {
                   />
                 </FieldWrap>
                 <div className="flex items-center justify-between mt-1.5">
-                  <span className="text-xs text-neutral-600">
+                  <span className="text-xs text-neutral-500">
                     {displayName.length}/50 · Shown on your profile instead of your @handle
                   </span>
                   <Button
@@ -934,7 +934,7 @@ export default function Settings() {
                   />
                 </FieldWrap>
                 <div className="flex items-center justify-between mt-1.5">
-                  <span className="text-xs text-neutral-600">
+                  <span className="text-xs text-neutral-500">
                     {bio.length}/300
                   </span>
                   <Button
@@ -1496,7 +1496,7 @@ export default function Settings() {
                   )}
                 </button>
               </div>
-              <p className="mt-1.5 text-xs text-neutral-600">
+              <p className="mt-1.5 text-xs text-neutral-500">
                 Keep this URL private — it gives read access to your watchlist.{" "}
                 <button
                   type="button"
@@ -1608,7 +1608,7 @@ export default function Settings() {
                   {syncCopied ? "Copied" : "Copy"}
                 </button>
               </div>
-              <p className="mt-1.5 text-xs text-neutral-600">
+              <p className="mt-1.5 text-xs text-neutral-500">
                 Lets an external service read your watch history. Keep it
                 private.{" "}
                 <button

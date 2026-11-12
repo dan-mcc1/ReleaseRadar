@@ -21,7 +21,7 @@ export default function CalendarHeader({
         <p className="font-mono text-[11px] tracking-[0.12em] uppercase text-neutral-500">
           Your calendar
           {viewMode === "month" && upcomingThisMonth > 0 && (
-            <span className="text-neutral-600">
+            <span className="text-neutral-500">
               {" "}
               · {upcomingThisMonth} upcoming releases this month
             </span>

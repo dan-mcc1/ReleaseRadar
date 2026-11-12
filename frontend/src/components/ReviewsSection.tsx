@@ -13,7 +13,7 @@ import { useNotificationPrefs } from "../hooks/api/useNotifications";
 import StarIcon from "./icons/StarIcon";
 import { ExclamationTriangleIcon, FlagIcon, HeartIcon as HeartOutline, PencilSquareIcon } from "@heroicons/react/24/outline";
 import { HeartIcon as HeartSolid } from "@heroicons/react/24/solid";
-import { Segmented, SectionHeader } from "./ui";
+import { Button, Modal, Segmented, SectionHeader } from "./ui";
 
 const REPORT_REASONS: { value: ReportReason; label: string }[] = [
   { value: "spam", label: "Spam" },
@@ -44,7 +44,7 @@ function MiniStars({ rating }: { rating: number }) {
         <StarIcon
           key={s}
           filled={s <= rating}
-          className={`w-3 h-3 ${s <= rating ? "text-warning-400" : "text-neutral-600"}`}
+          className={`w-3 h-3 ${s <= rating ? "text-warning-400" : "text-neutral-500"}`}
         />
       ))}
     </span>
@@ -75,77 +75,67 @@ function ReportReviewModal({
     setDone(true);
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
-      <div
-        className="bg-neutral-800 border border-neutral-700 rounded-xl p-5 w-full max-w-sm space-y-4"
-        onClick={(e) => e.stopPropagation()}
+  if (done) {
+    return (
+      <Modal
+        open
+        onClose={onClose}
+        title="Report submitted"
+        size="sm"
+        footer={<Button onClick={onClose}>Close</Button>}
       >
-        {done ? (
-          <>
-            <p className="text-neutral-200 text-sm">
-              Report submitted. Thanks for letting us know.
-            </p>
-            <button
-              onClick={onClose}
-              className="w-full bg-neutral-700 hover:bg-neutral-600 text-neutral-200 text-sm py-2 rounded-lg transition-colors"
-            >
-              Close
-            </button>
-          </>
-        ) : (
-          <>
-            <h3 className="text-white font-semibold">
-              Report @{username}'s review
-            </h3>
-            <div className="space-y-1">
-              {REPORT_REASONS.map(({ value, label }) => (
-                <label
-                  key={value}
-                  className="flex items-center gap-2 cursor-pointer py-1"
-                >
-                  <input
-                    type="radio"
-                    name="reason"
-                    value={value}
-                    checked={reason === value}
-                    onChange={() => setReason(value)}
-                    className="accent-highlight-500"
-                  />
-                  <span className="text-neutral-300 text-sm">{label}</span>
-                </label>
-              ))}
-            </div>
-            <div>
-              <label className="text-xs text-neutral-400 block mb-1">Additional details (optional)</label>
-              <textarea
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                rows={3}
-                maxLength={500}
-                placeholder="Describe the issue…"
-                className="w-full bg-neutral-900 border border-neutral-600 rounded-lg px-3 py-2 text-sm text-neutral-200 placeholder-neutral-600 focus:outline-none focus:border-neutral-500 resize-none"
-              />
-            </div>
-            <div className="flex gap-2 pt-1">
-              <button
-                onClick={onClose}
-                className="flex-1 bg-neutral-700 hover:bg-neutral-600 text-neutral-300 text-sm py-2 rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={submit}
-                disabled={reportMutation.isPending}
-                className="flex-1 bg-error-600 hover:bg-error-500 disabled:opacity-50 text-white text-sm py-2 rounded-lg transition-colors font-medium"
-              >
-                {reportMutation.isPending ? "Submitting…" : "Report"}
-              </button>
-            </div>
-          </>
-        )}
+        <p className="text-neutral-200 text-sm">
+          Report submitted. Thanks for letting us know.
+        </p>
+      </Modal>
+    );
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={`Report @${username}'s review`}
+      size="sm"
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="danger" onClick={submit} disabled={reportMutation.isPending}>
+            {reportMutation.isPending ? "Submitting…" : "Report"}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-1 mb-4">
+        {REPORT_REASONS.map(({ value, label }) => (
+          <label
+            key={value}
+            className="flex items-center gap-2 cursor-pointer py-1"
+          >
+            <input
+              type="radio"
+              name="reason"
+              value={value}
+              checked={reason === value}
+              onChange={() => setReason(value)}
+              className="accent-highlight-500"
+            />
+            <span className="text-neutral-300 text-sm">{label}</span>
+          </label>
+        ))}
       </div>
-    </div>
+      <div>
+        <label className="text-xs text-neutral-400 block mb-1">Additional details (optional)</label>
+        <textarea
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          rows={3}
+          maxLength={500}
+          placeholder="Describe the issue…"
+          className="w-full bg-neutral-900 border border-neutral-600 rounded-lg px-3 py-2 text-sm text-neutral-200 placeholder-neutral-500 focus:outline-none focus:border-neutral-500 resize-none"
+        />
+      </div>
+    </Modal>
   );
 }
 
@@ -342,7 +332,7 @@ export default function ReviewsSection({
                     />
                     Contains spoilers
                   </label>
-                  <span className="text-xs text-neutral-600">
+                  <span className="text-xs text-neutral-500">
                     {draft.length}/2000
                   </span>
                 </div>
@@ -412,7 +402,7 @@ export default function ReviewsSection({
                       Spoiler
                     </span>
                   )}
-                  <span className="text-xs text-neutral-600">
+                  <span className="text-xs text-neutral-500">
                     {timeAgo(review.updated_at ?? review.created_at)}
                   </span>
                 </div>
@@ -452,7 +442,7 @@ export default function ReviewsSection({
                 <div className="mt-2 flex justify-end">
                   <button
                     onClick={() => setReportingReviewId(review.id)}
-                    className="text-neutral-600 hover:text-error-400 transition-colors text-xs flex items-center gap-1"
+                    className="text-neutral-500 hover:text-error-400 transition-colors text-xs flex items-center gap-1"
                     title="Report review"
                   >
                     <FlagIcon className="w-3 h-3" strokeWidth={2} aria-hidden="true" />

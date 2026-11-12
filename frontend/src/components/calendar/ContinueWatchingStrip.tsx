@@ -298,7 +298,7 @@ export default function ContinueWatchingStrip() {
           Continue<br />watching
         </p>
       </div>
-      <p className="px-4 text-sm text-neutral-600">
+      <p className="px-4 text-sm text-neutral-500">
         Shows and movies you're watching will appear here.
       </p>
     </div>

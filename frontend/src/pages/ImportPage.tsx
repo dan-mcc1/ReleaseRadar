@@ -272,7 +272,7 @@ export default function ImportPage() {
                     Drop your {active.label} export here or{" "}
                     <span className="text-neutral-100 underline">browse</span>
                   </p>
-                  <p className="text-caption text-neutral-600 mt-0.5">
+                  <p className="text-caption text-neutral-500 mt-0.5">
                     {source === "tvtime"
                       ? ".zip export, .json, or .csv — max 20 MB"
                       : ".zip export or individual .csv, max 20 MB"}

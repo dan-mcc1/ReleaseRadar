@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { Button, CheckIcon, CloseIcon, IconButton, SectionHeader } from "./ui";
+import { Button, CheckIcon, CloseIcon, Modal, SectionHeader } from "./ui";
 
 export type UpgradeFeature = "shelves" | "tracking_limit" | "general";
 
@@ -73,92 +73,19 @@ export default function ProUpgradeModal({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
-      onClick={handleDismiss}
-    >
-      <div
-        className="relative w-full max-w-2xl rounded-surface bg-neutral-900 border border-neutral-700 shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="relative px-6 pt-8 pb-6 border-b border-neutral-800">
-          <IconButton
-            label="Close"
-            size="sm"
-            onClick={handleDismiss}
-            icon={<CloseIcon className="w-5 h-5" />}
-            className="absolute top-4 right-4"
-          />
-
-          <h2 className="text-heading font-semibold text-white mb-1 pr-10">{title}</h2>
-          <p className="text-neutral-400 text-label">{subtitle}</p>
-
-          <div className="flex items-center gap-6 mt-5">
-            <div>
-              <div className="text-heading font-semibold text-white tabular">$4.99</div>
-              <div className="text-caption text-neutral-400">per month</div>
-            </div>
-            <div className="text-neutral-500 text-title font-light">or</div>
-            <div>
-              <div className="text-heading font-semibold text-white tabular">$39.99</div>
-              <div className="text-caption text-neutral-400">
-                per year{" "}
-                <span className="text-neutral-300 font-medium">(save 33%)</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Feature comparison */}
-        <div className="grid sm:grid-cols-2 gap-6 px-6 mt-6">
-          {/* Free column */}
-          <div>
-            <SectionHeader title="Free" as="h3" divider className="mb-4" />
-            <ul className="space-y-2.5">
-              {FREE_FEATURES.map((f) => (
-                <li
-                  key={f}
-                  className="flex items-start gap-2 text-label text-neutral-300"
-                >
-                  <CheckIcon className="w-4 h-4 mt-0.5 shrink-0 text-neutral-500" />
-                  {f}
-                </li>
-              ))}
-              {FREE_MISSING.map((f) => (
-                <li
-                  key={f}
-                  className="flex items-start gap-2 text-label text-neutral-600"
-                >
-                  <CloseIcon className="w-4 h-4 mt-0.5 shrink-0 text-neutral-700" />
-                  {f}
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Premium column */}
-          <div>
-            <SectionHeader title="Premium" as="h3" divider className="mb-4" />
-            <ul className="space-y-2.5">
-              {PRO_FEATURES.map((f) => (
-                <li
-                  key={f}
-                  className="flex items-start gap-2 text-label text-neutral-200"
-                >
-                  <CheckIcon className="w-4 h-4 mt-0.5 shrink-0 text-neutral-300" />
-                  {f}
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-
-        {/* CTAs */}
-        <div className="px-6 py-6 flex flex-col sm:flex-row items-center gap-3">
+    <Modal
+      open
+      onClose={handleDismiss}
+      title={title}
+      description={subtitle}
+      size="xl"
+      footer={
+        <>
+          <Button variant="ghost" onClick={handleDismiss}>
+            Maybe Later
+          </Button>
           <Button
             variant="primary"
-            className="w-full sm:flex-1"
             onClick={() => {
               onClose();
               navigate("/pricing");
@@ -166,11 +93,67 @@ export default function ProUpgradeModal({
           >
             See pricing
           </Button>
-          <Button variant="ghost" className="w-full sm:w-auto" onClick={handleDismiss}>
-            Maybe Later
-          </Button>
+        </>
+      }
+    >
+      <div className="flex items-center gap-6 pb-6 border-b border-neutral-800">
+        <div>
+          <div className="text-heading font-semibold text-white tabular">$4.99</div>
+          <div className="text-caption text-neutral-400">per month</div>
+        </div>
+        <div className="text-neutral-500 text-title font-light">or</div>
+        <div>
+          <div className="text-heading font-semibold text-white tabular">$39.99</div>
+          <div className="text-caption text-neutral-400">
+            per year{" "}
+            <span className="text-neutral-300 font-medium">(save 33%)</span>
+          </div>
         </div>
       </div>
-    </div>
+
+      {/* Feature comparison */}
+      <div className="grid sm:grid-cols-2 gap-6 mt-6">
+        {/* Free column */}
+        <div>
+          <SectionHeader title="Free" as="h3" divider className="mb-4" />
+          <ul className="space-y-2.5">
+            {FREE_FEATURES.map((f) => (
+              <li
+                key={f}
+                className="flex items-start gap-2 text-label text-neutral-300"
+              >
+                <CheckIcon className="w-4 h-4 mt-0.5 shrink-0 text-neutral-500" />
+                {f}
+              </li>
+            ))}
+            {FREE_MISSING.map((f) => (
+              <li
+                key={f}
+                className="flex items-start gap-2 text-label text-neutral-500"
+              >
+                <CloseIcon className="w-4 h-4 mt-0.5 shrink-0 text-neutral-700" />
+                {f}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {/* Premium column */}
+        <div>
+          <SectionHeader title="Premium" as="h3" divider className="mb-4" />
+          <ul className="space-y-2.5">
+            {PRO_FEATURES.map((f) => (
+              <li
+                key={f}
+                className="flex items-start gap-2 text-label text-neutral-200"
+              >
+                <CheckIcon className="w-4 h-4 mt-0.5 shrink-0 text-neutral-300" />
+                {f}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </Modal>
   );
 }

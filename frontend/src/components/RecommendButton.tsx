@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import { useAuthUser } from "../hooks/useAuthUser";
 import { useFriends } from "../hooks/api/useFriends";
 import { useSendRecommendation } from "../hooks/api/useRecommendations";
-import { CheckIcon } from "./ui";
+import { Button, CheckIcon, Modal } from "./ui";
 
 interface Friend {
   friendship_id: number;
@@ -30,22 +30,10 @@ export function RecommendModal({
   const [message, setMessage] = useState("");
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const modalRef = useRef<HTMLDivElement>(null);
 
   const { data: friendsData, isLoading: loadingFriends } = useFriends();
   const friends = (friendsData as Friend[] | undefined) ?? [];
   const sendMutation = useSendRecommendation();
-
-  // Close on outside click
-  useEffect(() => {
-    function handler(e: MouseEvent) {
-      if (modalRef.current && !modalRef.current.contains(e.target as Node)) {
-        onClose();
-      }
-    }
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [onClose]);
 
   async function handleSend() {
     if (!selected) return;
@@ -64,103 +52,93 @@ export function RecommendModal({
     }
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
-      <div
-        ref={modalRef}
-        className="bg-neutral-800 border border-neutral-700 rounded-2xl w-full max-w-sm p-6 shadow-2xl"
+  const sendFooter = sent ? (
+    <Button variant="primary" onClick={onClose}>
+      Done
+    </Button>
+  ) : (
+    <>
+      <Button variant="ghost" onClick={onClose}>
+        Cancel
+      </Button>
+      <Button
+        variant="primary"
+        onClick={handleSend}
+        disabled={!selected || sendMutation.isPending}
       >
-        {sent ? (
-          <div className="text-center py-4">
-            <div className="mx-auto mb-3 size-12 rounded-full bg-success-500/20 text-success-400 flex items-center justify-center">
-              <CheckIcon className="w-6 h-6" />
-            </div>
-            <p className="text-white font-semibold text-lg mb-1">
-              Recommendation sent!
-            </p>
-            <p className="text-neutral-400 text-sm mb-6">
-              {selected} will be notified.
-            </p>
-            <button
-              onClick={onClose}
-              className="px-5 py-2 bg-primary-600 hover:bg-primary-500 text-white rounded-lg text-sm font-semibold"
-            >
-              Done
-            </button>
+        {sendMutation.isPending ? "Sending…" : "Send"}
+      </Button>
+    </>
+  );
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={sent ? "Recommendation sent!" : "Recommend to a friend"}
+      description={sent ? `${selected} will be notified.` : undefined}
+      size="sm"
+      footer={sendFooter}
+    >
+      {sent ? (
+        <div className="flex justify-center">
+          <div className="size-12 rounded-full bg-success-500/20 text-success-400 flex items-center justify-center">
+            <CheckIcon className="w-6 h-6" />
           </div>
-        ) : (
-          <>
-            <h2 className="text-white font-bold text-lg mb-1">
-              Recommend to a friend
-            </h2>
-            <p className="text-neutral-200 text-base sm:text-lg font-semibold mb-4 line-clamp-2">
-              {contentTitle}
+        </div>
+      ) : (
+        <>
+          <p className="text-neutral-200 text-base sm:text-lg font-semibold mb-4 line-clamp-2">
+            {contentTitle}
+          </p>
+
+          {/* Friend list */}
+          <div className="mb-4">
+            <p className="text-caption font-medium text-neutral-400 mb-2">
+              Select a friend
             </p>
+            {loadingFriends ? (
+              <p className="text-neutral-500 text-sm">Loading…</p>
+            ) : friends.length === 0 ? (
+              <p className="text-neutral-500 text-sm">No friends yet.</p>
+            ) : (
+              <div className="flex flex-col gap-1 max-h-40 overflow-y-auto">
+                {friends.map((f) => (
+                  <button
+                    key={f.friendship_id}
+                    onClick={() => setSelected(f.friend.username)}
+                    className={`text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                      selected === f.friend.username
+                        ? "bg-primary-600 text-white"
+                        : "bg-neutral-700 text-neutral-200 hover:bg-neutral-600"
+                    }`}
+                  >
+                    @{f.friend.username}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
-            {/* Friend list */}
-            <div className="mb-4">
-              <p className="text-caption font-medium text-neutral-400 mb-2">
-                Select a friend
-              </p>
-              {loadingFriends ? (
-                <p className="text-neutral-500 text-sm">Loading…</p>
-              ) : friends.length === 0 ? (
-                <p className="text-neutral-500 text-sm">No friends yet.</p>
-              ) : (
-                <div className="flex flex-col gap-1 max-h-40 overflow-y-auto">
-                  {friends.map((f) => (
-                    <button
-                      key={f.friendship_id}
-                      onClick={() => setSelected(f.friend.username)}
-                      className={`text-left px-3 py-2 rounded-lg text-sm transition-colors ${
-                        selected === f.friend.username
-                          ? "bg-primary-600 text-white"
-                          : "bg-neutral-700 text-neutral-200 hover:bg-neutral-600"
-                      }`}
-                    >
-                      @{f.friend.username}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+          {/* Optional message */}
+          <div>
+            <p className="text-caption font-medium text-neutral-400 mb-2">
+              Message (optional)
+            </p>
+            <textarea
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              placeholder="Why do you recommend this?"
+              maxLength={300}
+              rows={3}
+              className="w-full bg-neutral-700 text-neutral-100 text-sm px-3 py-2 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-primary-500 placeholder-neutral-500"
+            />
+          </div>
 
-            {/* Optional message */}
-            <div className="mb-4">
-              <p className="text-caption font-medium text-neutral-400 mb-2">
-                Message (optional)
-              </p>
-              <textarea
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                placeholder="Why do you recommend this?"
-                maxLength={300}
-                rows={3}
-                className="w-full bg-neutral-700 text-neutral-100 text-sm px-3 py-2 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-primary-500 placeholder-neutral-500"
-              />
-            </div>
-
-            {error && <p className="text-error-400 text-sm mb-3">{error}</p>}
-
-            <div className="flex gap-2 justify-end">
-              <button
-                onClick={onClose}
-                className="px-4 py-2 text-sm text-neutral-400 hover:text-neutral-200"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSend}
-                disabled={!selected || sendMutation.isPending}
-                className="px-5 py-2 bg-primary-600 hover:bg-primary-500 disabled:opacity-40 text-white text-sm font-semibold rounded-lg transition-colors"
-              >
-                {sendMutation.isPending ? "Sending…" : "Send"}
-              </button>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
+          {error && <p className="text-error-400 text-sm mt-3">{error}</p>}
+        </>
+      )}
+    </Modal>
   );
 }
 

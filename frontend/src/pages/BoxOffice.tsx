@@ -1,6 +1,6 @@
 import { Link, useSearchParams } from "react-router-dom";
 import { BASE_IMAGE_URL } from "../constants";
-import { usePageTitle } from "../hooks/usePageTitle";
+import { usePageMeta } from "../hooks/usePageMeta";
 import { useBoxOffice, useAllTimeBoxOffice, type BoxOfficeMovie } from "../hooks/api/useBoxOffice";
 import {
   Button,
@@ -46,7 +46,7 @@ function calcKpis(movies: BoxOfficeMovie[]) {
 const currentYear = new Date().getFullYear();
 
 export default function BoxOffice() {
-  usePageTitle("Box Office");
+  usePageMeta({ title: "Box Office", description: "See which movies are leading the box office, and track the ones you want to watch." });
   const [searchParams, setSearchParams] = useSearchParams();
   const mode = (searchParams.get("mode") as "yearly" | "monthly" | "all-time") ?? "yearly";
   const year = Number(searchParams.get("year") ?? currentYear);

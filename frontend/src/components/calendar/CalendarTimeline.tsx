@@ -151,8 +151,8 @@ function TimelineItem({ item }: { item: CalendarItem }) {
           title={localWatched ? "Mark as unwatched" : "Mark as watched"}
           className={`flex-shrink-0 w-6 h-6 rounded-full border flex items-center justify-center transition-colors ${
             localWatched
-              ? "bg-primary-500 border-primary-500 text-neutral-950 hover:bg-transparent hover:border-neutral-700 hover:text-neutral-600"
-              : "border-neutral-700 text-neutral-600 hover:border-primary-500 hover:text-primary-400"
+              ? "bg-primary-500 border-primary-500 text-neutral-950 hover:bg-transparent hover:border-neutral-700 hover:text-neutral-500"
+              : "border-neutral-700 text-neutral-500 hover:border-primary-500 hover:text-primary-400"
           } ${marking ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
         >
           {marking ? (
@@ -225,7 +225,7 @@ export default function CalendarTimeline({ weekDays, today, isLoading }: Props) 
               {isLoading ? (
                 <SkeletonRow />
               ) : items.length === 0 ? (
-                <p className="text-sm text-neutral-600 italic self-center">No releases</p>
+                <p className="text-sm text-neutral-500 italic self-center">No releases</p>
               ) : (
                 <div className="flex flex-col gap-2">
                   {items.map((item, idx) => (
