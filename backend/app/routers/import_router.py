@@ -23,6 +23,7 @@ from app.services.media_upsert import (
 )
 from app.services.watchlist_service import add_to_watchlist
 from app.services.episode_service import (
+    _refresh_show_metadata,
     maybe_sync_show_episodes,
     sync_season_episodes,
     sync_show_episodes,
@@ -43,12 +44,23 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _sync_episodes_for_watched_import(db, show):
-    """Store the show's episodes before they're all marked watched. A cached
-    show that isn't ended can have a stale episode list (nothing refreshes it
-    unless someone tracks it), so it gets a full sync; an ended show only needs
-    episodes if it has none."""
-    if show.in_production is False:
+def _sync_episodes_for_watched_import(db, show, cached: bool):
+    """Store the show's episodes before they're all marked watched.
+
+    Nothing refreshes a cached show unless someone tracks it, so one that was
+    cached before this import (``cached``) first gets its season list and
+    status from TMDb. A season the nightly refresh stored later would read as
+    new and move the show back to the watchlist.
+
+    A show that isn't ended, or just gained a season, gets a full sync; an
+    ended show only needs episodes if it has none. Makes TMDb calls, so the
+    importers run it in a worker thread."""
+    gained_season = False
+    if cached:
+        before = {s.season_number for s in show.seasons}
+        _refresh_show_metadata(db, show)
+        gained_season = bool({s.season_number for s in show.seasons} - before)
+    if show.in_production is False and not gained_season:
         maybe_sync_show_episodes(db, show.id)
     else:
         sync_show_episodes(db, show.id)
@@ -344,7 +356,12 @@ async def import_letterboxd(
                     media = ensure_show_in_db(
                         db, tmdb_id, tmdb_data=prefetched.get(("tv", tmdb_id)),
                     )
-                    _sync_episodes_for_watched_import(db, media)
+                    # Off the event loop: the request's session is only
+                    # used by one thread at a time, since this is awaited.
+                    await asyncio.to_thread(
+                        _sync_episodes_for_watched_import,
+                        db, media, tmdb_id in existing_shows,
+                    )
                     title = media.name
             except Exception as e:
                 db.rollback()
@@ -1309,7 +1326,10 @@ async def import_tvtime(
                 )
                 resolved_title = media.name
                 if row["is_watched"]:
-                    _sync_episodes_for_watched_import(db, media)
+                    await asyncio.to_thread(
+                        _sync_episodes_for_watched_import,
+                        db, media, tmdb_id in existing_show_ids,
+                    )
         except Exception as e:
             db.rollback()
             failed += 1

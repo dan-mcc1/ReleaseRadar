@@ -99,7 +99,11 @@ def create_user_route(
     display_name = claims.get("name")
     username = body.username
     if username is not None:
-        if not is_username_available(db, username):
+        # A repeat of a call whose response was lost: the name is the caller's
+        # own, so it isn't "taken" and the client can safely retry.
+        own = get_user(db, uid)
+        already_theirs = own is not None and own.username == username
+        if not already_theirs and not is_username_available(db, username):
             raise HTTPException(status_code=409, detail="Username already taken.")
     avatar = random.choice(VALID_AVATAR_KEYS) if username is not None else None
     user = create_user(db, uid, email, username, avatar, display_name=display_name)

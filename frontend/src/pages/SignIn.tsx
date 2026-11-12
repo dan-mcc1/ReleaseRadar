@@ -58,6 +58,12 @@ class BackendError extends Error {
   }
 }
 
+/** True when a failed /user/create left it unknown whether the account row was
+ * written: no response at all (network error, timeout) or a server error. */
+function isUnanswered(error: unknown): boolean {
+  return !(error instanceof BackendError) || error.status >= 500;
+}
+
 /** True when the API refused because the account is banned or suspended: either
  * a 403 carrying one of those codes, or apiFetch's own 403 for a session already
  * marked restricted. Such people must stay signed in so BanGate can show the
@@ -234,6 +240,20 @@ const SignIn: React.FC = () => {
     user: import("firebase/auth").User,
     username: string,
   ) {
+    try {
+      await createAppAccount(user, username);
+    } catch (error) {
+      if (!isUnanswered(error)) throw error;
+      // The call may have gone through with its response lost. Repeating it
+      // is safe: the server returns the account it already made.
+      await createAppAccount(user, username);
+    }
+  }
+
+  async function createAppAccount(
+    user: import("firebase/auth").User,
+    username: string,
+  ) {
     const res = await apiFetch("/user/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -256,8 +276,8 @@ const SignIn: React.FC = () => {
     }
   }
 
-  // Undo a Firebase account whose app account could not be created, so the same
-  // email can sign up again. If the delete fails, at least sign out.
+  // Undo a Firebase account whose app account the server refused to create, so
+  // the same email can sign up again. If the delete fails, at least sign out.
   async function discardFirebaseUser(user: import("firebase/auth").User) {
     try {
       await user.delete();
@@ -388,6 +408,17 @@ const SignIn: React.FC = () => {
         await registerUserInBackend(res.user, username);
       } catch (error) {
         console.error("Error creating app account:", error);
+        if (isUnanswered(error)) {
+          // The app account may exist. Deleting the Firebase user would leave
+          // it with no way in and its username taken; signing in finishes the
+          // setup whether or not it was made.
+          await signOutQuietly();
+          setIsRegistering(false);
+          setErrorMessage(
+            "We couldn't finish setting up your account. Sign in with your email and password to finish.",
+          );
+          return;
+        }
         await discardFirebaseUser(res.user);
         const usernameTaken =
           error instanceof BackendError && error.status === 409;

@@ -44,7 +44,9 @@ class TestUserCreate:
         r = client.post(
             "/user/create", json={"email": "alice@test.com", "username": "alice"}
         )
-        assert r.status_code in (200, 409)
+        # A retry after a lost response must not read as "username taken".
+        assert r.status_code == 200
+        assert r.json()["username"] == "alice"
 
 
 def _claims_client(uid, email, verified):

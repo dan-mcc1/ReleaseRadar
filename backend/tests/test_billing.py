@@ -169,6 +169,25 @@ class TestCreateCheckoutSession:
         assert r.status_code == 200
         assert "subscription_data" not in create.call_args.kwargs
 
+    def test_no_stored_email_returns_409_and_creates_no_customer(self, client, db):
+        # An email is stored only once verified (routers/user.py).
+        from app.models.user import User
+
+        _seed_user(db)
+        db.query(User).filter_by(id="test-uid-1").one().email = None
+        db.commit()
+        prices = {"monthly": "price_test", "yearly": "price_yearly"}
+        with (
+            patch("app.routers.billing._INTERVAL_TO_PRICE", prices),
+            patch("stripe.Customer.create") as customer,
+            patch("stripe.checkout.Session.create") as session,
+        ):
+            r = client.post("/billing/create-checkout-session", json={"interval": "monthly"})
+        assert r.status_code == 409
+        assert r.json()["detail"] == "Verify your email address before subscribing."
+        customer.assert_not_called()
+        session.assert_not_called()
+
     @pytest.mark.parametrize("status", ["active", "trialing"])
     def test_existing_subscription_returns_409(self, client, db, status):
         _seed_user(db, tier="premium")
