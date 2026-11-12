@@ -78,8 +78,10 @@ def upgrade() -> None:
         ["user_id"],
         unique=False,
     )
-    op.drop_index(op.f("ix_for_you_cache_user_id"), table_name="for_you_cache")
-    op.drop_table("for_you_cache")
+    # for_you_cache was a leftover table in the pre-Alembic databases with no
+    # model, so the baseline doesn't create it. IF EXISTS keeps a fresh
+    # `upgrade head` working; the drop takes its index with it.
+    op.execute("DROP TABLE IF EXISTS for_you_cache")
     # ### end Alembic commands ###
 
 

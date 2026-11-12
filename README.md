@@ -183,13 +183,15 @@ npm run lint     # ESLint
 
 ## Contributing
 
+Contributions are welcome. The licence lets you run the code locally to work on a contribution, but not to host or deploy it. By opening a pull request you grant the licence to your contribution described in [LICENSE](LICENSE), section 3.
+
 1. Fork the repo and create a branch from `main`
 2. Make your changes — keep PRs focused on a single feature or fix
-3. Run the test suite (`python -m pytest tests/ -v`) and linter (`npm run lint`) before submitting
+3. Run the backend tests (`python -m pytest tests/ -v`) and the frontend checks (`npm run lint`, `npm test`) before submitting. CI runs them on every pull request.
 4. Open a pull request with a clear description of what changed and why
 
 Bug reports and feature requests are welcome via [GitHub Issues](https://github.com/dan-mcc1/ReleaseRadar/issues).
 
 ## License
 
-MIT
+Source-available, all rights reserved; see [LICENSE](LICENSE). You may read the code and contribute to it, but you may not run, host, copy or redistribute it. Versions published before the licence change remain under MIT.

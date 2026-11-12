@@ -145,6 +145,18 @@ export default function WhereToWatch({ providers, hideTitle = false }: WhereToWa
           </div>
         </div>
       )}
+
+      <p className="text-caption text-neutral-400">
+        Availability data from{" "}
+        <a
+          href="https://www.justwatch.com"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-neutral-200 hover:text-white transition-colors"
+        >
+          JustWatch
+        </a>
+      </p>
     </div>
   );
 }

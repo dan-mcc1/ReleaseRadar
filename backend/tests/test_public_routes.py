@@ -15,6 +15,7 @@ from tests.test_http_cache import _dependency_calls, _routes
 NOT_TMDB_BACKED = {
     "/billing/webhook",          # Stripe, signature-checked
     "/events/stream",            # single-use SSE token
+    "/health",                   # static liveness, no DB or TMDb
     "/ical/feed/{token}",        # slowapi 6/minute per token
     "/notifications/unsubscribe",  # HMAC-checked
     "/user/check-username",      # slowapi 30/minute

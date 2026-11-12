@@ -19,6 +19,7 @@ import { apiFetch } from "../utils/apiFetch";
 import { usePageTitle } from "../hooks/usePageTitle";
 import { isAccountRestricted } from "../utils/accountState";
 import { needsEmailVerification } from "../utils/emailVerification";
+import SignUpConsent from "../components/SignUpConsent";
 
 const USERNAME_RE = /^[a-zA-Z0-9_]{3,30}$/;
 
@@ -627,6 +628,7 @@ const SignIn: React.FC = () => {
               >
                 {isLoading ? "Saving…" : "Continue"}
               </button>
+              <SignUpConsent lead="By selecting Continue" />
             </form>
           </div>
         </div>
@@ -823,6 +825,9 @@ const SignIn: React.FC = () => {
               </svg>
               Continue with Facebook
             </button>
+            {/* On either tab, these buttons create the app account for a new
+                user (finishSignIn), so the notice sits with them too. */}
+            <SignUpConsent lead="By continuing with Google, Microsoft or Facebook" />
           </div>
 
           {/* Divider */}
@@ -962,6 +967,7 @@ const SignIn: React.FC = () => {
                   ? "Create account"
                   : "Sign in"}
             </button>
+            {isRegistering && <SignUpConsent lead="By selecting Create account" />}
           </form>
         </div>
       </div>

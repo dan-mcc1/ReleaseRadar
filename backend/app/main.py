@@ -296,5 +296,15 @@ app.include_router(export_router.router, prefix="/export", tags=["export"])
 app.include_router(streaming.router, prefix="/streaming", tags=["streaming"])
 app.include_router(watch_status.router, prefix="/watch-status", tags=["watch-status"])
 app.include_router(feedback.router, tags=["feedback"])
+
+
+@app.api_route("/health", methods=["GET", "HEAD"], tags=["health"])
+def health() -> JSONResponse:
+    """Liveness for uptime monitors and load balancers. Deliberately doesn't
+    touch the database: a probe every few seconds would keep Neon from
+    scaling to zero."""
+    return JSONResponse({"status": "ok"}, headers={"Cache-Control": "no-store"})
+
+
 if settings.ENVIRONMENT != "production":
     app.include_router(dev.router, prefix="/dev", tags=["dev"])

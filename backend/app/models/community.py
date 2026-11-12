@@ -68,7 +68,7 @@ class CommunityMedia(Base):
 
     id = Column(Integer, primary_key=True)
     community_id = Column(
-        Integer, ForeignKey("community.id", ondelete="CASCADE"), nullable=False, index=True
+        Integer, ForeignKey("community.id", ondelete="CASCADE"), nullable=False
     )
     content_type = Column(String, nullable=False)
     content_id = Column(Integer, nullable=False)
@@ -79,6 +79,8 @@ class CommunityMedia(Base):
         UniqueConstraint(
             "community_id", "content_type", "content_id", name="uq_community_media"
         ),
+        # Named as migration 3b5d8e2a91c0 created it.
+        Index("ix_community_media_community", "community_id"),
     )
 
 
@@ -87,7 +89,7 @@ class CommunityPost(Base):
 
     id = Column(Integer, primary_key=True)
     community_id = Column(
-        Integer, ForeignKey("community.id", ondelete="CASCADE"), nullable=False, index=True
+        Integer, ForeignKey("community.id", ondelete="CASCADE"), nullable=False
     )
     user_id = Column(
         String, ForeignKey("user.id", ondelete="CASCADE"), nullable=False
@@ -99,13 +101,16 @@ class CommunityPost(Base):
     edited_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
+    # Named as migration 3b5d8e2a91c0 created it.
+    __table_args__ = (Index("ix_community_post_community", "community_id"),)
+
 
 class CommunityReply(Base):
     __tablename__ = "community_reply"
 
     id = Column(Integer, primary_key=True)
     post_id = Column(
-        Integer, ForeignKey("community_post.id", ondelete="CASCADE"), nullable=False, index=True
+        Integer, ForeignKey("community_post.id", ondelete="CASCADE"), nullable=False
     )
     user_id = Column(
         String, ForeignKey("user.id", ondelete="CASCADE"), nullable=False
@@ -114,6 +119,9 @@ class CommunityReply(Base):
     like_count = Column(Integer, nullable=False, server_default="0")
     edited_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Named as migration 3b5d8e2a91c0 created it.
+    __table_args__ = (Index("ix_community_reply_post", "post_id"),)
 
 
 class CommunityPostLike(Base):
@@ -147,7 +155,9 @@ class CommunityInvitation(Base):
     invited_by = Column(
         String, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
     )
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
 
     __table_args__ = (
         UniqueConstraint("community_id", "user_id", name="uq_community_invitation"),
