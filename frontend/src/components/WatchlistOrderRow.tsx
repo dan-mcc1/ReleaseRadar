@@ -183,7 +183,7 @@ export default function WatchlistOrderRow({
               <StarIcon
                 key={s}
                 filled={s <= userRating}
-                className={`w-3.5 h-3.5 ${s <= userRating ? "text-warning-400" : "text-neutral-600"}`}
+                className={`w-3.5 h-3.5 ${s <= userRating ? "text-warning-400" : "text-neutral-500"}`}
               />
             ))}
           </div>

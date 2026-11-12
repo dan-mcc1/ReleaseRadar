@@ -162,7 +162,7 @@ function NavDropdown({
           isActive
             ? "bg-neutral-800 text-white"
             : "text-neutral-400 hover:text-neutral-100 hover:bg-neutral-900",
-          "flex items-center gap-1 rounded-lg px-3 py-1.5 text-label font-medium transition-colors focus:outline-none",
+          "flex items-center gap-1 rounded-lg px-3 py-1.5 text-label font-medium transition-colors",
         )}
       >
         {label}
@@ -325,7 +325,7 @@ function SearchBar() {
         className={classNames(
           "flex items-center gap-2 h-9 px-3 rounded-xl border transition-colors cursor-text w-72",
           searchFocused
-            ? "bg-neutral-900 border-neutral-600"
+            ? "bg-neutral-900 border-primary-500"
             : "bg-neutral-900 border-neutral-700/70",
         )}
         onClick={() => searchInputRef.current?.focus()}
@@ -364,7 +364,7 @@ function SearchBar() {
             <XMarkIcon className="w-3.5 h-3.5" />
           </button>
         ) : (
-          <span className="font-mono text-caption px-1.5 py-0.5 border border-neutral-700 rounded text-neutral-600 shrink-0 select-none">
+          <span className="font-mono text-caption px-1.5 py-0.5 border border-neutral-700 rounded text-neutral-500 shrink-0 select-none">
             {isMac ? "⌘K" : "Ctrl K"}
           </span>
         )}
@@ -576,7 +576,7 @@ function NotificationsPanel() {
                         "{req.message}"
                       </p>
                     )}
-                    <p className="text-caption text-neutral-600 mt-0.5">
+                    <p className="text-caption text-neutral-500 mt-0.5">
                       {timeAgo(req.created_at)}
                     </p>
                     <div className="flex items-center gap-1.5 mt-1.5">
@@ -650,7 +650,7 @@ function NotificationsPanel() {
                         className="w-full h-full object-cover"
                       />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-neutral-600">
+                      <div className="w-full h-full flex items-center justify-center text-neutral-500">
                         <svg
                           xmlns="http://www.w3.org/2000/svg"
                           viewBox="0 0 24 24"
@@ -691,7 +691,7 @@ function NotificationsPanel() {
                           "{rec.message}"
                         </p>
                       )}
-                      <p className="text-caption text-neutral-600 mt-0.5">
+                      <p className="text-caption text-neutral-500 mt-0.5">
                         {timeAgo(rec.created_at)}
                       </p>
                     </Link>
@@ -948,7 +948,7 @@ export default function NavBar() {
                 </svg>
               </button>
             )}
-            <DisclosureButton className="group relative inline-flex items-center justify-center rounded-lg p-2 text-neutral-400 hover:bg-neutral-900 hover:text-white transition-colors focus:outline-none">
+            <DisclosureButton className="group relative inline-flex items-center justify-center rounded-lg p-2 text-neutral-400 hover:bg-neutral-900 hover:text-white transition-colors">
               <span className="absolute -inset-0.5" />
               <span className="sr-only">Open main menu</span>
               <Bars3Icon
@@ -1129,7 +1129,7 @@ export default function NavBar() {
                         await signOut(auth);
                         navigate("/");
                       }}
-                      className="w-full text-left px-3 py-2 text-label font-medium text-neutral-400 hover:bg-white/5 hover:text-neutral-200 transition-colors focus:outline-none"
+                      className="w-full text-left px-3 py-2 text-label font-medium text-neutral-400 hover:bg-white/5 hover:text-neutral-200 transition-colors"
                     >
                       Sign out
                     </button>

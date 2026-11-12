@@ -151,7 +151,10 @@ const SignIn: React.FC = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
-  const [isRegistering, setIsRegistering] = useState(false);
+  // ?mode=register opens on the Register tab (the landing page's sign-up link).
+  const [isRegistering, setIsRegistering] = useState(
+    () => searchParams.get("mode") === "register",
+  );
   const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(
     null,
   );
@@ -890,7 +893,7 @@ const SignIn: React.FC = () => {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
                 required
-                className="w-full bg-neutral-900 border border-neutral-700 text-white placeholder-neutral-600 px-3.5 py-3 rounded-xl text-sm focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500 transition-colors"
+                className="w-full bg-neutral-900 border border-neutral-700 text-white placeholder-neutral-500 px-3.5 py-3 rounded-xl text-sm focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500 transition-colors"
               />
             </label>
 
@@ -908,7 +911,7 @@ const SignIn: React.FC = () => {
                     : "Enter your password"
                 }
                 required
-                className="w-full bg-neutral-900 border border-neutral-700 text-white placeholder-neutral-600 px-3.5 py-3 rounded-xl text-sm focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500 transition-colors"
+                className="w-full bg-neutral-900 border border-neutral-700 text-white placeholder-neutral-500 px-3.5 py-3 rounded-xl text-sm focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500 transition-colors"
               />
               {!isRegistering && (
                 <button
@@ -933,7 +936,7 @@ const SignIn: React.FC = () => {
                   onChange={handleUsernameChange}
                   placeholder="letters, numbers, underscores"
                   required
-                  className={`w-full bg-neutral-900 border text-white placeholder-neutral-600 px-3.5 py-3 rounded-xl text-sm focus:outline-none focus:ring-1 transition-colors ${
+                  className={`w-full bg-neutral-900 border text-white placeholder-neutral-500 px-3.5 py-3 rounded-xl text-sm focus:outline-none focus:ring-1 transition-colors ${
                     username.length >= 3
                       ? usernameAvailable === true
                         ? "border-success-500 focus:border-success-500 focus:ring-success-500"

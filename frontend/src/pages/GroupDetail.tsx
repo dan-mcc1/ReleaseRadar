@@ -354,7 +354,7 @@ function NewPostBox({ communityId }: { communityId: number }) {
         onChange={(e) => setTitle(e.target.value)}
         placeholder="Title (optional)"
         maxLength={150}
-        className="w-full bg-neutral-950 border border-neutral-800 rounded-control px-3 py-2 text-sm text-white placeholder-neutral-600 outline-none focus:border-neutral-600 mb-2"
+        className="w-full bg-neutral-950 border border-neutral-800 rounded-control px-3 py-2 text-sm text-white placeholder-neutral-500 outline-none focus:border-neutral-600 mb-2"
       />
       <textarea
         value={body}
@@ -362,7 +362,7 @@ function NewPostBox({ communityId }: { communityId: number }) {
         placeholder="Start a discussion…"
         rows={3}
         maxLength={5000}
-        className="w-full bg-neutral-950 border border-neutral-800 rounded-control px-3 py-2 text-sm text-white placeholder-neutral-600 outline-none focus:border-neutral-600 resize-none"
+        className="w-full bg-neutral-950 border border-neutral-800 rounded-control px-3 py-2 text-sm text-white placeholder-neutral-500 outline-none focus:border-neutral-600 resize-none"
       />
       {error && <p className="text-error-400 text-xs mt-2">{error}</p>}
       <div className="flex justify-between items-center mt-2">
@@ -432,7 +432,7 @@ function PostRow({
                 onChange={(e) => setEditTitle(e.target.value)}
                 placeholder="Title (optional)"
                 maxLength={150}
-                className="w-full bg-neutral-950 border border-neutral-800 rounded-control px-3 py-2 text-sm text-white placeholder-neutral-600 outline-none focus:border-neutral-600 mb-2"
+                className="w-full bg-neutral-950 border border-neutral-800 rounded-control px-3 py-2 text-sm text-white placeholder-neutral-500 outline-none focus:border-neutral-600 mb-2"
               />
               <textarea
                 value={editBody}
@@ -472,7 +472,7 @@ function PostRow({
               )}
               <p className="text-label text-neutral-500 mb-2">
                 {authorLabel} · {timeAgo(post.created_at)}
-                {post.edited_at && <span className="text-neutral-600 italic"> · edited</span>}
+                {post.edited_at && <span className="text-neutral-500 italic"> · edited</span>}
               </p>
               <p className="text-body text-neutral-200 whitespace-pre-wrap leading-snug">
                 {post.body}
@@ -601,7 +601,7 @@ function ReplyRow({
       <div className="flex-1 min-w-0">
         <p className="text-caption text-neutral-500">
           {author} · {timeAgo(reply.created_at)}
-          {reply.edited_at && <span className="text-neutral-600 italic"> · edited</span>}
+          {reply.edited_at && <span className="text-neutral-500 italic"> · edited</span>}
         </p>
         {editing ? (
           <>
@@ -661,7 +661,7 @@ function ReplyRow({
                 onClick={() => {
                   if (window.confirm("Delete this reply?")) del.mutate(reply.id);
                 }}
-                className="text-caption text-neutral-600 hover:text-error-400"
+                className="text-caption text-neutral-500 hover:text-error-400"
               >
                 Delete
               </button>
@@ -669,7 +669,7 @@ function ReplyRow({
             {!isAuthor && userId && (
               <button
                 onClick={() => setShowReport(true)}
-                className="text-caption text-neutral-600 hover:text-error-400"
+                className="text-caption text-neutral-500 hover:text-error-400"
               >
                 Report
               </button>
@@ -724,7 +724,7 @@ function PostReplies({
             placeholder="Reply…"
             rows={2}
             maxLength={2000}
-            className="flex-1 bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-label text-white placeholder-neutral-600 outline-none focus:border-neutral-600 resize-none"
+            className="flex-1 bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-label text-white placeholder-neutral-500 outline-none focus:border-neutral-600 resize-none"
           />
           <Button
             variant="primary"

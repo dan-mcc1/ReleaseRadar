@@ -48,7 +48,7 @@ export default function MiniWatchButton({ contentType, contentId, initialStatus,
         ? "text-highlight-400"
         : status === "Want To Watch"
           ? "text-primary-400"
-          : "text-neutral-600 hover:text-neutral-400";
+          : "text-neutral-500 hover:text-neutral-400";
 
   return (
     <button

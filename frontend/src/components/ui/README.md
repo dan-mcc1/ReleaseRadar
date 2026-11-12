@@ -31,6 +31,7 @@ don't restyle them per component.
 | `PosterCard` | A title in a grid | `actions` sit bottom-right in every state; `corner` top-left; `footer` for ratings. |
 | `Card` | A panel that must read as one unit | Not a default wrapper. Never nest. |
 | `EmptyState` | Nothing to show | Say what's empty and give the way out. |
+| `Modal` | Every dialog, confirm and overlay | Focus trap, Escape, focus return and labelling built in. `title` is required (`hideTitle` for media); `dismissible={false}` for must-answer prompts; `variant="bare"` for video. Never hand-roll a `fixed inset-0` overlay. |
 | `Rating` | A TMDb rating in a subtitle or fact | Star icon + tabular number; renders nothing for 0. |
 | icons | `CheckIcon`, `PlusIcon`, … | Heroicons (24px outline, solid for "on"). No pasted `<svg>` paths or →★✓✕ glyphs. |
 

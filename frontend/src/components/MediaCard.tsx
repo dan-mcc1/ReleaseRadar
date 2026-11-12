@@ -60,7 +60,7 @@ export default function MediaCard({ item, type, onRemove }: MediaCardProps) {
           ) : (
             <div className="h-full w-full bg-neutral-700 flex items-center justify-center">
               <svg
-                className="w-12 h-12 text-neutral-600"
+                className="w-12 h-12 text-neutral-500"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -134,7 +134,7 @@ export default function MediaCard({ item, type, onRemove }: MediaCardProps) {
                 <StarIcon
                   key={s}
                   filled={s <= item.user_rating!}
-                  className={`w-3.5 h-3.5 ${s <= item.user_rating! ? "text-warning-400" : "text-neutral-600"}`}
+                  className={`w-3.5 h-3.5 ${s <= item.user_rating! ? "text-warning-400" : "text-neutral-500"}`}
                 />
               ))}
             </div>

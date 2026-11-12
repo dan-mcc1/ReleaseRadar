@@ -3,19 +3,24 @@
 // Use these instead of pasting <svg> paths or unicode glyphs (→ ★ ✓ ✕) into
 // components. They're decorative; the control holding one carries the label.
 import {
+  ArrowPathIcon as RefreshOutline,
   BookmarkIcon as BookmarkOutline,
+  CalendarDaysIcon as CalendarOutline,
   CheckIcon as CheckOutline,
   ChevronDownIcon as ChevronDownOutline,
   ChevronLeftIcon as ChevronLeftOutline,
   ChevronRightIcon as ChevronRightOutline,
   FunnelIcon as FunnelOutline,
+  HeartIcon as HeartOutline,
   MagnifyingGlassIcon as SearchOutline,
   PlusIcon as PlusOutline,
   StarIcon as StarOutline,
+  UsersIcon as UsersOutline,
   XMarkIcon as CloseOutline,
 } from "@heroicons/react/24/outline";
 import {
   BookmarkIcon as BookmarkSolid,
+  HeartIcon as HeartSolid,
   PlayIcon as PlaySolid,
   StarIcon as StarSolid,
 } from "@heroicons/react/24/solid";
@@ -78,5 +83,25 @@ export function StarIcon({ filled = true, className = SIZE }: IconProps & { fill
     <StarSolid className={className} aria-hidden="true" />
   ) : (
     <StarOutline className={className} strokeWidth={STROKE} aria-hidden="true" />
+  );
+}
+
+export function CalendarIcon({ className = SIZE }: IconProps) {
+  return <CalendarOutline className={className} strokeWidth={STROKE} aria-hidden="true" />;
+}
+
+export function RefreshIcon({ className = SIZE }: IconProps) {
+  return <RefreshOutline className={className} strokeWidth={STROKE} aria-hidden="true" />;
+}
+
+export function UsersIcon({ className = SIZE }: IconProps) {
+  return <UsersOutline className={className} strokeWidth={STROKE} aria-hidden="true" />;
+}
+
+export function HeartIcon({ filled = false, className = SIZE }: IconProps & { filled?: boolean }) {
+  return filled ? (
+    <HeartSolid className={className} aria-hidden="true" />
+  ) : (
+    <HeartOutline className={className} strokeWidth={STROKE} aria-hidden="true" />
   );
 }

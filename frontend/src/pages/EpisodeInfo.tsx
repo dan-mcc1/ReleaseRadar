@@ -293,7 +293,7 @@ export default function EpisodeInfo() {
             <Link to={`/tv/${showId}`} className="text-neutral-400 hover:text-neutral-200 transition-colors">
               {showName}
             </Link>
-            <span className="text-neutral-600">/</span>
+            <span className="text-neutral-500">/</span>
           </>
         )}
         <Link
@@ -302,7 +302,7 @@ export default function EpisodeInfo() {
         >
           Season {data.season_number}
         </Link>
-        <span className="text-neutral-600">/</span>
+        <span className="text-neutral-500">/</span>
         <span className="text-neutral-200 font-medium">
           Episode {data.episode_number}
         </span>
@@ -462,7 +462,7 @@ export default function EpisodeInfo() {
                   maxLength={2000}
                   rows={3}
                   placeholder="What did you think?"
-                  className="w-full bg-neutral-800 border border-neutral-700 rounded-control px-3 py-2 text-body text-neutral-200 placeholder-neutral-600 resize-none focus:outline-none focus:border-primary-500 font-sans"
+                  className="w-full bg-neutral-800 border border-neutral-700 rounded-control px-3 py-2 text-body text-neutral-200 placeholder-neutral-500 resize-none focus:outline-none focus:border-primary-500 font-sans"
                 />
                 <div className="flex items-center gap-2 justify-end">
                   <Button variant="ghost" size="sm" onClick={() => setNotesOpen(false)}>

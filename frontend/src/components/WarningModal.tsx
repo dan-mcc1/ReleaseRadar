@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { ExclamationTriangleIcon } from "@heroicons/react/24/outline";
-import { Button } from "./ui";
+import { Button, Modal } from "./ui";
 import { useUserMe, useAcknowledgeWarning } from "../hooks/api/useUser";
 
 function ordinal(n: number): string {
@@ -49,18 +49,31 @@ export default function WarningModal() {
   const consequence = consequenceMessage(me.warning_count);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-      <div className="bg-neutral-800 border border-warning-600/60 rounded-surface p-6 w-full max-w-sm space-y-4 shadow-xl">
+    <Modal
+      open
+      onClose={() => {}}
+      dismissible={false}
+      size="sm"
+      title="Account Warning"
+      footer={
+        <Button
+          variant="primary"
+          className="w-full"
+          onClick={() => acknowledge.mutate()}
+          disabled={acknowledge.isPending}
+        >
+          I understand
+        </Button>
+      }
+    >
+      <div className="space-y-4">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-warning-900/60 flex items-center justify-center shrink-0">
             <ExclamationTriangleIcon className="w-5 h-5 text-warning-400" strokeWidth={2} aria-hidden="true" />
           </div>
-          <div>
-            <h3 className="text-white font-semibold">Account Warning</h3>
-            <p className="text-warning-400 text-caption font-medium">
-              {ordinal(me.warning_count)} warning
-            </p>
-          </div>
+          <p className="text-warning-400 text-caption font-medium">
+            {ordinal(me.warning_count)} warning
+          </p>
         </div>
         <p className="text-neutral-300 text-sm leading-relaxed">
           Your account has received a warning from our moderation team for a
@@ -80,15 +93,7 @@ export default function WarningModal() {
             {consequence.text}
           </p>
         )}
-        <Button
-          variant="primary"
-          className="w-full"
-          onClick={() => acknowledge.mutate()}
-          disabled={acknowledge.isPending}
-        >
-          I understand
-        </Button>
       </div>
-    </div>
+    </Modal>
   );
 }

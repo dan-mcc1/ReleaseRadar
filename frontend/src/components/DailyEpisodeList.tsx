@@ -219,7 +219,7 @@ export default function DailyEpisodeList({ dailyItems }: DailyItemListProps) {
                       S{episode.season_number}E{episode.episode_number}
                     </span>
                     {episode.name}
-                    <span className="text-neutral-600 mx-1.5">·</span>
+                    <span className="text-neutral-500 mx-1.5">·</span>
                     <span className="text-neutral-500 text-xs">
                       <RuntimeBadge minutes={episode.runtime} />
                     </span>

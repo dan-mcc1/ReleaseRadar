@@ -38,7 +38,7 @@ export default function Chip({
       {dot && <span className="size-2 rounded-full" style={{ background: dot }} aria-hidden="true" />}
       {children}
       {count !== undefined && (
-        <span className={cx("tabular", pressed ? "text-neutral-600" : "text-neutral-500")}>{count}</span>
+        <span className={cx("tabular", pressed ? "text-neutral-500" : "text-neutral-500")}>{count}</span>
       )}
     </button>
   );

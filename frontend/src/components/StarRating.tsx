@@ -31,7 +31,7 @@ export default function StarRating({
           <StarIcon
             filled={star <= displayed}
             className={`w-5 h-5 transition-colors duration-100 ${
-              star <= displayed ? "text-warning-400" : "text-neutral-600"
+              star <= displayed ? "text-warning-400" : "text-neutral-500"
             }`}
           />
         </button>

@@ -91,8 +91,11 @@
   --color-neutral-300: #d4d4d4;
   --color-neutral-350: #bcbcbc;
   --color-neutral-400: #a3a3a3;
-  --color-neutral-450: #8b8b8b;
-  --color-neutral-500: #737373;
+  /* 500 is the quietest text colour, so it must reach WCAG AA (4.5:1) on every
+     dark surface up to neutral-800: #8f8f8f is 4.7:1 there, 6:1 on 950.
+     Don't use 550 or darker for text. */
+  --color-neutral-450: #999999;
+  --color-neutral-500: #8f8f8f;
   --color-neutral-550: #636363;
   --color-neutral-600: #525252;
   --color-neutral-650: #494949;

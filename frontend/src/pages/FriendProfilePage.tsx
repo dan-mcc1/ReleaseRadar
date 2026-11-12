@@ -9,6 +9,7 @@ import { queryKeys } from "../hooks/api/queryKeys";
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useEffect, useRef, useState } from "react";
 import { useBlockUser } from "../hooks/api/useModeration";
+import { Modal } from "../components/ui";
 import ReportModal from "../components/ReportModal";
 import {
   Button,
@@ -574,12 +575,13 @@ export default function FriendProfilePage() {
 
       {/* ── Block modal ─────────────────────────────────────────── */}
       {showBlockConfirm && (
-        <Modal onClose={() => setShowBlockConfirm(false)}>
-          <h3 className="text-white font-semibold mb-1">Block @{profile.username}?</h3>
-          <p className="text-neutral-400 text-body mb-5">
-            They won't be able to send you friend requests or recommendations, and their content won't appear to you.
-          </p>
-          <div className="flex gap-2">
+        <Modal
+          open
+          onClose={() => setShowBlockConfirm(false)}
+          size="sm"
+          title={<>Block @{profile.username}?</>}
+          footer={
+            <>
             <Button onClick={() => setShowBlockConfirm(false)} className="flex-1">
               Cancel
             </Button>
@@ -591,18 +593,24 @@ export default function FriendProfilePage() {
             >
               {blockMutation.isPending ? "Blocking…" : "Block"}
             </Button>
-          </div>
+            </>
+          }
+        >
+          <p className="text-neutral-400 text-body">
+            They won't be able to send you friend requests or recommendations, and their content won't appear to you.
+          </p>
         </Modal>
       )}
 
       {/* ── Unfriend modal ──────────────────────────────────────── */}
       {showUnfriendConfirm && (
-        <Modal onClose={() => setShowUnfriendConfirm(false)}>
-          <h3 className="text-white font-semibold mb-1">Unfriend @{profile.username}?</h3>
-          <p className="text-neutral-400 text-body mb-5">
-            You'll lose access to their private lists and they'll be removed from your friends.
-          </p>
-          <div className="flex gap-2">
+        <Modal
+          open
+          onClose={() => setShowUnfriendConfirm(false)}
+          size="sm"
+          title={<>Unfriend @{profile.username}?</>}
+          footer={
+            <>
             <Button onClick={() => setShowUnfriendConfirm(false)} className="flex-1">
               Cancel
             </Button>
@@ -614,7 +622,12 @@ export default function FriendProfilePage() {
             >
               {removeFriendMutation.isPending ? "Removing…" : "Unfriend"}
             </Button>
-          </div>
+            </>
+          }
+        >
+          <p className="text-neutral-400 text-body">
+            You'll lose access to their private lists and they'll be removed from your friends.
+          </p>
         </Modal>
       )}
 
@@ -656,21 +669,5 @@ function ListBlock({
         <p className="text-neutral-500 text-body">Nothing here yet.</p>
       )}
     </section>
-  );
-}
-
-function Modal({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-      onClick={onClose}
-    >
-      <div
-        className="bg-neutral-900 border border-neutral-800 rounded-surface p-6 w-full max-w-sm"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {children}
-      </div>
-    </div>
   );
 }

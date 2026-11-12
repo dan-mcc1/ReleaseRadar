@@ -10,7 +10,7 @@ import ReviewsSection from "../components/ReviewsSection";
 import RewatchSection from "../components/RewatchSection";
 import { useAuthLoading, useAuthUser } from "../hooks/useAuthUser";
 import { useMediaInfo } from "../hooks/useMediaInfo";
-import { usePageTitle } from "../hooks/usePageTitle";
+import { usePageMeta } from "../hooks/usePageMeta";
 import RatingsRow from "../components/media/RatingsRow";
 import ExternalLinksSection from "../components/media/ExternalLinksSection";
 import TrailerButton from "../components/media/TrailerButton";
@@ -98,7 +98,7 @@ export default function MovieInfo() {
   const authLoading = useAuthLoading();
   // Only once auth has answered, so signed-in visitors never see it flash.
   const signedOut = !user && !authLoading;
-  usePageTitle(movie?.title);
+  usePageMeta({ title: movie?.title, description: movie?.overview });
 
   if (loading)
     return (

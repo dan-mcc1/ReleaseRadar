@@ -4,6 +4,7 @@ import { API_URL } from "../constants";
 import { queryFetch } from "../hooks/api/queryFetch";
 import { queryKeys } from "../hooks/api/queryKeys";
 import { useAuthUser } from "../hooks/useAuthUser";
+import { Modal } from "./ui";
 
 interface Props {
   isOpen: boolean;
@@ -133,55 +134,32 @@ export default function CalendarSyncModal({ isOpen, onClose }: Props) {
     setTimeout(() => setCopied(false), 2000);
   }
 
-  if (!isOpen) return null;
-
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-    >
-      <div className="w-full max-w-lg bg-neutral-900 border border-neutral-700 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-700">
-          <div className="flex items-center gap-2.5">
-            <svg
-              className="w-5 h-5 text-primary-400"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={1.8}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-              />
-            </svg>
-            <h2 className="text-base font-semibold text-white">
-              Sync with Your Calendar
-            </h2>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-neutral-400 hover:text-white transition-colors rounded-lg p-1 hover:bg-neutral-700"
+    <Modal
+      open={isOpen}
+      onClose={onClose}
+      size="lg"
+      title={
+        <span className="flex items-center gap-2.5">
+          <svg
+            className="w-5 h-5 text-primary-400"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={1.8}
+            aria-hidden="true"
           >
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </button>
-        </div>
-
-        <div className="px-6 py-5 flex flex-col gap-5 overflow-y-auto">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+            />
+          </svg>
+          Sync with Your Calendar
+        </span>
+      }
+    >
+      <div className="flex flex-col gap-5">
           {/* Explanation */}
           <p className="text-sm text-neutral-400 leading-relaxed">
             Subscribe to your personal calendar feed to see your tracked TV
@@ -321,8 +299,7 @@ export default function CalendarSyncModal({ isOpen, onClose }: Props) {
               ))}
             </div>
           </div>
-        </div>
       </div>
-    </div>
+    </Modal>
   );
 }

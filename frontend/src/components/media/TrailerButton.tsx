@@ -1,6 +1,5 @@
-import { useState, useEffect } from "react";
-import { createPortal } from "react-dom";
-import { CloseIcon, PlayIcon } from "../ui";
+import { useState } from "react";
+import { Modal, PlayIcon } from "../ui";
 
 interface Props {
   trailerKey: string;
@@ -9,42 +8,18 @@ interface Props {
 }
 
 function TrailerModal({ trailerKey, onClose }: { trailerKey: string; onClose: () => void }) {
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
-      onClick={onClose}
-    >
-      <div
-        className="relative w-full max-w-4xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <button
-          onClick={onClose}
-          className="absolute -top-10 right-0 text-neutral-400 hover:text-white transition-colors flex items-center gap-1.5 text-sm"
-        >
-          <CloseIcon />
-          Close
-        </button>
-        <div className="aspect-video rounded-xl overflow-hidden shadow-2xl">
-          <iframe
-            src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&rel=0`}
-            title="Trailer"
-            className="w-full h-full"
-            allowFullScreen
-            allow="autoplay; encrypted-media"
-          />
-        </div>
+  return (
+    <Modal open onClose={onClose} title="Trailer" hideTitle variant="bare" size="xl">
+      <div className="aspect-video rounded-xl overflow-hidden shadow-2xl">
+        <iframe
+          src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&rel=0`}
+          title="Trailer"
+          className="w-full h-full"
+          allowFullScreen
+          allow="autoplay; encrypted-media"
+        />
       </div>
-    </div>,
-    document.body,
+    </Modal>
   );
 }
 

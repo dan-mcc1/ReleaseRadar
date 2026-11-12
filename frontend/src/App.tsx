@@ -118,11 +118,26 @@ function AppShell({ children }: { children: ReactNode }) {
   const isStripped = isSignIn || isAdmin;
   return (
     <>
+      {/* First tab stop: jumps keyboard users past the navigation. */}
+      <a
+        href="#main-content"
+        onClick={(e) => {
+          // Move focus without touching the URL: a #hash would re-trigger
+          // hash-driven code such as the tour and Settings' section scroll.
+          e.preventDefault();
+          document.getElementById("main-content")?.focus();
+        }}
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[60] focus:rounded-control focus:bg-primary-500 focus:px-4 focus:py-2 focus:text-label focus:font-semibold focus:text-neutral-950"
+      >
+        Skip to content
+      </a>
       {!isStripped && <NavBar />}
       {!isStripped && <div className="h-16 shrink-0" />}
       {!isStripped && <EmailVerificationBanner />}
       <InstallBanner />
-      {children}
+      <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col focus:outline-none">
+        {children}
+      </main>
       {!isStripped && <Footer />}
     </>
   );

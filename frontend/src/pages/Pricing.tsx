@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { usePageTitle } from "../hooks/usePageTitle";
+import { usePageMeta } from "../hooks/usePageMeta";
 import { CHECKOUT_ENABLED } from "../config/features";
 import {
   useSubscription,
@@ -70,12 +70,12 @@ function FeatureIcon({ included }: { included: boolean }) {
   return included ? (
     <CheckIcon className="w-4 h-4 shrink-0 text-neutral-300" />
   ) : (
-    <CloseIcon className="w-4 h-4 shrink-0 text-neutral-600" />
+    <CloseIcon className="w-4 h-4 shrink-0 text-neutral-500" />
   );
 }
 
 export default function Pricing() {
-  usePageTitle("Pricing");
+  usePageMeta({ title: "Pricing", description: "Release Radar is free during the beta, no card needed. See what is planned for premium." });
   const navigate = useNavigate();
   const { isPremium, isLoading } = useSubscription();
   const checkout = useCreateCheckoutSession();
@@ -127,7 +127,7 @@ export default function Pricing() {
             {FREE_FEATURES.map((f) => (
               <li
                 key={f.text}
-                className={`flex items-start gap-2.5 text-label ${f.included ? "text-neutral-300" : "text-neutral-600"}`}
+                className={`flex items-start gap-2.5 text-label ${f.included ? "text-neutral-300" : "text-neutral-500"}`}
               >
                 <FeatureIcon included={f.included} />
                 {f.text}

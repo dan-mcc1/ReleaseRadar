@@ -1,15 +1,19 @@
 // frontend/src/pages/LandingPage.tsx
 import { Navigate } from "react-router-dom";
-import { usePageTitle } from "../hooks/usePageTitle";
+import { usePageMeta } from "../hooks/usePageMeta";
 import { useAuthUser } from "../hooks/useAuthUser";
 import TrendingSection from "../components/landing/TrendingSection";
 import ComingSoonSection from "../components/landing/ComingSoonSection";
 import BrowseGenresSection from "../components/landing/BrowseGenresSection";
 import ReleasePreview from "../components/landing/ReleasePreview";
+import WhySection from "../components/landing/WhySection";
 import { ButtonLink } from "../components/ui";
 
 export default function LandingPage() {
-  usePageTitle();
+  usePageMeta({
+    description:
+      "Track the shows and movies you follow. Release Radar builds your release calendar and alerts from them and keeps your lists up to date, down to the episode. Free during the beta.",
+  });
   const user = useAuthUser();
 
   // Signed-in visitors go to their calendar as soon as auth knows who they
@@ -35,20 +39,24 @@ export default function LandingPage() {
             episode.
           </p>
           <div className="mt-6 flex flex-wrap items-center gap-3">
-            <ButtonLink to="/signIn" variant="primary">
-              Sign in to get started
+            <ButtonLink to="/signIn?mode=register" variant="primary">
+              Create a free account
             </ButtonLink>
             <ButtonLink to="/browse-genres" variant="ghost">
               Browse titles
             </ButtonLink>
           </div>
-          <p className="mt-4 text-caption text-neutral-400">
+          <p className="mt-4 text-label text-neutral-300">
+            Free during the beta: every feature unlocked, no card needed.
+          </p>
+          <p className="mt-1 text-caption text-neutral-400">
             The calendar shows original air dates only, not reruns.
           </p>
         </div>
         <ReleasePreview />
       </section>
 
+      <WhySection />
       <TrendingSection />
       <ComingSoonSection />
       <BrowseGenresSection />
