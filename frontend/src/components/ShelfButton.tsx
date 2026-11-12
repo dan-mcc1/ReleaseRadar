@@ -93,18 +93,28 @@ function IconPlus() {
   );
 }
 
-// ── Component ──────────────────────────────────────────────────────────────
+// ── Shelf picker ───────────────────────────────────────────────────────────
 
-export default function ShelfButton({ contentType, contentId, compact = false }: ShelfButtonProps) {
+interface ShelfPickerProps {
+  contentType: "movie" | "tv";
+  contentId: number;
+  /** Creating a shelf hit the plan limit; the parent shows the upgrade modal. */
+  onUpgradeRequired: () => void;
+  /** Tells the parent while a shelf change is being saved. */
+  onBusyChange?: (busy: boolean) => void;
+}
+
+/** The list of shelves with a tick on each one this title is on, plus "New shelf". */
+export function ShelfPicker({
+  contentType,
+  contentId,
+  onUpgradeRequired,
+  onBusyChange,
+}: ShelfPickerProps) {
   const user = useAuthUser();
-  const { isPremium } = useSubscription();
   const toast = useToast();
-  const shelvesGated = isPremiumFeature("shelves") && !isPremium;
-  const [menuOpen, setMenuOpen] = useState(false);
   const [showNewInput, setShowNewInput] = useState(false);
   const [newShelfName, setNewShelfName] = useState("");
-  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const { data: shelves = [] } = useShelves();
@@ -113,21 +123,15 @@ export default function ShelfButton({ contentType, contentId, compact = false }:
   const addToShelf = useAddToShelf();
   const removeFromShelf = useRemoveFromShelf();
 
-  const shelfCount = itemShelfIds.length;
-  const hasAnyShelves = shelfCount > 0;
   const isMutating = addToShelf.isPending || removeFromShelf.isPending || createShelf.isPending;
 
   useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setMenuOpen(false);
-        setShowNewInput(false);
-        setNewShelfName("");
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+    onBusyChange?.(isMutating);
+  }, [isMutating, onBusyChange]);
+
+  useEffect(() => {
+    return () => onBusyChange?.(false);
+  }, [onBusyChange]);
 
   useEffect(() => {
     if (showNewInput) {
@@ -162,13 +166,105 @@ export default function ShelfButton({ contentType, contentId, compact = false }:
       setShowNewInput(false);
     } catch (err: unknown) {
       if (err instanceof Error && err.message === "upgrade_required") {
-        setMenuOpen(false);
-        setShowUpgradeModal(true);
+        onUpgradeRequired();
       } else {
         toast.error("Failed to create shelf");
       }
     }
   }
+
+  return (
+    <>
+      {shelves.length === 0 && !showNewInput && (
+        <p className="px-4 py-3 text-sm text-neutral-400">No shelves yet</p>
+      )}
+
+      {shelves.map((shelf) => {
+        const isOn = itemShelfIds.includes(shelf.id);
+        return (
+          <button
+            key={shelf.id}
+            onClick={() => handleToggleShelf(shelf.id)}
+            className="flex items-center justify-between w-full text-left px-4 py-3 text-sm text-neutral-200 hover:bg-neutral-700 transition-colors"
+          >
+            <span className="truncate pr-2">{shelf.name}</span>
+            {isOn && (
+              <span className="text-sky-400 shrink-0">
+                <IconCheck />
+              </span>
+            )}
+          </button>
+        );
+      })}
+
+      <div className="border-t border-neutral-700 mx-3" />
+
+      {showNewInput ? (
+        <div className="px-3 py-2 flex gap-2">
+          <input
+            ref={inputRef}
+            value={newShelfName}
+            onChange={(e) => setNewShelfName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleCreateShelf();
+              if (e.key === "Escape") {
+                // Only cancels the new shelf, not the menu around it.
+                e.stopPropagation();
+                setShowNewInput(false);
+                setNewShelfName("");
+              }
+            }}
+            placeholder="Shelf name…"
+            aria-label="New shelf name"
+            className="flex-1 min-w-0 bg-neutral-700 border border-neutral-600 rounded-lg px-3 py-1.5 text-sm text-neutral-100 placeholder-neutral-500 outline-none focus:border-sky-500"
+          />
+          <button
+            onClick={handleCreateShelf}
+            disabled={!newShelfName.trim() || createShelf.isPending}
+            className="px-3 py-1.5 text-sm font-semibold bg-sky-600 hover:bg-sky-500 text-white rounded-lg disabled:opacity-50 transition-colors"
+          >
+            {createShelf.isPending ? <IconSpinner /> : "Add"}
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={() => setShowNewInput(true)}
+          className="flex items-center gap-2 w-full text-left px-4 py-3 text-sm text-neutral-400 hover:text-neutral-200 hover:bg-neutral-700 transition-colors"
+        >
+          <IconPlus />
+          New shelf
+        </button>
+      )}
+    </>
+  );
+}
+
+// ── Component ──────────────────────────────────────────────────────────────
+
+export default function ShelfButton({ contentType, contentId, compact = false }: ShelfButtonProps) {
+  const user = useAuthUser();
+  const { isPremium } = useSubscription();
+  const toast = useToast();
+  const shelvesGated = isPremiumFeature("shelves") && !isPremium;
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [isMutating, setIsMutating] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const { data: itemShelfIds = [] } = useItemShelves(contentType, contentId);
+
+  const shelfCount = itemShelfIds.length;
+  const hasAnyShelves = shelfCount > 0;
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const mainClass = hasAnyShelves
     ? "bg-neutral-700 hover:bg-neutral-600 text-sky-300 border border-sky-500/60"
@@ -231,63 +327,15 @@ export default function ShelfButton({ contentType, contentId, compact = false }:
         <div
           className={`absolute top-full mt-2 w-60 bg-neutral-800 border border-neutral-700 rounded-xl shadow-2xl shadow-black/60 z-30 overflow-hidden ${compact ? "right-0 sm:right-auto sm:left-0" : "left-0"}`}
         >
-          {shelves.length === 0 && !showNewInput && (
-            <p className="px-4 py-3 text-sm text-neutral-400">No shelves yet</p>
-          )}
-
-          {shelves.map((shelf) => {
-            const isOn = itemShelfIds.includes(shelf.id);
-            return (
-              <button
-                key={shelf.id}
-                onClick={() => handleToggleShelf(shelf.id)}
-                className="flex items-center justify-between w-full text-left px-4 py-3 text-sm text-neutral-200 hover:bg-neutral-700 transition-colors"
-              >
-                <span className="truncate pr-2">{shelf.name}</span>
-                {isOn && (
-                  <span className="text-sky-400 shrink-0">
-                    <IconCheck />
-                  </span>
-                )}
-              </button>
-            );
-          })}
-
-          <div className="border-t border-neutral-700 mx-3" />
-
-          {showNewInput ? (
-            <div className="px-3 py-2 flex gap-2">
-              <input
-                ref={inputRef}
-                value={newShelfName}
-                onChange={(e) => setNewShelfName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleCreateShelf();
-                  if (e.key === "Escape") {
-                    setShowNewInput(false);
-                    setNewShelfName("");
-                  }
-                }}
-                placeholder="Shelf name…"
-                className="flex-1 min-w-0 bg-neutral-700 border border-neutral-600 rounded-lg px-3 py-1.5 text-sm text-neutral-100 placeholder-neutral-500 outline-none focus:border-sky-500"
-              />
-              <button
-                onClick={handleCreateShelf}
-                disabled={!newShelfName.trim() || createShelf.isPending}
-                className="px-3 py-1.5 text-sm font-semibold bg-sky-600 hover:bg-sky-500 text-white rounded-lg disabled:opacity-50 transition-colors"
-              >
-                {createShelf.isPending ? <IconSpinner /> : "Add"}
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => setShowNewInput(true)}
-              className="flex items-center gap-2 w-full text-left px-4 py-3 text-sm text-neutral-400 hover:text-neutral-200 hover:bg-neutral-700 transition-colors"
-            >
-              <IconPlus />
-              New shelf
-            </button>
-          )}
+          <ShelfPicker
+            contentType={contentType}
+            contentId={contentId}
+            onBusyChange={setIsMutating}
+            onUpgradeRequired={() => {
+              setMenuOpen(false);
+              setShowUpgradeModal(true);
+            }}
+          />
         </div>
       )}
       {showUpgradeModal && (
