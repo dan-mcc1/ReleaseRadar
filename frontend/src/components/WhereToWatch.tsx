@@ -15,6 +15,10 @@ function deduplicateProviders(list: WatchProvider[]): WatchProvider[] {
   });
 }
 
+// Fixed-width cells so every logo lines up on the same grid whatever the name's length.
+const GRID = "grid grid-cols-[repeat(auto-fill,4.5rem)] gap-x-3 gap-y-4";
+const GROUP_LABEL = "font-mono text-[10px] tracking-[0.15em] text-neutral-500 uppercase mb-2.5";
+
 interface WhereToWatchProps {
   providers: Provider;
   hideTitle?: boolean;
@@ -38,13 +42,14 @@ function ProviderCard({
   const url = getProviderUrl(providerId) ?? fallbackUrl;
 
   const content = (
-    <div className="flex flex-col items-center gap-2" title={providerName}>
+    <div className="flex flex-col gap-1.5" title={providerName}>
       {logoPath && (
         <div className="relative">
           <img
             src={`${BASE_IMAGE_URL}/w154${logoPath}`}
-            alt={providerName}
-            className={`h-20 w-20 rounded transition-all ${owned ? "ring-2 ring-primary-500 ring-offset-2 ring-offset-neutral-900" : ""}`}
+            alt=""
+            loading="lazy"
+            className={`block w-full aspect-square rounded-xl transition-all ${owned ? "ring-2 ring-primary-500 ring-offset-2 ring-offset-neutral-950" : ""}`}
           />
           {owned && (
             <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-primary-500 rounded-full flex items-center justify-center shadow">
@@ -55,7 +60,11 @@ function ProviderCard({
           )}
         </div>
       )}
-      <span className={`text-sm ${owned ? "text-primary-400 font-medium" : ""}`}>{providerName}</span>
+      <span
+        className={`text-xs leading-tight text-center line-clamp-2 ${owned ? "text-primary-400 font-medium" : "text-neutral-300"}`}
+      >
+        {providerName}
+      </span>
     </div>
   );
 
@@ -84,12 +93,12 @@ export default function WhereToWatch({ providers, hideTitle = false }: WhereToWa
   }
 
   return (
-    <div className="mt-8">
-      {!hideTitle && <h2 className="text-xl font-semibold mb-3">Where to Watch</h2>}
+    <div className={`space-y-5 ${hideTitle ? "mt-3" : "mt-8"}`}>
+      {!hideTitle &&<h2 className="text-xl font-semibold mb-3">Where to Watch</h2>}
       {providers.flatrate && (
-        <div className="mb-4">
-          <h3 className="font-medium mb-2">Streaming</h3>
-          <div className="flex gap-4 flex-wrap">
+        <div>
+          <h3 className={GROUP_LABEL}>Streaming</h3>
+          <div className={GRID}>
             {sortOwned(deduplicateProviders(providers.flatrate)).map((p) => (
               <ProviderCard
                 key={p.provider_id}
@@ -105,9 +114,9 @@ export default function WhereToWatch({ providers, hideTitle = false }: WhereToWa
       )}
 
       {providers.rent && (
-        <div className="mb-4">
-          <h3 className="font-medium mb-2">Rent</h3>
-          <div className="flex gap-4 flex-wrap">
+        <div>
+          <h3 className={GROUP_LABEL}>Rent</h3>
+          <div className={GRID}>
             {deduplicateProviders(providers.rent).map((p) => (
               <ProviderCard
                 key={p.provider_id}
@@ -122,9 +131,9 @@ export default function WhereToWatch({ providers, hideTitle = false }: WhereToWa
       )}
 
       {providers.buy && (
-        <div className="mb-4">
-          <h3 className="font-medium mb-2">Buy</h3>
-          <div className="flex gap-4 flex-wrap">
+        <div>
+          <h3 className={GROUP_LABEL}>Buy</h3>
+          <div className={GRID}>
             {deduplicateProviders(providers.buy).map((p) => (
               <ProviderCard
                 key={p.provider_id}

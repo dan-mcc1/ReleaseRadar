@@ -6,10 +6,6 @@ import { Link } from "react-router-dom";
 import WhereToWatch from "../components/WhereToWatch";
 import CastBar from "../components/CastBar";
 import WatchButton from "../components/WatchButton";
-import FavoriteButton from "../components/FavoriteButton";
-import RecommendButton from "../components/RecommendButton";
-import ShelfButton from "../components/ShelfButton";
-import AddToGroupButton from "../components/AddToGroupButton";
 import ReviewsSection from "../components/ReviewsSection";
 import RewatchSection from "../components/RewatchSection";
 import { useAuthUser } from "../hooks/useAuthUser";
@@ -17,8 +13,10 @@ import { useMediaInfo } from "../hooks/useMediaInfo";
 import { usePageTitle } from "../hooks/usePageTitle";
 import RatingsRow from "../components/media/RatingsRow";
 import ExternalLinksSection from "../components/media/ExternalLinksSection";
-import RecommendationsGrid from "../components/media/RecommendationsGrid";
 import TrailerButton from "../components/media/TrailerButton";
+import BackdropCard from "../components/media/BackdropCard";
+import CastPreview from "../components/media/CastPreview";
+import MediaActionList from "../components/media/MediaActionList";
 import VideoGallery from "../components/media/VideoGallery";
 import ContentRatingBadge from "../components/media/ContentRatingBadge";
 import { BASE_IMAGE_URL } from "../constants";
@@ -67,13 +65,16 @@ function formatRuntime(minutes: number) {
     .join(" ");
 }
 
-const TABS = ["Overview", "Cast", "Reviews", "Related"] as const;
+const TABS = ["Overview", "Cast", "Reviews"] as const;
 type Tab = (typeof TABS)[number];
 
 export default function MovieInfo() {
   const { id } = useParams<{ id: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeTab = (searchParams.get("tab") as Tab) ?? "Overview";
+  // An unknown ?tab= (an old link to a tab that no longer exists) shows Overview.
+  const requestedTab = searchParams.get("tab") as Tab | null;
+  const activeTab =
+    requestedTab && TABS.includes(requestedTab) ? requestedTab : "Overview";
   function setActiveTab(tab: Tab) {
     setSearchParams((p) => { p.set("tab", tab); return p; }, { replace: true });
   }
@@ -136,70 +137,140 @@ export default function MovieInfo() {
 
   const topGenres = movie.genres?.slice(0, 3).map((g) => g.name) ?? [];
 
+  const hasOtherRatings = Boolean(
+    externalScores?.imdb ||
+      externalScores?.rotten_tomatoes ||
+      externalScores?.metacritic ||
+      aggRating?.average,
+  );
+
+  const recommendations = movie.recommendations?.results ?? [];
+  const hasRail = Boolean(user) || hasOtherRatings || recommendations.length > 0;
+
+  // The poster already carries the title, so the page title goes on the backdrop instead.
+  const titleArt = movie.logo_path ? (
+    <h1>
+      <img
+        src={`${BASE_IMAGE_URL}/w500${movie.logo_path}`}
+        alt={movie.title}
+        className="max-h-12 sm:max-h-20 lg:max-h-28 max-w-full sm:max-w-md object-contain object-left drop-shadow-2xl"
+      />
+    </h1>
+  ) : (
+    <h1 className="text-2xl sm:text-4xl lg:text-5xl font-bold text-white drop-shadow-lg">
+      {movie.title}
+    </h1>
+  );
+
+  const hasProviders = Boolean(
+    movie.providers?.flatrate?.length ||
+      movie.providers?.rent?.length ||
+      movie.providers?.buy?.length,
+  );
+
+  const keyFacts = (
+    <>
+      <div className="font-mono text-[10px] tracking-[0.15em] text-neutral-500 uppercase mb-3">Key facts</div>
+      <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+        {movie.created_by && movie.created_by.length > 0 && (
+          <>
+            <span className="text-neutral-500">Director</span>
+            <span className="font-medium">{movie.created_by.map((m) => m.name).join(", ")}</span>
+          </>
+        )}
+        <span className="text-neutral-500">Status</span>
+        <span className="font-medium">{movie.status}</span>
+        {movie.release_date && (
+          <>
+            <span className="text-neutral-500">Released</span>
+            <span className="font-medium">
+              {formatLocalDate(movie.release_date, { year: "numeric", month: "short", day: "numeric" })}
+            </span>
+          </>
+        )}
+        {movie.runtime > 0 && (
+          <>
+            <span className="text-neutral-500">Runtime</span>
+            <span className="font-medium">{formatRuntime(movie.runtime)}</span>
+          </>
+        )}
+        {movie.budget > 0 && (
+          <>
+            <span className="text-neutral-500">Budget</span>
+            <span className="font-medium">
+              {movie.budget >= 1_000_000_000
+                ? `$${(movie.budget / 1_000_000_000).toFixed(2)}B`
+                : `$${(movie.budget / 1_000_000).toFixed(0)}M`}
+            </span>
+          </>
+        )}
+        {movie.revenue > 0 && (
+          <>
+            <span className="text-neutral-500">Revenue</span>
+            <span className="font-medium">
+              {movie.revenue >= 1_000_000_000
+                ? `$${(movie.revenue / 1_000_000_000).toFixed(2)}B`
+                : `$${(movie.revenue / 1_000_000).toFixed(0)}M`}
+            </span>
+          </>
+        )}
+      </div>
+    </>
+  );
+
   return (
-    <div className="pb-16 w-full overflow-x-hidden">
-      {/* Hero */}
-      <div className="relative h-[380px] md:h-[460px]">
-        <div className="absolute inset-0 overflow-hidden">
-          {movie.backdrop_path ? (
-            <img
-              src={`${BASE_IMAGE_URL}/w1280${movie.backdrop_path}`}
-              srcSet={`${BASE_IMAGE_URL}/w780${movie.backdrop_path} 780w, ${BASE_IMAGE_URL}/w1280${movie.backdrop_path} 1280w`}
-              sizes="100vw"
-              alt=""
-              className="absolute inset-0 w-full h-full object-cover object-[center_25%]"
-              loading="eager"
-              fetchPriority="high"
-            />
-          ) : (
-            <div className="absolute inset-0 bg-gradient-to-br from-neutral-800 to-neutral-900" />
-          )}
-          <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-neutral-950/40 to-neutral-950/10" />
-          <div className="absolute inset-0 bg-gradient-to-r from-neutral-950/80 via-neutral-950/30 to-transparent" />
-        </div>
+    <div className="pb-16 w-full">
+      {/* Phones: one column. lg: side panel + main. 2xl: a third column for the rail. */}
+      <div
+        className={`mx-auto max-w-[1920px] px-6 sm:px-10 pt-6 grid grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)] lg:grid-rows-[auto_1fr] gap-x-10 gap-y-6 items-start ${
+          hasRail ? "2xl:grid-cols-[280px_minmax(0,1fr)_320px]" : ""
+        }`}
+      >
+        <BackdropCard
+          backdropPath={movie.backdrop_path}
+          className="lg:col-start-2 lg:row-start-1"
+          title={titleArt}
+        >
+          {trailer && <TrailerButton trailerKey={trailer.key} variant="overlay" />}
+        </BackdropCard>
 
-        <div className="absolute bottom-0 left-0 right-0 px-6 sm:px-10 pb-8 flex items-end gap-8 z-10">
-          {movie.poster_path && (
-            <img
-              src={`${BASE_IMAGE_URL}/w342${movie.poster_path}`}
-              alt={movie.title}
-              className="hidden md:block w-32 lg:w-40 flex-shrink-0 rounded-xl shadow-2xl border border-white/10 self-end"
-            />
-          )}
-
-          <div className="flex-1 min-w-0">
-            <p className="text-white/55 text-[11px] font-mono tracking-[0.15em] uppercase mb-2">
-              Film
-              {movie.runtime > 0
-                ? ` · ${formatRuntime(movie.runtime)}`
-                : ""}
-            </p>
-
-            {movie.logo_path ? (
+        {/* Side panel. It stays in view while the page scrolls, on windows tall enough to fit it. */}
+        <aside className="lg:col-start-1 lg:row-start-1 lg:row-span-2 flex flex-col gap-4 min-w-0 lg:[@media(min-height:1150px)]:sticky lg:[@media(min-height:1150px)]:top-20">
+          <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-4 lg:block">
+            {movie.poster_path ? (
               <img
-                src={`${BASE_IMAGE_URL}/w500${movie.logo_path}`}
-                alt={movie.title}
-                className="max-h-20 max-w-xs object-contain drop-shadow-2xl mb-3"
+                src={`${BASE_IMAGE_URL}/w342${movie.poster_path}`}
+                srcSet={`${BASE_IMAGE_URL}/w342${movie.poster_path} 342w, ${BASE_IMAGE_URL}/w500${movie.poster_path} 500w`}
+                sizes="(min-width: 1024px) 280px, 96px"
+                alt={`${movie.title} poster`}
+                className="w-24 lg:w-full rounded-xl shadow-2xl border border-white/10"
               />
             ) : (
-              <h1 className="text-4xl md:text-5xl font-bold text-white drop-shadow-lg mb-3">
-                {movie.title}
-              </h1>
+              <div className="w-24 lg:w-full aspect-[2/3] rounded-xl bg-neutral-800 border border-white/10" />
             )}
 
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/75 mb-4">
-              {movie.vote_average != null && movie.vote_average > 0 && (
-                <span className="flex items-center gap-1.5">
-                  <StarIcon filled className="w-3.5 h-3.5 text-yellow-400" />
-                  {movie.vote_average.toFixed(1)}
-                </span>
+            <div className="min-w-0 lg:mt-4">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-neutral-300">
+                {movie.vote_average != null && movie.vote_average > 0 && (
+                  <span className="flex items-center gap-1.5">
+                    <StarIcon filled className="w-3.5 h-3.5 text-yellow-400" />
+                    {movie.vote_average.toFixed(1)}
+                  </span>
+                )}
+                {releaseYear && <span>{releaseYear}</span>}
+                {movie.runtime > 0 && <span>{formatRuntime(movie.runtime)}</span>}
+              </div>
+              {(certification || topGenres.length > 0) && (
+                <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-neutral-400">
+                  {certification && <ContentRatingBadge rating={certification} />}
+                  {topGenres.length > 0 && <span>{topGenres.join(" · ")}</span>}
+                </div>
               )}
-              {releaseYear && <span>{releaseYear}</span>}
-              {topGenres.length > 0 && <span>{topGenres.join(" · ")}</span>}
-              {certification && <ContentRatingBadge rating={certification} />}
             </div>
+          </div>
 
-            <div className="flex flex-wrap items-center gap-2">
+          {((user && statusReady) || (trailer && !movie.backdrop_path)) && (
+            <div className="flex flex-wrap items-start gap-2">
               {user && statusReady && (
                 <WatchButton
                   contentType="movie"
@@ -209,120 +280,69 @@ export default function MovieInfo() {
                   skipNotifyPrompt={movieHasReleased}
                 />
               )}
-              {user && (
-                <FavoriteButton contentType="movie" contentId={movie.id} />
-              )}
-              {user && <ShelfButton contentType="movie" contentId={movie.id} />}
-              {user && <AddToGroupButton contentType="movie" contentId={movie.id} title={movie.title} />}
-              {user && (
-                <RecommendButton
-                  contentType="movie"
-                  contentId={movie.id}
-                  contentTitle={movie.title}
-                />
-              )}
-              {trailer && <TrailerButton trailerKey={trailer.key} />}
+              {/* With no backdrop to sit on, the trailer button goes here. */}
+              {trailer && !movie.backdrop_path && <TrailerButton trailerKey={trailer.key} />}
             </div>
+          )}
+
+          {user && (
+            <MediaActionList contentType="movie" contentId={movie.id} title={movie.title} />
+          )}
+
+          <div className="hidden lg:block pt-4 border-t border-neutral-800">{keyFacts}</div>
+        </aside>
+
+        {/* Main column */}
+        <div className="lg:col-start-2 lg:row-start-2 min-w-0">
+          <div className="border-b border-neutral-700 overflow-x-auto overflow-y-hidden scrollbar-none">
+            <nav className="flex gap-0 min-w-max">
+              {TABS.map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap ${
+                    activeTab === tab
+                      ? "border-primary-500 text-white"
+                      : "border-transparent text-neutral-400 hover:text-neutral-200"
+                  }`}
+                >
+                  {tab}
+                </button>
+              ))}
+            </nav>
           </div>
-        </div>
-      </div>
 
-      <div className="px-6 sm:px-10 mt-5">
-
-        {/* Tabs */}
-        <div className="mt-6 border-b border-neutral-700 overflow-x-auto overflow-y-hidden scrollbar-none">
-          <nav className="flex gap-0 min-w-max">
-            {TABS.map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap ${
-                  activeTab === tab
-                    ? "border-primary-500 text-white"
-                    : "border-transparent text-neutral-400 hover:text-neutral-200"
-                }`}
-              >
-                {tab}
-              </button>
-            ))}
-          </nav>
-        </div>
-
-        {/* Tab content */}
-        <div className="mt-6">
-          {activeTab === "Overview" && (
-            <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-10 min-w-0">
-              {/* Left column */}
-              <div className="space-y-10 min-w-0">
-                {/* Synopsis */}
-                {movie.overview && (
-                  <div>
-                    <p className="text-[1.25rem] leading-relaxed text-neutral-100 tracking-tight max-w-2xl font-light">
-                      {movie.overview}
-                    </p>
-                    {movie.created_by && movie.created_by.length > 0 && (
-                      <p className="text-neutral-500 text-sm mt-3">
-                        Directed by{" "}
-                        <span className="text-neutral-300">
-                          {movie.created_by.map((m) => m.name).join(", ")}
-                        </span>
+          <div className="mt-6">
+            {activeTab === "Overview" && (
+              <div className="@container space-y-10 min-w-0">
+                {/* Synopsis and cast, with where-to-watch beside them when the column is wide enough. */}
+                <div
+                  className={`grid grid-cols-1 gap-10 items-start ${
+                    hasProviders ? "@4xl:grid-cols-[minmax(0,1fr)_340px]" : ""
+                  }`}
+                >
+                  <div className="space-y-10 min-w-0">
+                    {movie.overview && (
+                      <p className="text-[1.25rem] leading-relaxed text-neutral-100 tracking-tight max-w-3xl font-light">
+                        {movie.overview}
                       </p>
                     )}
-                  </div>
-                )}
 
-                {/* Key facts + Ratings */}
-                <div className="flex flex-wrap gap-4">
-                  <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5 shrink-0">
-                    <div className="font-mono text-[10px] tracking-[0.15em] text-neutral-500 uppercase mb-4">Key facts</div>
-                    <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2.5 text-sm">
-                      <span className="text-neutral-500">Status</span>
-                      <span className="font-medium">{movie.status}</span>
-                      {movie.release_date && (
-                        <>
-                          <span className="text-neutral-500">Released</span>
-                          <span className="font-medium">
-                            {formatLocalDate(movie.release_date, { year: "numeric", month: "short", day: "numeric" })}
-                          </span>
-                        </>
-                      )}
-                      {movie.runtime > 0 && (
-                        <>
-                          <span className="text-neutral-500">Runtime</span>
-                          <span className="font-medium">{formatRuntime(movie.runtime)}</span>
-                        </>
-                      )}
-                      {movie.budget > 0 && (
-                        <>
-                          <span className="text-neutral-500">Budget</span>
-                          <span className="font-medium">
-                            {movie.budget >= 1_000_000_000
-                              ? `$${(movie.budget / 1_000_000_000).toFixed(2)}B`
-                              : `$${(movie.budget / 1_000_000).toFixed(0)}M`}
-                          </span>
-                        </>
-                      )}
-                      {movie.revenue > 0 && (
-                        <>
-                          <span className="text-neutral-500">Revenue</span>
-                          <span className="font-medium">
-                            {movie.revenue >= 1_000_000_000
-                              ? `$${(movie.revenue / 1_000_000_000).toFixed(2)}B`
-                              : `$${(movie.revenue / 1_000_000).toFixed(0)}M`}
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5 min-w-[300px]">
-                    <div className="font-mono text-[10px] tracking-[0.15em] text-neutral-500 uppercase mb-4">Ratings</div>
-                    <RatingsRow
-                      voteAverage={movie.vote_average}
-                      externalScores={externalScores}
-                      aggRating={aggRating}
-                      hideTitle
+                    <CastPreview
+                      cast={movie.credits?.cast ?? []}
+                      onSeeAll={() => setActiveTab("Cast")}
+                      count={hasProviders ? 6 : 8}
                     />
                   </div>
+
+                  {hasProviders && movie.providers && (
+                    <div>
+                      <div className="flex items-baseline gap-3 mb-1 pb-3 border-b border-neutral-800">
+                        <h2 className="text-lg font-semibold tracking-tight">Where to watch</h2>
+                      </div>
+                      <WhereToWatch providers={movie.providers} hideTitle />
+                    </div>
+                  )}
                 </div>
 
                 {/* Collection */}
@@ -340,16 +360,6 @@ export default function MovieInfo() {
                       </svg>
                       {movie.belongs_to_collection.name}
                     </Link>
-                  </div>
-                )}
-
-                {/* Where to Watch */}
-                {movie.providers && (
-                  <div>
-                    <div className="flex items-baseline gap-3 mb-1 pb-3 border-b border-neutral-800">
-                      <h2 className="text-lg font-semibold tracking-tight">Where to watch</h2>
-                    </div>
-                    <WhereToWatch providers={movie.providers} hideTitle />
                   </div>
                 )}
 
@@ -374,84 +384,87 @@ export default function MovieInfo() {
                   />
                 )}
               </div>
+            )}
 
-              {/* Right rail */}
-              <div className="flex flex-col gap-4 min-w-0">
-                {user && <FriendsActivityWidget contentType="movie" contentId={movie.id} />}
-                {/* You might also like */}
-                {(movie.recommendations?.results ?? []).length > 0 && (
-                  <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
-                    <div className="font-mono text-[10px] tracking-[0.15em] text-neutral-500 uppercase mb-4">You might also like</div>
-                    <div className="flex flex-col gap-3">
-                      {movie.recommendations.results.slice(0, 4).map((rec) => (
-                        <Link
-                          key={rec.id}
-                          to={`/movie/${rec.id}`}
-                          className="flex gap-3 items-center group"
-                        >
-                          {rec.poster_path ? (
-                            <img
-                              src={`${BASE_IMAGE_URL}/w92${rec.poster_path}`}
-                              alt={rec.title}
-                              className="w-10 h-14 rounded-md object-cover flex-shrink-0 border border-neutral-700"
-                            />
-                          ) : (
-                            <div className="w-10 h-14 rounded-md bg-neutral-800 flex-shrink-0 border border-neutral-700" />
-                          )}
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-neutral-200 group-hover:text-white truncate transition-colors">
-                              {rec.title}
-                            </p>
-                            {rec.genres && rec.genres.length > 0 && (
-                              <p className="text-xs text-neutral-500 mt-0.5">
-                                {rec.genres.slice(0, 2).map((g) => g.name).join(" · ")}
-                              </p>
-                            )}
-                          </div>
-                          <svg className="w-4 h-4 text-neutral-600 flex-shrink-0 group-hover:text-neutral-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                          </svg>
-                        </Link>
-                      ))}
-                    </div>
-                  </div>
+            {activeTab === "Cast" && (
+              <>
+                {(movie.credits?.cast?.length ?? 0) > 0 ? (
+                  <CastBar cast={movie.credits.cast} />
+                ) : (
+                  <p className="text-neutral-400">No cast info available.</p>
                 )}
+              </>
+            )}
 
-              </div>
-            </div>
-          )}
-
-          {activeTab === "Cast" && (
-            <>
-              {(movie.credits?.cast?.length ?? 0) > 0 ? (
-                <CastBar cast={movie.credits.cast} />
-              ) : (
-                <p className="text-neutral-400">No cast info available.</p>
-              )}
-            </>
-          )}
-
-          {activeTab === "Reviews" && (
-            <ReviewsSection
-              contentType="movie"
-              contentId={movie.id}
-              user={user}
-            />
-          )}
-
-          {activeTab === "Related" && (
-            <>
-              {(movie.recommendations?.results ?? []).length > 0 ? (
-                <RecommendationsGrid
-                  items={movie.recommendations.results}
-                  linkPrefix="/movie"
-                />
-              ) : (
-                <p className="text-neutral-400">No related movies found.</p>
-              )}
-            </>
-          )}
+            {activeTab === "Reviews" && (
+              <ReviewsSection
+                contentType="movie"
+                contentId={movie.id}
+                user={user}
+              />
+            )}
+          </div>
         </div>
+
+        {/* Below lg the key facts leave the side panel and sit under the main column. */}
+        <div className="lg:hidden bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
+          {keyFacts}
+        </div>
+
+        {/* Rail: under the main column until 2xl, then a column of its own. */}
+        {hasRail && (
+          <aside className="lg:col-start-2 2xl:col-start-3 2xl:row-start-1 2xl:row-span-2 min-w-0 grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-1 gap-4 items-start">
+            {user && <FriendsActivityWidget contentType="movie" contentId={movie.id} />}
+
+            {/* The TMDb score is beside the title, so this card holds the rest. */}
+            {hasOtherRatings && (
+              <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
+                <div className="font-mono text-[10px] tracking-[0.15em] text-neutral-500 uppercase mb-4">More ratings</div>
+                <RatingsRow
+                  externalScores={externalScores}
+                  aggRating={aggRating}
+                  hideTitle
+                />
+              </div>
+            )}
+
+            {recommendations.length > 0 && (
+              <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
+                <div className="font-mono text-[10px] tracking-[0.15em] text-neutral-500 uppercase mb-4">You might also like</div>
+                <div className="flex flex-col gap-3">
+                  {recommendations.slice(0, 8).map((rec) => (
+                    <Link
+                      key={rec.id}
+                      to={`/movie/${rec.id}`}
+                      className="flex gap-3 items-center group"
+                    >
+                      {rec.poster_path ? (
+                        <img
+                          src={`${BASE_IMAGE_URL}/w92${rec.poster_path}`}
+                          alt=""
+                          loading="lazy"
+                          className="w-10 h-14 rounded-md object-cover flex-shrink-0 border border-neutral-700"
+                        />
+                      ) : (
+                        <div className="w-10 h-14 rounded-md bg-neutral-800 flex-shrink-0 border border-neutral-700" />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-neutral-200 group-hover:text-white truncate transition-colors">
+                          {rec.title}
+                        </p>
+                        {rec.genres && rec.genres.length > 0 && (
+                          <p className="text-xs text-neutral-500 mt-0.5">
+                            {rec.genres.slice(0, 2).map((g) => g.name).join(" · ")}
+                          </p>
+                        )}
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+          </aside>
+        )}
       </div>
     </div>
   );
