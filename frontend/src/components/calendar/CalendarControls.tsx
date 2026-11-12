@@ -108,7 +108,7 @@ export default function CalendarControls({
           {showFilters && (
             <div className="absolute left-0 top-full mt-2 z-20 w-56 rounded-xl border border-neutral-700 bg-neutral-900 shadow-2xl p-3 flex flex-col gap-3">
               <div>
-                <p className="font-mono text-[10px] tracking-widest uppercase text-neutral-500 mb-2">Type</p>
+                <p className="text-caption font-medium text-neutral-400 mb-2">Type</p>
                 <div className="flex rounded-lg border border-neutral-700 overflow-hidden">
                   {(["all", "movie", "tv"] as const).map((value, idx, arr) => (
                     <button
@@ -126,7 +126,7 @@ export default function CalendarControls({
                 </div>
               </div>
               <div>
-                <p className="font-mono text-[10px] tracking-widest uppercase text-neutral-500 mb-2">Status</p>
+                <p className="text-caption font-medium text-neutral-400 mb-2">Status</p>
                 <div className="flex rounded-lg border border-neutral-700 overflow-hidden">
                   {(["all", "unwatched", "watched"] as const).map((value, idx, arr) => (
                     <button
@@ -144,7 +144,7 @@ export default function CalendarControls({
                 </div>
               </div>
               <div>
-                <p className="font-mono text-[10px] tracking-widest uppercase text-neutral-500 mb-2">Show</p>
+                <p className="text-caption font-medium text-neutral-400 mb-2">Show</p>
                 <button
                   onClick={() => onCurrentlyWatchingFilterChange(!currentlyWatchingFilter)}
                   className={`w-full flex items-center gap-2 py-1.5 px-3 text-xs font-medium rounded-lg border transition-colors ${

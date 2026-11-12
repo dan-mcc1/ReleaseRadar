@@ -1,6 +1,7 @@
 # app/routers/user.py
 import random
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from app.config.legal import TERMS_VERSION
 from app.core.limiter import limiter
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
@@ -57,6 +58,9 @@ class CreateUserBody(BaseModel):
     username: str | None = Field(
         None, min_length=USERNAME_MIN_LEN, max_length=USERNAME_MAX_LEN, pattern=USERNAME_PATTERN
     )
+    # Sent by the sign-up buttons, which sit under the Terms/Privacy notice.
+    # Recorded only when this call creates the account.
+    accepted_terms: bool = False
 
 
 class UpdateUsernameBody(BaseModel):
@@ -106,7 +110,11 @@ def create_user_route(
         if not already_theirs and not is_username_available(db, username):
             raise HTTPException(status_code=409, detail="Username already taken.")
     avatar = random.choice(VALID_AVATAR_KEYS) if username is not None else None
-    user = create_user(db, uid, email, username, avatar, display_name=display_name)
+    user = create_user(
+        db, uid, email, username, avatar,
+        display_name=display_name,
+        terms_version=TERMS_VERSION if body.accepted_terms else None,
+    )
     if email and not user.email:
         # Row made before the address was verified: fill it in now. A stored
         # email is never overwritten or cleared here.

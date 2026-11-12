@@ -18,7 +18,7 @@ export default function CalendarHeader({
       className="px-6 lg:px-10 py-4 bg-neutral-950 border-b border-neutral-800 flex items-center gap-4"
     >
       <div>
-        <p className="font-mono text-[11px] tracking-[0.12em] uppercase text-neutral-500">
+        <p className="text-label text-neutral-400">
           Your calendar
           {viewMode === "month" && upcomingThisMonth > 0 && (
             <span className="text-neutral-500">

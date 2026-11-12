@@ -124,7 +124,7 @@ function ShowCard({ show, initialNext }: ShowCardProps) {
               className="w-12 rounded-lg bg-neutral-600 flex items-center justify-center"
               style={{ height: "72px" }}
             >
-              <span className="text-neutral-400 text-[9px] text-center px-0.5">
+              <span className="text-neutral-400 text-caption leading-tight line-clamp-3 text-center px-0.5">
                 {show.name}
               </span>
             </div>
@@ -277,8 +277,8 @@ export default function CurrentlyWatchingStrip() {
         className="w-full flex items-center gap-2 px-4 sm:px-6 py-3 hover:bg-neutral-700/40 transition-colors"
       >
         <span className={`flex items-center justify-center w-2 h-2 rounded-full flex-shrink-0 ${total > 0 ? "bg-highlight-400 animate-pulse" : "bg-neutral-600"}`} />
-        <h2 className="text-sm font-semibold text-neutral-200 uppercase tracking-wider">
-          Currently Watching
+        <h2 className="text-label font-semibold text-neutral-200">
+          Currently watching
         </h2>
         {total > 0 && (
           <span className="text-xs text-neutral-500 font-normal normal-case tracking-normal">
@@ -346,7 +346,7 @@ export default function CurrentlyWatchingStrip() {
                         className="w-12 rounded-lg bg-neutral-600 flex items-center justify-center"
                         style={{ height: "72px" }}
                       >
-                        <span className="text-neutral-400 text-[9px] text-center px-0.5">
+                        <span className="text-neutral-400 text-caption leading-tight line-clamp-3 text-center px-0.5">
                           {movie.title}
                         </span>
                       </div>

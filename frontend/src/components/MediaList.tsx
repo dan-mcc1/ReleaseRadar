@@ -123,10 +123,10 @@ function MediaRow({
         {/* Type badge */}
         <div className="absolute top-2 left-2">
           <span
-            className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full backdrop-blur-sm ${
+            className={`text-caption font-semibold px-2 py-0.5 rounded-full backdrop-blur-sm ${
               type === "tv"
                 ? "bg-highlight-600/80 text-highlight-100"
-                : "bg-amber-600/80 text-amber-100"
+                : "bg-warning-600/80 text-warning-100"
             }`}
           >
             {type === "tv" ? "TV" : "Film"}
@@ -294,7 +294,7 @@ function CollectionRow({ collection }: { collection: CollectionResult }) {
           </div>
         )}
         <div className="absolute top-2 left-2">
-          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full backdrop-blur-sm bg-primary-600/80 text-primary-100">
+          <span className="text-caption font-semibold px-2 py-0.5 rounded-full backdrop-blur-sm bg-primary-600/80 text-primary-100">
             Collection
           </span>
         </div>

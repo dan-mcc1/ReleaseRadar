@@ -260,7 +260,8 @@ const SignIn: React.FC = () => {
     const res = await apiFetch("/user/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: user.email, username }),
+      // Sent from the Create account button, under the Terms notice.
+      body: JSON.stringify({ email: user.email, username, accepted_terms: true }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -299,7 +300,9 @@ const SignIn: React.FC = () => {
       const res = await apiFetch("/user/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: user.email }),
+        // A new account is created by this OAuth click, which sits under the
+        // Terms notice; the server ignores it for an existing account.
+        body: JSON.stringify({ email: user.email, accepted_terms: true }),
       });
       if (!res.ok) {
         if (await isRestrictedResponse(res)) {

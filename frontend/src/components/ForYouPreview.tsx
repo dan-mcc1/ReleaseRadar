@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { ChevronRightIcon, moreLinkClass } from "./ui";
 import MediaList from "./MediaList";
 import type { Movie, Show } from "../types/calendar";
 import { useForYou } from "../hooks/api/useRecommendations";
@@ -16,9 +17,10 @@ export default function ForYouPreview() {
         <h2 className="text-xl font-bold text-white">For You</h2>
         <Link
           to="/for-you"
-          className="text-sm text-primary-400 hover:text-primary-300 transition-colors"
+          className={moreLinkClass}
         >
-          See all →
+          See all
+          <ChevronRightIcon />
         </Link>
       </div>
       <MediaList results={{ movies, shows, people: [] }} paginated />
