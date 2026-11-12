@@ -2,7 +2,17 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { isPremiumFeature } from "../../config/features";
 import CalendarSyncModal from "../CalendarSyncModal";
 import ProUpgradeModal from "../ProUpgradeModal";
-import Segmented from "../Segmented";
+import {
+  Button,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  IconButton,
+  PageHeader,
+  Segmented,
+  buttonClass,
+  cx,
+  focusRing,
+} from "../ui";
 import { useUserMe } from "../../hooks/api/useUser";
 import { useCalendarData } from "../../hooks/useCalendarData";
 import { useCurrentlyWatching } from "../../hooks/api/useLists";
@@ -40,31 +50,6 @@ const monthNames = [
   "November",
   "December",
 ];
-
-const FOCUS =
-  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-400";
-// Same height as the Segmented control beside them.
-const CONTROL = `h-10 min-w-10 px-3 inline-flex items-center justify-center gap-1.5 rounded-xl border border-neutral-800 bg-neutral-900 text-[13px] font-medium text-neutral-100 hover:bg-neutral-800 transition-colors cursor-pointer ${FOCUS}`;
-const LABEL = "font-mono text-[11px] tracking-[0.14em] uppercase text-neutral-500";
-
-function Chevron({ direction }: { direction: "left" | "right" }) {
-  return (
-    <svg
-      className="w-4 h-4"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={2}
-      aria-hidden="true"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d={direction === "left" ? "M15 19l-7-7 7-7" : "M9 5l7 7-7 7"}
-      />
-    </svg>
-  );
-}
 
 function FiltersMenu({
   type,
@@ -111,7 +96,7 @@ function FiltersMenu({
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className={`${CONTROL} ${open || active ? "bg-neutral-800 border-neutral-700" : ""}`}
+        className={cx(buttonClass("secondary"), (open || active) && "border-neutral-500")}
       >
         Filters
         {active && (
@@ -123,9 +108,9 @@ function FiltersMenu({
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-2 z-20 w-max max-w-[calc(100vw-3rem)] rounded-2xl border border-neutral-700 bg-neutral-900 shadow-2xl p-4 flex flex-col items-start gap-4">
+        <div className="absolute right-0 top-full mt-2 z-20 w-max max-w-[calc(100vw-3rem)] rounded-surface border border-neutral-700 bg-neutral-900 shadow-2xl shadow-black/50 p-4 flex flex-col items-start gap-4">
           <div>
-            <p className={`${LABEL} mb-2`}>Type</p>
+            <p className="mb-2 text-caption text-neutral-400">Type</p>
             <Segmented
               label="Type"
               value={type}
@@ -138,7 +123,7 @@ function FiltersMenu({
             />
           </div>
           <div>
-            <p className={`${LABEL} mb-2`}>Status</p>
+            <p className="mb-2 text-caption text-neutral-400">Status</p>
             <Segmented
               label="Status"
               value={watch}
@@ -150,7 +135,7 @@ function FiltersMenu({
               ]}
             />
           </div>
-          <label className="flex items-center gap-2.5 min-h-10 text-[13px] text-neutral-200 cursor-pointer">
+          <label className="flex items-center gap-2.5 min-h-10 text-label text-neutral-200 cursor-pointer">
             <input
               type="checkbox"
               checked={watchingOnly}
@@ -167,7 +152,7 @@ function FiltersMenu({
                 onWatch("all");
                 onWatchingOnly(false);
               }}
-              className={`rounded-sm text-[13px] text-neutral-400 hover:text-neutral-100 transition-colors cursor-pointer ${FOCUS}`}
+              className={cx("rounded-sm text-label text-neutral-400 hover:text-neutral-100 transition-colors cursor-pointer", focusRing)}
             >
               Clear filters
             </button>
@@ -350,62 +335,53 @@ export default function CalendarView() {
     <div className="w-full px-6 sm:px-10 pt-6 pb-16 grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-6 items-start">
       <div className="min-w-0 flex flex-col gap-5">
         {/* ── Header ── */}
-        <div data-tour="calendar-view" className="flex flex-wrap items-end gap-3">
-          <div className="flex-1 basis-60 min-w-0">
-            <p className={LABEL}>
-              Your calendar
-              {viewMode === "month" &&
-                upcomingThisMonth > 0 &&
-                ` · ${upcomingThisMonth} upcoming ${upcomingThisMonth === 1 ? "release" : "releases"} this month`}
-            </p>
-            <h1 className="mt-2.5 text-[40px] leading-none font-medium tracking-tight text-neutral-100">
-              {heading} <em className="italic text-primary-400">{headingYear}</em>
-            </h1>
-          </div>
-
-          {/* One group, so when the row is too narrow the controls wrap together. */}
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={handlePrev}
-                aria-label={`Previous ${span}`}
-                className={CONTROL}
-              >
-                <Chevron direction="left" />
-              </button>
-              <button type="button" onClick={goToToday} className={CONTROL}>
-                Today
-              </button>
-              <button
-                type="button"
-                onClick={handleNext}
-                aria-label={`Next ${span}`}
-                className={CONTROL}
-              >
-                <Chevron direction="right" />
-              </button>
-            </div>
-
-            <Segmented
-              label="View"
-              value={viewMode}
-              onChange={setViewMode}
-              options={[
-                { value: "month", label: "Calendar" },
-                { value: "week", label: "Timeline" },
-              ]}
-            />
-
-            <FiltersMenu
-              type={filterType}
-              onType={setFilterType}
-              watch={watchFilter}
-              onWatch={setWatchFilter}
-              watchingOnly={currentlyWatchingFilter}
-              onWatchingOnly={setCurrentlyWatchingFilter}
-            />
-          </div>
+        <div data-tour="calendar-view">
+          <PageHeader
+            title={`${heading} ${headingYear}`}
+            description={
+              viewMode === "month" && upcomingThisMonth > 0
+                ? `${upcomingThisMonth} upcoming ${upcomingThisMonth === 1 ? "release" : "releases"} this month`
+                : undefined
+            }
+            actions={
+              <>
+                <div className="flex items-center gap-1.5">
+                  <IconButton
+                    label={`Previous ${span}`}
+                    icon={<ChevronLeftIcon />}
+                    variant="secondary"
+                    shape="square"
+                    onClick={handlePrev}
+                  />
+                  <Button onClick={goToToday}>Today</Button>
+                  <IconButton
+                    label={`Next ${span}`}
+                    icon={<ChevronRightIcon />}
+                    variant="secondary"
+                    shape="square"
+                    onClick={handleNext}
+                  />
+                </div>
+                <Segmented
+                  label="View"
+                  value={viewMode}
+                  onChange={setViewMode}
+                  options={[
+                    { value: "month", label: "Calendar" },
+                    { value: "week", label: "Timeline" },
+                  ]}
+                />
+                <FiltersMenu
+                  type={filterType}
+                  onType={setFilterType}
+                  watch={watchFilter}
+                  onWatch={setWatchFilter}
+                  watchingOnly={currentlyWatchingFilter}
+                  onWatchingOnly={setCurrentlyWatchingFilter}
+                />
+              </>
+            }
+          />
         </div>
 
         <ContinueWatchingStrip />

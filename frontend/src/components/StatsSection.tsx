@@ -6,8 +6,8 @@ import {
   YAxis,
   Tooltip,
   ResponsiveContainer,
-  Cell,
 } from "recharts";
+import { CheckIcon, SectionHeader } from "./ui";
 
 interface Stats {
   counts: {
@@ -30,26 +30,10 @@ interface Stats {
   };
 }
 
-const GENRE_COLORS = [
-  "#10b981", // primary-500 (emerald)
-  "#8b5cf6", // highlight-500 (purple)
-  "#f59e0b", // warning-500 (yellow)
-  "#ef4444", // error-500 (red)
-  "#3b82f6", // info-500 (blue)
-  "#06b6d4", // cyan
-  "#f97316", // orange
-  "#ec4899", // pink
-];
+// Recharts takes a colour value, not a class: warning-400 for ratings.
+const RATING_BAR_COLOR = "#fbbf24";
 
-const RATING_COLORS: Record<number, string> = {
-  1: "#ef4444",
-  2: "#f97316",
-  3: "#f59e0b",
-  4: "#22c55e",
-  5: "#8b5cf6",
-};
-
-function StatCard({
+function StatItem({
   label,
   value,
   sub,
@@ -59,10 +43,10 @@ function StatCard({
   sub?: string;
 }) {
   return (
-    <div className="bg-neutral-700/50 rounded-lg p-4 flex flex-col items-center text-center">
-      <span className="text-2xl font-bold text-white">{value}</span>
-      <span className="text-sm text-neutral-300 mt-1">{label}</span>
-      {sub && <span className="text-xs text-neutral-500 mt-0.5">{sub}</span>}
+    <div>
+      <dt className="text-caption text-neutral-400">{label}</dt>
+      <dd className="mt-1 text-heading font-semibold text-neutral-50 tabular">{value}</dd>
+      {sub && <dd className="text-caption text-neutral-400">{sub}</dd>}
     </div>
   );
 }
@@ -73,12 +57,12 @@ export default function StatsSection() {
 
   if (isLoading) {
     return (
-      <div className="bg-neutral-800 rounded-lg p-4">
-        <h2 className="text-lg font-semibold mb-4 text-white">Stats</h2>
-        <div className="h-32 flex items-center justify-center text-neutral-400 text-sm">
+      <section className="space-y-4">
+        <SectionHeader title="Stats" />
+        <div className="h-32 flex items-center justify-center text-neutral-400 text-body">
           Loading stats…
         </div>
-      </div>
+      </section>
     );
   }
 
@@ -90,104 +74,66 @@ export default function StatsSection() {
   const hasGenres = top_genres.length > 0;
 
   return (
-    <div className="bg-neutral-800 rounded-lg p-4 space-y-6">
-      <h2 className="text-lg font-semibold text-white">Stats</h2>
+    <section className="space-y-6">
+      <SectionHeader title="Stats" />
 
       {/* Watch streak */}
       {streak && (streak.current > 0 || streak.longest > 0) && (
-        <div className="flex flex-wrap gap-3">
-          <div
-            className={`flex items-center gap-3 rounded-lg px-4 py-3 border ${
-              streak.current > 0
-                ? "bg-orange-500/10 border-orange-500/30"
-                : "bg-neutral-700/50 border-neutral-600/50"
-            }`}
-          >
-            <span className="text-2xl" aria-hidden="true">
-              {streak.today_logged ? "🔥" : streak.current > 0 ? "🔥" : "💤"}
+        <p className="text-body text-neutral-300">
+          <span className="font-semibold text-neutral-50 tabular">{streak.current}</span>{" "}
+          day{streak.current !== 1 ? "s" : ""} current streak
+          {streak.today_logged && (
+            <span className="ml-2 inline-flex items-center gap-1 text-primary-300">
+              <CheckIcon className="w-3.5 h-3.5" />
+              Logged today
             </span>
-            <div>
-              <div className="text-xl font-bold text-white leading-none">
-                {streak.current}{" "}
-                <span className="text-sm font-normal text-neutral-300">
-                  day{streak.current !== 1 ? "s" : ""}
-                </span>
-              </div>
-              <div className="text-xs text-neutral-400 mt-0.5">
-                Current streak
-                {streak.today_logged && (
-                  <span className="ml-1 text-orange-400">· logged today</span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {streak.longest > 0 && (
-            <div className="flex items-center gap-3 bg-neutral-700/50 border border-neutral-600/50 rounded-lg px-4 py-3">
-              <span className="text-2xl" aria-hidden="true">🏆</span>
-              <div>
-                <div className="text-xl font-bold text-white leading-none">
-                  {streak.longest}{" "}
-                  <span className="text-sm font-normal text-neutral-300">
-                    day{streak.longest !== 1 ? "s" : ""}
-                  </span>
-                </div>
-                <div className="text-xs text-neutral-400 mt-0.5">
-                  Longest streak
-                </div>
-              </div>
-            </div>
           )}
-        </div>
+          {streak.longest > 0 && (
+            <>
+              {" · "}
+              <span className="font-semibold text-neutral-50 tabular">{streak.longest}</span>{" "}
+              day{streak.longest !== 1 ? "s" : ""} longest
+            </>
+          )}
+        </p>
       )}
 
       {/* Summary counts */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        <StatCard label="Movies Watched" value={counts.movies_watched} />
-        <StatCard label="Shows Watched" value={counts.shows_watched} />
-        <StatCard label="Episodes Watched" value={counts.episodes_watched} />
-        <StatCard
-          label="On Watchlist"
+      <dl className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-x-6 gap-y-5">
+        <StatItem label="Movies watched" value={counts.movies_watched} />
+        <StatItem label="Shows watched" value={counts.shows_watched} />
+        <StatItem label="Episodes watched" value={counts.episodes_watched} />
+        <StatItem
+          label="On watchlist"
           value={counts.movies_watchlist + counts.shows_watchlist}
-          sub={`${counts.movies_watchlist}m · ${counts.shows_watchlist}tv`}
+          sub={`${counts.movies_watchlist} movies · ${counts.shows_watchlist} shows`}
         />
-        <StatCard
-          label="Total Watched"
-          value={totalWatched}
-          sub="movies + shows"
-        />
-      </div>
+        <StatItem label="Total watched" value={totalWatched} sub="movies + shows" />
+      </dl>
 
       {/* Average ratings */}
       {(ratings.movie_avg !== null || ratings.show_avg !== null) && (
-        <div className="flex gap-4 flex-wrap">
+        <p className="text-body text-neutral-400">
           {ratings.movie_avg !== null && (
-            <div className="flex items-center gap-2 bg-neutral-700/50 rounded-lg px-4 py-2">
-              <span className="text-neutral-400 text-sm">Avg movie rating</span>
-              <span className="text-white font-semibold text-lg">
-                {ratings.movie_avg}
-                <span className="text-neutral-400 text-sm">/5</span>
-              </span>
-            </div>
+            <>
+              Average movie rating{" "}
+              <span className="font-semibold text-neutral-50 tabular">{ratings.movie_avg}</span>/5
+            </>
           )}
+          {ratings.movie_avg !== null && ratings.show_avg !== null && " · "}
           {ratings.show_avg !== null && (
-            <div className="flex items-center gap-2 bg-neutral-700/50 rounded-lg px-4 py-2">
-              <span className="text-neutral-400 text-sm">Avg show rating</span>
-              <span className="text-white font-semibold text-lg">
-                {ratings.show_avg}
-                <span className="text-neutral-400 text-sm">/5</span>
-              </span>
-            </div>
+            <>
+              Average show rating{" "}
+              <span className="font-semibold text-neutral-50 tabular">{ratings.show_avg}</span>/5
+            </>
           )}
-        </div>
+        </p>
       )}
 
       {/* Rating distribution */}
       {hasRatings && (
         <div>
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-neutral-400 mb-3">
-            Rating Distribution
-          </h3>
+          <SectionHeader title="Rating distribution" as="h3" className="mb-3" />
           <ResponsiveContainer width="100%" height={160}>
             <BarChart
               data={ratings.distribution}
@@ -217,17 +163,10 @@ export default function StatsSection() {
                 itemStyle={{ color: "#60a5fa" }}
                 formatter={(value) => [value ?? 0, "Ratings"]}
                 labelFormatter={(label) =>
-                  `${label} ${"★".repeat(Number(label))}${"☆".repeat(5 - Number(label))}`
+                  `${label} out of 5`
                 }
               />
-              <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                {ratings.distribution.map((entry) => (
-                  <Cell
-                    key={entry.rating}
-                    fill={RATING_COLORS[entry.rating] ?? "#3b82f6"}
-                  />
-                ))}
-              </Bar>
+              <Bar dataKey="count" radius={[4, 4, 0, 0]} fill={RATING_BAR_COLOR} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -236,28 +175,23 @@ export default function StatsSection() {
       {/* Top genres */}
       {hasGenres && (
         <div>
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-neutral-400 mb-3">
-            Favorite Genres
-          </h3>
+          <SectionHeader title="Favorite genres" as="h3" className="mb-3" />
           <div className="space-y-2">
-            {top_genres.map((genre, i) => {
+            {top_genres.map((genre) => {
               const max = top_genres[0].count;
               const pct = Math.round((genre.count / max) * 100);
               return (
                 <div key={genre.name} className="flex items-center gap-3">
-                  <span className="text-neutral-300 text-sm w-28 shrink-0 truncate">
+                  <span className="text-neutral-300 text-label w-28 shrink-0 truncate">
                     {genre.name}
                   </span>
                   <div className="flex-1 bg-neutral-700 rounded-full h-2.5 overflow-hidden">
                     <div
-                      className="h-full rounded-full transition-all duration-500"
-                      style={{
-                        width: `${pct}%`,
-                        backgroundColor: GENRE_COLORS[i % GENRE_COLORS.length],
-                      }}
+                      className="h-full rounded-full bg-neutral-400 transition-all duration-500"
+                      style={{ width: `${pct}%` }}
                     />
                   </div>
-                  <span className="text-neutral-400 text-sm w-6 text-right shrink-0">
+                  <span className="text-neutral-400 text-label w-6 text-right shrink-0 tabular">
                     {genre.count}
                   </span>
                 </div>
@@ -268,10 +202,10 @@ export default function StatsSection() {
       )}
 
       {totalWatched === 0 && (
-        <p className="text-neutral-400 text-sm text-center py-4">
+        <p className="text-neutral-400 text-body text-center py-4">
           Watch some movies and shows to see your stats here.
         </p>
       )}
-    </div>
+    </section>
   );
 }

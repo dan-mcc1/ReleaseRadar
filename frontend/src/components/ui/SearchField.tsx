@@ -10,10 +10,17 @@ interface Props {
   /** Defaults to the label. */
   placeholder?: string;
   className?: string;
+  /** Also called when the clear button or Escape empties the field, e.g. to
+   *  drop a search that was already submitted. */
+  onClear?: () => void;
 }
 
 /** A search box with a clear button, h-control tall. */
-export default function SearchField({ value, onChange, label, placeholder, className }: Props) {
+export default function SearchField({ value, onChange, label, placeholder, className, onClear }: Props) {
+  function clear() {
+    onChange("");
+    onClear?.();
+  }
   const id = useId();
   return (
     <div className={cx("relative w-80 max-w-full", className)}>
@@ -29,16 +36,16 @@ export default function SearchField({ value, onChange, label, placeholder, class
         onKeyDown={(e) => {
           if (e.key === "Escape" && value) {
             e.preventDefault();
-            onChange("");
+            clear();
           }
         }}
         placeholder={placeholder ?? label}
-        className="w-full h-control pl-10 pr-10 rounded-control border border-neutral-700 bg-neutral-900 text-label text-neutral-100 placeholder-neutral-500 hover:border-neutral-500 focus:border-neutral-400 focus:outline-none [&::-webkit-search-cancel-button]:hidden"
+        className="w-full h-control pl-10 pr-10 rounded-control border border-neutral-700 bg-neutral-900 text-base sm:text-label text-neutral-100 placeholder-neutral-500 hover:border-neutral-500 focus:border-neutral-400 focus:outline-none [&::-webkit-search-cancel-button]:hidden"
       />
       {value && (
         <button
           type="button"
-          onClick={() => onChange("")}
+          onClick={clear}
           aria-label="Clear search"
           title="Clear search"
           className={cx(

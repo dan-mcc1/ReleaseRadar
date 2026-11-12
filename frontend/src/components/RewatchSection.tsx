@@ -1,36 +1,8 @@
 import { useState } from "react";
 import { useRewatches, useAddRewatch, useDeleteRewatch } from "../hooks/api/useRewatch";
 import PremiumGate from "./PremiumGate";
-
-function StarRow({
-  value,
-  onChange,
-}: {
-  value: number | null;
-  onChange: (v: number | null) => void;
-}) {
-  return (
-    <div className="flex items-center gap-1">
-      {[1, 2, 3, 4, 5].map((s) => (
-        <button
-          key={s}
-          type="button"
-          onClick={() => onChange(value === s ? null : s)}
-          className="focus:outline-none"
-        >
-          <svg
-            className={`w-5 h-5 transition-colors ${
-              (value ?? 0) >= s ? "fill-amber-400 text-amber-400" : "fill-neutral-700 text-neutral-700 hover:fill-amber-400/50"
-            }`}
-            viewBox="0 0 24 24"
-          >
-            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-          </svg>
-        </button>
-      ))}
-    </div>
-  );
-}
+import StarRating from "./StarRating";
+import { Button, Card, Chip, CloseIcon, IconButton, PlusIcon, SectionHeader, StarIcon } from "./ui";
 
 export default function RewatchSection({
   contentType,
@@ -66,101 +38,77 @@ export default function RewatchSection({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h2 className="text-base font-semibold text-white flex items-center gap-2">
-          <svg className="w-4 h-4 text-highlight-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-          Rewatches
-          {rewatches.length > 0 && (
-            <span className="text-xs text-neutral-500 font-normal bg-neutral-800 border border-neutral-700 px-2 py-0.5 rounded-full">
-              {rewatches.length}
-            </span>
-          )}
-        </h2>
-        <PremiumGate>
-          {!open && (
-            <button
-              onClick={() => setOpen(true)}
-              className="text-sm text-highlight-400 hover:text-highlight-300 transition-colors"
-            >
-              + Log rewatch
-            </button>
-          )}
-        </PremiumGate>
-      </div>
+      <SectionHeader
+        title="Rewatches"
+        note={rewatches.length > 0 ? rewatches.length : undefined}
+        action={
+          <PremiumGate>
+            {!open && (
+              <Button variant="ghost" size="sm" icon={<PlusIcon />} onClick={() => setOpen(true)}>
+                Log rewatch
+              </Button>
+            )}
+          </PremiumGate>
+        }
+      />
 
       {/* Log form — only renders for premium (open is always false for free users since the button is gated) */}
       {open && (
-        <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 space-y-4">
+        <Card padding="sm" className="space-y-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500 mb-2">Rating</p>
-            <StarRow value={rating} onChange={setRating} />
+            <p className="text-caption text-neutral-400 mb-2">Rating</p>
+            <StarRating rating={rating} onRate={setRating} />
           </div>
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500 mb-2">Notes</p>
+            <label htmlFor="rewatch-notes" className="block text-caption text-neutral-400 mb-2">
+              Notes
+            </label>
             <textarea
+              id="rewatch-notes"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               maxLength={2000}
               rows={2}
               placeholder="Any thoughts on the rewatch?"
-              className="w-full bg-neutral-800 border border-neutral-700 rounded-xl px-3 py-2 text-sm text-neutral-200 placeholder-neutral-500 resize-none focus:outline-none focus:border-primary-500"
+              className="w-full bg-neutral-900 border border-neutral-700 rounded-control px-3 py-2 text-body text-neutral-200 placeholder-neutral-500 resize-none hover:border-neutral-500 focus:outline-none focus:border-neutral-400"
             />
           </div>
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500 mb-2">Would watch again?</p>
+            <p className="text-caption text-neutral-400 mb-2">Would watch again?</p>
             <div className="flex gap-2">
               {([true, false] as const).map((val) => (
-                <button
+                <Chip
                   key={String(val)}
-                  type="button"
+                  pressed={wouldRewatch === val}
                   onClick={() => setWouldRewatch(wouldRewatch === val ? null : val)}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
-                    wouldRewatch === val
-                      ? val
-                        ? "bg-success-700/30 border-success-600/50 text-success-400"
-                        : "bg-error-900/30 border-error-600/40 text-error-400"
-                      : "bg-neutral-800 border-neutral-700 text-neutral-400 hover:border-neutral-500"
-                  }`}
                 >
                   {val ? "Yes" : "No"}
-                </button>
+                </Chip>
               ))}
             </div>
           </div>
           <div className="flex items-center gap-2 justify-end">
-            <button
-              onClick={() => setOpen(false)}
-              className="text-sm text-neutral-500 hover:text-neutral-300 transition-colors"
-            >
+            <Button variant="ghost" onClick={() => setOpen(false)}>
               Cancel
-            </button>
-            <button
-              onClick={handleAdd}
-              disabled={addRewatch.isPending}
-              className="text-sm px-4 py-1.5 bg-highlight-600 hover:bg-highlight-500 disabled:opacity-50 text-white rounded-lg transition-colors"
-            >
-              {addRewatch.isPending ? "Saving…" : "Log Rewatch"}
-            </button>
+            </Button>
+            <Button variant="primary" onClick={handleAdd} disabled={addRewatch.isPending}>
+              {addRewatch.isPending ? "Saving…" : "Log rewatch"}
+            </Button>
           </div>
-        </div>
+        </Card>
       )}
 
       {/* History */}
       {rewatches.length > 0 && (
-        <div className="space-y-2">
+        <ul className="divide-y divide-neutral-800">
           {rewatches.map((rw, i) => (
-            <div
-              key={rw.id}
-              className="bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 flex items-start gap-3"
-            >
-              <div className="flex-shrink-0 w-6 h-6 rounded-full bg-highlight-600/20 border border-highlight-600/30 flex items-center justify-center text-xs font-bold text-highlight-400">
+            <li key={rw.id} className="py-3 flex items-start gap-3">
+              <span className="flex-shrink-0 w-6 text-caption font-semibold text-neutral-400 text-center tabular pt-0.5">
                 {rewatches.length - i}
-              </div>
+              </span>
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs text-neutral-500">
+                <div className="flex items-center gap-x-3 gap-y-1 flex-wrap">
+                  <span className="text-caption text-neutral-400">
                     {new Date(rw.watched_at).toLocaleDateString(undefined, {
                       year: "numeric",
                       month: "short",
@@ -168,24 +116,25 @@ export default function RewatchSection({
                     })}
                   </span>
                   {rw.rating != null && (
-                    <span className="flex items-center gap-0.5 text-xs text-amber-400">
-                      <svg className="w-3 h-3 fill-current" viewBox="0 0 24 24">
-                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-                      </svg>
+                    <span className="flex items-center gap-0.5 text-caption text-warning-400">
+                      <StarIcon className="w-3 h-3" />
                       {rw.rating}/5
                     </span>
                   )}
                   {rw.would_rewatch != null && (
-                    <span className={`text-xs ${rw.would_rewatch ? "text-success-400" : "text-error-400"}`}>
+                    <span className={`text-caption ${rw.would_rewatch ? "text-success-400" : "text-error-400"}`}>
                       {rw.would_rewatch ? "Would watch again" : "Wouldn't rewatch"}
                     </span>
                   )}
                 </div>
                 {rw.notes && (
-                  <p className="text-sm text-neutral-300 mt-1 leading-relaxed">{rw.notes}</p>
+                  <p className="text-body text-neutral-300 mt-1 leading-relaxed">{rw.notes}</p>
                 )}
               </div>
-              <button
+              <IconButton
+                label="Delete rewatch"
+                icon={<CloseIcon />}
+                size="sm"
                 onClick={() =>
                   deleteRewatch.mutate({
                     rewatchId: rw.id,
@@ -193,20 +142,14 @@ export default function RewatchSection({
                     contentId: rw.content_id,
                   })
                 }
-                className="text-neutral-600 hover:text-error-400 transition-colors flex-shrink-0"
-                aria-label="Delete rewatch"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
+              />
+            </li>
           ))}
-        </div>
+        </ul>
       )}
 
       {rewatches.length === 0 && !open && (
-        <p className="text-sm text-neutral-600 italic">No rewatches logged yet.</p>
+        <p className="text-body text-neutral-400">No rewatches logged yet.</p>
       )}
     </div>
   );

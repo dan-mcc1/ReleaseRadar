@@ -20,6 +20,7 @@ import {
 import EpisodeRow, { epKey } from "../components/EpisodeRow";
 import StarRating from "../components/StarRating";
 import { useToast } from "../components/Toast";
+import { Button, ButtonLink, CheckIcon, ChevronLeftIcon, PageHeader, SectionHeader } from "../components/ui";
 import type { Episode } from "../types/calendar";
 
 interface TmdbSeason {
@@ -223,16 +224,13 @@ export default function SeasonInfoPage() {
   if (seasonQuery.isError || !seasonQuery.data) {
     return (
       <div className="w-full max-w-3xl mx-auto px-6 py-16 text-center">
-        <p className="text-error-400 text-lg">
+        <p className="text-error-400 text-title">
           {seasonQuery.error?.message ?? "Season not found."}
         </p>
         {showIdNum > 0 && (
-          <Link
-            to={`/tv/${showIdNum}`}
-            className="text-primary-400 hover:text-primary-300 text-sm mt-4 inline-block"
-          >
-            ← Back to show
-          </Link>
+          <ButtonLink to={`/tv/${showIdNum}`} icon={<ChevronLeftIcon />} className="mt-4">
+            Back to show
+          </ButtonLink>
         )}
       </div>
     );
@@ -249,16 +247,16 @@ export default function SeasonInfoPage() {
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100">
       {/* Breadcrumb */}
-      <div className="px-6 md:px-10 pt-6 pb-3 flex items-center gap-2.5 font-mono text-[11.5px] tracking-wider flex-wrap">
+      <div className="px-6 md:px-10 pt-6 pb-3 flex items-center gap-2.5 text-label flex-wrap">
         {showQuery.data && (
           <>
             <Link
               to={`/tv/${showIdNum}`}
-              className="text-neutral-500 hover:text-neutral-300 transition-colors"
+              className="text-neutral-400 hover:text-neutral-200 transition-colors"
             >
               {showQuery.data.name}
             </Link>
-            <span className="text-neutral-700">/</span>
+            <span className="text-neutral-600">/</span>
           </>
         )}
         <span className="text-neutral-200 font-medium">
@@ -272,16 +270,15 @@ export default function SeasonInfoPage() {
           <img
             src={`${BASE_IMAGE_URL}/w342${season.poster_path}`}
             alt={season.name}
-            className="w-40 sm:w-48 flex-shrink-0 h-auto rounded-lg object-cover self-start"
+            className="w-40 sm:w-48 flex-shrink-0 h-auto rounded-surface object-cover self-start"
           />
         )}
         <div className="flex-1 min-w-0">
-          <h1 className="text-3xl md:text-4xl font-semibold mb-2">
-            {season.name || `Season ${season.season_number}`}
-          </h1>
-          <p className="text-neutral-400 text-sm mb-3">
-            {dateRange} · {totalCount} episode{totalCount === 1 ? "" : "s"}
-          </p>
+          <PageHeader
+            title={season.name || `Season ${season.season_number}`}
+            description={`${dateRange} · ${totalCount} episode${totalCount === 1 ? "" : "s"}`}
+            className="mb-3"
+          />
 
           {isLoggedIn && totalCount > 0 && (
             <div className="flex items-center gap-2 mb-3">
@@ -291,20 +288,18 @@ export default function SeasonInfoPage() {
                   style={{ width: `${(watchedCount / totalCount) * 100}%` }}
                 />
               </div>
-              <span className="text-xs text-neutral-400">
+              <span className="text-caption text-neutral-400 tabular">
                 {watchedCount}/{totalCount}
               </span>
-              <button
+              <Button
+                size="sm"
                 onClick={onToggleSeason}
                 disabled={togglingSeason}
-                className={`ml-2 flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all duration-150 disabled:opacity-50 ${
-                  allWatched
-                    ? "bg-success-700/40 border border-success-600/60 text-success-400 hover:bg-error-900/30 hover:border-error-600/40 hover:text-error-400"
-                    : "bg-neutral-800 border border-neutral-700 text-neutral-300 hover:bg-success-900/30 hover:border-success-600/40 hover:text-success-400"
-                }`}
+                icon={allWatched ? <CheckIcon /> : undefined}
+                className="ml-2"
               >
                 {allWatched ? "Watched" : "Mark season watched"}
-              </button>
+              </Button>
             </div>
           )}
 
@@ -313,7 +308,7 @@ export default function SeasonInfoPage() {
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-4">
               {isLoggedIn && (
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-neutral-400">Your rating:</span>
+                  <span className="text-caption text-neutral-400">Your rating:</span>
                   <StarRating
                     rating={myRating?.rating ?? null}
                     onRate={handleRate}
@@ -322,7 +317,7 @@ export default function SeasonInfoPage() {
                 </div>
               )}
               {aggregate && aggregate.count > 0 && (
-                <span className="text-xs text-neutral-500">
+                <span className="text-caption text-neutral-400">
                   Community: {aggregate.average?.toFixed(1)}/5 (
                   {aggregate.count} rating{aggregate.count === 1 ? "" : "s"})
                 </span>
@@ -338,7 +333,7 @@ export default function SeasonInfoPage() {
 
       {/* Episodes */}
       <div className="px-6 md:px-10 pb-12">
-        <h2 className="text-xl font-semibold mb-4">Episodes</h2>
+        <SectionHeader title="Episodes" className="mb-4" />
         {episodes.length === 0 ? (
           <p className="text-neutral-500 text-sm">No episodes available yet.</p>
         ) : (

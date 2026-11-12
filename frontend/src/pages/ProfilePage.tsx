@@ -1,10 +1,24 @@
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useState, type ReactNode } from "react";
 import { useAuthUser } from "../hooks/useAuthUser";
-import { BASE_IMAGE_URL, AVATAR_PRESETS, getAvatarColor } from "../constants";
+import { AVATAR_PRESETS, getAvatarColor } from "../constants";
 import { Link } from "react-router-dom";
+import { ShareIcon, UserMinusIcon } from "@heroicons/react/24/outline";
 import FriendSearch from "../components/FriendSearch";
 import FriendRequests from "../components/FriendRequests";
 import { usePageTitle } from "../hooks/usePageTitle";
+import {
+  Button,
+  ButtonLink,
+  CheckIcon,
+  IconButton,
+  PageHeader,
+  PlusIcon,
+  PosterCard,
+  SectionHeader,
+  StarIcon,
+  cx,
+  focusRing,
+} from "../components/ui";
 
 // Charts (Recharts) are most of this page's code; load them on their own.
 const StatsSection = lazy(() => import("../components/StatsSection"));
@@ -31,35 +45,19 @@ function avatarKeyToHue(key: string | null | undefined): number {
   return key ? (map[key] ?? 160) : 160;
 }
 
-function SectionHead({
-  title, sub, action, actionHref,
-}: {
-  title: string;
-  sub?: string;
-  action?: string;
-  actionHref?: string;
-}) {
+function SectionLink({ to, children }: { to: string; children: ReactNode }) {
   return (
-    <div className="flex items-baseline gap-3 mb-4">
-      <h2 className="m-0 font-normal text-[22px] tracking-tight text-neutral-100 italic leading-none">
-        {title}
-      </h2>
-      {sub && (
-        <span className="font-mono text-[10.5px] text-neutral-500 tracking-[0.06em]">
-          · {sub.toUpperCase()}
-        </span>
-      )}
-      <span className="flex-1" />
-      {action && actionHref && (
-        <Link
-          to={actionHref}
-          className="text-[12.5px] text-neutral-400 hover:text-neutral-200 font-medium transition-colors"
-        >
-          {action} →
-        </Link>
-      )}
-    </div>
+    <Link
+      to={to}
+      className={cx("rounded-sm text-label text-neutral-300 hover:text-primary-300 transition-colors", focusRing)}
+    >
+      {children}
+    </Link>
   );
+}
+
+function SubLabel({ children }: { children: ReactNode }) {
+  return <div className="text-label font-medium text-neutral-400 mb-3">{children}</div>;
 }
 
 type ListPreviewItem = {
@@ -89,29 +87,14 @@ function PosterGrid({
 
   return (
     <div className={gridClass}>
-      {items.map((item) => {
-        const label = item.title ?? item.name ?? "";
-        const href = type === "movie" ? `/movie/${item.id}` : `/tv/${item.id}`;
-        const fallback = type === "movie" ? "/movie-icon.png" : "/tv-icon.png";
-        return (
-          <Link key={item.id} to={href} className="group block">
-            <div className="rounded-xl overflow-hidden aspect-[2/3] bg-neutral-800">
-              <img
-                src={
-                  item.poster_path
-                    ? `${BASE_IMAGE_URL}/w342${item.poster_path}`
-                    : fallback
-                }
-                alt={label}
-                className="w-full h-full object-cover group-hover:opacity-80 transition-opacity"
-              />
-            </div>
-            <p className="mt-1.5 text-[11.5px] font-medium text-neutral-400 text-center line-clamp-1">
-              {label}
-            </p>
-          </Link>
-        );
-      })}
+      {items.map((item) => (
+        <PosterCard
+          key={item.id}
+          to={type === "movie" ? `/movie/${item.id}` : `/tv/${item.id}`}
+          title={item.title ?? item.name ?? ""}
+          posterPath={item.poster_path}
+        />
+      ))}
     </div>
   );
 }
@@ -124,26 +107,7 @@ function CollectionPosterGrid({
   return (
     <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 2xl:grid-cols-posters-dense gap-2">
       {items.map((c) => (
-        <Link key={c.id} to={`/collection/${c.id}`} className="group block">
-          <div className="rounded-xl overflow-hidden aspect-[2/3] bg-neutral-800">
-            {c.poster_path ? (
-              <img
-                src={`${BASE_IMAGE_URL}/w342${c.poster_path}`}
-                alt={c.name}
-                className="w-full h-full object-cover group-hover:opacity-80 transition-opacity"
-              />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center p-2">
-                <span className="text-[10px] text-neutral-500 text-center line-clamp-4">
-                  {c.name}
-                </span>
-              </div>
-            )}
-          </div>
-          <p className="mt-1.5 text-[11.5px] font-medium text-neutral-400 text-center line-clamp-1">
-            {c.name}
-          </p>
-        </Link>
+        <PosterCard key={c.id} to={`/collection/${c.id}`} title={c.name} posterPath={c.poster_path} />
       ))}
     </div>
   );
@@ -189,17 +153,19 @@ function FriendsWidget() {
   }
 
   return (
-    <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
-      <div className="flex items-center gap-2 mb-4">
-        <div className="font-mono text-[10px] tracking-[0.15em] text-neutral-500 uppercase flex-1">
-          Friends · {friends.length}
-        </div>
-        {incomingCount > 0 && (
-          <span className="font-mono text-[10px] font-bold bg-primary-500 text-neutral-900 px-1.5 py-0.5 rounded">
-            {incomingCount} new
-          </span>
-        )}
-      </div>
+    <section>
+      <SectionHeader
+        title="Friends"
+        note={String(friends.length)}
+        action={
+          incomingCount > 0 && (
+            <span className="tabular text-caption font-semibold bg-primary-500 text-neutral-900 px-1.5 py-0.5 rounded">
+              {incomingCount} new
+            </span>
+          )
+        }
+        className="mb-4"
+      />
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-neutral-800 mb-4 -mx-1 px-1">
@@ -216,20 +182,21 @@ function FriendsWidget() {
           <button
             key={t.id}
             onClick={() => setFriendsTab(t.id)}
-            className={[
-              "flex items-center gap-1.5 pb-2.5 text-[12px] font-medium border-b-2 -mb-px transition-colors px-1",
+            className={cx(
+              "flex items-center gap-1.5 pb-2.5 text-caption font-medium border-b-2 -mb-px transition-colors px-1",
+              focusRing,
               friendsTab === t.id
                 ? "border-primary-500 text-neutral-100"
-                : "border-transparent text-neutral-500 hover:text-neutral-300",
-            ].join(" ")}
+                : "border-transparent text-neutral-400 hover:text-neutral-200",
+            )}
           >
             {t.label}
             {t.count != null && t.count > 0 && (
               <span
-                className={[
-                  "font-mono text-[9.5px] px-1 py-px rounded font-semibold",
-                  t.badge ? "bg-primary-500 text-neutral-900" : "bg-neutral-800 text-neutral-500",
-                ].join(" ")}
+                className={cx(
+                  "tabular text-caption px-1 py-px rounded font-semibold",
+                  t.badge ? "bg-primary-500 text-neutral-900" : "bg-neutral-800 text-neutral-400",
+                )}
               >
                 {t.count}
               </span>
@@ -242,12 +209,12 @@ function FriendsWidget() {
       {friendsTab === "friends" && (
         <div className="flex flex-col gap-2.5">
           {friends.length === 0 ? (
-            <p className="text-neutral-500 text-[13px]">No friends yet.</p>
+            <p className="text-neutral-500 text-label">No friends yet.</p>
           ) : (
             friends.map(({ friendship_id, friend }) => (
               <div key={friendship_id} className="flex items-center gap-3">
                 <div
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-semibold shrink-0"
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-caption font-semibold shrink-0"
                   style={{
                     background: `oklch(0.32 0.10 ${avatarKeyToHue(undefined) + (friend.username.charCodeAt(0) * 7) % 360})`,
                     color: `oklch(0.85 0.08 ${(friend.username.charCodeAt(0) * 7) % 360})`,
@@ -257,42 +224,36 @@ function FriendsWidget() {
                 </div>
                 <Link
                   to={`/user/${friend.username}`}
-                  className="flex-1 min-w-0 hover:text-primary-400 transition-colors"
+                  className="flex-1 min-w-0 hover:text-primary-300 transition-colors"
                 >
-                  <div className="text-[13px] font-medium text-neutral-200 truncate">
+                  <div className="text-label font-medium text-neutral-200 truncate">
                     {friend.display_name || `@${friend.username}`}
                   </div>
                   {friend.display_name && (
-                    <div className="text-[11px] text-neutral-500 truncate">@{friend.username}</div>
+                    <div className="text-caption text-neutral-500 truncate">@{friend.username}</div>
                   )}
                 </Link>
                 {confirmRemoveId === friend.id ? (
                   <div className="flex gap-1 items-center">
-                    <button
+                    <Button
+                      variant="danger"
+                      size="sm"
                       onClick={() => removeFriend(friend.id)}
                       disabled={removeMutation.isPending && removeMutation.variables === friend.id}
-                      className="text-[10.5px] bg-error-600 hover:bg-error-500 text-white px-2 py-0.5 rounded disabled:opacity-50"
                     >
                       Yes
-                    </button>
-                    <button
-                      onClick={() => setConfirmRemoveId(null)}
-                      className="text-[10.5px] text-neutral-500 hover:text-neutral-300"
-                    >
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => setConfirmRemoveId(null)}>
                       No
-                    </button>
+                    </Button>
                   </div>
                 ) : (
-                  <button
+                  <IconButton
+                    size="sm"
+                    label={`Remove @${friend.username}`}
+                    icon={<UserMinusIcon className="w-4 h-4" strokeWidth={2} aria-hidden="true" />}
                     onClick={() => setConfirmRemoveId(friend.id)}
-                    className="text-neutral-700 hover:text-neutral-400 transition-colors"
-                  >
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                      <circle cx="12" cy="5" r="2" />
-                      <circle cx="12" cy="12" r="2" />
-                      <circle cx="12" cy="19" r="2" />
-                    </svg>
-                  </button>
+                  />
                 )}
               </div>
             ))
@@ -304,31 +265,31 @@ function FriendsWidget() {
       {friendsTab === "followers" && typedDbUser?.profile_visibility === "public" && (
         <div className="flex flex-col gap-2.5">
           {followers.length === 0 ? (
-            <p className="text-neutral-500 text-[13px]">No followers yet.</p>
+            <p className="text-neutral-500 text-label">No followers yet.</p>
           ) : (
             followers.map(({ friendship_id, follower }) => (
               <div key={friendship_id} className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-semibold shrink-0 bg-neutral-800 text-neutral-400">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center text-caption font-semibold shrink-0 bg-neutral-800 text-neutral-400">
                   {follower.username.slice(0, 2).toUpperCase()}
                 </div>
                 <Link
                   to={`/user/${follower.username}`}
-                  className="flex-1 min-w-0 hover:text-primary-400 transition-colors"
+                  className="flex-1 min-w-0 hover:text-primary-300 transition-colors"
                 >
-                  <div className="text-[13px] font-medium text-neutral-200 truncate">
+                  <div className="text-label font-medium text-neutral-200 truncate">
                     {follower.display_name || `@${follower.username}`}
                   </div>
                   {follower.display_name && (
-                    <div className="text-[11px] text-neutral-500 truncate">@{follower.username}</div>
+                    <div className="text-caption text-neutral-500 truncate">@{follower.username}</div>
                   )}
                 </Link>
-                <button
+                <Button
+                  size="sm"
                   onClick={() => addBack(follower)}
                   disabled={addingBackUsername === follower.username}
-                  className="text-[11px] font-semibold text-primary-400 bg-primary-500/15 hover:bg-primary-500/25 disabled:opacity-50 px-2.5 py-1 rounded-lg transition-colors"
                 >
                   {addingBackUsername === follower.username ? "…" : "Add back"}
-                </button>
+                </Button>
               </div>
             ))
           )}
@@ -382,13 +343,14 @@ function FriendsWidget() {
         />
       )}
 
-      <button
+      <Button
+        icon={<PlusIcon className="w-4 h-4" />}
         onClick={() => setFriendsTab("add")}
-        className="mt-4 w-full text-[12.5px] font-medium text-primary-400 bg-primary-500/10 hover:bg-primary-500/20 border border-primary-500/20 py-2 rounded-xl transition-colors"
+        className="mt-4 w-full"
       >
-        + Find friends
-      </button>
-    </div>
+        Find friends
+      </Button>
+    </section>
   );
 }
 
@@ -443,176 +405,99 @@ export default function ProfilePage() {
     .slice(0, 2)
     .toUpperCase();
 
-  const statStrip = [
-    { label: "Watched",   value: summaryLoading ? "—" : totalWatched },
-    { label: "Watchlist", value: summaryLoading ? "—" : totalWatchlist },
-    { label: "Favorites", value: summaryLoading ? "—" : totalFavorites },
-    { label: "Shelves",   value: summaryLoading ? "—" : shelves.length },
-    { label: "Friends",   value: summaryLoading ? "—" : friends.length },
-  ];
+  const memberSince = user.metadata?.creationTime
+    ? new Date(user.metadata.creationTime).toLocaleDateString("en-US", { month: "long", year: "numeric" })
+    : "—";
+
+  const countsLine = summaryLoading
+    ? null
+    : `${totalWatched} watched · ${totalWatchlist} on your watchlist · ${totalFavorites} favorites · ${shelves.length} ${shelves.length === 1 ? "shelf" : "shelves"} · ${friends.length} ${friends.length === 1 ? "friend" : "friends"}`;
 
   return (
     <div className="w-full">
-      {/* ── Hero ────────────────────────────────────────────────────── */}
-      <div
-        className="relative overflow-hidden border-b border-neutral-800"
-        style={{ background: "#111" }}
-      >
-        {/* Atmospheric gradient */}
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            background: `radial-gradient(80% 70% at 80% 0%, oklch(0.28 0.12 ${hue}) 0%, transparent 65%), radial-gradient(60% 70% at 10% 80%, oklch(0.20 0.08 ${hue} / 0.5) 0%, transparent 70%)`,
-            opacity: 0.7,
-          }}
-        />
-        {/* Radar rings decoration */}
-        <svg
-          viewBox="0 0 600 400"
-          className="absolute pointer-events-none"
-          style={{ right: -80, top: -80, width: 600, height: 400, opacity: 0.14 }}
-        >
-          {[60, 110, 160, 210, 260].map((r) => (
-            <circle key={r} cx="400" cy="200" r={r} stroke="#10b981" strokeWidth="0.8" fill="none" />
-          ))}
-        </svg>
-
-        <div
-          className="relative flex flex-col gap-5 sm:grid sm:items-end sm:gap-8 px-6 sm:px-10 pt-10 pb-8"
-          style={{ gridTemplateColumns: "116px 1fr auto" }}
-        >
-          {/* Avatar */}
-          <div className="relative shrink-0">
-            {!avatarColor && user.photoURL ? (
-              <img
-                src={user.photoURL}
-                alt="Profile"
-                style={{ width: 116, height: 116 }}
-                className="rounded-full object-cover border-4 border-white/10 shadow-2xl"
-              />
-            ) : (
-              <div
-                style={{
-                  width: 116, height: 116, borderRadius: "50%",
-                  background: avatarColor
-                    ? `linear-gradient(135deg, ${avatarColor}cc, ${avatarColor}88)`
-                    : `linear-gradient(135deg, oklch(0.55 0.14 ${hue}), oklch(0.38 0.14 ${(hue + 40) % 360}))`,
-                  boxShadow: "0 16px 40px rgba(0,0,0,0.4), 0 0 0 4px rgba(255,255,255,0.07)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 40, fontWeight: 700, color: "rgba(255,255,255,0.92)",
-                  letterSpacing: "-0.02em",
-                }}
-              >
-                {initials}
-              </div>
-            )}
-            {typedDbUser?.subscription_tier === "premium" && (
-              <span className="absolute bottom-0 right-0 font-mono text-[9px] font-bold tracking-wider bg-amber-400 text-amber-900 rounded-full px-2 py-0.5 shadow-lg uppercase">
-                ★ Pro
-              </span>
-            )}
-          </div>
-
-          {/* Name + meta */}
-          <div className="min-w-0">
-            <div className="font-mono text-[11px] tracking-[0.15em] text-primary-400 uppercase mb-2">
-              ◉ Member since{" "}
-              {user.metadata?.creationTime
-                ? new Date(user.metadata.creationTime).toLocaleDateString("en-US", { month: "long", year: "numeric" })
-                : "—"}
+      {/* ── Header ──────────────────────────────────────────────────── */}
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:gap-8 px-6 sm:px-10 pt-10 pb-8 border-b border-neutral-800">
+        {/* Avatar */}
+        <div className="relative shrink-0">
+          {!avatarColor && user.photoURL ? (
+            <img
+              src={user.photoURL}
+              alt="Profile"
+              style={{ width: 116, height: 116 }}
+              className="rounded-full object-cover border-4 border-white/10"
+            />
+          ) : (
+            <div
+              style={{
+                width: 116, height: 116, borderRadius: "50%",
+                background: avatarColor
+                  ? `linear-gradient(135deg, ${avatarColor}cc, ${avatarColor}88)`
+                  : `linear-gradient(135deg, oklch(0.55 0.14 ${hue}), oklch(0.38 0.14 ${(hue + 40) % 360}))`,
+                boxShadow: "0 0 0 4px rgba(255,255,255,0.07)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 40, fontWeight: 700, color: "rgba(255,255,255,0.92)",
+                letterSpacing: "-0.02em",
+              }}
+            >
+              {initials}
             </div>
-            <div className="flex items-baseline gap-4 flex-wrap">
-              <h1 className="m-0 font-normal text-[32px] sm:text-[50px] tracking-[-0.025em] leading-none text-neutral-100">
-                {displayName}
-              </h1>
-              {typedDbUser?.username && (
-                <span className="font-mono text-[14px] text-neutral-400 tracking-[0.02em]">
-                  @{typedDbUser.username}
-                </span>
-              )}
-              {typedDbUser?.subscription_tier === "admin" && (
-                <span className="text-[10px] font-bold uppercase tracking-wider bg-highlight-500/20 text-highlight-400 border border-highlight-500/30 rounded-full px-2 py-0.5">
-                  Admin
-                </span>
-              )}
-            </div>
-            {typedDbUser?.bio && (
-              <p className="italic text-[17px] leading-snug tracking-tight text-neutral-300 mt-3 max-w-xl">
-                {typedDbUser.bio}
-              </p>
-            )}
-            <div className="flex gap-4 mt-3 font-mono text-[11.5px] text-neutral-500 tracking-[0.02em] uppercase flex-wrap">
-              {user.email && <span>{user.email}</span>}
-              {user.email && <span className="text-neutral-700">·</span>}
-              <span className="flex items-center gap-1.5">
-                <span
-                  className="w-1.5 h-1.5 rounded-full bg-primary-500"
-                  style={{ display: "inline-block" }}
-                />
-                Online now
-              </span>
-            </div>
-          </div>
-
-          {/* Actions */}
-          <div className="flex flex-col gap-2 items-start sm:items-end shrink-0">
-            <div className="flex gap-2">
-              {typedDbUser?.username && (
-                <button
-                  onClick={handleShareProfile}
-                  className="flex items-center gap-1.5 text-[12.5px] font-medium text-neutral-300 hover:text-neutral-100 bg-neutral-800/80 hover:bg-neutral-700 border border-neutral-700 px-3.5 py-2 rounded-xl transition-colors"
-                >
-                  {shareCopied ? (
-                    <>
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                      </svg>
-                      Copied!
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z" />
-                      </svg>
-                      Share profile
-                    </>
-                  )}
-                </button>
-              )}
-              <Link
-                to="/settings"
-                className="flex items-center gap-1.5 text-[12.5px] font-medium text-neutral-900 bg-primary-500 hover:bg-primary-400 px-3.5 py-2 rounded-xl transition-colors"
-              >
-                Edit profile
-              </Link>
-            </div>
-            {typedDbUser?.username && (
-              <span className="font-mono text-[10px] text-neutral-600 tracking-[0.06em] uppercase">
-                releaseradar.app/user/{typedDbUser.username}
-              </span>
-            )}
-          </div>
+          )}
+          {typedDbUser?.subscription_tier === "premium" && (
+            <span className="absolute bottom-0 right-0 inline-flex items-center gap-1 text-caption font-semibold bg-warning-400 text-warning-900 rounded-full px-2 py-0.5">
+              <StarIcon className="w-3 h-3" />
+              Pro
+            </span>
+          )}
         </div>
 
-        {/* Stat strip */}
-        <div
-          className="relative grid grid-cols-3 sm:grid-cols-5 border-t border-neutral-800"
-          style={{ background: "#0d0d0d" }}
-        >
-          {statStrip.map((s, i) => (
-            <div
-              key={s.label}
-              className="flex flex-col gap-1 px-4 sm:px-6 py-4 sm:py-5 border-neutral-800"
-              style={{ borderLeft: i === 0 ? "none" : "1px solid #262626" }}
-            >
-              <div className="font-mono text-[10px] text-neutral-500 tracking-[0.12em] uppercase">
-                {s.label}
-              </div>
-              <div className="text-[22px] sm:text-[30px] leading-none tracking-tight text-neutral-100 italic font-normal">
-                {s.value}
-              </div>
-            </div>
-          ))}
+        {/* Name + meta */}
+        <div className="flex-1 min-w-0">
+          <PageHeader
+            title={
+              <>
+                {displayName}
+                {typedDbUser?.subscription_tier === "admin" && (
+                  <span className="ml-3 align-middle text-caption font-semibold bg-highlight-500/20 text-highlight-400 border border-highlight-500/30 rounded-full px-2 py-0.5">
+                    Admin
+                  </span>
+                )}
+              </>
+            }
+            description={
+              <>
+                {typedDbUser?.username && <>@{typedDbUser.username} · </>}
+                {user.email && <>{user.email} · </>}
+                Member since {memberSince}
+              </>
+            }
+            actions={
+              <>
+                {typedDbUser?.username && (
+                  <Button
+                    onClick={handleShareProfile}
+                    icon={
+                      shareCopied ? (
+                        <CheckIcon className="w-4 h-4" />
+                      ) : (
+                        <ShareIcon className="w-4 h-4" strokeWidth={2} aria-hidden="true" />
+                      )
+                    }
+                  >
+                    {shareCopied ? "Copied!" : "Share profile"}
+                  </Button>
+                )}
+                <ButtonLink to="/settings" variant="primary">
+                  Edit profile
+                </ButtonLink>
+              </>
+            }
+          />
+          {typedDbUser?.bio && (
+            <p className="text-body text-neutral-300 mt-3 max-w-xl">
+              {typedDbUser.bio}
+            </p>
+          )}
+          {countsLine && <p className="text-body text-neutral-400 mt-3">{countsLine}</p>}
         </div>
       </div>
 
@@ -624,29 +509,23 @@ export default function ProfilePage() {
           {/* Favorites */}
           {totalFavorites > 0 && (
             <section>
-              <SectionHead title="Favorites" sub={`${totalFavorites} pinned`} />
-              <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 flex flex-col gap-6">
+              <SectionHeader title="Favorites" note={`${totalFavorites} pinned`} className="mb-4" />
+              <div className="flex flex-col gap-6">
                 {favorites.shows.length > 0 && (
                   <div>
-                    <div className="font-mono text-[10px] text-neutral-500 tracking-[0.12em] uppercase mb-3">
-                      TV Shows · {favorites.shows.length}
-                    </div>
+                    <SubLabel>TV shows · {favorites.shows.length}</SubLabel>
                     <PosterGrid items={favorites.shows} type="tv" cols={8} />
                   </div>
                 )}
                 {favorites.movies.length > 0 && (
                   <div>
-                    <div className="font-mono text-[10px] text-neutral-500 tracking-[0.12em] uppercase mb-3">
-                      Movies · {favorites.movies.length}
-                    </div>
+                    <SubLabel>Movies · {favorites.movies.length}</SubLabel>
                     <PosterGrid items={favorites.movies} type="movie" cols={8} />
                   </div>
                 )}
                 {favorites.collections.length > 0 && (
                   <div>
-                    <div className="font-mono text-[10px] text-neutral-500 tracking-[0.12em] uppercase mb-3">
-                      Collections · {favorites.collections.length}
-                    </div>
+                    <SubLabel>Collections · {favorites.collections.length}</SubLabel>
                     <CollectionPosterGrid items={favorites.collections} />
                   </div>
                 )}
@@ -655,55 +534,55 @@ export default function ProfilePage() {
           )}
 
           {/* Watchlist + Watched side by side */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
             <section>
-              <SectionHead
+              <SectionHeader
                 title="Watchlist"
-                sub={String(totalWatchlist)}
-                action="View all"
-                actionHref="/watchlist"
+                note={String(totalWatchlist)}
+                action={<SectionLink to="/watchlist">View all</SectionLink>}
+                className="mb-4"
               />
-              <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
+              <div>
                 {watchlistPreview.shows.length > 0 && (
                   <div className="mb-4">
-                    <div className="font-mono text-[10px] text-neutral-500 tracking-[0.12em] uppercase mb-3">TV</div>
+                    <SubLabel>TV</SubLabel>
                     <PosterGrid items={watchlistPreview.shows} type="tv" cols={5} />
                   </div>
                 )}
                 {watchlistPreview.movies.length > 0 && (
                   <div>
-                    <div className="font-mono text-[10px] text-neutral-500 tracking-[0.12em] uppercase mb-3">Movies</div>
+                    <SubLabel>Movies</SubLabel>
                     <PosterGrid items={watchlistPreview.movies} type="movie" cols={5} />
                   </div>
                 )}
                 {totalWatchlist === 0 && !summaryLoading && (
-                  <p className="text-neutral-500 text-[13px]">Your watchlist is empty.</p>
+                  <p className="text-neutral-500 text-label">Your watchlist is empty.</p>
                 )}
               </div>
             </section>
 
             <section>
-              <SectionHead
+              <SectionHeader
                 title="Watched"
-                sub={String(totalWatched)}
-                action="View all"
-                actionHref="/watched"
+                note={String(totalWatched)}
+                action={<SectionLink to="/watched">View all</SectionLink>}
+                className="mb-4"
               />
-              <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
+              <div>
                 {watchedPreview.shows.length > 0 && (
                   <div className="mb-4">
-                    <div className="font-mono text-[10px] text-neutral-500 tracking-[0.12em] uppercase mb-3">TV</div>
+                    <SubLabel>TV</SubLabel>
                     <PosterGrid items={watchedPreview.shows} type="tv" cols={5} />
                   </div>
                 )}
                 {watchedPreview.movies.length > 0 && (
                   <div>
-                    <div className="font-mono text-[10px] text-neutral-500 tracking-[0.12em] uppercase mb-3">Movies</div>
+                    <SubLabel>Movies</SubLabel>
                     <PosterGrid items={watchedPreview.movies} type="movie" cols={5} />
                   </div>
                 )}
                 {totalWatched === 0 && !summaryLoading && (
-                  <p className="text-neutral-500 text-[13px]">Nothing watched yet.</p>
+                  <p className="text-neutral-500 text-label">Nothing watched yet.</p>
                 )}
               </div>
             </section>
@@ -712,74 +591,61 @@ export default function ProfilePage() {
           {/* Shelves */}
           {shelves.length > 0 && (
             <section>
-              <SectionHead
+              <SectionHeader
                 title="Shelves"
-                sub={`${shelves.length} curated`}
-                action="Manage"
-                actionHref="/shelves"
+                note={`${shelves.length} curated`}
+                action={<SectionLink to="/shelves">Manage</SectionLink>}
+                className="mb-4"
               />
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {shelves.map((shelf, i) => {
-                  const SHELF_HUES = [160, 220, 285, 30, 175, 330];
-                  const shelfHue = SHELF_HUES[i % SHELF_HUES.length];
-                  return (
-                    <Link
-                      key={shelf.id}
-                      to={`/shelves/${shelf.id}`}
-                      className="group block bg-neutral-900 border border-neutral-800 hover:border-neutral-700 rounded-2xl p-5 transition-colors relative overflow-hidden"
-                    >
-                      <div
-                        className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-2xl"
-                        style={{
-                          background: `linear-gradient(180deg, oklch(0.65 0.14 ${shelfHue}), oklch(0.45 0.14 ${shelfHue}))`,
-                        }}
-                      />
-                      <div className="pl-1">
-                        <h3 className="font-normal text-[17px] tracking-tight text-neutral-100 italic group-hover:text-primary-400 transition-colors truncate">
-                          {shelf.name}
-                        </h3>
-                        <div className="font-mono text-[10px] text-neutral-500 tracking-[0.08em] uppercase mt-1.5">
-                          {shelf.item_count} {shelf.item_count === 1 ? "title" : "titles"}
-                        </div>
-                      </div>
-                    </Link>
-                  );
-                })}
+                {shelves.map((shelf) => (
+                  <Link
+                    key={shelf.id}
+                    to={`/shelves/${shelf.id}`}
+                    className={cx(
+                      "group block bg-neutral-900 border border-neutral-800 hover:border-neutral-700 rounded-surface p-4 transition-colors",
+                      focusRing,
+                    )}
+                  >
+                    <h3 className="font-semibold text-body text-neutral-100 group-hover:text-primary-300 transition-colors truncate">
+                      {shelf.name}
+                    </h3>
+                    <div className="text-caption text-neutral-500 mt-1 tabular">
+                      {shelf.item_count} {shelf.item_count === 1 ? "title" : "titles"}
+                    </div>
+                  </Link>
+                ))}
               </div>
             </section>
           )}
 
           {/* Stats */}
           <section>
-            <SectionHead title="Your stats" action="Full stats" actionHref="/stats" />
-            <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6">
-              <Suspense fallback={<div className="h-40" />}>
-                <StatsSection />
-              </Suspense>
-            </div>
+            <SectionHeader
+              title="Your stats"
+              action={<SectionLink to="/stats">Full stats</SectionLink>}
+              className="mb-4"
+            />
+            <Suspense fallback={<div className="h-40" />}>
+              <StatsSection />
+            </Suspense>
           </section>
         </div>
 
         {/* Right rail */}
-        <div className="flex flex-col gap-5 lg:sticky lg:top-24 lg:self-start">
+        <div className="flex flex-col gap-8 lg:sticky lg:top-24 lg:self-start">
 
           {/* About */}
-          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
-            <div className="font-mono text-[10px] tracking-[0.15em] text-neutral-500 uppercase mb-4">
-              About
-            </div>
-            <div className="grid gap-x-4 gap-y-2.5 text-[13px]" style={{ gridTemplateColumns: "72px 1fr" }}>
-              <span className="text-neutral-500">Joined</span>
-              <span className="font-medium text-neutral-200">
-                {user.metadata?.creationTime
-                  ? new Date(user.metadata.creationTime).toLocaleDateString("en-US", { month: "long", year: "numeric" })
-                  : "—"}
-              </span>
-              <span className="text-neutral-500">Plan</span>
+          <section>
+            <SectionHeader title="About" className="mb-4" />
+            <div className="grid gap-x-4 gap-y-2.5 text-label" style={{ gridTemplateColumns: "72px 1fr" }}>
+              <span className="text-caption text-neutral-400">Joined</span>
+              <span className="font-medium text-neutral-200">{memberSince}</span>
+              <span className="text-caption text-neutral-400">Plan</span>
               <span className="font-medium text-neutral-200 flex items-center gap-1.5">
                 {typedDbUser?.subscription_tier === "premium" ? (
                   <>
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-warning-400 inline-block" />
                     Premium
                   </>
                 ) : typedDbUser?.subscription_tier === "admin" ? (
@@ -794,22 +660,20 @@ export default function ProfilePage() {
                   </>
                 )}
               </span>
-              <span className="text-neutral-500">Visibility</span>
+              <span className="text-caption text-neutral-400">Visibility</span>
               <span className="font-medium text-neutral-200 capitalize">
                 {typedDbUser?.profile_visibility?.replace("_", " ") ?? "—"}
               </span>
               {user.email && (
                 <>
-                  <span className="text-neutral-500">Email</span>
-                  <span className="font-medium text-neutral-200 text-[12px] truncate">{user.email}</span>
+                  <span className="text-caption text-neutral-400">Email</span>
+                  <span className="font-medium text-neutral-200 text-caption truncate">{user.email}</span>
                 </>
               )}
             </div>
             {/* Avatar color picker hint */}
             <div className="mt-4 pt-4 border-t border-neutral-800">
-              <div className="font-mono text-[10px] text-neutral-500 tracking-[0.12em] uppercase mb-2.5">
-                Avatar color
-              </div>
+              <div className="text-caption text-neutral-400 mb-2.5">Avatar color</div>
               <div className="flex gap-2 flex-wrap">
                 {AVATAR_PRESETS.map((p) => (
                   <div
@@ -827,12 +691,12 @@ export default function ProfilePage() {
               </div>
               <Link
                 to="/settings"
-                className="mt-2 inline-block text-[11.5px] text-primary-400 hover:text-primary-300 transition-colors"
+                className="mt-2 inline-block text-caption text-neutral-300 hover:text-primary-300 transition-colors"
               >
-                Change in settings →
+                Change in settings
               </Link>
             </div>
-          </div>
+          </section>
 
           {/* Friends — isolated component, tab state doesn't re-render the hero */}
           <FriendsWidget />

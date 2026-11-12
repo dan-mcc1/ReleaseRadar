@@ -1,4 +1,5 @@
 import { Link, useParams } from "react-router-dom";
+import { Bars3Icon } from "@heroicons/react/24/outline";
 import { BASE_IMAGE_URL } from "../constants";
 import type { Movie } from "../types/calendar";
 import { usePageTitle } from "../hooks/usePageTitle";
@@ -6,7 +7,18 @@ import { formatLocalDate, toLocalISODate } from "../utils/date";
 import BackdropCard from "../components/media/BackdropCard";
 import FavoriteButton from "../components/FavoriteButton";
 import StarRating from "../components/StarRating";
-import StarIcon from "../components/icons/StarIcon";
+import {
+  Button,
+  ButtonLink,
+  Card,
+  CheckIcon,
+  EmptyState,
+  IconButton,
+  SectionHeader,
+  StarIcon,
+  buttonClass,
+  focusRing,
+} from "../components/ui";
 import { useToast } from "../components/Toast";
 import type { WatchStatus } from "../components/WatchButton";
 import { useAuthUser } from "../hooks/useAuthUser";
@@ -39,13 +51,6 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-
-const LABEL = "font-mono text-[10px] tracking-[0.15em] text-neutral-500 uppercase";
-const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-400";
-const BTN = `inline-flex items-center justify-center gap-2 h-10 px-3.5 rounded-xl border text-[13px] font-semibold whitespace-nowrap transition-colors disabled:opacity-50 ${FOCUS}`;
-const BTN_PLAIN = "bg-neutral-900 border-neutral-700 text-neutral-100 hover:border-neutral-500";
-const BTN_WATCHED = "bg-primary-500/15 border-primary-400/50 text-primary-300 hover:border-primary-400";
-const BTN_LISTED = "bg-neutral-900 border-primary-400 text-primary-200 hover:bg-neutral-800";
 
 function formatRuntime(minutes: number) {
   const h = Math.floor(minutes / 60);
@@ -173,14 +178,23 @@ export default function CollectionInfo() {
       <div className="flex items-center justify-center min-h-64">
         <div className="flex flex-col items-center gap-3">
           <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-neutral-400 text-sm">Loading collection…</p>
+          <p className="text-neutral-400 text-body">Loading collection…</p>
         </div>
       </div>
     );
   if (error && !isNotFoundError(error))
-    return <p className="text-error-400 p-6">{error.message}</p>;
+    return <EmptyState title="Couldn't load this collection" description={error.message} />;
   if (!rawCollection)
-    return <p className="text-neutral-400 p-6">Collection not found.</p>;
+    return (
+      <EmptyState
+        title="Collection not found"
+        action={
+          <ButtonLink to="/collections" variant="primary">
+            Browse collections
+          </ButtonLink>
+        }
+      />
+    );
 
   const collection = {
     ...rawCollection,
@@ -202,8 +216,8 @@ export default function CollectionInfo() {
 
   const keyFacts = stats && stats.count > 0 && (
     <>
-      <div className={`${LABEL} mb-3`}>Key facts</div>
-      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
+      <SectionHeader title="Key facts" className="mb-3" />
+      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-body">
         <Fact label="Films">{stats.count}</Fact>
         {yearRange && <Fact label="Years">{yearRange}</Fact>}
         {stats.total_runtime != null && stats.total_runtime > 0 && (
@@ -243,7 +257,7 @@ export default function CollectionInfo() {
           backdropPath={collection.backdrop_path}
           className="lg:col-start-2 lg:row-start-1"
           title={
-            <h1 className="text-3xl sm:text-4xl lg:text-5xl 2xl:text-[3.5rem] font-bold tracking-tight leading-[1.05] text-white text-balance drop-shadow-lg">
+            <h1 className="text-display font-semibold leading-tight text-white text-balance drop-shadow-lg">
               {collection.name}
             </h1>
           }
@@ -258,17 +272,17 @@ export default function CollectionInfo() {
                 srcSet={`${BASE_IMAGE_URL}/w342${collection.poster_path} 342w, ${BASE_IMAGE_URL}/w500${collection.poster_path} 500w`}
                 sizes="(min-width: 1024px) 280px, 96px"
                 alt={`${collection.name} poster`}
-                className="w-24 lg:w-full rounded-xl shadow-2xl border border-white/10"
+                className="w-24 lg:w-full rounded-surface shadow-2xl border border-white/10"
               />
             ) : (
-              <div className="w-24 lg:w-full aspect-[2/3] rounded-xl bg-neutral-800 border border-white/10" />
+              <div className="w-24 lg:w-full aspect-[2/3] rounded-surface bg-neutral-800 border border-white/10" />
             )}
 
             <div className="min-w-0 lg:mt-4">
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-neutral-300">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-body text-neutral-300">
                 {stats?.avg_rating != null && (
                   <span className="flex items-center gap-1.5">
-                    <StarIcon filled className="w-3.5 h-3.5 text-yellow-400" />
+                    <StarIcon className="w-3.5 h-3.5 text-warning-400" />
                     {stats.avg_rating.toFixed(1)} average
                   </span>
                 )}
@@ -280,7 +294,7 @@ export default function CollectionInfo() {
                 {yearRange && <span>{yearRange}</span>}
               </div>
               {topGenres.length > 0 && (
-                <div className="mt-1.5 text-sm text-neutral-400">{topGenres.join(" · ")}</div>
+                <div className="mt-1.5 text-body text-neutral-400">{topGenres.join(" · ")}</div>
               )}
             </div>
           </div>
@@ -290,25 +304,21 @@ export default function CollectionInfo() {
               contentType="collection"
               contentId={collection.id}
               variant="row"
-              className={`${BTN} ${BTN_PLAIN} w-full`}
+              className={`${buttonClass("secondary")} w-full`}
             />
           )}
 
           {progress && progress.total > 0 && (
-            <section aria-label="Your progress" className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
+            <Card as="section" aria-label="Your progress" padding="sm">
               <div className="flex items-center justify-between">
-                <div className={LABEL}>Your progress</div>
-                {complete && (
-                  <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.15em] text-primary-300">
-                    Complete
-                  </span>
-                )}
+                <SectionHeader title="Your progress" as="h3" />
+                {complete && <span className="text-label font-semibold text-primary-300">Complete</span>}
               </div>
 
               <div className="mt-2.5 flex items-baseline gap-2">
-                <span className="text-4xl font-semibold text-primary-400 tabular-nums">{progress.watched}</span>
-                <span className="text-sm text-neutral-300">of {progress.total} watched</span>
-                <span className="ml-auto text-sm font-mono text-neutral-300 tabular-nums">{progress.pct}%</span>
+                <span className="text-heading font-semibold text-neutral-100 tabular">{progress.watched}</span>
+                <span className="text-body text-neutral-300">of {progress.total} watched</span>
+                <span className="ml-auto text-body text-neutral-300 tabular">{progress.pct}%</span>
               </div>
 
               <div
@@ -328,7 +338,7 @@ export default function CollectionInfo() {
                 <Count label="Not seen" value={progress.unseen} />
               </dl>
 
-              <p className="mt-3.5 text-[13px] text-neutral-300 leading-snug">
+              <p className="mt-3.5 text-label text-neutral-300 leading-snug">
                 {complete ? (
                   "You've seen every film in this collection."
                 ) : (
@@ -339,7 +349,7 @@ export default function CollectionInfo() {
                   </>
                 )}
               </p>
-            </section>
+            </Card>
           )}
 
           {keyFacts && <div className="hidden lg:block pt-4 border-t border-neutral-800">{keyFacts}</div>}
@@ -348,16 +358,13 @@ export default function CollectionInfo() {
         {/* Main column */}
         <div className="lg:col-start-2 lg:row-start-2 min-w-0 space-y-8">
           {collection.overview && (
-            <p className="text-[1.25rem] leading-relaxed text-neutral-100 tracking-tight max-w-3xl font-light">
+            <p className="text-title leading-relaxed text-neutral-200 max-w-3xl">
               {collection.overview}
             </p>
           )}
 
           <section aria-label="Films">
-            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 pb-3 mb-4 border-b border-neutral-800">
-              <h2 className="text-lg font-semibold text-neutral-100">Films</h2>
-              <span className="text-[13px] text-neutral-400">in release order</span>
-            </div>
+            <SectionHeader title="Films" note="in release order" divider className="mb-4" />
             {filmCount === 0 ? (
               <p className="py-6 text-neutral-400">No films are listed for this collection yet.</p>
             ) : (
@@ -380,23 +387,27 @@ export default function CollectionInfo() {
 
         {/* Below lg the key facts leave the side panel and sit under the main column. */}
         {keyFacts && (
-          <div className="lg:hidden bg-neutral-900 border border-neutral-800 rounded-2xl p-5">{keyFacts}</div>
+          <Card padding="sm" className="lg:hidden">
+            {keyFacts}
+          </Card>
         )}
 
         {/* Rail: under the main column until 2xl, then a column of its own. */}
         {hasRail && (
-          <aside
+          <Card
+            as="aside"
+            padding="sm"
             aria-label="Your ranking"
-            className="lg:col-start-2 2xl:col-start-3 2xl:row-start-1 2xl:row-span-2 min-w-0 bg-neutral-900 border border-neutral-800 rounded-2xl p-5"
+            className="lg:col-start-2 2xl:col-start-3 2xl:row-start-1 2xl:row-span-2 min-w-0"
           >
-            <div className={LABEL}>Your ranking</div>
+            <SectionHeader title="Your ranking" />
             {rankedWatched.length === 0 ? (
-              <p className="mt-2 text-[13px] text-neutral-400 leading-snug">
+              <p className="mt-2 text-label text-neutral-400 leading-snug">
                 Mark films as watched and they'll appear here for you to put in order.
               </p>
             ) : (
               <>
-                <p className="mt-2 mb-3.5 text-[13px] text-neutral-400 leading-snug">
+                <p className="mt-2 mb-3.5 text-label text-neutral-400 leading-snug">
                   Drag to reorder. Only films you've watched appear here.
                 </p>
                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleRankDragEnd}>
@@ -410,7 +421,7 @@ export default function CollectionInfo() {
                 </DndContext>
               </>
             )}
-          </aside>
+          </Card>
         )}
       </div>
     </div>
@@ -421,7 +432,7 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
   return (
     <>
       <dt className="text-neutral-400">{label}</dt>
-      <dd className="text-neutral-100 tabular-nums">{children}</dd>
+      <dd className="text-neutral-100 tabular">{children}</dd>
     </>
   );
 }
@@ -429,8 +440,8 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
 function Count({ label, value }: { label: string; value: number }) {
   return (
     <div className="flex flex-col-reverse">
-      <dt className="mt-1 font-mono text-[10px] tracking-[0.1em] text-neutral-500 uppercase">{label}</dt>
-      <dd className="text-lg font-semibold text-neutral-100 tabular-nums">{value}</dd>
+      <dt className="mt-1 text-caption text-neutral-400">{label}</dt>
+      <dd className="text-title font-semibold text-neutral-100 tabular">{value}</dd>
     </div>
   );
 }
@@ -478,7 +489,7 @@ function FilmRow({
   if (released && movie.vote_average != null && movie.vote_average > 0) {
     meta.push(
       <span className="inline-flex items-center gap-1">
-        <StarIcon filled className="w-3 h-3 text-yellow-400" />
+        <StarIcon className="w-3 h-3 text-warning-400" />
         {movie.vote_average.toFixed(1)}
       </span>,
     );
@@ -486,12 +497,12 @@ function FilmRow({
 
   return (
     <li
-      className={`@container rounded-2xl border bg-neutral-900/60 ${
+      className={`@container rounded-surface border bg-neutral-900/60 ${
         upNext ? "border-primary-400" : "border-neutral-800"
       }`}
     >
       <div className="grid grid-cols-[1.25rem_6rem_minmax(0,1fr)] @2xl:grid-cols-[1.75rem_11.5rem_minmax(0,1fr)_auto] items-center gap-x-3 @2xl:gap-x-5 gap-y-3 p-3.5">
-        <span className="font-mono text-[13px] text-neutral-400 text-center tabular-nums">{number}</span>
+        <span className="text-label text-neutral-400 text-center tabular">{number}</span>
 
         <Link to={`/movie/${movie.id}`} tabIndex={-1} aria-hidden="true" className="block">
           {thumb ? (
@@ -510,17 +521,17 @@ function FilmRow({
           <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
             <Link
               to={`/movie/${movie.id}`}
-              className={`text-base font-semibold leading-snug text-neutral-100 hover:text-white rounded ${FOCUS}`}
+              className={`text-base font-semibold leading-snug text-neutral-100 hover:text-primary-300 rounded ${focusRing}`}
             >
               {movie.title}
             </Link>
             {upNext && (
-              <span className="px-2 py-0.5 rounded-full bg-primary-400 text-primary-950 font-mono text-[10px] font-semibold tracking-[0.1em] uppercase">
+              <span className="px-2 py-0.5 rounded-full bg-primary-400 text-primary-950 text-caption font-semibold">
                 Up next
               </span>
             )}
           </div>
-          <div className="mt-1 flex flex-wrap items-center gap-x-2 text-[13px] text-neutral-400">
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 text-label text-neutral-400">
             {meta.map((part, i) => (
               <span key={i} className="inline-flex items-center gap-2">
                 {i > 0 && <span aria-hidden="true">·</span>}
@@ -529,7 +540,7 @@ function FilmRow({
             ))}
           </div>
           {movie.overview && (
-            <p className="mt-1.5 text-[13px] leading-snug text-neutral-300 line-clamp-2">{movie.overview}</p>
+            <p className="mt-1.5 text-label leading-snug text-neutral-300 line-clamp-2">{movie.overview}</p>
           )}
         </div>
 
@@ -544,51 +555,35 @@ function FilmRow({
             )}
             <div className="flex flex-wrap items-center gap-2">
               {status === "Watched" ? (
-                <button
-                  type="button"
+                <Button
                   aria-pressed="true"
                   title="Remove from watched"
                   disabled={update.isPending}
                   onClick={() => setStatus("none")}
-                  className={`${BTN} ${BTN_WATCHED}`}
+                  icon={<CheckIcon className="w-4 h-4 text-primary-300" />}
                 >
-                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" aria-hidden="true">
-                    <path d="M3 8.5l3.2 3.2L13 4.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
                   Watched
-                </button>
+                </Button>
               ) : (
                 <>
                   {status === "none" ? (
-                    <button
-                      type="button"
-                      disabled={update.isPending}
-                      onClick={() => setStatus("Want To Watch")}
-                      className={`${BTN} ${BTN_PLAIN}`}
-                    >
+                    <Button disabled={update.isPending} onClick={() => setStatus("Want To Watch")}>
                       Add to watchlist
-                    </button>
+                    </Button>
                   ) : (
-                    <button
-                      type="button"
+                    <Button
                       aria-pressed="true"
                       title={status === "Want To Watch" ? "Remove from watchlist" : "Stop watching"}
                       disabled={update.isPending}
                       onClick={() => setStatus("none")}
-                      className={`${BTN} ${BTN_LISTED}`}
                     >
                       {status === "Want To Watch" ? "On watchlist" : "Watching"}
-                    </button>
+                    </Button>
                   )}
                   {released && (
-                    <button
-                      type="button"
-                      disabled={update.isPending}
-                      onClick={() => setStatus("Watched")}
-                      className={`${BTN} ${BTN_PLAIN}`}
-                    >
+                    <Button disabled={update.isPending} onClick={() => setStatus("Watched")}>
                       Mark watched
-                    </button>
+                    </Button>
                   )}
                 </>
               )}
@@ -612,9 +607,9 @@ function SortableRankRow({ movie, rank }: { movie: Movie; rank: number }) {
     <li
       ref={setNodeRef}
       style={style}
-      className="flex items-center gap-3 pl-2.5 bg-neutral-950 border border-neutral-800 hover:border-neutral-700 rounded-xl"
+      className="flex items-center gap-3 pl-2.5 bg-neutral-950 border border-neutral-800 hover:border-neutral-700 rounded-control"
     >
-      <span className="w-6 shrink-0 font-mono text-lg font-semibold text-primary-400 text-center tabular-nums">
+      <span className="w-6 shrink-0 text-title font-semibold text-neutral-300 text-center tabular">
         {rank}
       </span>
       {movie.poster_path ? (
@@ -626,18 +621,16 @@ function SortableRankRow({ movie, rank }: { movie: Movie; rank: number }) {
       ) : (
         <div className="w-9 my-2 aspect-[2/3] rounded-md bg-neutral-800 shrink-0" />
       )}
-      <span className="flex-1 min-w-0 text-sm font-medium leading-snug text-neutral-100 line-clamp-2">{movie.title}</span>
-      <button
-        type="button"
+      <span className="flex-1 min-w-0 text-body font-medium leading-snug text-neutral-100 line-clamp-2">{movie.title}</span>
+      <IconButton
         {...attributes}
         {...listeners}
-        aria-label={`Move ${movie.title}`}
-        className={`w-11 h-11 shrink-0 flex items-center justify-center rounded-lg text-neutral-400 hover:text-neutral-100 cursor-grab active:cursor-grabbing touch-none ${FOCUS}`}
-      >
-        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
-          <path d="M7 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 14a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
-        </svg>
-      </button>
+        label={`Move ${movie.title}`}
+        icon={<Bars3Icon className="w-4 h-4" strokeWidth={2} aria-hidden="true" />}
+        size="touch"
+        shape="square"
+        className="cursor-grab active:cursor-grabbing touch-none"
+      />
     </li>
   );
 }

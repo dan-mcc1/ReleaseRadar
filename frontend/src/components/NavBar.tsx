@@ -132,7 +132,7 @@ function classNames(...classes: string[]) {
 function Badge({ count }: { count: number }) {
   if (count <= 0) return null;
   return (
-    <span className="ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 bg-error-500 text-white text-[10px] font-bold rounded-full leading-none">
+    <span className="ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 bg-error-500 text-white text-caption font-bold rounded-full leading-none">
       {count > 9 ? "9+" : count}
     </span>
   );
@@ -162,7 +162,7 @@ function NavDropdown({
           isActive
             ? "bg-neutral-800 text-white"
             : "text-neutral-400 hover:text-neutral-100 hover:bg-neutral-900",
-          "flex items-center gap-1 rounded-lg px-3 py-1.5 text-[13.5px] font-medium tracking-[-0.01em] transition-colors focus:outline-none",
+          "flex items-center gap-1 rounded-lg px-3 py-1.5 text-label font-medium transition-colors focus:outline-none",
         )}
       >
         {label}
@@ -192,7 +192,7 @@ function NavDropdown({
               <div
                 className={classNames(
                   sIdx > 0 ? "mt-1 border-t border-neutral-800/80 pt-1.5" : "",
-                  "px-3 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-neutral-500",
+                  "px-3 pb-0.5 text-caption font-medium text-neutral-500",
                 )}
               >
                 {section.header}
@@ -206,7 +206,7 @@ function NavDropdown({
                     to={item.href}
                     className={classNames(
                       item.href === currentPath ? "bg-white/5" : "",
-                      "flex items-center justify-between px-3 py-2 text-[13px] font-medium text-neutral-300 data-focus:bg-white/5 data-focus:outline-hidden hover:bg-white/5 transition-colors",
+                      "flex items-center justify-between px-3 py-2 text-label font-medium text-neutral-300 data-focus:bg-white/5 data-focus:outline-hidden hover:bg-white/5 transition-colors",
                     )}
                   >
                     {item.name}
@@ -350,7 +350,7 @@ function SearchBar() {
           }}
           onBlur={() => setSearchFocused(false)}
           placeholder="Search shows, movies, people"
-          className="flex-1 bg-transparent text-white text-[13px] placeholder-neutral-500 focus:outline-none min-w-0"
+          className="flex-1 bg-transparent text-white text-label placeholder-neutral-500 focus:outline-none min-w-0"
         />
         {searchQuery ? (
           <button
@@ -364,7 +364,7 @@ function SearchBar() {
             <XMarkIcon className="w-3.5 h-3.5" />
           </button>
         ) : (
-          <span className="font-mono text-[11px] px-1.5 py-0.5 border border-neutral-700 rounded text-neutral-600 shrink-0 select-none">
+          <span className="font-mono text-caption px-1.5 py-0.5 border border-neutral-700 rounded text-neutral-600 shrink-0 select-none">
             {isMac ? "⌘K" : "Ctrl K"}
           </span>
         )}
@@ -373,11 +373,11 @@ function SearchBar() {
       {showDropdown && (
         <div className="absolute top-full mt-1.5 right-0 w-80 bg-neutral-900 border border-neutral-700/70 rounded-xl shadow-2xl shadow-black/50 z-50 overflow-hidden">
           {dropdownLoading && dropdownResults.length === 0 ? (
-            <div className="px-4 py-3 text-[13px] text-neutral-500">
+            <div className="px-4 py-3 text-label text-neutral-500">
               Searching…
             </div>
           ) : dropdownResults.length === 0 ? (
-            <div className="px-4 py-3 text-[13px] text-neutral-500">
+            <div className="px-4 py-3 text-label text-neutral-500">
               No results found.
             </div>
           ) : (
@@ -418,16 +418,16 @@ function SearchBar() {
                           className="w-full h-full object-cover"
                         />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center text-neutral-500 text-[9px] text-center leading-tight px-0.5">
+                        <div className="w-full h-full flex items-center justify-center text-neutral-500 text-caption text-center leading-tight px-0.5">
                           {label}
                         </div>
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-[13px] font-medium text-white truncate">
+                      <p className="text-label font-medium text-white truncate">
                         {label}
                       </p>
-                      <p className="text-[12px] text-neutral-500">
+                      <p className="text-caption text-neutral-500">
                         {typeLabel}
                       </p>
                     </div>
@@ -440,9 +440,9 @@ function SearchBar() {
                   setDropdownOpen(false);
                   setSearchQuery("");
                 }}
-                className="flex items-center justify-center px-3 py-2 border-t border-neutral-800 text-[12px] text-primary-400 hover:text-primary-300 hover:bg-white/5 transition-colors"
+                className="flex items-center justify-center px-3 py-2 border-t border-neutral-800 text-caption text-primary-400 hover:text-primary-300 hover:bg-white/5 transition-colors"
               >
-                See all results →
+                See all results
               </Link>
             </>
           )}
@@ -486,7 +486,10 @@ function NotificationsPanel() {
   return (
     <div ref={notifRef} className="relative hidden lg:block">
       <button
+        type="button"
         onClick={() => setNotifOpen((o) => !o)}
+        aria-label={hasNotifications ? "Notifications (new)" : "Notifications"}
+        aria-expanded={notifOpen}
         className="relative flex items-center justify-center w-9 h-9 rounded-xl border border-neutral-700/70 bg-transparent text-neutral-400 hover:text-neutral-100 hover:border-neutral-600 transition-colors"
       >
         <svg
@@ -511,11 +514,11 @@ function NotificationsPanel() {
       {notifOpen && (
         <div className="absolute right-0 top-full mt-1.5 w-80 bg-neutral-900 border border-neutral-700/70 rounded-xl shadow-2xl shadow-black/50 z-50 overflow-hidden">
           <div className="px-3 py-2.5 border-b border-neutral-800 flex items-center justify-between">
-            <span className="text-[12px] font-semibold text-neutral-400 uppercase tracking-wider">
+            <span className="text-label font-semibold text-neutral-200">
               Notifications
             </span>
             {totalNotifs > 0 && (
-              <span className="text-[11px] text-neutral-500">
+              <span className="text-caption text-neutral-500">
                 {totalNotifs} new
               </span>
             )}
@@ -537,7 +540,7 @@ function NotificationsPanel() {
                   d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"
                 />
               </svg>
-              <p className="text-[13px] text-neutral-500">
+              <p className="text-label text-neutral-500">
                 You're all caught up
               </p>
             </div>
@@ -559,7 +562,7 @@ function NotificationsPanel() {
                     </svg>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-[13px] text-neutral-200 leading-snug">
+                    <p className="text-label text-neutral-200 leading-snug">
                       <span className="font-semibold">
                         {req.from_user.username}
                       </span>
@@ -569,11 +572,11 @@ function NotificationsPanel() {
                       </span>
                     </p>
                     {req.message && (
-                      <p className="text-[12px] text-neutral-500 truncate mt-0.5">
+                      <p className="text-caption text-neutral-500 truncate mt-0.5">
                         "{req.message}"
                       </p>
                     )}
-                    <p className="text-[11px] text-neutral-600 mt-0.5">
+                    <p className="text-caption text-neutral-600 mt-0.5">
                       {timeAgo(req.created_at)}
                     </p>
                     <div className="flex items-center gap-1.5 mt-1.5">
@@ -585,7 +588,7 @@ function NotificationsPanel() {
                           })
                         }
                         disabled={respondToRequest.isPending}
-                        className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[11.5px] font-medium bg-primary-500/20 text-primary-400 border border-primary-500/30 hover:bg-primary-500/30 transition-colors disabled:opacity-50"
+                        className="flex items-center gap-1 px-2 py-0.5 rounded-md text-caption font-medium bg-primary-500/20 text-primary-400 border border-primary-500/30 hover:bg-primary-500/30 transition-colors disabled:opacity-50"
                       >
                         <svg
                           xmlns="http://www.w3.org/2000/svg"
@@ -609,7 +612,7 @@ function NotificationsPanel() {
                           })
                         }
                         disabled={respondToRequest.isPending}
-                        className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[11.5px] font-medium bg-neutral-800 text-neutral-400 border border-neutral-700 hover:bg-neutral-700 hover:text-neutral-200 transition-colors disabled:opacity-50"
+                        className="flex items-center gap-1 px-2 py-0.5 rounded-md text-caption font-medium bg-neutral-800 text-neutral-400 border border-neutral-700 hover:bg-neutral-700 hover:text-neutral-200 transition-colors disabled:opacity-50"
                       >
                         <svg
                           xmlns="http://www.w3.org/2000/svg"
@@ -674,7 +677,7 @@ function NotificationsPanel() {
                       onClick={() => setNotifOpen(false)}
                       className="block"
                     >
-                      <p className="text-[13px] text-neutral-200 leading-snug">
+                      <p className="text-label text-neutral-200 leading-snug">
                         <span className="font-semibold">
                           {rec.sender_username ?? "Someone"}
                         </span>
@@ -684,11 +687,11 @@ function NotificationsPanel() {
                         </span>
                       </p>
                       {rec.message && (
-                        <p className="text-[12px] text-neutral-500 truncate mt-0.5">
+                        <p className="text-caption text-neutral-500 truncate mt-0.5">
                           "{rec.message}"
                         </p>
                       )}
-                      <p className="text-[11px] text-neutral-600 mt-0.5">
+                      <p className="text-caption text-neutral-600 mt-0.5">
                         {timeAgo(rec.created_at)}
                       </p>
                     </Link>
@@ -697,7 +700,8 @@ function NotificationsPanel() {
                     onClick={() => markRecRead.mutate(rec.id)}
                     disabled={markRecRead.isPending}
                     title="Mark as read"
-                    className="opacity-0 group-hover:opacity-100 shrink-0 w-6 h-6 flex items-center justify-center rounded-md text-neutral-500 hover:text-neutral-200 hover:bg-white/8 transition-all disabled:opacity-30"
+                    aria-label="Mark as read"
+                    className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100 shrink-0 w-6 h-6 flex items-center justify-center rounded-md text-neutral-500 hover:text-neutral-200 hover:bg-white/8 transition-all disabled:opacity-30"
                   >
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
@@ -721,7 +725,7 @@ function NotificationsPanel() {
             <Link
               to="/activity"
               onClick={() => setNotifOpen(false)}
-              className="flex-1 text-center text-[12.5px] font-medium text-neutral-400 hover:text-neutral-200 hover:bg-white/5 rounded-lg py-1.5 transition-colors"
+              className="flex-1 text-center text-label font-medium text-neutral-400 hover:text-neutral-200 hover:bg-white/5 rounded-lg py-1.5 transition-colors"
             >
               Activity
             </Link>
@@ -729,7 +733,7 @@ function NotificationsPanel() {
             <Link
               to="/friends"
               onClick={() => setNotifOpen(false)}
-              className="flex-1 text-center text-[12.5px] font-medium text-neutral-400 hover:text-neutral-200 hover:bg-white/5 rounded-lg py-1.5 transition-colors"
+              className="flex-1 text-center text-label font-medium text-neutral-400 hover:text-neutral-200 hover:bg-white/5 rounded-lg py-1.5 transition-colors"
             >
               Friends
             </Link>
@@ -968,7 +972,7 @@ export default function NavBar() {
               fetchPriority="high"
               className="h-7 w-7"
             />
-            <span className="text-white font-semibold text-[16px] tracking-[-0.02em] truncate max-[350px]:hidden">
+            <span className="text-white font-semibold text-base tracking-[-0.02em] truncate max-[350px]:hidden">
               Release Radar
             </span>
           </Link>
@@ -981,7 +985,7 @@ export default function NavBar() {
                 location.pathname === "/calendar"
                   ? "bg-neutral-800 text-white"
                   : "text-neutral-400 hover:text-neutral-100 hover:bg-neutral-900",
-                "rounded-lg px-3 py-1.5 text-[13.5px] font-medium tracking-[-0.01em] transition-colors",
+                "rounded-lg px-3 py-1.5 text-label font-medium transition-colors",
               )}
             >
               Calendar
@@ -1019,7 +1023,7 @@ export default function NavBar() {
             {showUpgradeCta && (
               <Link
                 to="/pricing"
-                className="hidden lg:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30 hover:bg-amber-500/25 transition-colors"
+                className="hidden lg:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-warning-500/15 text-warning-400 border border-warning-500/30 hover:bg-warning-500/25 transition-colors"
               >
                 <svg
                   className="w-3.5 h-3.5"
@@ -1067,7 +1071,7 @@ export default function NavBar() {
                       />
                     )}
                     {pendingRequests > 0 && (
-                      <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-error-500 text-[9px] font-bold text-white ring-2 ring-neutral-950">
+                      <span className="absolute -top-1.5 -right-1.5 flex h-[18px] min-w-[18px] px-1 items-center justify-center rounded-full bg-error-500 text-caption leading-none font-bold tabular text-white ring-2 ring-neutral-950">
                         {pendingRequests > 9 ? "9+" : pendingRequests}
                       </span>
                     )}
@@ -1081,7 +1085,7 @@ export default function NavBar() {
                   <MenuItem>
                     <Link
                       to="/profile"
-                      className="flex items-center justify-between px-3 py-2 text-[13px] font-medium text-neutral-300 data-focus:bg-white/5 data-focus:outline-hidden hover:bg-white/5 transition-colors"
+                      className="flex items-center justify-between px-3 py-2 text-label font-medium text-neutral-300 data-focus:bg-white/5 data-focus:outline-hidden hover:bg-white/5 transition-colors"
                     >
                       Your profile
                       {pendingRequests > 0 && <Badge count={pendingRequests} />}
@@ -1090,7 +1094,7 @@ export default function NavBar() {
                   <MenuItem>
                     <Link
                       to="/settings"
-                      className="block px-3 py-2 text-[13px] font-medium text-neutral-300 data-focus:bg-white/5 data-focus:outline-hidden hover:bg-white/5 transition-colors"
+                      className="block px-3 py-2 text-label font-medium text-neutral-300 data-focus:bg-white/5 data-focus:outline-hidden hover:bg-white/5 transition-colors"
                     >
                       Settings
                     </Link>
@@ -1098,11 +1102,11 @@ export default function NavBar() {
                   {/* <MenuItem>
                     <a
                       href="/billing"
-                      className="flex items-center justify-between px-3 py-2 text-[13px] font-medium text-neutral-300 data-focus:bg-white/5 data-focus:outline-hidden hover:bg-white/5 transition-colors"
+                      className="flex items-center justify-between px-3 py-2 text-label font-medium text-neutral-300 data-focus:bg-white/5 data-focus:outline-hidden hover:bg-white/5 transition-colors"
                     >
                       Subscription
                       {userMe?.subscription_tier === "premium" && (
-                        <span className="text-[9px] font-bold uppercase tracking-wider bg-amber-400/15 text-amber-400 border border-amber-400/30 rounded-full px-1.5 py-0.5">
+                        <span className="text-caption font-bold uppercase tracking-wider bg-warning-400/15 text-warning-400 border border-warning-400/30 rounded-full px-1.5 py-0.5"> design-ok (commented-out code)
                           Premium
                         </span>
                       )}
@@ -1112,12 +1116,9 @@ export default function NavBar() {
                     <MenuItem>
                       <Link
                         to="/admin"
-                        className="flex items-center gap-2 px-3 py-2 text-[13px] font-medium text-red-400 data-focus:bg-white/5 data-focus:outline-hidden hover:bg-white/5 transition-colors"
+                        className="flex items-center gap-2 px-3 py-2 text-label font-medium text-neutral-300 data-focus:bg-white/5 data-focus:outline-hidden hover:bg-white/5 transition-colors"
                       >
                         Admin
-                        <span className="text-[9px] font-bold uppercase tracking-wider bg-red-500/15 text-red-400 border border-red-500/30 rounded-full px-1.5 py-0.5">
-                          Admin
-                        </span>
                       </Link>
                     </MenuItem>
                   )}
@@ -1128,7 +1129,7 @@ export default function NavBar() {
                         await signOut(auth);
                         navigate("/");
                       }}
-                      className="w-full text-left px-3 py-2 text-[13px] font-medium text-neutral-400 hover:bg-white/5 hover:text-neutral-200 transition-colors focus:outline-none"
+                      className="w-full text-left px-3 py-2 text-label font-medium text-neutral-400 hover:bg-white/5 hover:text-neutral-200 transition-colors focus:outline-none"
                     >
                       Sign out
                     </button>
@@ -1140,7 +1141,7 @@ export default function NavBar() {
             {!user && (
               <Link
                 to="/signIn"
-                className="text-neutral-400 hover:text-white rounded-lg px-3 py-1.5 text-[13.5px] font-medium tracking-[-0.01em] hover:bg-neutral-900 transition-colors"
+                className="text-neutral-400 hover:text-white rounded-lg px-3 py-1.5 text-label font-medium hover:bg-neutral-900 transition-colors"
               >
                 Sign In
               </Link>
@@ -1187,7 +1188,7 @@ export default function NavBar() {
               value={mobileSearchQuery}
               onChange={(e) => setMobileSearchQuery(e.target.value)}
               placeholder="Search..."
-              className="pl-9 pr-8 w-full py-2 rounded-xl bg-neutral-900 border border-neutral-700/70 text-white text-[16px] placeholder-neutral-500 focus:outline-none focus:border-neutral-600 transition-colors"
+              className="pl-9 pr-8 w-full py-2 rounded-xl bg-neutral-900 border border-neutral-700/70 text-white text-base placeholder-neutral-500 focus:outline-none focus:border-neutral-600 transition-colors"
             />
             {mobileSearchQuery && (
               <button
@@ -1209,7 +1210,7 @@ export default function NavBar() {
               location.pathname === "/calendar"
                 ? "bg-neutral-800 text-white"
                 : "text-neutral-400 hover:bg-neutral-900 hover:text-white",
-              "block rounded-lg px-3 py-2 text-[14px] font-medium transition-colors",
+              "block rounded-lg px-3 py-2 text-body font-medium transition-colors",
             )}
           >
             Calendar
@@ -1218,7 +1219,7 @@ export default function NavBar() {
           {/* Discover accordion */}
           <button
             onClick={() => setMobileDiscoverOpen((o) => !o)}
-            className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-[14px] font-medium text-neutral-400 hover:bg-neutral-900 hover:text-white transition-colors"
+            className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-body font-medium text-neutral-400 hover:bg-neutral-900 hover:text-white transition-colors"
           >
             Discover
             <svg
@@ -1243,7 +1244,7 @@ export default function NavBar() {
                     <div
                       className={classNames(
                         sIdx > 0 ? "mt-1.5" : "",
-                        "px-3 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-neutral-500",
+                        "px-3 pt-1 pb-0.5 text-caption font-medium text-neutral-500",
                       )}
                     >
                       {section.header}
@@ -1258,7 +1259,7 @@ export default function NavBar() {
                         location.pathname === item.href
                           ? "bg-neutral-800 text-white"
                           : "text-neutral-400 hover:bg-neutral-900 hover:text-white",
-                        "block rounded-lg px-3 py-2 text-[13px] font-medium transition-colors",
+                        "block rounded-lg px-3 py-2 text-label font-medium transition-colors",
                       )}
                     >
                       {item.name}
@@ -1274,7 +1275,7 @@ export default function NavBar() {
             <>
               <button
                 onClick={() => setMobileLibraryOpen((o) => !o)}
-                className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-[14px] font-medium text-neutral-400 hover:bg-neutral-900 hover:text-white transition-colors"
+                className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-body font-medium text-neutral-400 hover:bg-neutral-900 hover:text-white transition-colors"
               >
                 My Library
                 <svg
@@ -1299,7 +1300,7 @@ export default function NavBar() {
                         <div
                           className={classNames(
                             sIdx > 0 ? "mt-1.5" : "",
-                            "px-3 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-neutral-500",
+                            "px-3 pt-1 pb-0.5 text-caption font-medium text-neutral-500",
                           )}
                         >
                           {section.header}
@@ -1314,7 +1315,7 @@ export default function NavBar() {
                             location.pathname === item.href
                               ? "bg-neutral-800 text-white"
                               : "text-neutral-400 hover:bg-neutral-900 hover:text-white",
-                            "block rounded-lg px-3 py-2 text-[13px] font-medium transition-colors",
+                            "block rounded-lg px-3 py-2 text-label font-medium transition-colors",
                           )}
                         >
                           {item.name}
@@ -1328,7 +1329,7 @@ export default function NavBar() {
               {/* Social accordion */}
               <button
                 onClick={() => setMobileSocialOpen((o) => !o)}
-                className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-[14px] font-medium text-neutral-400 hover:bg-neutral-900 hover:text-white transition-colors"
+                className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-body font-medium text-neutral-400 hover:bg-neutral-900 hover:text-white transition-colors"
               >
                 <span className="flex items-center gap-1">
                   Social
@@ -1361,7 +1362,7 @@ export default function NavBar() {
                           location.pathname === item.href
                             ? "bg-neutral-800 text-white"
                             : "text-neutral-400 hover:bg-neutral-900 hover:text-white",
-                          "flex items-center justify-between rounded-lg px-3 py-2 text-[13px] font-medium transition-colors",
+                          "flex items-center justify-between rounded-lg px-3 py-2 text-label font-medium transition-colors",
                         )}
                       >
                         <span>{item.name}</span>

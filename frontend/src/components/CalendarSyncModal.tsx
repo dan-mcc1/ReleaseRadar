@@ -191,7 +191,7 @@ export default function CalendarSyncModal({ isOpen, onClose }: Props) {
 
           {/* URL box */}
           <div>
-            <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-2">
+            <p className="text-caption font-medium text-neutral-400 mb-2">
               Your feed URL
             </p>
             <div className="flex items-stretch gap-2">
@@ -211,7 +211,7 @@ export default function CalendarSyncModal({ isOpen, onClose }: Props) {
                 disabled={!feedUrl || loading}
                 className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all border ${
                   copied
-                    ? "bg-emerald-600/20 border-emerald-600/40 text-emerald-400"
+                    ? "bg-primary-600/20 border-primary-600/40 text-primary-400"
                     : "bg-neutral-700 border-neutral-600 text-neutral-200 hover:bg-neutral-600 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed"
                 }`}
               >
@@ -259,7 +259,7 @@ export default function CalendarSyncModal({ isOpen, onClose }: Props) {
 
           {/* Per-app instructions */}
           <div>
-            <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-2">
+            <p className="text-caption font-medium text-neutral-400 mb-2">
               How to subscribe
             </p>
             <div className="flex flex-col gap-1.5">

@@ -13,6 +13,18 @@ import { queryKeys } from "../hooks/api/queryKeys";
 import { useAuthUser } from "../hooks/useAuthUser";
 import { usePageTitle } from "../hooks/usePageTitle";
 import FriendSearch from "../components/FriendSearch";
+import {
+  Button,
+  Card,
+  CheckIcon,
+  EmptyState,
+  IconButton,
+  PageHeader,
+  SectionHeader,
+  cx,
+  focusRing,
+} from "../components/ui";
+import { UserMinusIcon } from "@heroicons/react/24/outline";
 
 type Tab = "friends" | "requests" | "search" | "sent";
 
@@ -170,35 +182,75 @@ export default function FriendsPage() {
       count: incoming.length,
       badge: incoming.length > 0,
     },
-    { id: "search", label: "Find People" },
+    { id: "search", label: "Find people" },
     { id: "sent", label: "Sent", count: outgoing.length },
   ];
 
+  // One incoming request. The banner on the Friends tab says "Ignore"; the
+  // Requests tab says "Decline" and shows "…" while the answer is sent.
+  function renderIncoming(req: IncomingReq, inRequestsTab: boolean) {
+    const busy = respondingId === req.friendship_id;
+    return (
+      <div
+        key={req.friendship_id}
+        className="grid items-center gap-4 py-3"
+        style={{ gridTemplateColumns: "auto 1fr auto" }}
+      >
+        <Avatar name={req.from_user.username} size={inRequestsTab ? 44 : 40} />
+        <div>
+          <div className="flex items-baseline gap-2 flex-wrap">
+            <Link
+              to={`/user/${req.from_user.username}`}
+              className="font-semibold text-body text-neutral-100 hover:text-primary-300 transition-colors"
+            >
+              @{req.from_user.username}
+            </Link>
+            <span className="text-caption text-neutral-500">
+              · {timeAgo(req.created_at)}
+            </span>
+          </div>
+          {req.message && (
+            <p className="mt-1 italic text-label text-neutral-400 leading-snug">
+              "{req.message}"
+            </p>
+          )}
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="primary"
+            size="sm"
+            icon={inRequestsTab ? undefined : <CheckIcon className="w-3.5 h-3.5" />}
+            onClick={() => respond(req.friendship_id, true)}
+            disabled={busy}
+          >
+            {inRequestsTab && busy ? "…" : "Accept"}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => respond(req.friendship_id, false)}
+            disabled={busy}
+          >
+            {inRequestsTab ? "Decline" : "Ignore"}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="w-full px-4 sm:px-6 py-8">
-      {/* Header */}
-      <div className="flex items-end gap-6 mb-1">
-        <div>
-          <div className="font-mono text-[11px] tracking-[0.12em] text-neutral-500 uppercase mb-2">
-            {friends.length} friend{friends.length !== 1 ? "s" : ""}
-            {incoming.length > 0 && (
-              <>
-                {" · "}
-                <span className="text-primary-400">
-                  {incoming.length} request{incoming.length !== 1 ? "s" : ""}{" "}
-                  waiting
-                </span>
-              </>
-            )}
-          </div>
-          <h1
-            className="m-0 font-normal text-[38px] tracking-tight leading-none text-neutral-100"
-            data-tour="friends-header"
-          >
-            Your{" "}
-            <em className="not-italic text-primary-400 font-normal">circle</em>
-          </h1>
-        </div>
+      <div data-tour="friends-header">
+        <PageHeader
+          title="Your circle"
+          description={
+            <>
+              {friends.length} friend{friends.length !== 1 ? "s" : ""}
+              {incoming.length > 0 &&
+                ` · ${incoming.length} request${incoming.length !== 1 ? "s" : ""} waiting`}
+            </>
+          }
+        />
       </div>
 
       {/* Tabs */}
@@ -207,22 +259,23 @@ export default function FriendsPage() {
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={[
-              "flex items-center gap-2 pb-3 text-[13.5px] font-medium border-b-2 -mb-px transition-colors",
+            className={cx(
+              "flex items-center gap-2 pb-3 text-label font-medium border-b-2 -mb-px transition-colors",
+              focusRing,
               tab === t.id
                 ? "border-primary-500 text-neutral-100"
                 : "border-transparent text-neutral-400 hover:text-neutral-200",
-            ].join(" ")}
+            )}
           >
             {t.label}
             {t.count != null && t.count > 0 && (
               <span
-                className={[
-                  "font-mono text-[10.5px] px-1.5 py-px rounded font-semibold",
+                className={cx(
+                  "tabular text-caption px-1.5 py-px rounded font-semibold",
                   t.badge
                     ? "bg-primary-500 text-neutral-900"
                     : "bg-neutral-800 text-neutral-400",
-                ].join(" ")}
+                )}
               >
                 {t.count}
               </span>
@@ -238,171 +291,84 @@ export default function FriendsPage() {
           {/* Friends tab */}
           {tab === "friends" && (
             <div>
-              {/* Inline requests banner */}
+              {/* Inline requests */}
               {incoming.length > 0 && (
-                <div className="bg-primary-500/10 border border-primary-500/30 rounded-2xl p-5 mb-6">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-6 h-6 rounded-full bg-primary-500 flex items-center justify-center shrink-0">
-                      <svg
-                        width="11"
-                        height="11"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        className="text-neutral-900"
-                        strokeWidth={2.5}
-                      >
-                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" />
-                      </svg>
-                    </div>
-                    <h3 className="m-0 font-normal text-[19px] tracking-tight text-neutral-100">
-                      {incoming.length} new friend request
-                      {incoming.length !== 1 ? "s" : ""}
-                    </h3>
+                <section className="mb-8">
+                  <SectionHeader
+                    title={`${incoming.length} new friend request${incoming.length !== 1 ? "s" : ""}`}
+                    divider
+                  />
+                  <div className="flex flex-col divide-y divide-neutral-800">
+                    {incoming.map((req) => renderIncoming(req, false))}
                   </div>
-                  <div className="flex flex-col gap-3">
-                    {incoming.map((req) => (
-                      <div
-                        key={req.friendship_id}
-                        className="grid items-center gap-4 p-3 bg-neutral-900 border border-neutral-800 rounded-xl"
-                        style={{ gridTemplateColumns: "auto 1fr auto" }}
-                      >
-                        <Avatar name={req.from_user.username} size={40} />
-                        <div>
-                          <div className="flex items-baseline gap-2">
-                            <Link
-                              to={`/user/${req.from_user.username}`}
-                              className="font-semibold text-[14px] text-neutral-100 hover:text-primary-400 transition-colors"
-                            >
-                              @{req.from_user.username}
-                            </Link>
-                            <span className="font-mono text-[10.5px] text-neutral-500">
-                              · {timeAgo(req.created_at)}
-                            </span>
-                          </div>
-                          {req.message && (
-                            <p className="mt-1 italic text-[13.5px] text-neutral-400 leading-snug">
-                              "{req.message}"
-                            </p>
-                          )}
-                        </div>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => respond(req.friendship_id, true)}
-                            disabled={respondingId === req.friendship_id}
-                            className="flex items-center gap-1.5 text-[12px] font-semibold bg-primary-500 hover:bg-primary-400 disabled:opacity-50 text-neutral-900 px-3 py-1.5 rounded-lg transition-colors"
-                          >
-                            <svg
-                              width="11"
-                              height="11"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth={2.5}
-                            >
-                              <polyline points="20 6 9 17 4 12" />
-                            </svg>
-                            Accept
-                          </button>
-                          <button
-                            onClick={() => respond(req.friendship_id, false)}
-                            disabled={respondingId === req.friendship_id}
-                            className="text-[12px] font-medium text-neutral-400 hover:text-neutral-200 disabled:opacity-50 bg-transparent border border-neutral-700 px-3 py-1.5 rounded-lg transition-colors"
-                          >
-                            Ignore
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                </section>
               )}
 
               {/* Friends grid */}
               {friends.length === 0 ? (
-                <div className="text-center py-16 text-neutral-500">
-                  <p className="text-[15px] mb-3">No friends added yet.</p>
-                  <button
-                    onClick={() => setTab("search")}
-                    className="text-sm bg-primary-600 hover:bg-primary-500 text-white font-medium px-4 py-1.5 rounded-lg transition-colors"
-                  >
-                    Find People
-                  </button>
-                </div>
+                <EmptyState
+                  title="No friends added yet"
+                  action={
+                    <Button variant="primary" onClick={() => setTab("search")}>
+                      Find people
+                    </Button>
+                  }
+                />
               ) : (
                 <>
-                  <div className="flex items-baseline gap-4 mb-5">
-                    <span className="font-mono text-[10px] text-neutral-500 tracking-[0.12em] uppercase">
-                      All friends
-                    </span>
-                    <h2 className="m-0 font-normal text-[24px] tracking-tight text-neutral-100 italic">
-                      People you follow
-                    </h2>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <SectionHeader
+                    title="People you follow"
+                    note={String(friends.length)}
+                    divider
+                    className="mb-2"
+                  />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8">
                     {friends.map(({ friendship_id, friend }) => (
                       <div
                         key={friendship_id}
-                        className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5 flex flex-col gap-4"
+                        className="flex items-center gap-3 py-3 border-b border-neutral-800"
                       >
-                        <div className="flex items-start gap-4">
-                          <Avatar name={friend.username} size={48} />
-                          <div className="flex-1 min-w-0">
-                            <Link
-                              to={`/user/${friend.username}`}
-                              className="text-[15px] font-semibold text-neutral-100 hover:text-primary-400 transition-colors tracking-tight"
-                            >
-                              @{friend.username}
-                            </Link>
-                          </div>
-                          {confirmRemoveId === friend.id ? (
-                            <div className="flex items-center gap-2">
-                              <span className="text-[11px] text-neutral-400">
-                                Remove?
-                              </span>
-                              <button
-                                onClick={() => removeFriend(friend.id)}
-                                disabled={
-                                  removeMutation.isPending &&
-                                  removeMutation.variables === friend.id
-                                }
-                                className="text-[11px] bg-error-600 hover:bg-error-500 disabled:opacity-50 text-white px-2 py-1 rounded-md"
-                              >
-                                Yes
-                              </button>
-                              <button
-                                onClick={() => setConfirmRemoveId(null)}
-                                className="text-[11px] text-neutral-500 hover:text-neutral-300"
-                              >
-                                No
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => setConfirmRemoveId(friend.id)}
-                              className="text-neutral-600 hover:text-neutral-400 transition-colors"
-                            >
-                              <svg
-                                width="14"
-                                height="14"
-                                viewBox="0 0 24 24"
-                                fill="currentColor"
-                              >
-                                <circle cx="12" cy="5" r="2" />
-                                <circle cx="12" cy="12" r="2" />
-                                <circle cx="12" cy="19" r="2" />
-                              </svg>
-                            </button>
-                          )}
-                        </div>
-                        <div className="flex gap-2">
+                        <Avatar name={friend.username} size={40} />
+                        <div className="flex-1 min-w-0">
                           <Link
                             to={`/user/${friend.username}`}
-                            className="flex-1 text-center text-[12px] font-medium text-neutral-300 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 px-3 py-2 rounded-lg transition-colors"
+                            className="text-body font-semibold text-neutral-100 hover:text-primary-300 transition-colors truncate block"
                           >
-                            View profile
+                            @{friend.username}
                           </Link>
                         </div>
+                        {confirmRemoveId === friend.id ? (
+                          <div className="flex items-center gap-1">
+                            <span className="text-caption text-neutral-400">
+                              Remove?
+                            </span>
+                            <Button
+                              variant="danger"
+                              size="sm"
+                              onClick={() => removeFriend(friend.id)}
+                              disabled={
+                                removeMutation.isPending &&
+                                removeMutation.variables === friend.id
+                              }
+                            >
+                              Yes
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setConfirmRemoveId(null)}
+                            >
+                              No
+                            </Button>
+                          </div>
+                        ) : (
+                          <IconButton
+                            size="sm"
+                            label={`Remove @${friend.username}`}
+                            icon={<UserMinusIcon className="w-4 h-4" strokeWidth={2} aria-hidden="true" />}
+                            onClick={() => setConfirmRemoveId(friend.id)}
+                          />
+                        )}
                       </div>
                     ))}
                   </div>
@@ -414,65 +380,12 @@ export default function FriendsPage() {
           {/* Requests tab */}
           {tab === "requests" && (
             <div>
-              <div className="flex items-baseline gap-4 mb-5">
-                <span className="font-mono text-[10px] text-neutral-500 tracking-[0.12em] uppercase">
-                  Incoming
-                </span>
-                <h2 className="m-0 font-normal text-[24px] tracking-tight text-neutral-100 italic">
-                  Friend requests
-                </h2>
-              </div>
+              <SectionHeader title="Friend requests" note={String(incoming.length)} divider />
               {incoming.length === 0 ? (
-                <p className="text-neutral-500 text-[14px]">
-                  No pending requests.
-                </p>
+                <EmptyState title="No pending requests" className="py-12" />
               ) : (
-                <div className="flex flex-col gap-3">
-                  {incoming.map((req) => (
-                    <div
-                      key={req.friendship_id}
-                      className="grid items-center gap-4 p-4 bg-neutral-900 border border-neutral-800 rounded-2xl"
-                      style={{ gridTemplateColumns: "auto 1fr auto" }}
-                    >
-                      <Avatar name={req.from_user.username} size={44} />
-                      <div>
-                        <div className="flex items-baseline gap-2 flex-wrap">
-                          <Link
-                            to={`/user/${req.from_user.username}`}
-                            className="font-semibold text-[14px] text-neutral-100 hover:text-primary-400 transition-colors"
-                          >
-                            @{req.from_user.username}
-                          </Link>
-                          <span className="font-mono text-[10.5px] text-neutral-500">
-                            · {timeAgo(req.created_at)}
-                          </span>
-                        </div>
-                        {req.message && (
-                          <p className="mt-1.5 italic text-[13px] text-neutral-400 leading-snug">
-                            "{req.message}"
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => respond(req.friendship_id, true)}
-                          disabled={respondingId === req.friendship_id}
-                          className="text-[12px] font-semibold bg-primary-500 hover:bg-primary-400 disabled:opacity-50 text-neutral-900 px-3 py-1.5 rounded-lg transition-colors"
-                        >
-                          {respondingId === req.friendship_id
-                            ? "…"
-                            : "Accept"}
-                        </button>
-                        <button
-                          onClick={() => respond(req.friendship_id, false)}
-                          disabled={respondingId === req.friendship_id}
-                          className="text-[12px] font-medium text-neutral-400 hover:text-neutral-200 disabled:opacity-50 border border-neutral-700 px-3 py-1.5 rounded-lg transition-colors"
-                        >
-                          Decline
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                <div className="flex flex-col divide-y divide-neutral-800">
+                  {incoming.map((req) => renderIncoming(req, true))}
                 </div>
               )}
             </div>
@@ -492,46 +405,43 @@ export default function FriendsPage() {
           {/* Sent tab */}
           {tab === "sent" && (
             <div>
-              <div className="flex items-baseline gap-4 mb-5">
-                <span className="font-mono text-[10px] text-neutral-500 tracking-[0.12em] uppercase">
-                  Sent · {outgoing.length}
-                </span>
-                <h2 className="m-0 font-normal text-[24px] tracking-tight text-neutral-100 italic">
-                  Pending requests
-                </h2>
-              </div>
+              <SectionHeader title="Pending requests" note={String(outgoing.length)} divider />
               {outgoing.length === 0 ? (
-                <p className="text-neutral-500 text-[14px]">
-                  No outgoing requests.
-                </p>
+                <EmptyState
+                  title="No outgoing requests"
+                  className="py-12"
+                  action={
+                    <Button onClick={() => setTab("search")}>Find people</Button>
+                  }
+                />
               ) : (
-                <div className="flex flex-col gap-3">
+                <div className="flex flex-col divide-y divide-neutral-800">
                   {outgoing.map((req) => (
                     <div
                       key={req.friendship_id}
-                      className="flex items-center gap-4 p-4 bg-neutral-900 border border-neutral-800 rounded-2xl"
+                      className="flex items-center gap-4 py-3"
                     >
                       <Avatar name={req.to_user.username} size={40} />
                       <div className="flex-1 min-w-0">
                         <Link
                           to={`/user/${req.to_user.username}`}
-                          className="font-semibold text-[14px] text-neutral-100 hover:text-primary-400 transition-colors"
+                          className="font-semibold text-body text-neutral-100 hover:text-primary-300 transition-colors"
                         >
                           @{req.to_user.username}
                         </Link>
-                        <div className="font-mono text-[10px] text-neutral-500 tracking-[0.05em] uppercase mt-1">
+                        <div className="text-caption text-neutral-500 mt-1">
                           Sent {timeAgo(req.created_at)} · Pending
                         </div>
                       </div>
-                      <button
+                      <Button
+                        size="sm"
                         onClick={() => cancelRequest(req.friendship_id)}
                         disabled={cancellingId === req.friendship_id}
-                        className="text-[12px] text-neutral-400 hover:text-error-400 disabled:opacity-50 border border-neutral-700 hover:border-error-700 px-3 py-1.5 rounded-lg transition-colors"
                       >
                         {cancellingId === req.friendship_id
                           ? "Cancelling…"
                           : "Cancel"}
-                      </button>
+                      </Button>
                     </div>
                   ))}
                 </div>
@@ -541,96 +451,70 @@ export default function FriendsPage() {
         </div>
 
         {/* Side rail */}
-        <div className="flex flex-col gap-5 lg:sticky lg:top-24 lg:self-start">
+        <div className="flex flex-col gap-6 lg:sticky lg:top-24 lg:self-start">
           {/* Search tab tip */}
           {tab === "search" && (
-            <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
-              <div
-                className="font-mono text-[10px] text-neutral-500 uppercase mb-2"
-                style={{ letterSpacing: "0.15em" }}
-              >
-                Tip
-              </div>
-              <p className="text-[12px] text-neutral-400 leading-relaxed m-0">
-                You can{" "}
-                <strong className="text-neutral-200 font-semibold">
-                  follow public profiles
-                </strong>{" "}
-                instantly to see their activity. To unlock shared watch history
-                and recommendations, send a friend request.
-              </p>
-            </div>
+            <p className="text-label text-neutral-400 leading-relaxed m-0">
+              You can{" "}
+              <strong className="text-neutral-200 font-semibold">
+                follow public profiles
+              </strong>{" "}
+              instantly to see their activity. To unlock shared watch history
+              and recommendations, send a friend request.
+            </p>
           )}
 
           {/* Sent requests (compact, always visible unless on sent tab) */}
           {tab !== "sent" && outgoing.length > 0 && (
-            <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
-              <div className="font-mono text-[10px] tracking-[0.15em] text-neutral-500 uppercase mb-4">
-                Sent requests · {outgoing.length}
-              </div>
-              <div className="flex flex-col gap-3">
-                {outgoing.map((req, i) => (
+            <section>
+              <SectionHeader
+                as="h3"
+                title="Sent requests"
+                note={String(outgoing.length)}
+                divider
+              />
+              <div className="flex flex-col divide-y divide-neutral-800">
+                {outgoing.map((req) => (
                   <div
                     key={req.friendship_id}
-                    className={[
-                      "flex items-center gap-3",
-                      i > 0 ? "pt-3 border-t border-neutral-800" : "",
-                    ].join(" ")}
+                    className="flex items-center gap-3 py-3"
                   >
                     <Avatar name={req.to_user.username} size={32} />
                     <div className="flex-1 min-w-0">
-                      <div className="text-[13px] font-semibold text-neutral-200 truncate">
+                      <div className="text-label font-semibold text-neutral-200 truncate">
                         @{req.to_user.username}
                       </div>
-                      <div className="font-mono text-[10px] text-neutral-500 tracking-[0.04em] uppercase mt-0.5">
+                      <div className="text-caption text-neutral-500 mt-0.5">
                         {timeAgo(req.created_at)} · Pending
                       </div>
                     </div>
-                    <button
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => cancelRequest(req.friendship_id)}
                       disabled={cancellingId === req.friendship_id}
-                      className="text-[11.5px] text-neutral-500 hover:text-error-400 disabled:opacity-50 border border-neutral-700 px-2.5 py-1 rounded-lg transition-colors"
                     >
                       Cancel
-                    </button>
+                    </Button>
                   </div>
                 ))}
               </div>
-            </div>
+            </section>
           )}
 
-          {/* Invite card */}
-          <div
-            className="p-5 rounded-2xl border border-neutral-800 relative overflow-hidden"
-            style={{
-              background:
-                "linear-gradient(135deg, oklch(0.20 0.08 160) 0%, oklch(0.12 0.04 200) 100%)",
-            }}
-          >
-            <div
-              className="absolute inset-0 pointer-events-none"
-              style={{
-                background:
-                  "radial-gradient(60% 80% at 80% 20%, oklch(0.50 0.15 155 / 0.18), transparent 65%)",
-              }}
-            />
-            <div className="relative">
-              <div className="text-[21px] tracking-tight leading-tight mb-2 text-neutral-100 italic font-normal">
-                Bring a{" "}
-                <em className="not-italic text-primary-400">friend</em>
-              </div>
-              <p className="text-[12.5px] text-neutral-400 mb-4 leading-relaxed">
-                Invite someone to ReleaseRadar and track what you're both
-                watching.
-              </p>
-              <button
-                onClick={() => setTab("search")}
-                className="w-full text-[12.5px] font-semibold bg-primary-500 hover:bg-primary-400 text-neutral-900 px-4 py-2.5 rounded-xl transition-colors"
-              >
-                Find People
-              </button>
-            </div>
-          </div>
+          {/* Invite */}
+          <Card padding="sm">
+            <h3 className="text-title font-semibold text-neutral-100 mb-2">
+              Bring a friend
+            </h3>
+            <p className="text-label text-neutral-400 mb-4 leading-relaxed">
+              Invite someone to ReleaseRadar and track what you're both
+              watching.
+            </p>
+            <Button onClick={() => setTab("search")} className="w-full">
+              Find people
+            </Button>
+          </Card>
         </div>
       </div>
     </div>

@@ -19,7 +19,7 @@ export default function PremiumGate({ children, fallback }: Props) {
         {fallback ?? (
           <button
             onClick={() => setShowModal(true)}
-            className="inline-flex items-center gap-1.5 text-sm text-amber-400 hover:text-amber-300 transition-colors"
+            className="inline-flex items-center gap-1.5 text-sm text-warning-400 hover:text-warning-300 transition-colors"
           >
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
               <path d="M2.5 7.5L5 14h14l2.5-6.5L17 10l-5-6-5 6-4.5-2.5zm2.5 8h14v2H5v-2z" />

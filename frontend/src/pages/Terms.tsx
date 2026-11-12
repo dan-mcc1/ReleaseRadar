@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { usePageTitle } from "../hooks/usePageTitle";
+import { PageHeader } from "../components/ui";
 
 const EFFECTIVE_DATE = "June 2, 2026";
 
@@ -36,7 +37,7 @@ const SECTIONS = [
         these terms or our{" "}
         <Link
           to="/community-guidelines"
-          className="text-amber-400 hover:underline"
+          className="text-neutral-200 underline hover:text-primary-300"
         >
           Community Guidelines
         </Link>
@@ -145,7 +146,7 @@ const SECTIONS = [
         suspend or terminate your access if you violate these terms. On
         termination, your tracking data, reviews, and personal information are
         removed as described in the{" "}
-        <Link to="/privacy" className="text-amber-400 hover:underline">
+        <Link to="/privacy" className="text-neutral-200 underline hover:text-primary-300">
           Privacy Policy
         </Link>
         .
@@ -167,14 +168,14 @@ const SECTIONS = [
     body: (
       <>
         Questions about these terms? Reach out through the{" "}
-        <Link to="/feedback" className="text-amber-400 hover:underline">
+        <Link to="/feedback" className="text-neutral-200 underline hover:text-primary-300">
           feedback page
         </Link>
         {/* {" "} */}
         {/* or email us at{" "}
         <a
           href="mailto:support@releaseradar.co"
-          className="text-amber-400 hover:underline"
+          className="text-neutral-200 underline hover:text-primary-300"
         >
           support@releaseradar.co
         </a> */}
@@ -189,15 +190,16 @@ export default function Terms() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-12">
-      <div className="mb-10">
-        <h1 className="text-3xl font-bold text-white mb-3">Terms of Service</h1>
-        <p className="text-neutral-500 text-sm">Effective {EFFECTIVE_DATE}</p>
-      </div>
+      <PageHeader
+        className="mb-10"
+        title="Terms of Service"
+        description={`Effective ${EFFECTIVE_DATE}`}
+      />
 
       <div className="space-y-8">
         {SECTIONS.map((section) => (
           <section key={section.title}>
-            <h2 className="text-white font-semibold mb-2">{section.title}</h2>
+            <h2 className="text-title font-semibold text-white mb-2">{section.title}</h2>
             <p className="text-neutral-400 text-sm leading-relaxed">
               {section.body}
             </p>

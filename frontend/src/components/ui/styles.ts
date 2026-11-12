@@ -41,3 +41,9 @@ export const selectClass = cx(
   buttonClass("secondary"),
   "pr-3 [color-scheme:dark] text-left",
 );
+
+/** A quiet text link with a trailing chevron: "See all >". */
+export const moreLinkClass = cx(
+  "inline-flex items-center gap-1 rounded-sm text-label font-medium text-neutral-300 hover:text-neutral-50 transition-colors",
+  focusRing,
+);

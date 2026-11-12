@@ -1,8 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
-import { BASE_IMAGE_URL } from "../constants";
+import { useSearchParams } from "react-router-dom";
+import { ArrowUpIcon } from "@heroicons/react/24/outline";
 import { usePageTitle } from "../hooks/usePageTitle";
-import StarIcon from "../components/icons/StarIcon";
+import {
+  Button,
+  CheckIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  EmptyState,
+  IconButton,
+  PageHeader,
+  PosterCard,
+  PosterCardSkeleton,
+  SearchField,
+  StarIcon,
+  cx,
+  selectClass,
+} from "../components/ui";
 import {
   useCollectionsBrowse,
   useCollectionsSearch,
@@ -50,83 +64,57 @@ function CollectionCard({
       : 0;
 
   return (
-    <Link to={`/collection/${c.id}`} className="group flex flex-col gap-2">
-      <div className="relative aspect-[2/3] rounded-lg overflow-hidden bg-neutral-800 border border-neutral-700/50 group-hover:border-neutral-600 transition-colors">
-        {c.poster_path ? (
-          <img
-            src={`${BASE_IMAGE_URL}/w342${c.poster_path}`}
-            alt={c.name}
-            loading="lazy"
-            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-          />
-        ) : (
-          <div className="h-full w-full flex items-center justify-center p-3 text-center">
-            <span className="text-xs text-neutral-500 line-clamp-4">
-              {c.name}
-            </span>
-          </div>
-        )}
-        {c.size != null && c.size > 0 && (
-          <div className="absolute top-1.5 right-1.5 bg-black/70 backdrop-blur-sm text-[10px] font-semibold text-neutral-100 px-1.5 py-0.5 rounded">
-            {c.size} {c.size === 1 ? "movie" : "movies"}
-          </div>
-        )}
-
-        {finished && (
-          <div
-            className="absolute top-1.5 left-1.5 w-6 h-6 rounded-full bg-success-500 text-neutral-950 flex items-center justify-center shadow-lg ring-2 ring-neutral-950/40"
+    <PosterCard
+      to={`/collection/${c.id}`}
+      title={c.name}
+      posterPath={c.poster_path}
+      corner={
+        finished ? (
+          <span
+            className="size-6 rounded-full bg-success-500 text-neutral-950 flex items-center justify-center"
             title="You've watched every released film in this collection"
           >
-            <svg
-              className="w-3.5 h-3.5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={3}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-            </svg>
-          </div>
-        )}
-
-        {!finished && started && progressDenom > 0 && (
-          <div
-            className="absolute left-1.5 right-1.5 bottom-1.5 flex flex-col gap-0.5"
-            title={`${watched} of ${progressDenom} watched`}
-          >
-            <div className="flex items-center justify-between text-[9.5px] font-mono font-semibold text-white drop-shadow">
-              <span>{watched}/{progressDenom}</span>
-              <span>{pct}%</span>
+            <CheckIcon className="w-3.5 h-3.5" />
+          </span>
+        ) : undefined
+      }
+      subtitle={
+        (yearRange || (c.size != null && c.size > 0) || c.avg_rating != null) && (
+          <span className="inline-flex items-center gap-1.5">
+            {yearRange && <span>{yearRange}</span>}
+            {c.size != null && c.size > 0 && (
+              <>
+                {yearRange && <span aria-hidden="true">·</span>}
+                <span>
+                  {c.size} {c.size === 1 ? "movie" : "movies"}
+                </span>
+              </>
+            )}
+            {c.avg_rating != null && (
+              <>
+                {(yearRange || (c.size != null && c.size > 0)) && <span aria-hidden="true">·</span>}
+                <span className="inline-flex items-center gap-1">
+                  <StarIcon className="w-3 h-3 text-warning-400" />
+                  <span className="tabular">{c.avg_rating.toFixed(1)}</span>
+                </span>
+              </>
+            )}
+          </span>
+        )
+      }
+      footer={
+        !finished && started && progressDenom > 0 ? (
+          <div className="flex flex-col gap-1.5">
+            <div className="h-1 bg-neutral-800 rounded-full overflow-hidden" aria-hidden="true">
+              <div className="h-full bg-primary-500 rounded-full" style={{ width: `${pct}%` }} />
             </div>
-            <div className="h-[3px] bg-black/60 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-primary-500 rounded-full"
-                style={{ width: `${pct}%` }}
-              />
-            </div>
+            <p className="text-caption text-neutral-400 tabular">
+              {watched} of {progressDenom} watched
+            </p>
           </div>
-        )}
-
-        <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-      </div>
-      <div className="min-w-0">
-        <span className="block text-sm font-semibold text-neutral-100 line-clamp-2 group-hover:text-primary-300 transition-colors leading-tight">
-          {c.name}
-        </span>
-        <div className="flex items-center gap-1.5 mt-1 text-xs text-neutral-500">
-          {yearRange && <span>{yearRange}</span>}
-          {yearRange && c.avg_rating != null && (
-            <span className="text-neutral-700">·</span>
-          )}
-          {c.avg_rating != null && (
-            <span className="flex items-center gap-0.5 text-warning-400 font-medium">
-              <StarIcon filled className="w-2.5 h-2.5" />
-              {c.avg_rating.toFixed(1)}
-            </span>
-          )}
-        </div>
-      </div>
-    </Link>
+        ) : undefined
+      }
+    />
   );
 }
 
@@ -281,47 +269,21 @@ export default function BrowseCollections() {
     (filters.sort && filters.sort !== "popularity");
 
   return (
-    <div className="min-h-full">
-      {/* Header */}
-      <div className="px-6 sm:px-10 pt-7 pb-4">
-        <div className="text-[11px] font-mono tracking-widest text-neutral-500 uppercase mb-2">
-          Discover · Browse collections
-        </div>
-        <h1
-          className="text-[2.6rem] font-light tracking-tight text-neutral-100 leading-none"
-          style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
-        >
-          Movie <em className="italic text-primary-400">collections</em>
-        </h1>
-        <p className="text-neutral-400 mt-3 text-sm max-w-xl">
-          Franchises, sagas, and groupings of related films.
-        </p>
-      </div>
+    <div className="w-full px-6 sm:px-10 pt-6 pb-16 flex flex-col gap-6">
+      <PageHeader
+        title="Movie collections"
+        description="Franchises, sagas, and groupings of related films."
+      />
 
       {/* Search + filters */}
-      <div className="px-6 sm:px-10 pb-6 space-y-4">
-        <div className="relative max-w-md">
-          <svg
-            className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z"
-            />
-          </svg>
-          <input
-            type="search"
-            value={queryInput}
-            onChange={(e) => setQueryInput(e.target.value)}
-            placeholder="Search collections…"
-            className="w-full bg-neutral-800 border border-neutral-700 focus:border-primary-500 focus:outline-none rounded-xl pl-10 pr-3 py-2 text-sm text-neutral-100 placeholder:text-neutral-500"
-          />
-        </div>
+      <div className="space-y-4">
+        <SearchField
+          value={queryInput}
+          onChange={setQueryInput}
+          label="Search collections"
+          placeholder="Search collections…"
+          className="w-96"
+        />
 
         {!isSearching && (
           <div className="flex flex-wrap items-end gap-3">
@@ -332,30 +294,19 @@ export default function BrowseCollections() {
                 onChange={(v) => changeSort(v as BrowseSort)}
                 options={SORT_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
               />
-              <button
-                type="button"
-                onClick={toggleDirection}
-                title={
-                  effectiveDir === "asc"
-                    ? "Ascending — click to reverse"
-                    : "Descending — click to reverse"
+              <IconButton
+                label={`Sort direction: ${effectiveDir === "asc" ? "ascending" : "descending"}. Click to reverse`}
+                icon={
+                  <ArrowUpIcon
+                    className={cx("w-4 h-4 transition-transform", effectiveDir !== "asc" && "rotate-180")}
+                    strokeWidth={2}
+                    aria-hidden="true"
+                  />
                 }
-                aria-label={`Sort direction: ${effectiveDir === "asc" ? "ascending" : "descending"}`}
-                className="bg-neutral-800 border border-neutral-700 hover:border-neutral-600 focus:border-primary-500 focus:outline-none rounded-lg w-[34px] h-[34px] flex items-center justify-center text-neutral-300 hover:text-neutral-100 transition-colors"
-              >
-                <svg
-                  className={`w-4 h-4 transition-transform ${effectiveDir === "asc" ? "" : "rotate-180"}`}
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M12 5v14" />
-                  <path d="M6 11l6-6 6 6" />
-                </svg>
-              </button>
+                variant="secondary"
+                shape="square"
+                onClick={toggleDirection}
+              />
             </div>
             <FilterSelect
               label="Genre"
@@ -401,56 +352,54 @@ export default function BrowseCollections() {
               onChange={(v) => setParam("min_size", v)}
               min={1}
             />
-            {hasActiveFilters && (
-              <button
-                onClick={clearFilters}
-                className="text-xs font-medium text-neutral-400 hover:text-neutral-200 px-3 py-1.5 border border-neutral-700 hover:border-neutral-600 rounded-lg transition-colors h-[34px]"
-              >
-                Clear filters
-              </button>
-            )}
+            {hasActiveFilters && <Button onClick={clearFilters}>Clear filters</Button>}
           </div>
         )}
       </div>
 
       {/* Toolbar */}
       {!loading && results.length > 0 && (
-        <div className="px-6 sm:px-10 pb-4">
-          <span className="text-[11px] font-mono tracking-wider text-neutral-500 uppercase">
-            {isSearching
-              ? `${results.length} match${results.length === 1 ? "" : "es"}`
-              : `Showing ${pageStart.toLocaleString()}–${pageEnd.toLocaleString()} of ${total.toLocaleString()}`}
-          </span>
-        </div>
+        <p className="text-label text-neutral-400 tabular">
+          {isSearching
+            ? `${results.length} match${results.length === 1 ? "" : "es"}`
+            : `Showing ${pageStart.toLocaleString()}–${pageEnd.toLocaleString()} of ${total.toLocaleString()}`}
+        </p>
       )}
 
       {/* Loading */}
       {loading && (
-        <div className="flex items-center justify-center py-20">
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
-            <p className="text-neutral-400 text-sm">Loading…</p>
-          </div>
+        <div
+          className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 lg:grid-cols-8 2xl:grid-cols-posters gap-4"
+          aria-hidden="true"
+        >
+          {Array.from({ length: 16 }).map((_, i) => (
+            <PosterCardSkeleton key={i} />
+          ))}
         </div>
       )}
 
       {/* Empty */}
       {!loading && results.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-20 text-center">
-          <p className="text-neutral-300 font-medium mb-1">No collections found</p>
-          <p className="text-neutral-500 text-sm">
-            {isSearching
-              ? "Try a different search term"
+        <EmptyState
+          title="No collections found"
+          description={
+            isSearching
+              ? "Try a different search term."
               : hasActiveFilters
-                ? "Try loosening the filters"
-                : "The catalog is empty — the daily sync may not have run yet"}
-          </p>
-        </div>
+                ? "Try loosening the filters."
+                : "The catalog is empty. The daily sync may not have run yet."
+          }
+          action={
+            !isSearching && hasActiveFilters ? (
+              <Button onClick={clearFilters}>Clear filters</Button>
+            ) : undefined
+          }
+        />
       )}
 
       {/* Grid */}
       {!loading && results.length > 0 && (
-        <div className="px-6 sm:px-10 pb-8 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 lg:grid-cols-8 2xl:grid-cols-posters gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 lg:grid-cols-8 2xl:grid-cols-posters gap-4">
           {results.map((c) => (
             <CollectionCard key={c.id} c={c} status={statusMap?.[String(c.id)]} />
           ))}
@@ -459,24 +408,24 @@ export default function BrowseCollections() {
 
       {/* Pagination */}
       {!isSearching && !loading && totalPages > 1 && (
-        <div className="px-6 sm:px-10 pb-10 flex items-center justify-center gap-4">
-          <button
+        <div className="flex items-center justify-center gap-4">
+          <Button
             onClick={() => setPage(Math.max(1, page - 1))}
             disabled={page === 1}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-medium text-neutral-400 hover:text-neutral-200 bg-neutral-800 hover:bg-neutral-750 border border-neutral-700 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+            icon={<ChevronLeftIcon />}
           >
-            ← Previous
-          </button>
-          <span className="font-mono text-xs text-neutral-500 tracking-wider">
+            Previous
+          </Button>
+          <span className="text-label text-neutral-400 tabular">
             Page {page.toLocaleString()} of {totalPages.toLocaleString()}
           </span>
-          <button
+          <Button
             onClick={() => setPage(Math.min(totalPages, page + 1))}
             disabled={page === totalPages}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-medium text-neutral-400 hover:text-neutral-200 bg-neutral-800 hover:bg-neutral-750 border border-neutral-700 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-all"
           >
-            Next →
-          </button>
+            Next
+            <ChevronRightIcon />
+          </Button>
         </div>
       )}
     </div>
@@ -496,13 +445,11 @@ function FilterSelect({
 }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-[10px] font-mono uppercase tracking-wider text-neutral-500">
-        {label}
-      </span>
+      <span className="text-caption text-neutral-400">{label}</span>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="bg-neutral-800 border border-neutral-700 hover:border-neutral-600 focus:border-primary-500 focus:outline-none rounded-lg px-2.5 py-1.5 text-xs text-neutral-100 min-w-[140px] h-[34px]"
+        className={cx(selectClass, "min-w-[140px]")}
       >
         {options.map((o) => (
           <option key={o.value} value={o.value}>
@@ -533,9 +480,7 @@ function FilterNumber({
 }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-[10px] font-mono uppercase tracking-wider text-neutral-500">
-        {label}
-      </span>
+      <span className="text-caption text-neutral-400">{label}</span>
       <input
         type="number"
         value={value}
@@ -544,7 +489,7 @@ function FilterNumber({
         max={max}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
-        className="bg-neutral-800 border border-neutral-700 hover:border-neutral-600 focus:border-primary-500 focus:outline-none rounded-lg px-2.5 py-1.5 text-xs text-neutral-100 w-[110px] h-[34px]"
+        className="h-control w-[110px] rounded-control border border-neutral-700 bg-neutral-900 px-3 text-label text-neutral-100 placeholder-neutral-500 hover:border-neutral-500 focus:border-neutral-400 focus:outline-none"
       />
     </label>
   );

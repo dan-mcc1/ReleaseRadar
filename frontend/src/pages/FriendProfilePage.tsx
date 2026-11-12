@@ -1,23 +1,27 @@
 import { useParams, Link, Navigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
+import { EllipsisHorizontalIcon, LockClosedIcon } from "@heroicons/react/24/outline";
 import { apiFetch } from "../utils/apiFetch";
 import { useAuthUser } from "../hooks/useAuthUser";
 import { useFriendProfile } from "../hooks/api/useUser";
 import { useRemoveFriend } from "../hooks/api/useFriends";
 import { queryKeys } from "../hooks/api/queryKeys";
-import { BASE_IMAGE_URL } from "../constants";
 import { usePageTitle } from "../hooks/usePageTitle";
-import { useState } from "react";
-import { useBlockUser, useSubmitReport, type ReportReason } from "../hooks/api/useModeration";
-
-const REPORT_REASONS: { value: ReportReason; label: string }[] = [
-  { value: "spam", label: "Spam" },
-  { value: "harassment", label: "Harassment" },
-  { value: "hate_speech", label: "Hate speech" },
-  { value: "inappropriate_content", label: "Inappropriate content" },
-  { value: "misinformation", label: "Misinformation" },
-  { value: "other", label: "Other" },
-];
+import { useEffect, useRef, useState } from "react";
+import { useBlockUser } from "../hooks/api/useModeration";
+import ReportModal from "../components/ReportModal";
+import {
+  Button,
+  ButtonLink,
+  CheckIcon,
+  CloseIcon,
+  EmptyState,
+  IconButton,
+  PageHeader,
+  PlusIcon,
+  PosterCard,
+  SectionHeader,
+} from "../components/ui";
 
 interface MediaItem {
   id: number;
@@ -58,62 +62,13 @@ function usernameToHue(username: string): number {
   return h;
 }
 
-function SectionHead({
-  eyebrow,
-  title,
-  count,
-  cta,
-  ctaTo,
-}: {
-  eyebrow: string;
-  title: string;
-  count?: number;
-  cta?: string;
-  ctaTo?: string;
-}) {
-  return (
-    <div className="flex items-baseline gap-3 mb-4">
-      {eyebrow && (
-        <span className="font-mono text-[10px] text-neutral-500 tracking-[0.12em] uppercase">
-          {eyebrow}
-        </span>
-      )}
-      <h2 className="m-0 font-light italic text-[22px] tracking-tight text-neutral-100 leading-none">
-        {title}
-      </h2>
-      {count !== undefined && (
-        <span className="font-mono text-[11px] text-neutral-500">· {count}</span>
-      )}
-      <span className="flex-1" />
-      {cta && ctaTo && (
-        <Link
-          to={ctaTo}
-          className="text-[12.5px] text-neutral-400 hover:text-neutral-200 font-medium transition-colors"
-        >
-          {cta} →
-        </Link>
-      )}
-    </div>
-  );
-}
-
 function PosterThumb({ item, type }: { item: MediaItem; type: "movie" | "tv" }) {
-  const label = item.title ?? item.name ?? "";
-  const href = type === "movie" ? `/movie/${item.id}` : `/tv/${item.id}`;
-  const fallback = type === "movie" ? "/movie-icon.png" : "/tv-icon.png";
   return (
-    <Link to={href} className="group block">
-      <div className="rounded-xl overflow-hidden aspect-[2/3] bg-neutral-800">
-        <img
-          src={item.poster_path ? `${BASE_IMAGE_URL}/w342${item.poster_path}` : fallback}
-          alt={label}
-          className="w-full h-full object-cover group-hover:opacity-80 transition-opacity"
-        />
-      </div>
-      <p className="mt-1.5 text-[11.5px] font-medium text-neutral-400 text-center line-clamp-1">
-        {label}
-      </p>
-    </Link>
+    <PosterCard
+      to={type === "movie" ? `/movie/${item.id}` : `/tv/${item.id}`}
+      title={item.title ?? item.name ?? ""}
+      posterPath={item.poster_path}
+    />
   );
 }
 
@@ -132,7 +87,7 @@ function PosterSection({
   const preview = items.slice(0, cols);
   return (
     <div>
-      <div className="font-mono text-[10px] text-neutral-500 tracking-[0.12em] uppercase mb-3">
+      <div className="text-label font-medium text-neutral-400 mb-3">
         {label} · {items.length}
       </div>
       <div
@@ -164,12 +119,26 @@ export default function FriendProfilePage() {
   const [showBlockConfirm, setShowBlockConfirm] = useState(false);
   const [showUnfriendConfirm, setShowUnfriendConfirm] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
-  const [reportReason, setReportReason] = useState<ReportReason>("spam");
-  const [reportMessage, setReportMessage] = useState("");
-  const [reportDone, setReportDone] = useState(false);
+  // The actions menu closes on a tap or click outside it, or Escape (it
+  // also shows on touch, where there's no mouse to leave it).
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [menuOpen]);
 
   const blockMutation = useBlockUser();
-  const reportMutation = useSubmitReport();
   const removeFriendMutation = useRemoveFriend();
 
   async function blockUser() {
@@ -184,17 +153,6 @@ export default function FriendProfilePage() {
     setShowUnfriendConfirm(false);
     if (username)
       await queryClient.invalidateQueries({ queryKey: queryKeys.friendProfile(username) });
-  }
-
-  async function submitReport() {
-    if (!profile) return;
-    await reportMutation.mutateAsync({
-      reported_type: "user",
-      reported_id: profile.id,
-      reason: reportReason,
-      message: reportMessage.trim() || undefined,
-    });
-    setReportDone(true);
   }
 
   function setProfileData(updater: (p: PublicProfile) => PublicProfile) {
@@ -289,9 +247,7 @@ export default function FriendProfilePage() {
   if (isLoading) {
     return (
       <div className="w-full">
-        <div className="relative overflow-hidden border-b border-neutral-800" style={{ background: "#111", height: 220 }}>
-          <div className="absolute inset-0 animate-pulse bg-neutral-800/40" />
-        </div>
+        <div className="h-[220px] border-b border-neutral-800 animate-pulse bg-neutral-800/40" />
         <div className="px-6 sm:px-10 py-8">
           <div className="h-4 w-48 rounded-full bg-neutral-800 animate-pulse mb-3" />
           <div className="h-4 w-96 rounded-full bg-neutral-800 animate-pulse" />
@@ -305,11 +261,12 @@ export default function FriendProfilePage() {
   if (blockedByViewer) {
     const blockedUsername = (data as { username: string }).username;
     return (
-      <div className="w-full max-w-2xl mx-auto px-4 py-16 text-center">
-        <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-10 space-y-3">
-          <p className="text-neutral-200 font-medium">You have blocked @{blockedUsername}.</p>
-          <p className="text-neutral-500 text-sm">Unblock them in Settings to view their profile.</p>
-        </div>
+      <div className="w-full max-w-2xl mx-auto px-4 py-16">
+        <EmptyState
+          title={`You have blocked @${blockedUsername}.`}
+          description="Unblock them in Settings to view their profile."
+          action={<ButtonLink to="/settings">Open settings</ButtonLink>}
+        />
       </div>
     );
   }
@@ -317,12 +274,8 @@ export default function FriendProfilePage() {
   if (isError || !profile) {
     const is404 = (error as Error)?.message === "404";
     return (
-      <div className="w-full max-w-2xl mx-auto px-4 py-16 text-center">
-        <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-10">
-          <p className="text-neutral-400">
-            {is404 ? "This account doesn't exist." : "Could not load profile."}
-          </p>
-        </div>
+      <div className="w-full max-w-2xl mx-auto px-4 py-16">
+        <EmptyState title={is404 ? "This account doesn't exist." : "Could not load profile."} />
       </div>
     );
   }
@@ -343,250 +296,152 @@ export default function FriendProfilePage() {
   const totalWatchlist = canSeeDetails ? (watchlist?.movies.length ?? 0) + (watchlist?.shows.length ?? 0) : null;
   const totalFavorites = canSeeDetails ? (favorites?.movies.length ?? 0) + (favorites?.shows.length ?? 0) : null;
 
-  const statStrip = canSeeDetails
-    ? [
-        { label: "Watched",   value: totalWatched ?? 0 },
-        { label: "Watchlist", value: totalWatchlist ?? 0 },
-        { label: "Favorites", value: totalFavorites ?? 0 },
-        { label: "Friends",   value: friends.length },
-      ]
-    : [];
+  const relationLabel = profile.is_friend
+    ? "Friends"
+    : profile.is_following
+      ? "Following"
+      : profile.profile_visibility === "public"
+        ? "Public profile"
+        : "Friends only";
+
+  const countsLine = canSeeDetails
+    ? `${totalWatched ?? 0} watched · ${totalWatchlist ?? 0} on their watchlist · ${totalFavorites ?? 0} favorites · ${friends.length} ${friends.length === 1 ? "friend" : "friends"}`
+    : null;
+
+  const addLabel = profile.profile_visibility === "public" ? "Follow" : profile.is_followed_by_them ? "Add back" : "Add friend";
 
   return (
     <div className="w-full">
-      {/* ── Hero ─────────────────────────────────────────────────── */}
-      <div
-        className="relative border-b border-neutral-800"
-        style={{ background: "#111" }}
-      >
+      {/* ── Header ───────────────────────────────────────────────── */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:gap-7 px-5 sm:px-10 pt-8 sm:pt-10 pb-6 sm:pb-8 border-b border-neutral-800">
+        {/* Avatar */}
         <div
-          className="absolute inset-0 pointer-events-none"
+          className="shrink-0 rounded-full flex items-center justify-center size-[72px] sm:size-[100px] text-heading sm:text-display font-bold text-white/90"
           style={{
-            background: `radial-gradient(80% 70% at 80% 0%, oklch(0.28 0.12 ${hue}) 0%, transparent 65%), radial-gradient(60% 70% at 10% 80%, oklch(0.20 0.08 ${hue} / 0.5) 0%, transparent 70%)`,
-            opacity: 0.65,
+            background: `linear-gradient(135deg, oklch(0.55 0.14 ${hue}), oklch(0.38 0.14 ${(hue + 40) % 360}))`,
+            boxShadow: "0 0 0 4px rgba(255,255,255,0.07)",
+            letterSpacing: "-0.02em",
           }}
-        />
-        <svg
-          viewBox="0 0 600 400"
-          className="absolute pointer-events-none overflow-hidden"
-          style={{ right: -80, top: -80, width: 600, height: 400, opacity: 0.1, clipPath: "inset(0)" }}
         >
-          {[60, 110, 160, 210, 260].map((r) => (
-            <circle key={r} cx="400" cy="200" r={r} stroke="#10b981" strokeWidth="0.8" fill="none" />
-          ))}
-        </svg>
+          {initials}
+        </div>
 
-        <div
-          className="relative items-end gap-7 px-6 sm:px-10 pt-10 pb-8 hidden sm:grid"
-          style={{ gridTemplateColumns: "100px 1fr auto" }}
-        >
-          {/* Avatar */}
-          <div
-            className="shrink-0 rounded-full flex items-center justify-center text-[36px] font-bold text-white/90"
-            style={{
-              width: 100, height: 100,
-              background: `linear-gradient(135deg, oklch(0.55 0.14 ${hue}), oklch(0.38 0.14 ${(hue + 40) % 360}))`,
-              boxShadow: "0 16px 40px rgba(0,0,0,0.4), 0 0 0 4px rgba(255,255,255,0.07)",
-              letterSpacing: "-0.02em",
-            }}
-          >
-            {initials}
-          </div>
-
-          {/* Identity */}
-          <div className="min-w-0">
-            <div className="font-mono text-[11px] tracking-[0.15em] text-primary-400 uppercase mb-2">
-              {profile.is_friend ? "◉ Friends" : profile.is_following ? "◎ Following" : profile.profile_visibility === "public" ? "◎ Public profile" : "◌ Friends only"}
-            </div>
-            <div className="flex items-baseline gap-4 flex-wrap">
-              <h1 className="m-0 font-light italic text-[48px] tracking-[-0.025em] leading-none text-neutral-100">
-                {heroName}
-              </h1>
-              <span className="font-mono text-[13px] text-neutral-500 tracking-[0.02em]">
-                @{profile.username}
-              </span>
-            </div>
-            {profile.bio && (
-              <p className="italic text-[15.5px] leading-snug tracking-[-0.005em] text-neutral-300 mt-3 mb-0 max-w-xl">
-                {profile.bio}
-              </p>
-            )}
-          </div>
-
-          {/* Actions */}
-          <div className="flex flex-col items-end gap-2 shrink-0">
-            <div className="flex items-center gap-2">
-              {!profile.is_friend && (
-                profile.incoming_request_id ? (
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => respondToRequest(true)}
+        <div className="flex-1 min-w-0">
+          <PageHeader
+            title={heroName}
+            description={`@${profile.username} · ${relationLabel}`}
+            actions={
+              <>
+                {!profile.is_friend && (
+                  profile.incoming_request_id ? (
+                    <>
+                      <Button
+                        variant="primary"
+                        onClick={() => respondToRequest(true)}
+                        disabled={requesting}
+                        loading={requesting}
+                      >
+                        Accept
+                      </Button>
+                      <Button onClick={() => respondToRequest(false)} disabled={requesting}>
+                        Decline
+                      </Button>
+                    </>
+                  ) : profile.is_following ? (
+                    <Button
+                      onClick={unfollow}
                       disabled={requesting}
-                      className="flex items-center gap-2 bg-primary-600 hover:bg-primary-500 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors"
+                      loading={requesting}
+                      icon={<CheckIcon className="w-4 h-4" />}
                     >
-                      {requesting ? <Spinner /> : null}
-                      Accept
-                    </button>
-                    <button
-                      onClick={() => respondToRequest(false)}
+                      Following
+                    </Button>
+                  ) : profile.pending_request_id ? (
+                    <Button
+                      onClick={cancelRequest}
                       disabled={requesting}
-                      className="flex items-center gap-2 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 disabled:opacity-50 text-neutral-300 text-sm font-medium px-4 py-2 rounded-xl transition-colors"
+                      loading={requesting}
+                      icon={<CloseIcon className="w-4 h-4" />}
                     >
-                      Decline
-                    </button>
-                  </div>
-                ) : profile.is_following ? (
-                  <button
-                    onClick={unfollow}
-                    disabled={requesting}
-                    className="flex items-center gap-2 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 disabled:opacity-50 text-neutral-300 text-sm font-medium px-4 py-2 rounded-xl transition-colors"
-                  >
-                    {requesting ? <Spinner /> : <CheckIcon />}
-                    Following
-                  </button>
-                ) : profile.pending_request_id ? (
-                  <button
-                    onClick={cancelRequest}
-                    disabled={requesting}
-                    className="flex items-center gap-2 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 disabled:opacity-50 text-neutral-300 text-sm font-medium px-4 py-2 rounded-xl transition-colors"
-                  >
-                    {requesting ? <Spinner /> : <XIcon />}
-                    Request Sent
-                  </button>
-                ) : (
-                  <button
-                    onClick={sendRequest}
-                    disabled={requesting}
-                    className="flex items-center gap-2 bg-primary-600 hover:bg-primary-500 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors"
-                  >
-                    {requesting ? <Spinner /> : <PlusIcon />}
-                    {profile.profile_visibility === "public" ? "Follow" : profile.is_followed_by_them ? "Add back" : "Add Friend"}
-                  </button>
-                )
-              )}
+                      Request sent
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="primary"
+                      onClick={sendRequest}
+                      disabled={requesting}
+                      loading={requesting}
+                      icon={<PlusIcon className="w-4 h-4" />}
+                    >
+                      {addLabel}
+                    </Button>
+                  )
+                )}
 
-              {user && (
-                <div className="relative">
-                  <button
-                    onClick={() => setMenuOpen((v) => !v)}
-                    className="w-9 h-9 flex items-center justify-center rounded-xl bg-transparent border border-neutral-700 text-neutral-500 hover:text-neutral-300 hover:border-neutral-600 transition-colors"
-                  >
-                    <DotsIcon />
-                  </button>
-                  {menuOpen && (
-                    <div
-                      className="absolute right-0 mt-1 w-44 bg-neutral-900 border border-neutral-800 rounded-xl shadow-xl z-30 overflow-hidden"
-                      onMouseLeave={() => setMenuOpen(false)}
-                    >
-                      {profile.is_friend && (
+                {user && (
+                  <div ref={menuRef} className="relative">
+                    <IconButton
+                      variant="secondary"
+                      shape="square"
+                      label="More actions"
+                      aria-expanded={menuOpen}
+                      icon={<EllipsisHorizontalIcon className="w-5 h-5" strokeWidth={2} aria-hidden="true" />}
+                      onClick={() => setMenuOpen((v) => !v)}
+                    />
+                    {menuOpen && (
+                      <div
+                        className="absolute right-0 mt-1 w-44 bg-neutral-900 border border-neutral-800 rounded-control shadow-xl z-30 overflow-hidden"
+                      >
+                        {profile.is_friend && (
+                          <button
+                            onClick={() => { setMenuOpen(false); setShowUnfriendConfirm(true); }}
+                            className="w-full text-left px-4 py-2.5 text-body text-neutral-300 hover:bg-neutral-800 transition-colors"
+                          >
+                            Unfriend
+                          </button>
+                        )}
                         <button
-                          onClick={() => { setMenuOpen(false); setShowUnfriendConfirm(true); }}
-                          className="w-full text-left px-4 py-2.5 text-sm text-neutral-300 hover:bg-neutral-800 transition-colors"
+                          onClick={() => { setMenuOpen(false); setShowBlockConfirm(true); }}
+                          className="w-full text-left px-4 py-2.5 text-body text-neutral-300 hover:bg-neutral-800 transition-colors"
                         >
-                          Unfriend
+                          Block user
                         </button>
-                      )}
-                      <button
-                        onClick={() => { setMenuOpen(false); setShowBlockConfirm(true); }}
-                        className="w-full text-left px-4 py-2.5 text-sm text-neutral-300 hover:bg-neutral-800 transition-colors"
-                      >
-                        Block user
-                      </button>
-                      <button
-                        onClick={() => { setMenuOpen(false); setShowReportModal(true); }}
-                        className="w-full text-left px-4 py-2.5 text-sm text-error-400 hover:bg-neutral-800 transition-colors"
-                      >
-                        Report user
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Mobile hero */}
-        <div className="relative sm:hidden px-5 pt-8 pb-6 flex flex-col gap-4">
-          <div className="flex items-center gap-4">
-            <div
-              className="shrink-0 rounded-full flex items-center justify-center text-[28px] font-bold text-white/90"
-              style={{
-                width: 72, height: 72,
-                background: `linear-gradient(135deg, oklch(0.55 0.14 ${hue}), oklch(0.38 0.14 ${(hue + 40) % 360}))`,
-                boxShadow: "0 8px 24px rgba(0,0,0,0.4), 0 0 0 3px rgba(255,255,255,0.07)",
-              }}
-            >
-              {initials}
-            </div>
-            <div className="min-w-0">
-              <h1 className="m-0 font-light italic text-[32px] tracking-[-0.025em] leading-none text-neutral-100">
-                {heroName}
-              </h1>
-              <span className="font-mono text-[12px] text-neutral-500">@{profile.username}</span>
-            </div>
-          </div>
-          {profile.bio && (
-            <p className="italic text-[14px] leading-snug text-neutral-300 m-0">{profile.bio}</p>
-          )}
-          <MobileActions
-            profile={profile}
-            requesting={requesting}
-            user={user}
-            onSend={sendRequest}
-            onCancel={cancelRequest}
-            onUnfollow={unfollow}
-            onRespond={respondToRequest}
-            onOpenMenu={() => setMenuOpen(true)}
+                        <button
+                          onClick={() => { setMenuOpen(false); setShowReportModal(true); }}
+                          className="w-full text-left px-4 py-2.5 text-body text-error-400 hover:bg-neutral-800 transition-colors"
+                        >
+                          Report user
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
+            }
           />
+          {profile.bio && (
+            <p className="text-body text-neutral-300 mt-3 mb-0 max-w-xl">{profile.bio}</p>
+          )}
+          {countsLine && <p className="text-body text-neutral-400 mt-3 mb-0">{countsLine}</p>}
         </div>
-
-        {/* Stat strip */}
-        {canSeeDetails && statStrip.length > 0 && (
-          <div
-            className="relative grid border-t border-neutral-800"
-            style={{ gridTemplateColumns: `repeat(${statStrip.length}, 1fr)`, background: "#0d0d0d" }}
-          >
-            {statStrip.map((s, i) => (
-              <div
-                key={s.label}
-                className="flex flex-col gap-1 py-4 px-5"
-                style={{ borderLeft: i === 0 ? "none" : "1px solid #262626" }}
-              >
-                <span className="font-mono text-[10px] text-neutral-600 tracking-[0.12em] uppercase">
-                  {s.label}
-                </span>
-                <span className="italic font-light text-[28px] leading-none tracking-[-0.02em] text-neutral-100">
-                  {s.value}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* ── Body ─────────────────────────────────────────────────── */}
       {canSeeDetails ? (
-        <div
-          className="grid gap-8 px-6 sm:px-10 py-8 items-start"
-          style={{ gridTemplateColumns: "1fr" }}
-        >
-          <div
-            className="grid gap-8 items-start"
-            style={{ gridTemplateColumns: "minmax(0,1fr) 280px" }}
-          >
+        <div className="px-6 sm:px-10 py-8">
+          <div className="grid gap-8 items-start grid-cols-1 lg:grid-cols-[minmax(0,1fr)_280px]">
             {/* ── Left column ── */}
             <div className="flex flex-col gap-8">
               {/* Favorites */}
               {favorites && (favorites.movies.length > 0 || favorites.shows.length > 0) && (
                 <section>
-                  <SectionHead
-                    eyebrow=""
+                  <SectionHeader
                     title="Favorites"
-                    count={(favorites.movies.length ?? 0) + (favorites.shows.length ?? 0)}
+                    note={String((favorites.movies.length ?? 0) + (favorites.shows.length ?? 0))}
+                    className="mb-4"
                   />
-                  <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5 space-y-6">
-                    <PosterSection label="TV Shows" items={favorites.shows} type="tv" cols={8} />
+                  <div className="space-y-6">
+                    <PosterSection label="TV shows" items={favorites.shows} type="tv" cols={8} />
                     <PosterSection label="Movies" items={favorites.movies} type="movie" cols={8} />
                   </div>
                 </section>
@@ -594,15 +449,13 @@ export default function FriendProfilePage() {
 
               {/* Watchlist + Watched */}
               {watchlist && watched && (
-                <div className="grid grid-cols-2 gap-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
                   <ListBlock
-                    eyebrow=""
                     title="Watchlist"
                     movies={watchlist.movies}
                     shows={watchlist.shows}
                   />
                   <ListBlock
-                    eyebrow=""
                     title="Watched"
                     movies={watched.movies}
                     shows={watched.shows}
@@ -612,34 +465,29 @@ export default function FriendProfilePage() {
             </div>
 
             {/* ── Right sidebar ── */}
-            <div className="flex flex-col gap-4 sticky top-24">
+            <div className="flex flex-col gap-8 lg:sticky lg:top-24">
               {/* About */}
-              <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
-                <div className="font-mono text-[10px] text-neutral-600 tracking-[0.15em] uppercase mb-4">
-                  About
-                </div>
-                <div className="grid gap-y-2.5 gap-x-3 text-[13px]" style={{ gridTemplateColumns: "80px 1fr" }}>
-                  <span className="text-neutral-500">Visibility</span>
+              <section>
+                <SectionHeader title="About" className="mb-4" />
+                <div className="grid gap-y-2.5 gap-x-3 text-label" style={{ gridTemplateColumns: "80px 1fr" }}>
+                  <span className="text-caption text-neutral-400">Visibility</span>
                   <span className="font-medium text-neutral-200 flex items-center gap-1.5">
                     <span
-                      className="inline-block w-1.5 h-1.5 rounded-full"
-                      style={{ background: profile.profile_visibility === "public" ? "#10b981" : "#6b7280" }}
+                      className={`inline-block w-1.5 h-1.5 rounded-full ${profile.profile_visibility === "public" ? "bg-success-400" : "bg-neutral-500"}`}
                     />
                     {profile.profile_visibility === "public" ? "Public" : "Friends only"}
                   </span>
-                  <span className="text-neutral-500">Relationship</span>
+                  <span className="text-caption text-neutral-400">Relationship</span>
                   <span className="font-medium text-neutral-200">
                     {profile.is_friend ? "Friends" : profile.is_following ? "Following" : "—"}
                   </span>
                 </div>
-              </div>
+              </section>
 
               {/* Friends */}
               {friends.length > 0 && (
-                <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
-                  <div className="font-mono text-[10px] text-neutral-600 tracking-[0.15em] uppercase mb-4">
-                    Friends · {friends.length}
-                  </div>
+                <section>
+                  <SectionHeader title="Friends" note={String(friends.length)} className="mb-4" />
                   <div className="flex flex-col gap-2.5">
                     {friends.slice(0, 8).map(({ friendship_id, friend }) => (
                       <Link
@@ -647,43 +495,32 @@ export default function FriendProfilePage() {
                         to={`/user/${friend.username}`}
                         className="flex items-center gap-2.5 group"
                       >
-                        <div className="w-7 h-7 rounded-full bg-neutral-700 flex items-center justify-center text-[11px] font-bold text-neutral-300 flex-shrink-0 group-hover:bg-neutral-600 transition-colors">
+                        <div className="w-7 h-7 rounded-full bg-neutral-700 flex items-center justify-center text-caption font-bold text-neutral-300 flex-shrink-0 group-hover:bg-neutral-600 transition-colors">
                           {(friend.display_name?.[0] ?? friend.username[0]).toUpperCase()}
                         </div>
-                        <span className="text-[13px] text-neutral-300 group-hover:text-neutral-100 transition-colors font-medium truncate">
+                        <span className="text-label text-neutral-300 group-hover:text-neutral-100 transition-colors font-medium truncate">
                           {friend.display_name || `@${friend.username}`}
                         </span>
                       </Link>
                     ))}
                   </div>
-                </div>
+                </section>
               )}
 
               {/* Moderation actions */}
               {user && (
-                <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4">
-                  <div className="flex gap-2 text-[12px]">
-                    {profile.is_friend && (
-                      <button
-                        onClick={() => setShowUnfriendConfirm(true)}
-                        className="flex-1 py-2 px-3 rounded-xl border border-neutral-800 text-neutral-400 hover:text-neutral-200 hover:border-neutral-700 bg-transparent font-medium transition-colors"
-                      >
-                        Unfriend
-                      </button>
-                    )}
-                    <button
-                      onClick={() => setShowBlockConfirm(true)}
-                      className="flex-1 py-2 px-3 rounded-xl border border-neutral-800 text-neutral-400 hover:text-neutral-200 hover:border-neutral-700 bg-transparent font-medium transition-colors"
-                    >
-                      Block
-                    </button>
-                    <button
-                      onClick={() => setShowReportModal(true)}
-                      className="flex-1 py-2 px-3 rounded-xl border border-neutral-800 text-error-400 hover:text-error-300 hover:border-neutral-700 bg-transparent font-medium transition-colors"
-                    >
-                      Report
-                    </button>
-                  </div>
+                <div className="flex gap-2">
+                  {profile.is_friend && (
+                    <Button size="sm" onClick={() => setShowUnfriendConfirm(true)} className="flex-1">
+                      Unfriend
+                    </Button>
+                  )}
+                  <Button size="sm" onClick={() => setShowBlockConfirm(true)} className="flex-1">
+                    Block
+                  </Button>
+                  <Button size="sm" variant="danger" onClick={() => setShowReportModal(true)} className="flex-1">
+                    Report
+                  </Button>
                 </div>
               )}
             </div>
@@ -691,49 +528,46 @@ export default function FriendProfilePage() {
         </div>
       ) : (
         <div className="px-6 sm:px-10 py-16 flex justify-center">
-          <div className="w-full max-w-md text-center space-y-4">
-            <div
-              className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-2"
-              style={{ background: `oklch(0.22 0.06 ${hue})`, border: `1px solid oklch(0.32 0.06 ${hue})` }}
-            >
-              <LockIcon />
-            </div>
-            <p className="text-neutral-200 font-medium text-[15px]">
-              {profile.profile_visibility === "private"
-                ? "This account is private."
-                : "Add this person as a friend to see their lists."}
-            </p>
-            <p className="text-neutral-500 text-sm">
-              {profile.profile_visibility === "private"
-                ? "Only they can see their activity."
-                : "Their watchlist, watched, and favorites are only visible to friends."}
-            </p>
-            {!profile.is_friend && !profile.is_following && !profile.pending_request_id && profile.profile_visibility !== "private" && (
-              <button
-                onClick={sendRequest}
-                disabled={requesting}
-                className="inline-flex items-center gap-2 bg-primary-600 hover:bg-primary-500 disabled:opacity-50 text-white text-sm font-medium px-5 py-2.5 rounded-xl transition-colors mt-2"
-              >
-                {requesting ? <Spinner /> : <PlusIcon />}
-                {profile.is_followed_by_them ? "Add back" : "Add Friend"}
-              </button>
-            )}
-            {user && (
-              <div className="flex justify-center gap-2 pt-4">
-                <button
-                  onClick={() => setShowBlockConfirm(true)}
-                  className="text-[12px] text-neutral-500 hover:text-neutral-300 px-3 py-1.5 rounded-lg border border-neutral-800 hover:border-neutral-700 transition-colors"
-                >
-                  Block
-                </button>
-                <button
-                  onClick={() => setShowReportModal(true)}
-                  className="text-[12px] text-error-500 hover:text-error-400 px-3 py-1.5 rounded-lg border border-neutral-800 hover:border-neutral-700 transition-colors"
-                >
-                  Report
-                </button>
-              </div>
-            )}
+          <div className="w-full max-w-md flex flex-col items-center">
+            <LockClosedIcon className="w-6 h-6 text-neutral-400" strokeWidth={1.5} aria-hidden="true" />
+            <EmptyState
+              className="py-4"
+              title={
+                profile.profile_visibility === "private"
+                  ? "This account is private."
+                  : "Add this person as a friend to see their lists."
+              }
+              description={
+                profile.profile_visibility === "private"
+                  ? "Only they can see their activity."
+                  : "Their watchlist, watched, and favorites are only visible to friends."
+              }
+              action={
+                <>
+                  {!profile.is_friend && !profile.is_following && !profile.pending_request_id && profile.profile_visibility !== "private" && (
+                    <Button
+                      variant="primary"
+                      onClick={sendRequest}
+                      disabled={requesting}
+                      loading={requesting}
+                      icon={<PlusIcon className="w-4 h-4" />}
+                    >
+                      {profile.is_followed_by_them ? "Add back" : "Add friend"}
+                    </Button>
+                  )}
+                  {user && (
+                    <>
+                      <Button variant="ghost" onClick={() => setShowBlockConfirm(true)}>
+                        Block
+                      </Button>
+                      <Button variant="ghost" onClick={() => setShowReportModal(true)}>
+                        Report
+                      </Button>
+                    </>
+                  )}
+                </>
+              }
+            />
           </div>
         </div>
       )}
@@ -742,23 +576,21 @@ export default function FriendProfilePage() {
       {showBlockConfirm && (
         <Modal onClose={() => setShowBlockConfirm(false)}>
           <h3 className="text-white font-semibold mb-1">Block @{profile.username}?</h3>
-          <p className="text-neutral-400 text-sm mb-5">
+          <p className="text-neutral-400 text-body mb-5">
             They won't be able to send you friend requests or recommendations, and their content won't appear to you.
           </p>
           <div className="flex gap-2">
-            <button
-              onClick={() => setShowBlockConfirm(false)}
-              className="flex-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-sm py-2.5 rounded-xl transition-colors"
-            >
+            <Button onClick={() => setShowBlockConfirm(false)} className="flex-1">
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="danger"
               onClick={blockUser}
               disabled={blockMutation.isPending}
-              className="flex-1 bg-error-600 hover:bg-error-500 disabled:opacity-50 text-white text-sm py-2.5 rounded-xl transition-colors font-medium"
+              className="flex-1"
             >
               {blockMutation.isPending ? "Blocking…" : "Block"}
-            </button>
+            </Button>
           </div>
         </Modal>
       )}
@@ -767,101 +599,43 @@ export default function FriendProfilePage() {
       {showUnfriendConfirm && (
         <Modal onClose={() => setShowUnfriendConfirm(false)}>
           <h3 className="text-white font-semibold mb-1">Unfriend @{profile.username}?</h3>
-          <p className="text-neutral-400 text-sm mb-5">
+          <p className="text-neutral-400 text-body mb-5">
             You'll lose access to their private lists and they'll be removed from your friends.
           </p>
           <div className="flex gap-2">
-            <button
-              onClick={() => setShowUnfriendConfirm(false)}
-              className="flex-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-sm py-2.5 rounded-xl transition-colors"
-            >
+            <Button onClick={() => setShowUnfriendConfirm(false)} className="flex-1">
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="danger"
               onClick={unfriend}
               disabled={removeFriendMutation.isPending}
-              className="flex-1 bg-error-600 hover:bg-error-500 disabled:opacity-50 text-white text-sm py-2.5 rounded-xl transition-colors font-medium"
+              className="flex-1"
             >
               {removeFriendMutation.isPending ? "Removing…" : "Unfriend"}
-            </button>
+            </Button>
           </div>
         </Modal>
       )}
 
       {/* ── Report modal ────────────────────────────────────────── */}
       {showReportModal && (
-        <Modal onClose={() => { setShowReportModal(false); setReportDone(false); }}>
-          {reportDone ? (
-            <>
-              <p className="text-neutral-200 text-sm mb-5">Report submitted. Thank you for letting us know.</p>
-              <button
-                onClick={() => { setShowReportModal(false); setReportDone(false); }}
-                className="w-full bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-sm py-2.5 rounded-xl transition-colors"
-              >
-                Close
-              </button>
-            </>
-          ) : (
-            <>
-              <h3 className="text-white font-semibold mb-4">Report @{profile.username}</h3>
-              <div className="space-y-0.5 mb-4">
-                {REPORT_REASONS.map(({ value, label }) => (
-                  <label key={value} className="flex items-center gap-2.5 cursor-pointer py-1.5">
-                    <input
-                      type="radio"
-                      name="reportReason"
-                      value={value}
-                      checked={reportReason === value}
-                      onChange={() => setReportReason(value)}
-                      className="accent-primary-500"
-                    />
-                    <span className="text-neutral-300 text-sm">{label}</span>
-                  </label>
-                ))}
-              </div>
-              <div className="mb-5">
-                <label className="text-[11px] text-neutral-500 block mb-1.5 font-mono uppercase tracking-wider">
-                  Additional details (optional)
-                </label>
-                <textarea
-                  value={reportMessage}
-                  onChange={(e) => setReportMessage(e.target.value)}
-                  rows={3}
-                  maxLength={500}
-                  placeholder="Describe the issue…"
-                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2.5 text-sm text-neutral-200 placeholder-neutral-700 focus:outline-none focus:border-neutral-600 resize-none"
-                />
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setShowReportModal(false)}
-                  className="flex-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-sm py-2.5 rounded-xl transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={submitReport}
-                  disabled={reportMutation.isPending}
-                  className="flex-1 bg-error-600 hover:bg-error-500 disabled:opacity-50 text-white text-sm py-2.5 rounded-xl transition-colors font-medium"
-                >
-                  {reportMutation.isPending ? "Submitting…" : "Report"}
-                </button>
-              </div>
-            </>
-          )}
-        </Modal>
+        <ReportModal
+          reportedType="user"
+          reportedId={profile.id}
+          label={`@${profile.username}`}
+          onClose={() => setShowReportModal(false)}
+        />
       )}
     </div>
   );
 }
 
 function ListBlock({
-  eyebrow,
   title,
   movies,
   shows,
 }: {
-  eyebrow: string;
   title: string;
   movies: MediaItem[];
   shows: MediaItem[];
@@ -869,8 +643,8 @@ function ListBlock({
   const total = movies.length + shows.length;
   const preview = [...shows, ...movies].slice(0, 4);
   return (
-    <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
-      <SectionHead eyebrow={eyebrow} title={title} count={total} />
+    <section>
+      <SectionHeader title={title} note={String(total)} className="mb-4" />
       {total > 0 ? (
         <div className="grid grid-cols-4 gap-2.5">
           {preview.map((item) => {
@@ -879,9 +653,9 @@ function ListBlock({
           })}
         </div>
       ) : (
-        <p className="text-neutral-600 text-sm italic">Nothing here yet.</p>
+        <p className="text-neutral-500 text-body">Nothing here yet.</p>
       )}
-    </div>
+    </section>
   );
 }
 
@@ -892,90 +666,11 @@ function Modal({ children, onClose }: { children: React.ReactNode; onClose: () =
       onClick={onClose}
     >
       <div
-        className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 w-full max-w-sm"
+        className="bg-neutral-900 border border-neutral-800 rounded-surface p-6 w-full max-w-sm"
         onClick={(e) => e.stopPropagation()}
       >
         {children}
       </div>
     </div>
-  );
-}
-
-function MobileActions({
-  profile, requesting, user,
-  onSend, onCancel, onUnfollow, onRespond, onOpenMenu,
-}: {
-  profile: PublicProfile;
-  requesting: boolean;
-  user: ReturnType<typeof useAuthUser>;
-  onSend: () => void;
-  onCancel: () => void;
-  onUnfollow: () => void;
-  onRespond: (accept: boolean) => void;
-  onOpenMenu: () => void;
-}) {
-  return (
-    <div className="flex items-center gap-2">
-      {!profile.is_friend && (
-        profile.incoming_request_id ? (
-          <>
-            <button onClick={() => onRespond(true)} disabled={requesting} className="flex-1 bg-primary-600 hover:bg-primary-500 disabled:opacity-50 text-white text-sm font-medium py-2 rounded-xl transition-colors">Accept</button>
-            <button onClick={() => onRespond(false)} disabled={requesting} className="flex-1 bg-neutral-800 border border-neutral-700 disabled:opacity-50 text-neutral-300 text-sm font-medium py-2 rounded-xl transition-colors">Decline</button>
-          </>
-        ) : profile.is_following ? (
-          <button onClick={onUnfollow} disabled={requesting} className="flex-1 bg-neutral-800 border border-neutral-700 disabled:opacity-50 text-neutral-300 text-sm font-medium py-2 rounded-xl transition-colors">Following</button>
-        ) : profile.pending_request_id ? (
-          <button onClick={onCancel} disabled={requesting} className="flex-1 bg-neutral-800 border border-neutral-700 disabled:opacity-50 text-neutral-300 text-sm font-medium py-2 rounded-xl transition-colors">Request Sent</button>
-        ) : (
-          <button onClick={onSend} disabled={requesting} className="flex-1 bg-primary-600 hover:bg-primary-500 disabled:opacity-50 text-white text-sm font-medium py-2 rounded-xl transition-colors">
-            {profile.profile_visibility === "public" ? "Follow" : profile.is_followed_by_them ? "Add back" : "Add Friend"}
-          </button>
-        )
-      )}
-      {user && (
-        <button onClick={onOpenMenu} className="w-9 h-9 flex items-center justify-center rounded-xl border border-neutral-700 text-neutral-500">
-          <DotsIcon />
-        </button>
-      )}
-    </div>
-  );
-}
-
-function Spinner() {
-  return <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />;
-}
-function CheckIcon() {
-  return (
-    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-    </svg>
-  );
-}
-function XIcon() {
-  return (
-    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-    </svg>
-  );
-}
-function PlusIcon() {
-  return (
-    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-    </svg>
-  );
-}
-function DotsIcon() {
-  return (
-    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-      <circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" />
-    </svg>
-  );
-}
-function LockIcon() {
-  return (
-    <svg className="w-6 h-6 text-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
-    </svg>
   );
 }

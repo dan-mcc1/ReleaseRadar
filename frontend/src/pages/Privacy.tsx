@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { usePageTitle } from "../hooks/usePageTitle";
+import { PageHeader } from "../components/ui";
 
 const EFFECTIVE_DATE = "June 2, 2026";
 
@@ -98,7 +99,7 @@ const SECTIONS = [
             moderate the community per our{" "}
             <Link
               to="/community-guidelines"
-              className="text-amber-400 hover:underline"
+              className="text-neutral-200 underline hover:text-primary-300"
             >
               Community Guidelines
             </Link>
@@ -255,14 +256,14 @@ const SECTIONS = [
     body: (
       <>
         Privacy questions, data requests, or concerns? Reach out via the{" "}
-        <Link to="/feedback" className="text-amber-400 hover:underline">
+        <Link to="/feedback" className="text-neutral-200 underline hover:text-primary-300">
           feedback page
         </Link>
         {/* {" "}
         or email{" "}
         <a
           href="mailto:privacy@releaseradar.co"
-          className="text-amber-400 hover:underline"
+          className="text-neutral-200 underline hover:text-primary-300"
         >
           privacy@releaseradar.co
         </a> */}
@@ -277,15 +278,16 @@ export default function Privacy() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-12">
-      <div className="mb-10">
-        <h1 className="text-3xl font-bold text-white mb-3">Privacy Policy</h1>
-        <p className="text-neutral-500 text-sm">Effective {EFFECTIVE_DATE}</p>
-      </div>
+      <PageHeader
+        className="mb-10"
+        title="Privacy Policy"
+        description={`Effective ${EFFECTIVE_DATE}`}
+      />
 
       <div className="space-y-8">
         {SECTIONS.map((section) => (
           <section key={section.title}>
-            <h2 className="text-white font-semibold mb-2">{section.title}</h2>
+            <h2 className="text-title font-semibold text-white mb-2">{section.title}</h2>
             <div className="text-neutral-400 text-sm leading-relaxed">
               {section.body}
             </div>

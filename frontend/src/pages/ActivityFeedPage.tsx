@@ -11,6 +11,23 @@ import {
   useDeleteRecommendation,
 } from "../hooks/api/useRecommendations";
 import { useBulkWatchStatus } from "../hooks/api/useWatchStatus";
+import {
+  Button,
+  ButtonLink,
+  Card,
+  CheckIcon,
+  Chip,
+  CloseIcon,
+  EmptyState,
+  IconButton,
+  PageHeader,
+  PlayIcon,
+  PlusIcon,
+  SectionHeader,
+  StarIcon,
+  cx,
+  focusRing,
+} from "../components/ui";
 
 type StatusMap = Record<string, { status: WatchStatus; rating: number | null }>;
 
@@ -146,20 +163,20 @@ function InitialsAvatar({ name, size = 36 }: { name: string; size?: number }) {
 
 const BADGE_MAP: Record<
   ActivityItem["activity_type"],
-  { icon: string; label: string; color: string }
+  { Icon: typeof CheckIcon; label: string; color: string }
 > = {
-  watched: { icon: "✓", label: "watched", color: "#4ade80" },
+  watched: { Icon: CheckIcon, label: "watched", color: "text-success-400" },
   currently_watching: {
-    icon: "▶",
+    Icon: PlayIcon,
     label: "started watching",
-    color: "#a78bfa",
+    color: "text-highlight-400",
   },
-  want_to_watch: { icon: "+", label: "added to watchlist", color: "#34d399" },
-  rated: { icon: "★", label: "rated", color: "#fbbf24" },
+  want_to_watch: { Icon: PlusIcon, label: "added to watchlist", color: "text-neutral-400" },
+  rated: { Icon: StarIcon, label: "rated", color: "text-warning-400" },
   episode_watched: {
-    icon: "▶",
+    Icon: PlayIcon,
     label: "watched an episode of",
-    color: "#34d399",
+    color: "text-neutral-400",
   },
 };
 
@@ -197,7 +214,7 @@ function ActivityCard({
   const badge = BADGE_MAP[item.activity_type];
 
   return (
-    <div className="p-3.5 bg-neutral-800 border border-neutral-700 rounded-xl flex flex-col gap-2.5">
+    <div className="py-3.5 flex flex-col gap-2.5">
       {/* Row 1: avatar + name + action */}
       <div className="flex items-center gap-2">
         <InitialsAvatar name={nameLabel} size={26} />
@@ -211,10 +228,8 @@ function ActivityCard({
             {nameLabel}
           </Link>
         )}
-        <span style={{ color: badge.color }} className="text-xs leading-none">
-          {badge.icon}
-        </span>
-        <span className="text-xs text-neutral-400">{badge.label}</span>
+        <badge.Icon className={cx("w-3.5 h-3.5", badge.color)} />
+        <span className="text-caption text-neutral-400">{badge.label}</span>
       </div>
 
       {/* Row 2: poster + title + watch button */}
@@ -238,17 +253,15 @@ function ActivityCard({
           {item.activity_type === "episode_watched" &&
             item.season_number != null &&
             item.episode_number != null && (
-              <span className="font-mono text-[11px] text-neutral-500">
-                S{String(item.season_number).padStart(2, "0")}E{String(item.episode_number).padStart(2, "0")}
+              <span className="font-mono text-caption text-neutral-500">
+                S{item.season_number} E{item.episode_number}
               </span>
             )}
           {(item.activity_type === "rated" || item.activity_type === "watched") &&
             item.rating != null && (
-              <span
-                className="inline-block font-mono text-[11px] font-semibold px-1.5 py-0.5 rounded mt-0.5"
-                style={{ background: "rgba(251,191,36,0.12)", color: "#fbbf24" }}
-              >
-                ★ {item.rating}
+              <span className="inline-flex items-center gap-1 text-caption font-semibold px-1.5 py-0.5 rounded mt-0.5 bg-warning-400/10 text-warning-400 tabular">
+                <StarIcon className="w-3 h-3" />
+                {item.rating}
               </span>
             )}
         </Link>
@@ -267,9 +280,9 @@ function ActivityCard({
       </div>
 
       {/* Row 3: timestamp */}
-      <div className="font-mono text-[10.5px] text-neutral-600 tracking-wide uppercase">
+      <time dateTime={item.created_at} className="text-caption text-neutral-500">
         {timeAgo(item.created_at)}
-      </div>
+      </time>
     </div>
   );
 }
@@ -286,18 +299,21 @@ function RecsInboxPanel({
   unreadCount: number;
 }) {
   return (
-    <div className="bg-neutral-800 border border-neutral-700 rounded-2xl p-4">
-      <div className="flex items-center justify-between mb-3.5">
-        <span className="font-mono text-[10px] tracking-[0.15em] text-neutral-500 uppercase">
-          Inbox{unreadCount > 0 ? ` · ${unreadCount} new` : ""}
-        </span>
-        <Link
-          to="/activity?tab=recommendations"
-          className="text-xs text-primary-400 font-medium hover:underline"
-        >
-          See all
-        </Link>
-      </div>
+    <Card padding="sm">
+      <SectionHeader
+        as="h3"
+        title="Inbox"
+        note={unreadCount > 0 ? `${unreadCount} new` : undefined}
+        action={
+          <Link
+            to="/activity?tab=recommendations"
+            className="text-label text-neutral-300 hover:text-primary-300"
+          >
+            See all
+          </Link>
+        }
+        className="mb-3.5"
+      />
 
       {items.length === 0 ? (
         <p className="text-xs text-neutral-500 text-center py-4">
@@ -318,16 +334,8 @@ function RecsInboxPanel({
               >
                 {!rec.is_read && (
                   <span
-                    className="absolute right-0"
-                    style={{
-                      top: i > 0 ? 18 : 4,
-                      width: 7,
-                      height: 7,
-                      borderRadius: "50%",
-                      background: "#10b981",
-                      boxShadow: "0 0 8px #10b98180",
-                      display: "block",
-                    }}
+                    className="absolute right-0 size-[7px] rounded-full bg-primary-500"
+                    style={{ top: i > 0 ? 18 : 4 }}
                   />
                 )}
                 <div className="flex gap-2.5">
@@ -355,7 +363,7 @@ function RecsInboxPanel({
                       <span className="text-neutral-400">
                         {rec.sender_username?.split(" ")[0]}
                       </span>
-                      <span className="text-neutral-600 font-mono text-[10px]">
+                      <span className="text-neutral-500 text-caption">
                         · {timeAgo(rec.created_at)}
                       </span>
                     </div>
@@ -372,32 +380,20 @@ function RecsInboxPanel({
                       </p>
                     )}
                   </div>
-                  <button
+                  <IconButton
+                    size="sm"
+                    label="Dismiss recommendation"
+                    icon={<CloseIcon className="w-3.5 h-3.5" />}
                     onClick={() => onDelete(rec.id)}
-                    title="Dismiss"
-                    className="text-neutral-600 hover:text-error-400 transition-colors self-start mt-0.5 flex-shrink-0"
-                  >
-                    <svg
-                      className="w-3.5 h-3.5"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth={2}
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M6 18L18 6M6 6l12 12"
-                      />
-                    </svg>
-                  </button>
+                    className="self-start flex-shrink-0"
+                  />
                 </div>
               </div>
             );
           })}
         </div>
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -425,39 +421,20 @@ function WeekStatsPanel({ friendItems }: { friendItems: ActivityItem[] }) {
   }, [friendItems]);
 
   return (
-    <div className="bg-neutral-800 border border-neutral-700 rounded-2xl p-4">
-      <div className="font-mono text-[10px] tracking-[0.15em] text-neutral-500 uppercase mb-3.5">
-        This week
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="bg-neutral-900 rounded-xl p-3">
-          <div className="text-[10px] font-mono text-neutral-500 uppercase tracking-wide mb-1">
-            Friends active
-          </div>
-          <div className="text-xl font-semibold text-neutral-100">
-            {uniqueFriends}
-          </div>
-          <div className="text-[11px] text-neutral-500 mt-0.5">this week</div>
-        </div>
-        <div className="bg-neutral-900 rounded-xl p-3">
-          <div className="text-[10px] font-mono text-neutral-500 uppercase tracking-wide mb-1">
-            Top title
-          </div>
-          {topTitle ? (
-            <>
-              <div className="text-sm font-semibold text-neutral-100 line-clamp-1">
-                {topTitle[0]}
-              </div>
-              <div className="text-[11px] text-neutral-500 mt-0.5">
-                {topTitle[1]} {topTitle[1] === 1 ? "activity" : "activities"}
-              </div>
-            </>
-          ) : (
-            <div className="text-sm text-neutral-500">—</div>
-          )}
-        </div>
-      </div>
-    </div>
+    <section>
+      <SectionHeader as="h3" title="This week" className="mb-2" />
+      <p className="text-body text-neutral-300">
+        <span className="tabular">{uniqueFriends}</span>{" "}
+        {uniqueFriends === 1 ? "friend" : "friends"} active
+        {topTitle && (
+          <>
+            . Most active title: <span className="text-neutral-100">{topTitle[0]}</span> (
+            <span className="tabular">{topTitle[1]}</span>{" "}
+            {topTitle[1] === 1 ? "activity" : "activities"})
+          </>
+        )}
+      </p>
+    </section>
   );
 }
 
@@ -527,18 +504,15 @@ export default function ActivityFeedPage() {
 
   return (
     <div className="w-full px-6 lg:px-10 py-7">
-      {/* Header */}
-      <div className="mb-5">
-        <div className="font-mono text-[11px] tracking-[0.12em] text-neutral-500 uppercase mb-2">
-          Activity
-          {unreadCount > 0 &&
-            ` · ${unreadCount} new recommendation${unreadCount !== 1 ? "s" : ""}`}
-        </div>
-        <h1 className="text-4xl font-light text-neutral-100 tracking-tight leading-none">
-          What&rsquo;s{" "}
-          <em className="not-italic font-semibold text-primary-400">moving</em>
-        </h1>
-      </div>
+      <PageHeader
+        title={<>What&rsquo;s moving</>}
+        description={
+          unreadCount > 0
+            ? `${unreadCount} new recommendation${unreadCount !== 1 ? "s" : ""}`
+            : undefined
+        }
+        className="mb-5"
+      />
 
       {/* Tabs */}
       <div className="flex gap-3 sm:gap-6 border-b border-neutral-700 mb-6">
@@ -570,16 +544,16 @@ export default function ActivityFeedPage() {
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`flex items-center gap-1.5 py-3 text-xs sm:text-sm font-medium border-b-2 -mb-px transition-colors ${
+            className={`flex items-center gap-1.5 py-3 text-label font-medium border-b-2 -mb-px transition-colors ${focusRing} ${
               tab === t.id
                 ? "border-primary-500 text-neutral-100"
-                : "border-transparent text-neutral-500 hover:text-neutral-300"
+                : "border-transparent text-neutral-400 hover:text-neutral-200"
             }`}
           >
             <span className="sm:hidden">{t.shortLabel}</span>
             <span className="hidden sm:inline">{t.label}</span>
             <span
-              className={`font-mono text-[10.5px] font-semibold px-1.5 py-0.5 rounded ${
+              className={`tabular text-caption font-semibold px-1.5 py-0.5 rounded ${
                 t.badge
                   ? "bg-primary-500 text-neutral-950"
                   : "bg-neutral-700 text-neutral-400"
@@ -600,45 +574,38 @@ export default function ActivityFeedPage() {
             (friendsLoading && tab === "friends") ? (
               <Spinner />
             ) : filteredGroups.length === 0 ? (
-              <div className="text-center py-20 text-neutral-400">
-                <p className="text-base mb-2">
-                  {filter !== "all"
+              <EmptyState
+                title={
+                  filter !== "all"
                     ? "No matching activity"
                     : tab === "friends"
                       ? "No friend activity yet"
-                      : "No activity yet"}
-                </p>
-                <p className="text-sm text-neutral-500">
-                  {tab === "friends" ? (
-                    <>
-                      Add friends to see what they&rsquo;re watching.{" "}
-                      <Link
-                        to="/friends"
-                        className="text-primary-400 hover:underline"
-                      >
-                        Find friends →
-                      </Link>
-                    </>
-                  ) : (
-                    "Start tracking shows and movies to see your history here."
-                  )}
-                </p>
-              </div>
+                      : "No activity yet"
+                }
+                description={
+                  tab === "friends"
+                    ? "Add friends to see what they’re watching."
+                    : "Start tracking shows and movies to see your history here."
+                }
+                action={
+                  tab === "friends" ? (
+                    <ButtonLink to="/friends" variant="primary">
+                      Find friends
+                    </ButtonLink>
+                  ) : undefined
+                }
+              />
             ) : (
               filteredGroups.map((group) => (
                 <div key={group.label} className="mb-9">
                   {/* Day header */}
-                  <div className="flex items-baseline gap-3.5 mb-4">
-                    <h2 className="text-2xl font-light text-neutral-100 tracking-tight flex-shrink-0">
-                      {group.label}
-                    </h2>
-                    <span className="font-mono text-[10.5px] text-neutral-600 tracking-[0.08em] uppercase flex-shrink-0">
-                      {group.dateStr.toUpperCase()}
-                    </span>
-                    <div className="flex-1 h-px bg-neutral-700" />
-                  </div>
+                  <SectionHeader
+                    title={group.label}
+                    note={group.dateStr || undefined}
+                    divider
+                  />
                   {/* Items */}
-                  <div className="flex flex-col gap-2.5">
+                  <div className="flex flex-col divide-y divide-neutral-800">
                     {group.items.map((item) => (
                       <ActivityCard
                         key={item.id}
@@ -665,26 +632,20 @@ export default function ActivityFeedPage() {
             <WeekStatsPanel friendItems={friendItems} />
 
             {/* Filters */}
-            <div className="bg-neutral-800 border border-neutral-700 rounded-2xl p-4">
-              <div className="font-mono text-[10px] tracking-[0.15em] text-neutral-500 uppercase mb-3">
-                Filters
-              </div>
+            <section>
+              <SectionHeader as="h3" title="Filters" className="mb-3" />
               <div className="flex flex-wrap gap-1.5">
                 {FILTERS.map(({ label, value }) => (
-                  <button
+                  <Chip
                     key={value}
+                    pressed={filter === value}
                     onClick={() => setFilter(value)}
-                    className={`px-2.5 py-1 text-xs font-medium rounded-full border transition-colors ${
-                      filter === value
-                        ? "bg-primary-500/20 text-primary-400 border-primary-500/40"
-                        : "bg-neutral-900 text-neutral-500 border-neutral-700 hover:text-neutral-300"
-                    }`}
                   >
                     {label}
-                  </button>
+                  </Chip>
                 ))}
               </div>
-            </div>
+            </section>
           </div>
         </div>
       ) : (
@@ -693,20 +654,15 @@ export default function ActivityFeedPage() {
           {recsLoading ? (
             <Spinner />
           ) : recommendations.length === 0 ? (
-            <div className="text-center py-20 text-neutral-400">
-              <p className="text-base mb-2">No recommendations yet</p>
-              <p className="text-sm text-neutral-500">
-                When a friend recommends something, it will appear here. Visit a
-                friend&rsquo;s profile to send one, or{" "}
-                <Link
-                  to="/friends"
-                  className="text-primary-400 hover:underline"
-                >
-                  find friends
-                </Link>{" "}
-                to get started.
-              </p>
-            </div>
+            <EmptyState
+              title="No recommendations yet"
+              description="When a friend recommends something, it will appear here. Visit a friend’s profile to send one."
+              action={
+                <ButtonLink to="/friends" variant="primary">
+                  Find friends
+                </ButtonLink>
+              }
+            />
           ) : (
             <div className="flex flex-col gap-3">
               {recommendations.map((rec) => {
@@ -714,7 +670,7 @@ export default function ActivityFeedPage() {
                 return (
                   <div
                     key={rec.id}
-                    className={`relative flex items-start gap-4 border rounded-xl p-4 transition-colors ${
+                    className={`relative flex items-start gap-4 border rounded-surface p-4 transition-colors ${
                       rec.is_read
                         ? "bg-neutral-800 border-neutral-700"
                         : "bg-neutral-800 border-primary-600/50 ring-1 ring-primary-600/20"
@@ -738,21 +694,18 @@ export default function ActivityFeedPage() {
 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 mb-1">
-                        <span className="text-xs font-bold text-pink-400">
-                          ♥
-                        </span>
-                        <span className="text-xs text-neutral-400">
-                          recommended by
+                        <span className="text-caption text-neutral-400">
+                          Recommended by
                         </span>
                         <Link
                           to={`/user/${rec.sender_username}`}
-                          className="text-xs font-semibold text-primary-400 hover:underline"
+                          className="text-caption font-semibold text-neutral-100 hover:text-primary-300"
                         >
                           @{rec.sender_username ?? "someone"}
                         </Link>
                         {!rec.is_read && (
-                          <span className="ml-1 bg-primary-600 text-neutral-950 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-                            NEW
+                          <span className="ml-1 bg-primary-500 text-neutral-950 text-caption font-semibold px-1.5 py-0.5 rounded-full">
+                            New
                           </span>
                         )}
                       </div>
@@ -769,39 +722,28 @@ export default function ActivityFeedPage() {
                         </p>
                       )}
                       <div className="flex items-center gap-2 mt-1.5">
-                        <span className="font-mono text-[10.5px] text-neutral-600">
+                        <time dateTime={rec.created_at} className="text-caption text-neutral-500">
                           {timeAgo(rec.created_at)}
-                        </span>
+                        </time>
                         {!rec.is_read && (
-                          <button
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={() => markRead(rec.id)}
-                            className="text-xs text-neutral-500 hover:text-neutral-300 underline"
                           >
                             Mark read
-                          </button>
+                          </Button>
                         )}
                       </div>
                     </div>
 
-                    <button
+                    <IconButton
+                      size="sm"
+                      label="Delete recommendation"
+                      icon={<CloseIcon className="w-4 h-4" />}
                       onClick={() => deleteRec(rec.id)}
-                      title="Delete recommendation"
-                      className="absolute top-2 right-2 text-neutral-600 hover:text-error-400 transition-colors"
-                    >
-                      <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth={2}
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M6 18L18 6M6 6l12 12"
-                        />
-                      </svg>
-                    </button>
+                      className="absolute top-2 right-2"
+                    />
 
                     {statusMap[`${rec.content_type}:${rec.content_id}`] !==
                       undefined && (

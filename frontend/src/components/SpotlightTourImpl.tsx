@@ -257,9 +257,9 @@ export default function SpotlightTourImpl() {
         allowClose: true,
         showProgress: true,
         popoverClass: "rr-tour-popover",
-        nextBtnText: "Next →",
-        prevBtnText: "← Back",
-        doneBtnText: isLastGroup ? "Finish ✓" : "Next →",
+        nextBtnText: "Next",
+        prevBtnText: "Back",
+        doneBtnText: isLastGroup ? "Finish" : "Next",
         onHighlighted: updateGlobalProgress,
         onNextClick: () => {
           const current = driverRef.current?.getActiveIndex() ?? 0;
@@ -344,7 +344,7 @@ export default function SpotlightTourImpl() {
             </div>
 
             <p className="text-xs text-neutral-600">
-              You can always import later from Settings → Account
+              You can always import later from Settings, under Account
             </p>
           </div>
         </div>

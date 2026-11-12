@@ -13,6 +13,7 @@ import {
 import { useToggleEpisode } from "../../hooks/api/useEpisodes";
 import { useFriendsActivity } from "../../hooks/api/useActivity";
 import { useToast } from "../Toast";
+import { buttonClass } from "../ui";
 import {
   episodeCode,
   episodeTag,
@@ -41,13 +42,14 @@ interface Props {
   isLoading?: boolean;
 }
 
-const CARD = "bg-neutral-900 border border-neutral-800 rounded-2xl p-[18px]";
-const LABEL = "font-mono text-[11px] tracking-[0.14em] uppercase text-neutral-500";
+const CARD = "bg-neutral-900 border border-neutral-800 rounded-surface p-4";
+// Section headings inside the rail's panels.
+const LABEL = "text-label font-semibold text-neutral-200";
 const FOCUS =
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-400";
 const ROW = "flex items-center gap-3 py-2 border-t border-neutral-800 min-w-0";
 const DETAIL_ROW = "flex items-start gap-3 py-2.5 border-t border-neutral-800 min-w-0";
-const OVERVIEW = "mt-1 text-[13px] leading-snug text-neutral-400 line-clamp-3";
+const OVERVIEW = "mt-1 text-label text-neutral-400 line-clamp-3";
 const TITLE = `block truncate rounded-sm text-sm font-semibold text-neutral-100 hover:text-primary-300 transition-colors ${FOCUS}`;
 const SUB = "truncate text-xs text-neutral-400";
 const SUB_LINK = `rounded-sm hover:text-neutral-100 transition-colors ${FOCUS}`;
@@ -232,7 +234,7 @@ function Thumb({
 function TagChip({ tag }: { tag: EpisodeTag }) {
   return (
     <span
-      className={`flex-none rounded-full px-2 py-0.5 font-mono text-[10px] font-semibold tracking-[0.06em] uppercase ${TAG_TONES[tag.tone]}`}
+      className={`flex-none rounded-full px-2 py-0.5 text-caption font-semibold ${TAG_TONES[tag.tone]}`}
     >
       {tag.label}
     </span>
@@ -519,7 +521,7 @@ function ReleaseRow({ items, detailed }: { items: CalendarItem[]; detailed: bool
           type="button"
           onClick={() => setExpanded((v) => !v)}
           aria-expanded={expanded}
-          className={`self-start py-2 rounded-sm font-mono text-xs text-neutral-400 hover:text-primary-300 transition-colors cursor-pointer ${FOCUS}`}
+          className={`self-start py-2 rounded-sm text-caption font-medium text-neutral-400 hover:text-neutral-100 transition-colors cursor-pointer ${FOCUS}`}
         >
           {expanded ? "Show fewer" : `Show ${known.length - EPISODES_SHOWN} more`}
         </button>
@@ -593,7 +595,7 @@ function UpcomingCard({ days }: { days: DayItem[] }) {
       ) : (
         days.map((day) => (
           <div key={day.date.toISOString()}>
-            <h3 className="mt-3 mb-1.5 font-mono text-[11px] tracking-[0.08em] uppercase text-neutral-300">
+            <h3 className="mt-3 mb-1.5 text-caption font-semibold text-neutral-400 tabular">
               {weekdayFormatter.format(day.date)} {day.date.getDate()}
             </h3>
             <ReleaseRows items={day.items ?? []} detailed={false} />
@@ -751,9 +753,9 @@ export default function CalendarSideRail({
         <div className="flex items-start justify-between gap-3">
           <h2
             id="calendar-day-heading"
-            className="text-xl font-medium italic leading-tight text-primary-400"
+            className="text-title font-semibold text-neutral-50"
           >
-            {isToday ? "On the radar today" : selectedDayFormatter.format(selectedDate)}
+            {isToday ? "Today" : selectedDayFormatter.format(selectedDate)}
           </h2>
           {!isToday && (
             <button
@@ -772,10 +774,10 @@ export default function CalendarSideRail({
             <RowSkeleton />
           </div>
         ) : dayItems.length === 0 ? (
-          <p className="mt-1 text-[13px] text-neutral-400">Nothing scheduled.</p>
+          <p className="mt-1 text-label text-neutral-400">Nothing scheduled.</p>
         ) : (
           <>
-            <p className="mt-1 mb-2.5 text-[13px] text-neutral-400">
+            <p className="mt-1 mb-2.5 text-label text-neutral-400">
               {summarize(dayItems)}
             </p>
             <ReleaseRows items={dayItems} detailed />
@@ -800,7 +802,7 @@ export default function CalendarSideRail({
           <button
             type="button"
             onClick={onSyncCalendar}
-            className={`flex-none h-10 px-4 rounded-xl border border-primary-500/30 bg-primary-500/15 text-[13px] font-medium text-primary-300 hover:bg-primary-500/25 transition-colors cursor-pointer ${FOCUS}`}
+            className={buttonClass("secondary")}
           >
             Connect
           </button>

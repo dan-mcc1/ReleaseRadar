@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Button } from "./ui";
 import { useSubmitReport, type ReportReason, type SubmitReportPayload } from "../hooks/api/useModeration";
 
 const REASONS: { value: ReportReason; label: string }[] = [
@@ -45,7 +46,7 @@ export default function ReportModal({ reportedType, reportedId, label, onClose }
       onClick={onClose}
     >
       <div
-        className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 w-full max-w-sm"
+        className="bg-neutral-900 border border-neutral-800 rounded-surface p-6 w-full max-w-sm"
         onClick={(e) => e.stopPropagation()}
       >
         {done ? (
@@ -53,12 +54,9 @@ export default function ReportModal({ reportedType, reportedId, label, onClose }
             <p className="text-neutral-200 text-sm mb-5">
               Report submitted. Thank you for letting us know.
             </p>
-            <button
-              onClick={onClose}
-              className="w-full bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-sm py-2.5 rounded-xl"
-            >
+            <Button onClick={onClose} className="w-full">
               Close
-            </button>
+            </Button>
           </>
         ) : (
           <>
@@ -79,7 +77,7 @@ export default function ReportModal({ reportedType, reportedId, label, onClose }
               ))}
             </div>
             <div className="mb-5">
-              <label className="text-[11px] text-neutral-500 block mb-1.5 font-mono uppercase tracking-wider">
+              <label className="text-caption text-neutral-400 block mb-1.5">
                 Additional details (optional)
               </label>
               <textarea
@@ -88,24 +86,22 @@ export default function ReportModal({ reportedType, reportedId, label, onClose }
                 rows={3}
                 maxLength={500}
                 placeholder="Describe the issue…"
-                className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2.5 text-sm text-neutral-200 placeholder-neutral-700 outline-none focus:border-neutral-600 resize-none"
+                className="w-full bg-neutral-950 border border-neutral-800 rounded-control px-3 py-2.5 text-body text-neutral-200 placeholder-neutral-600 hover:border-neutral-700 focus:outline-none focus:border-neutral-500 resize-none"
               />
             </div>
             {error && <p className="text-error-400 text-sm mb-2">{error}</p>}
             <div className="flex gap-2">
-              <button
-                onClick={onClose}
-                className="flex-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-sm py-2.5 rounded-xl"
-              >
+              <Button onClick={onClose} className="flex-1">
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="danger"
                 onClick={send}
                 disabled={submit.isPending}
-                className="flex-1 bg-error-600 hover:bg-error-500 disabled:opacity-50 text-white text-sm py-2.5 rounded-xl font-medium"
+                className="flex-1"
               >
                 {submit.isPending ? "Submitting…" : "Report"}
-              </button>
+              </Button>
             </div>
           </>
         )}

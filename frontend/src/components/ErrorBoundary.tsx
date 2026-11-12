@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { reportError } from "../sentry";
+import { Button, EmptyState } from "./ui";
 
 type Props = {
   children: ReactNode;
@@ -138,52 +139,31 @@ export class ErrorBoundary extends Component<Props, State> {
 
     return (
       <div className="mx-auto max-w-3xl px-4 py-6">
-        <div className="flex items-start gap-3 rounded-xl border border-amber-500/40 bg-amber-500/5 p-4">
-          <svg
-            className="mt-0.5 h-5 w-5 shrink-0 text-amber-400"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"
-            />
-          </svg>
+        <div>
+          <EmptyState
+            className="py-10"
+            title="This section couldn't load"
+            description="The rest of the page is still usable. Try again, or reload if it keeps happening."
+            action={
+              <>
+                <Button onClick={this.handleReset}>Try again</Button>
+                <Button variant="primary" onClick={this.handleReload}>
+                  Reload page
+                </Button>
+              </>
+            }
+          />
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-neutral-100">
-              This section couldn't load
-            </p>
-            <p className="mt-0.5 text-xs text-neutral-400">
-              The rest of the page is still usable. Try again, or reload if it keeps
-              happening.
-            </p>
-            <div className="mt-3 flex gap-2">
-              <button
-                onClick={this.handleReset}
-                className="rounded-md border border-neutral-700 px-3 py-1 text-xs font-medium text-neutral-200 hover:bg-neutral-800"
-              >
-                Try again
-              </button>
-              <button
-                onClick={this.handleReload}
-                className="rounded-md bg-neutral-100 px-3 py-1 text-xs font-medium text-neutral-900 hover:bg-white"
-              >
-                Reload page
-              </button>
-            </div>
             {isDev && error && (
               <details
                 open
-                className="mt-3 rounded-md border border-red-500/40 bg-red-500/5 p-3 text-xs"
+                className="mt-3 rounded-control border border-error-500/40 bg-error-500/5 p-3 text-caption"
               >
-                <summary className="cursor-pointer text-red-400 font-semibold">
+                <summary className="cursor-pointer text-error-400 font-semibold">
                   {error.name}: {error.message}
                 </summary>
                 {error.stack && (
-                  <pre className="mt-2 overflow-auto whitespace-pre-wrap text-red-300/80">
+                  <pre className="mt-2 overflow-auto whitespace-pre-wrap text-error-300/80">
                     {error.stack}
                   </pre>
                 )}

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
+import { CloseIcon, PlayIcon, PlusIcon, SectionHeader } from "../ui";
 import type { MediaVideo } from "../../types/media";
 
 const TYPE_ORDER: Record<string, number> = {
@@ -32,9 +33,7 @@ function VideoModal({ video, onClose }: { video: MediaVideo; onClose: () => void
           onClick={onClose}
           className="absolute -top-10 right-0 text-neutral-400 hover:text-white transition-colors flex items-center gap-1.5 text-sm"
         >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-          </svg>
+          <CloseIcon />
           Close
         </button>
         <div className="aspect-video rounded-xl overflow-hidden shadow-2xl">
@@ -67,10 +66,8 @@ function VideoThumbnail({ video, onClick, className = "flex-shrink-0 w-52" }: { 
           loading="lazy"
         />
         <div className="absolute inset-0 bg-black/30 group-hover:bg-black/10 transition-colors flex items-center justify-center">
-          <div className="w-10 h-10 rounded-full bg-black/60 flex items-center justify-center group-hover:bg-primary-600 transition-colors">
-            <svg className="w-5 h-5 text-white translate-x-0.5" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M8 5v14l11-7z" />
-            </svg>
+          <div className="w-10 h-10 rounded-full bg-black/60 flex items-center justify-center group-hover:bg-neutral-700 transition-colors">
+            <PlayIcon className="w-5 h-5 text-white translate-x-0.5" />
           </div>
         </div>
         <span className="absolute top-2 left-2 px-1.5 py-0.5 rounded text-xs font-medium bg-black/70 text-neutral-300">
@@ -109,9 +106,7 @@ export default function VideoGallery({ videos, hideTitle = false }: Props) {
   return (
     <div>
       {!hideTitle && (
-        <h2 className="text-neutral-400 text-xs uppercase tracking-wider font-semibold mb-3">
-          Videos
-        </h2>
+        <SectionHeader title="Videos" className="mb-3" />
       )}
 
       {/* Main scrolling bar */}
@@ -126,11 +121,9 @@ export default function VideoGallery({ videos, hideTitle = false }: Props) {
             onClick={() => setExpanded(true)}
             className="group flex-shrink-0 w-52 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded-xl"
           >
-            <div className="relative aspect-video rounded-xl overflow-hidden bg-neutral-800 border border-neutral-700 hover:border-primary-600/50 transition-colors flex flex-col items-center justify-center gap-1.5">
-              <div className="w-10 h-10 rounded-full bg-neutral-700 group-hover:bg-primary-600/20 flex items-center justify-center transition-colors">
-                <svg className="w-5 h-5 text-neutral-400 group-hover:text-primary-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                </svg>
+            <div className="relative aspect-video rounded-xl overflow-hidden bg-neutral-800 border border-neutral-700 hover:border-neutral-500 transition-colors flex flex-col items-center justify-center gap-1.5">
+              <div className="w-10 h-10 rounded-full bg-neutral-700 group-hover:bg-neutral-600 flex items-center justify-center transition-colors">
+                <PlusIcon className="w-5 h-5 text-neutral-400 group-hover:text-neutral-100 transition-colors" />
               </div>
               <span className="text-sm font-semibold text-neutral-300 group-hover:text-white transition-colors">
                 {overflowVideos.length} more

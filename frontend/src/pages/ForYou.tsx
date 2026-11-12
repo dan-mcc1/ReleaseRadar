@@ -7,8 +7,21 @@ import { useForYou } from "../hooks/api/useRecommendations";
 import { useUpdateWatchStatus } from "../hooks/api/useWatchActions";
 import { TrackingLimitError } from "../hooks/api/useSubscription";
 import type { WatchStatus } from "../components/WatchButton";
-import Segmented from "../components/Segmented";
-import StarIcon from "../components/icons/StarIcon";
+import {
+  BookmarkIcon,
+  Button,
+  ButtonLink,
+  CheckIcon,
+  EmptyState,
+  IconButton,
+  PageHeader,
+  PlusIcon,
+  PosterCard,
+  PosterCardSkeleton,
+  SectionHeader,
+  Segmented,
+  StarIcon,
+} from "../components/ui";
 import { useToast } from "../components/Toast";
 import { BASE_IMAGE_URL } from "../constants";
 
@@ -32,7 +45,6 @@ const GENRE_MAP: Record<number, string> = {
 };
 
 const TOP_PICKS = 3;
-const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-400";
 const POSTER_GRID =
   "grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-posters gap-x-3 gap-y-5";
 // Phones: stacked. md: the first pick leads, wide, with two below. xl: three across.
@@ -63,21 +75,9 @@ function Score({ item }: { item: RecItem }) {
   if (!item.vote_average) return null;
   return (
     <span className="inline-flex items-center gap-1">
-      <StarIcon filled className="w-3 h-3 text-yellow-400" />
-      {item.vote_average.toFixed(1)}
+      <StarIcon className="w-3 h-3 text-warning-400" />
+      <span className="tabular">{item.vote_average.toFixed(1)}</span>
     </span>
-  );
-}
-
-const PLUS = <path d="M8 3v10M3 8h10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />;
-const CHECK = <path d="M3 8.5l3.2 3.2L13 4.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />;
-const BOOKMARK = <path d="M4.5 2.5h7v11L8 11l-3.5 2.5z" fill="currentColor" />;
-
-function Glyph({ children }: { children: React.ReactNode }) {
-  return (
-    <svg viewBox="0 0 16 16" className="w-4 h-4 shrink-0" aria-hidden="true">
-      {children}
-    </svg>
   );
 }
 
@@ -100,7 +100,7 @@ function TopPick({ item, contentType, status, onSet }: PickProps) {
   const watched = status === "Watched";
 
   return (
-    <article className={`@container group relative rounded-2xl overflow-hidden bg-neutral-900 ${TOP_SHAPE}`}>
+    <article className={`@container group relative rounded-surface overflow-hidden bg-neutral-900 ${TOP_SHAPE}`}>
       {item.backdrop_path && (
         <img
           src={`${BASE_IMAGE_URL}/w780${item.backdrop_path}`}
@@ -114,22 +114,22 @@ function TopPick({ item, contentType, status, onSet }: PickProps) {
 
       <div className="absolute inset-x-0 bottom-0 p-4 @md:p-6 flex flex-wrap items-end gap-x-4 gap-y-3">
         <div className="flex-1 basis-60 min-w-0">
-          <h3 className="text-xl @md:text-2xl @2xl:text-[2rem] font-bold leading-tight tracking-tight text-white text-balance">
+          <h3 className="text-title @md:text-heading @2xl:text-display font-semibold leading-tight text-white text-balance">
             {/* The link covers the whole card; the buttons sit above it. */}
             <Link
               to={`/${contentType}/${item.id}`}
-              className="after:absolute after:inset-0 after:rounded-2xl focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:-outline-offset-2 focus-visible:after:outline-primary-400"
+              className="after:absolute after:inset-0 after:rounded-surface focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:-outline-offset-2 focus-visible:after:outline-primary-400"
             >
               {title}
             </Link>
           </h3>
           {because.length > 0 && (
-            <p className="mt-1.5 text-sm @md:text-[15px] text-neutral-100 line-clamp-1">
+            <p className="mt-1.5 text-body text-neutral-100 line-clamp-1">
               Because you watched {listTitles(because)}
             </p>
           )}
           {meta.length > 0 && (
-            <p className="mt-1.5 flex flex-wrap items-center gap-x-2 text-[13px] text-neutral-300">
+            <p className="mt-1.5 flex flex-wrap items-center gap-x-2 text-label text-neutral-300">
               {meta.map((part, i) => (
                 <span key={i} className="inline-flex items-center gap-2">
                   {i > 0 && <span aria-hidden="true">·</span>}
@@ -141,139 +141,82 @@ function TopPick({ item, contentType, status, onSet }: PickProps) {
         </div>
 
         <div className="relative flex flex-wrap gap-2">
-          <button
-            type="button"
+          <Button
+            variant={listed ? "secondary" : "primary"}
             aria-pressed={listed}
             onClick={() => onSet("Want To Watch")}
-            className={`inline-flex items-center gap-2 h-10 px-3.5 rounded-xl border text-[13px] font-semibold whitespace-nowrap transition-colors ${FOCUS} ${
-              listed
-                ? "bg-neutral-950/70 border-primary-400 text-primary-200"
-                : "bg-primary-500 border-primary-500 text-primary-950 hover:bg-primary-400"
-            }`}
+            icon={listed ? <BookmarkIcon filled className="w-4 h-4 text-primary-300" /> : <PlusIcon />}
           >
-            <Glyph>{listed ? BOOKMARK : PLUS}</Glyph>
             {listed ? "On watchlist" : "Add to watchlist"}
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
             aria-pressed={watched}
             onClick={() => onSet("Watched")}
-            className={`inline-flex items-center gap-2 h-10 px-3.5 rounded-xl border text-[13px] font-semibold whitespace-nowrap transition-colors ${FOCUS} ${
-              watched
-                ? "bg-primary-500/20 border-primary-400 text-primary-200"
-                : "bg-neutral-950/70 border-white/35 text-neutral-50 hover:border-white/70"
-            }`}
+            icon={<CheckIcon className={watched ? "w-4 h-4 text-primary-300" : "w-4 h-4"} />}
           >
-            <Glyph>{CHECK}</Glyph>
-            Watched
-          </button>
+            {watched ? "Watched" : "Mark watched"}
+          </Button>
         </div>
       </div>
     </article>
   );
 }
 
-function QuickButton({
-  label,
-  pressed,
-  onClick,
-  children,
-}: {
-  label: string;
-  pressed: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      title={label}
-      aria-label={label}
-      aria-pressed={pressed}
-      onClick={onClick}
-      className={`w-9 h-9 flex items-center justify-center rounded-full border backdrop-blur-sm transition-colors ${FOCUS} ${
-        pressed
-          ? "bg-primary-500 border-primary-500 text-primary-950"
-          : "bg-neutral-950/85 border-white/30 text-neutral-50 hover:border-primary-400 hover:text-primary-300"
-      }`}
-    >
-      <Glyph>{children}</Glyph>
-    </button>
-  );
-}
-
-function PosterCard({ item, contentType, status, onSet }: PickProps) {
+function PickCard({ item, contentType, status, onSet }: PickProps) {
   const title = getTitle(item);
   const genre = getGenre(item);
-  const href = `/${contentType}/${item.id}`;
   const listed = status === "Want To Watch";
   const watched = status === "Watched";
 
   return (
-    <div className="flex flex-col min-w-0">
-      <div className="relative aspect-[2/3] rounded-xl overflow-hidden bg-neutral-800 border border-white/10 hover:border-white/40 transition-colors">
-        <Link to={href} tabIndex={-1} aria-hidden="true" className="block w-full h-full">
-          {item.poster_path ? (
-            <img
-              src={`${BASE_IMAGE_URL}/w342${item.poster_path}`}
-              alt=""
-              loading="lazy"
-              className="w-full h-full object-cover"
-            />
-          ) : (
-            <span className="w-full h-full flex items-center justify-center p-2 text-center text-xs text-neutral-400">
-              {title}
-            </span>
-          )}
-        </Link>
-        <div className="absolute right-1.5 bottom-1.5 flex gap-1.5">
-          <QuickButton
+    <PosterCard
+      to={`/${contentType}/${item.id}`}
+      title={title}
+      posterPath={item.poster_path}
+      subtitle={
+        (genre || !!item.vote_average) && (
+          <span className="inline-flex items-center gap-1.5">
+            {genre}
+            {genre && !!item.vote_average && <span aria-hidden="true">·</span>}
+            <Score item={item} />
+          </span>
+        )
+      }
+      actions={
+        <>
+          <IconButton
             label={listed ? `Remove ${title} from watchlist` : `Add ${title} to watchlist`}
+            icon={listed ? <BookmarkIcon filled /> : <PlusIcon />}
+            variant="overlay"
+            size="touch"
             pressed={listed}
             onClick={() => onSet("Want To Watch")}
-          >
-            {listed ? BOOKMARK : PLUS}
-          </QuickButton>
-          <QuickButton
+          />
+          <IconButton
             label={watched ? `Unmark ${title} as watched` : `Mark ${title} as watched`}
+            icon={<CheckIcon />}
+            variant="overlay"
+            size="touch"
             pressed={watched}
             onClick={() => onSet("Watched")}
-          >
-            {CHECK}
-          </QuickButton>
-        </div>
-      </div>
-      <Link
-        to={href}
-        className={`mt-2 text-[13px] font-semibold leading-tight text-neutral-100 hover:text-primary-300 truncate rounded ${FOCUS}`}
-      >
-        {title}
-      </Link>
-      {(genre || !!item.vote_average) && (
-        <span className="mt-0.5 flex items-center gap-1.5 text-xs text-neutral-400 truncate">
-          {genre}
-          {genre && !!item.vote_average && <span aria-hidden="true">·</span>}
-          <Score item={item} />
-        </span>
-      )}
-    </div>
+          />
+        </>
+      }
+    />
   );
 }
 
 function LoadingState() {
   return (
-    <div className="mt-8 animate-pulse" aria-hidden="true">
-      <div className={TOP_GRID}>
+    <div className="flex flex-col gap-10" aria-hidden="true">
+      <div className={`${TOP_GRID} animate-pulse`}>
         {Array.from({ length: TOP_PICKS }).map((_, i) => (
-          <div key={i} className={`rounded-2xl bg-neutral-800 ${TOP_SHAPE}`} />
+          <div key={i} className={`rounded-surface bg-neutral-800 ${TOP_SHAPE}`} />
         ))}
       </div>
-      <div className={`${POSTER_GRID} mt-10`}>
+      <div className={POSTER_GRID}>
         {Array.from({ length: 12 }).map((_, i) => (
-          <div key={i} className="flex flex-col gap-2">
-            <div className="aspect-[2/3] rounded-xl bg-neutral-800" />
-            <div className="h-3 bg-neutral-800 rounded w-3/4" />
-          </div>
+          <PosterCardSkeleton key={i} />
         ))}
       </div>
     </div>
@@ -339,67 +282,70 @@ export default function ForYou() {
 
   if (!currentUser) {
     return (
-      <div className="flex flex-col items-center justify-center py-32 text-center px-4">
-        <p className="text-neutral-300 font-medium mb-2">Sign in to see recommendations</p>
-        <Link to="/signIn" className="text-primary-400 hover:text-primary-300 text-sm">
-          Sign in →
-        </Link>
-      </div>
+      <EmptyState
+        className="py-32"
+        title="Sign in to see recommendations"
+        action={
+          <ButtonLink to="/signIn" variant="primary">
+            Sign in
+          </ButtonLink>
+        }
+      />
     );
   }
 
   return (
-    <div className="w-full px-6 sm:px-10 pt-8 pb-16">
-      {/* ── Header ── */}
-      <div className="flex flex-wrap items-end gap-x-5 gap-y-4">
-        <div className="flex-1 basis-72 min-w-0">
-          <p className="font-mono text-[11px] tracking-[0.12em] uppercase text-neutral-500">
-            For you
-            {seedCount > 0 &&
-              ` · built from the ${seedCount} ${seedCount === 1 ? "title" : "titles"} on your lists`}
-          </p>
-          <h1
-            className="mt-2 text-4xl font-normal leading-tight tracking-tight text-neutral-100"
-            style={{ fontFamily: "var(--font-serif)" }}
-          >
-            Watch <em className="italic text-primary-400">next</em>
-          </h1>
-        </div>
-        <Segmented
-          label="Type"
-          value={activeTab}
-          onChange={setActiveTab}
-          options={[
-            { value: "tv", label: <>TV <span className="ml-1 tabular-nums opacity-70">{shows.length}</span></> },
-            { value: "movies", label: <>Movies <span className="ml-1 tabular-nums opacity-70">{movies.length}</span></> },
-          ]}
-        />
-      </div>
+    <div className="w-full px-6 sm:px-10 pt-6 pb-16 flex flex-col gap-8">
+      <PageHeader
+        title="Watch next"
+        description={
+          seedCount > 0
+            ? `Built from the ${seedCount} ${seedCount === 1 ? "title" : "titles"} on your lists`
+            : undefined
+        }
+        actions={
+          <Segmented
+            label="Type"
+            value={activeTab}
+            onChange={setActiveTab}
+            options={[
+              { value: "tv", label: <>TV <span className="ml-1 tabular text-neutral-400">{shows.length}</span></> },
+              { value: "movies", label: <>Movies <span className="ml-1 tabular text-neutral-400">{movies.length}</span></> },
+            ]}
+          />
+        }
+      />
 
       {isLoading && <LoadingState />}
 
       {/* ── Empty: no history ── */}
       {!isLoading && seedCount === 0 && (
-        <div className="py-24 text-center">
-          <p className="text-neutral-200 font-medium mb-1">Nothing to go on yet</p>
-          <p className="text-neutral-400 text-sm max-w-sm mx-auto">
-            Add some movies or shows to your watched list or watchlist and we'll suggest things you might like.
-          </p>
-        </div>
+        <EmptyState
+          title="Nothing to go on yet"
+          description="Add some movies or shows to your watched list or watchlist and we'll suggest things you might like."
+          action={
+            <ButtonLink to="/trending" variant="primary">
+              Browse trending
+            </ButtonLink>
+          }
+        />
       )}
 
       {/* ── Empty: no results for tab ── */}
       {!isLoading && seedCount > 0 && activeItems.length === 0 && (
-        <p className="py-20 text-center text-neutral-400 text-sm">
-          No {noun} picks right now. Try the other tab.
-        </p>
+        <EmptyState
+          title={`No ${noun} picks right now`}
+          action={
+            <Button onClick={() => setActiveTab(activeTab === "tv" ? "movies" : "tv")}>
+              {activeTab === "tv" ? "See movie picks" : "See TV picks"}
+            </Button>
+          }
+        />
       )}
 
       {!isLoading && topPicks.length > 0 && (
-        <section aria-labelledby="top-picks" className="mt-8">
-          <h2 id="top-picks" className="font-mono text-[10px] uppercase tracking-[0.12em] text-neutral-500 mb-3">
-            Top picks
-          </h2>
+        <section aria-labelledby="top-picks" className="flex flex-col gap-3">
+          <SectionHeader id="top-picks" title="Top picks" />
           <div className={TOP_GRID}>
             {topPicks.map((item) => (
               <TopPick key={item.id} {...pickProps(item)} />
@@ -409,18 +355,16 @@ export default function ForYou() {
       )}
 
       {!isLoading && morePicks.length > 0 && (
-        <section aria-labelledby="more-picks" className="mt-10">
-          <div className="flex items-baseline gap-3 pb-3 mb-4 border-b border-neutral-800">
-            <h2 id="more-picks" className="text-lg font-semibold text-neutral-100">
-              More picks
-            </h2>
-            <span className="text-[13px] text-neutral-400 tabular-nums">
-              {morePicks.length} {morePicks.length === 1 ? noun : `${noun}s`}
-            </span>
-          </div>
+        <section aria-labelledby="more-picks" className="flex flex-col gap-4">
+          <SectionHeader
+            id="more-picks"
+            title="More picks"
+            note={`${morePicks.length} ${morePicks.length === 1 ? noun : `${noun}s`}`}
+            divider
+          />
           <div className={POSTER_GRID}>
             {morePicks.map((item) => (
-              <PosterCard key={item.id} {...pickProps(item)} />
+              <PickCard key={item.id} {...pickProps(item)} />
             ))}
           </div>
         </section>

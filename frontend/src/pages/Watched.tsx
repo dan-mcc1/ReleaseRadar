@@ -12,6 +12,7 @@ import ListFilterPanel, {
 import {
   Button,
   ButtonLink,
+  Chip,
   CloseIcon,
   EmptyState,
   IconButton,
@@ -280,17 +281,6 @@ function WatchedCard({
   );
 }
 
-function Stat({ value, label, accent }: { value: string; label: string; accent?: boolean }) {
-  return (
-    <div>
-      <div className={cx("text-heading font-semibold tabular", accent ? "text-warning-400" : "text-neutral-100")}>
-        {value}
-      </div>
-      <div className="mt-0.5 text-label text-neutral-400">{label}</div>
-    </div>
-  );
-}
-
 export default function Watched() {
   usePageTitle("Watched");
   const { data, isLoading } = useWatched();
@@ -432,7 +422,13 @@ export default function Watched() {
     <div className="w-full px-6 sm:px-10 pt-6 pb-16 flex flex-col gap-6">
       <PageHeader
         title="Watched"
-        description={isLoading ? undefined : `${plural(totalCount, "title")} you've finished`}
+        description={
+          isLoading
+            ? undefined
+            : stats.average === null
+              ? `${plural(totalCount, "title")} you've finished`
+              : `${plural(totalCount, "title")} you've finished · ${stats.rated} rated, averaging ${stats.average.toFixed(1)} stars`
+        }
         actions={
           totalCount > 0 && (
             <>
@@ -485,43 +481,6 @@ export default function Watched() {
         />
       )}
 
-      {/* ── Summary ── */}
-      {totalCount > 0 && (
-        <section
-          aria-label="Summary"
-          className="flex flex-wrap items-center gap-x-14 gap-y-4 px-6 py-4 bg-neutral-900 border border-neutral-800 rounded-surface"
-        >
-          <Stat value={String(totalCount)} label="Watched" />
-          <Stat value={String(stats.rated)} label="Rated" />
-          <Stat
-            value={stats.average === null ? "—" : `★ ${stats.average.toFixed(1)}`}
-            label="Your average"
-            accent={stats.average !== null}
-          />
-          <div className="sm:ml-auto flex flex-wrap items-center gap-4">
-            <p className="text-body text-neutral-300">
-              {stats.unrated === 0 ? (
-                "Every title has a rating."
-              ) : (
-                <>
-                  <strong className="font-semibold text-neutral-100">{stats.unrated}</strong>{" "}
-                  {stats.unrated === 1 ? "title has" : "titles have"} no rating yet.
-                </>
-              )}
-            </p>
-            {(stats.unrated > 0 || unratedOnly) && (
-              <Button
-                variant={unratedOnly ? "primary" : "secondary"}
-                onClick={toggleUnratedOnly}
-                aria-pressed={unratedOnly}
-              >
-                Show unrated only
-              </Button>
-            )}
-          </div>
-        </section>
-      )}
-
       {/* ── Type and search ── */}
       {totalCount > 0 && (
         <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
@@ -540,6 +499,11 @@ export default function Watched() {
             }))}
           />
           <SearchField value={query} onChange={setQuery} label="Search watched titles" />
+          {(stats.unrated > 0 || unratedOnly) && (
+            <Chip pressed={unratedOnly} onClick={toggleUnratedOnly} count={stats.unrated}>
+              Unrated only
+            </Chip>
+          )}
         </div>
       )}
 

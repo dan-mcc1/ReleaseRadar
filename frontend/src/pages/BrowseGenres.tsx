@@ -18,6 +18,7 @@ import {
   PlusIcon,
   PosterCard,
   PosterCardSkeleton,
+  Rating,
   SectionHeader,
   Segmented,
 } from "../components/ui";
@@ -75,8 +76,8 @@ function BrowseCard({
   type: MediaType;
   /** Undefined while signed out or still loading: no buttons. */
   status: WatchStatus | undefined;
-  /** "Mystery · ★ 8.1" */
-  detail: string;
+  /** "Mystery · 8.1" */
+  detail: React.ReactNode;
 }) {
   const toast = useToast();
   const update = useUpdateWatchStatus();
@@ -140,7 +141,7 @@ function BrowseCard({
       to={`/${type}/${item.id}`}
       title={title}
       posterPath={item.poster_path}
-      subtitle={detail || undefined}
+      subtitle={detail ?? undefined}
       actions={actions || undefined}
     />
   );
@@ -228,14 +229,20 @@ export default function BrowseGenres() {
     }
   });
 
-  function detailFor(item: Item): string {
+  function detailFor(item: Item): React.ReactNode {
     // The genre you're browsing goes without saying; name another one.
     const ids = item.genre_ids ?? [];
     const other = ids.find((id) => id !== genreId && genreNames.has(id)) ?? ids[0];
-    const parts = [genreNames.get(other ?? -1)];
-    if (item.vote_average) parts.push(`★ ${item.vote_average.toFixed(1)}`);
-    return parts.filter(Boolean).join(" · ");
+    const genreName = genreNames.get(other ?? -1);
+    if (!genreName && !item.vote_average) return null;
+    return (
+      <span className="inline-flex items-center gap-1.5">
+        {genreName && <span>{genreName}</span>}
+        <Rating value={item.vote_average} />
+      </span>
+    );
   }
+
 
   const noun = type === "movie" ? "movies" : "TV shows";
   const heading = genre ? `${genre.name} ${noun}` : `Trending ${noun} this week`;

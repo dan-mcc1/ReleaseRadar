@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useRemoveFriend } from "../hooks/api/useFriends";
+import { Button } from "./ui";
 
 interface Friend {
   id: string;
@@ -48,12 +49,9 @@ export default function FriendsList({
           You have no friends added yet.
         </p>
         {onFindFriends && (
-          <button
-            onClick={onFindFriends}
-            className="text-sm bg-primary-600 hover:bg-primary-500 text-white font-medium px-4 py-1.5 rounded-lg transition-colors"
-          >
-            Find Friends
-          </button>
+          <Button variant="primary" onClick={onFindFriends}>
+            Find friends
+          </Button>
         )}
       </div>
     );
@@ -76,27 +74,22 @@ export default function FriendsList({
           {confirmId === friend.id ? (
             <div className="flex gap-2 items-center">
               <span className="text-neutral-400 text-sm">Remove friend?</span>
-              <button
+              <Button
+                variant="danger"
+                size="sm"
                 onClick={() => removeFriend(friend.id)}
                 disabled={removingId === friend.id}
-                className="text-sm bg-error-500 hover:bg-error-500 disabled:opacity-50 text-white px-3 py-1 rounded"
               >
                 {removingId === friend.id ? "Removing…" : "Yes"}
-              </button>
-              <button
-                onClick={() => setConfirmId(null)}
-                className="text-sm text-neutral-400 hover:text-neutral-200"
-              >
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setConfirmId(null)}>
                 No
-              </button>
+              </Button>
             </div>
           ) : (
-            <button
-              onClick={() => setConfirmId(friend.id)}
-              className="text-sm text-neutral-500 hover:text-error-400"
-            >
+            <Button variant="ghost" size="sm" onClick={() => setConfirmId(friend.id)}>
               Remove
-            </button>
+            </Button>
           )}
         </li>
       ))}

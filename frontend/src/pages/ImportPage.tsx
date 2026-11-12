@@ -1,6 +1,16 @@
 import { useState, useRef } from "react";
 import { usePageTitle } from "../hooks/usePageTitle";
 import { apiFetch } from "../utils/apiFetch";
+import { ArrowUpTrayIcon } from "@heroicons/react/24/outline";
+import {
+  Button,
+  Card,
+  ChevronLeftIcon,
+  Chip,
+  PageHeader,
+  Segmented,
+  StarIcon,
+} from "../components/ui";
 
 type Source = "letterboxd" | "tvtime";
 
@@ -52,13 +62,13 @@ const SOURCES: {
     instructions: {
       title: "How to export from Letterboxd",
       steps: [
-        "Go to letterboxd.com → Settings → Data",
+        "Go to letterboxd.com, then Settings, then Data",
         "Click Export your data — you'll receive a zip file",
         "Upload the zip directly, or unzip and upload individual CSV files",
       ],
       notes: [
-        "watched.csv / diary.csv / ratings.csv / reviews.csv → watched history",
-        "watchlist.csv → your watchlist",
+        "watched.csv / diary.csv / ratings.csv / reviews.csv: watched history",
+        "watchlist.csv: your watchlist",
         "Ratings and watch dates are preserved. Duplicates are skipped.",
       ],
     },
@@ -79,10 +89,10 @@ const SOURCES: {
         'You can also still upload the original TV Time "Personal Data" email zip by contacting TVTime',
       ],
       notes: [
-        "Watched movies → added to your watched list",
-        "Unwatched movies → added to your watchlist",
-        "Watched episodes → tracked per-episode, with shows auto-completed when finished",
-        "Shows with no watched episodes → added to your watchlist",
+        "Watched movies: added to your watched list",
+        "Unwatched movies: added to your watchlist",
+        "Watched episodes: tracked per episode, with shows completed automatically when finished",
+        "Shows with no watched episodes: added to your watchlist",
       ],
     },
   },
@@ -168,34 +178,22 @@ export default function ImportPage() {
 
   return (
     <div className="w-full max-w-3xl mx-auto px-4 py-8 space-y-8">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-white">Import your history</h1>
-        <p className="text-sm text-neutral-400 mt-1">
-          Bring your watch history and watchlist over from another tracker.
-        </p>
-      </div>
+      <PageHeader
+        title="Import your history"
+        description="Bring your watch history and watchlist over from another tracker."
+      />
 
       {/* Source tabs */}
-      <div className="flex gap-1 border-b border-neutral-700">
-        {SOURCES.map((s) => (
-          <button
-            key={s.id}
-            onClick={() => switchSource(s.id)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-              source === s.id
-                ? "border-primary-500 text-primary-400"
-                : "border-transparent text-neutral-400 hover:text-neutral-200"
-            }`}
-          >
-            {s.label}
-          </button>
-        ))}
-      </div>
+      <Segmented
+        label="Import from"
+        value={source}
+        onChange={switchSource}
+        options={SOURCES.map((s) => ({ value: s.id, label: s.label }))}
+      />
 
       {/* How-to */}
-      <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5 space-y-2">
-        <h2 className="text-sm font-semibold text-white">
+      <Card className="space-y-2">
+        <h2 className="text-body font-semibold text-white">
           {active.instructions.title}
         </h2>
         <ol className="list-decimal list-inside space-y-1 text-sm text-neutral-400">
@@ -204,16 +202,16 @@ export default function ImportPage() {
           ))}
         </ol>
         <div className="mt-2 pt-2 border-t border-neutral-800 space-y-1">
-          <p className="text-xs text-neutral-500 font-medium">
+          <p className="text-caption text-neutral-500 font-medium">
             What gets imported:
           </p>
-          <ul className="text-xs text-neutral-500 space-y-0.5 list-disc list-inside">
+          <ul className="text-caption text-neutral-500 space-y-0.5 list-disc list-inside">
             {active.instructions.notes.map((n, i) => (
               <li key={i}>{n}</li>
             ))}
           </ul>
         </div>
-      </div>
+      </Card>
 
       {phase === "idle" || phase === "error" ? (
         <div className="space-y-4">
@@ -231,7 +229,7 @@ export default function ImportPage() {
               if (f) pickFile(f);
             }}
             onClick={() => inputRef.current?.click()}
-            className={`border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer transition-colors ${
+            className={`border-2 border-dashed rounded-surface p-12 text-center cursor-pointer transition-colors ${
               dragOver
                 ? "border-primary-500 bg-primary-500/5"
                 : file
@@ -253,26 +251,18 @@ export default function ImportPage() {
               <div
                 className={`w-12 h-12 rounded-full flex items-center justify-center ${file ? "bg-primary-600/20" : "bg-neutral-800"}`}
               >
-                <svg
+                <ArrowUpTrayIcon
                   className={`w-6 h-6 ${file ? "text-primary-400" : "text-neutral-500"}`}
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
                   strokeWidth={1.5}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"
-                  />
-                </svg>
+                  aria-hidden="true"
+                />
               </div>
               {file ? (
                 <div>
                   <p className="text-sm font-semibold text-primary-400">
                     {file.name}
                   </p>
-                  <p className="text-xs text-neutral-500 mt-0.5">
+                  <p className="text-caption text-neutral-500 mt-0.5">
                     {(file.size / 1024).toFixed(1)} KB — click to change
                   </p>
                 </div>
@@ -280,9 +270,9 @@ export default function ImportPage() {
                 <div>
                   <p className="text-sm text-neutral-300">
                     Drop your {active.label} export here or{" "}
-                    <span className="text-primary-400">browse</span>
+                    <span className="text-neutral-100 underline">browse</span>
                   </p>
-                  <p className="text-xs text-neutral-600 mt-0.5">
+                  <p className="text-caption text-neutral-600 mt-0.5">
                     {source === "tvtime"
                       ? ".zip export, .json, or .csv — max 20 MB"
                       : ".zip export or individual .csv, max 20 MB"}
@@ -293,18 +283,14 @@ export default function ImportPage() {
           </div>
 
           {errorMsg && (
-            <p className="text-sm text-error-400 bg-error-900/20 border border-error-700/30 rounded-xl px-4 py-3">
+            <p className="text-sm text-error-400 bg-error-900/20 border border-error-700/30 rounded-control px-4 py-3">
               {errorMsg}
             </p>
           )}
 
-          <button
-            onClick={runImport}
-            disabled={!file}
-            className="w-full py-3 rounded-xl bg-primary-600 hover:bg-primary-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold text-sm transition-colors"
-          >
+          <Button variant="primary" className="w-full" onClick={runImport} disabled={!file}>
             Import
-          </button>
+          </Button>
         </div>
       ) : phase === "uploading" ? (
         <div className="flex flex-col items-center gap-4 py-16">
@@ -319,68 +305,58 @@ export default function ImportPage() {
       ) : (
         /* Done state */
         <div className="space-y-6">
-          {/* Summary cards */}
+          {/* Summary */}
           {summary && (
-            <div className="grid grid-cols-4 gap-3">
-              <div className="bg-success-900/20 border border-success-700/30 rounded-xl p-4 text-center">
-                <p className="text-2xl font-bold text-success-400">
-                  {summary.imported}
-                </p>
-                <p className="text-xs text-neutral-400 mt-0.5">
-                  {active.importedLabel}
-                </p>
+            <dl className="tabular flex flex-wrap gap-x-6 gap-y-2 text-body text-neutral-300">
+              <div className="flex gap-1.5">
+                <dd className="font-semibold text-success-400">{summary.imported}</dd>
+                <dt>{active.importedLabel}</dt>
               </div>
-              <div className="bg-primary-900/20 border border-primary-700/30 rounded-xl p-4 text-center">
-                <p className="text-2xl font-bold text-primary-400">
-                  {summary.watchlisted}
-                </p>
-                <p className="text-xs text-neutral-400 mt-0.5">Watchlisted</p>
+              <div className="flex gap-1.5">
+                <dd className="font-semibold text-neutral-100">{summary.watchlisted}</dd>
+                <dt>Watchlisted</dt>
               </div>
-              <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 text-center">
-                <p className="text-2xl font-bold text-neutral-400">
-                  {summary.skipped}
-                </p>
-                <p className="text-xs text-neutral-400 mt-0.5">Skipped</p>
+              <div className="flex gap-1.5">
+                <dd className="font-semibold text-neutral-100">{summary.skipped}</dd>
+                <dt>Skipped</dt>
               </div>
-              <div
-                className={`rounded-xl p-4 text-center border ${summary.failed > 0 ? "bg-error-900/20 border-error-700/30" : "bg-neutral-900 border-neutral-800"}`}
-              >
-                <p
-                  className={`text-2xl font-bold ${summary.failed > 0 ? "text-error-400" : "text-neutral-400"}`}
-                >
+              <div className="flex gap-1.5">
+                <dd className={`font-semibold ${summary.failed > 0 ? "text-error-400" : "text-neutral-100"}`}>
                   {summary.failed}
-                </p>
-                <p className="text-xs text-neutral-400 mt-0.5">Failed</p>
+                </dd>
+                <dt>Failed</dt>
               </div>
-            </div>
+            </dl>
           )}
 
           {source === "tvtime" && summary?.ratings_applied ? (
-            <p className="text-xs text-neutral-500">
+            <p className="text-caption text-neutral-500">
               Applied {summary.ratings_applied} rating
               {summary.ratings_applied === 1 ? "" : "s"} to finished shows.
             </p>
           ) : null}
 
-          {/* Filter tabs */}
-          <div className="flex gap-1 border-b border-neutral-700 overflow-x-auto">
+          {/* Filter */}
+          <div role="group" aria-label="Show" className="flex flex-wrap gap-2">
             {(
               ["all", "imported", "watchlisted", "skipped", "failed"] as const
             ).map((f) => (
-              <button
+              <Chip
                 key={f}
+                pressed={filter === f}
+                count={
+                  f === "all" || !summary
+                    ? undefined
+                    : f === "imported"
+                      ? summary.imported
+                      : f === "watchlisted"
+                        ? summary.watchlisted
+                        : summary[f]
+                }
                 onClick={() => setFilter(f)}
-                className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors capitalize whitespace-nowrap ${
-                  filter === f
-                    ? "border-primary-500 text-primary-400"
-                    : "border-transparent text-neutral-400 hover:text-neutral-200"
-                }`}
               >
-                {f === "imported" ? active.importedLabel : f}{" "}
-                {f !== "all" &&
-                  summary &&
-                  `(${f === "imported" ? summary.imported : f === "watchlisted" ? summary.watchlisted : summary[f]})`}
-              </button>
+                {f === "imported" ? active.importedLabel : f === "all" ? "All" : f[0].toUpperCase() + f.slice(1)}
+              </Chip>
             ))}
           </div>
 
@@ -389,14 +365,10 @@ export default function ImportPage() {
             {visibleResults.map((r, idx) => (
               <div
                 key={r.row ?? `${r.title}-${idx}`}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm border ${
-                  r.status === "imported"
-                    ? "bg-success-900/10 border-success-700/20"
-                    : r.status === "watchlisted"
-                      ? "bg-primary-900/10 border-primary-700/20"
-                      : r.status === "failed"
-                        ? "bg-error-900/10 border-error-700/20"
-                        : "bg-neutral-900 border-neutral-800"
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-control text-body border ${
+                  r.status === "failed"
+                    ? "bg-error-900/10 border-error-700/20"
+                    : "bg-neutral-900 border-neutral-800"
                 }`}
               >
                 <span
@@ -414,27 +386,28 @@ export default function ImportPage() {
                   {r.title}
                 </span>
                 {r.episodes_added != null && r.episodes_added > 0 && (
-                  <span className="text-xs text-neutral-400 flex-shrink-0">
+                  <span className="text-caption text-neutral-400 flex-shrink-0">
                     {r.episodes_added} ep{r.episodes_added === 1 ? "" : "s"}
                   </span>
                 )}
                 {r.status === "watchlisted" && (
-                  <span className="text-xs text-primary-400 flex-shrink-0">
+                  <span className="text-caption text-neutral-400 flex-shrink-0">
                     watchlist
                   </span>
                 )}
                 {r.rating != null && (
-                  <span className="text-xs text-amber-400 flex-shrink-0">
-                    ★ {r.rating}
+                  <span className="text-caption text-neutral-300 flex-shrink-0 inline-flex items-center gap-1">
+                    <StarIcon className="w-3 h-3 text-warning-400" />
+                    {r.rating}
                   </span>
                 )}
                 {r.watched_at && (
-                  <span className="text-xs text-neutral-500 flex-shrink-0">
+                  <span className="text-caption text-neutral-500 flex-shrink-0">
                     {r.watched_at}
                   </span>
                 )}
                 {r.reason && (
-                  <span className="text-xs text-neutral-500 flex-shrink-0 italic">
+                  <span className="text-caption text-neutral-500 flex-shrink-0">
                     {r.reason}
                   </span>
                 )}
@@ -442,12 +415,9 @@ export default function ImportPage() {
             ))}
           </div>
 
-          <button
-            onClick={reset}
-            className="text-sm text-primary-400 hover:text-primary-300 transition-colors"
-          >
-            ← Import another file
-          </button>
+          <Button variant="ghost" icon={<ChevronLeftIcon />} onClick={reset}>
+            Import another file
+          </Button>
         </div>
       )}
     </div>

@@ -10,5 +10,6 @@ export { default as Card } from "./Card";
 export { default as PosterCard, PosterCardSkeleton } from "./PosterCard";
 export { default as EmptyState } from "./EmptyState";
 export { default as SearchField } from "./SearchField";
+export { default as Rating } from "./Rating";
 export * from "./icons";
-export { cx, focusRing, buttonClass, selectClass } from "./styles";
+export { cx, focusRing, buttonClass, selectClass, moreLinkClass } from "./styles";

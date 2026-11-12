@@ -1,6 +1,6 @@
-import { memo, useState, useCallback, useMemo } from "react";
+import { memo, useState, useCallback, useMemo, type ReactNode } from "react";
 import type { Show, Movie } from "../types/calendar";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import {
   DndContext,
   closestCenter,
@@ -16,13 +16,33 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { BASE_IMAGE_URL } from "../constants";
+import { ChevronDoubleLeftIcon } from "@heroicons/react/24/outline";
 import ListFilterPanel, {
   DEFAULT_FILTERS,
   type ListFilters,
   countActiveFilters,
   applyFilters,
 } from "../components/ListFilterPanel";
+import {
+  Button,
+  ButtonLink,
+  CheckIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  CloseIcon,
+  EmptyState,
+  FilterIcon,
+  IconButton,
+  PageHeader,
+  PosterCard,
+  PosterCardSkeleton,
+  SearchField,
+  SectionHeader,
+  StarIcon,
+  cx,
+  focusRing,
+  selectClass,
+} from "../components/ui";
 import { usePageTitle } from "../hooks/usePageTitle";
 import {
   useWatchlist,
@@ -180,136 +200,91 @@ function getStatusText(
   return `${p.remaining_episodes} ep${p.remaining_episodes === 1 ? "" : "s"} left`;
 }
 
-function WatchingBadge() {
-  return (
-    <div
-      className="absolute top-2 right-2 px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-primary-500 text-neutral-950 flex items-center gap-0.5 leading-none pointer-events-none shadow"
-      title="Currently watching"
-    >
-      <svg className="w-2 h-2" fill="currentColor" viewBox="0 0 24 24">
-        <path d="M8 5v14l11-7z" />
-      </svg>
-      Watching
-    </div>
-  );
-}
-
-const WatchlistCard = memo(function WatchlistCard({
+function CardFooter({
   item,
   bingePlans,
-  onNavigate,
-  onRemove,
+  rank,
+  children,
 }: {
   item: CombinedItem;
   bingePlans?: Record<string, ShowProgress>;
-  onNavigate: (type: "movie" | "tv", id: number) => void;
-  onRemove: (type: "movie" | "tv", id: number, listType: ListType) => void;
+  rank?: number;
+  children?: ReactNode;
 }) {
   const progress = getProgress(item, bingePlans);
   const statusText = getStatusText(item, bingePlans);
   const isCaughtUp =
     item._contentType === "tv" &&
     bingePlans?.[String(item.id)]?.remaining_episodes === 0;
+  const isWatching = item._listType === "currently_watching" && !isCaughtUp;
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      {progress > 0 && !isCaughtUp && (
+        <div className="h-1 rounded-full bg-neutral-800 overflow-hidden" aria-hidden="true">
+          <div
+            className="h-full bg-primary-500 rounded-full"
+            style={{ width: `${Math.min(progress * 100, 100)}%` }}
+          />
+        </div>
+      )}
+      {(rank != null || isWatching || statusText) && (
+        <p className="flex flex-wrap items-center gap-x-2 text-caption text-neutral-400">
+          {rank != null && <span className="tabular">#{rank}</span>}
+          {isWatching && <span className="text-primary-300">Watching</span>}
+          {statusText && (
+            <span className="inline-flex items-center gap-1">
+              {isCaughtUp && <CheckIcon className="w-3 h-3" />}
+              {statusText}
+            </span>
+          )}
+        </p>
+      )}
+      {children}
+    </div>
+  );
+}
+
+function getSubtitle(item: CombinedItem): ReactNode {
+  if (item.vote_average == null || item.vote_average <= 0) return undefined;
+  return (
+    <span className="inline-flex items-center gap-1">
+      <StarIcon className="w-3 h-3 text-warning-400 flex-none" />
+      <span className="tabular">{item.vote_average.toFixed(1)}</span>
+    </span>
+  );
+}
+
+const WatchlistCard = memo(function WatchlistCard({
+  item,
+  bingePlans,
+  onRemove,
+}: {
+  item: CombinedItem;
+  bingePlans?: Record<string, ShowProgress>;
+  onRemove: (type: "movie" | "tv", id: number, listType: ListType) => void;
+}) {
   const title = getTitle(item);
 
   return (
-    <div className="flex flex-col gap-2 group/card">
-      <div className="relative cursor-pointer" onClick={() => onNavigate(item._contentType, item.id)}>
-        <div className="aspect-[2/3] rounded-xl overflow-hidden bg-neutral-800">
-          {item.poster_path ? (
-            <img
-              src={`${BASE_IMAGE_URL}/w342${item.poster_path}`}
-              alt={title}
-              className="w-full h-full object-cover transition-opacity duration-200 group-hover/card:opacity-85"
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center p-3 text-center">
-              <span className="text-neutral-600 text-xs leading-tight">
-                {title}
-              </span>
-            </div>
-          )}
-        </div>
-
-        {/* Progress bar */}
-        {progress > 0 && !isCaughtUp && (
-          <div className="absolute left-2 right-2 bottom-2 h-[3px] bg-black/50 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-primary-500 rounded-full"
-              style={{ width: `${Math.min(progress * 100, 100)}%` }}
-            />
-          </div>
-        )}
-
-        {/* Caught up badge */}
-        {isCaughtUp && (
-          <div className="absolute top-2 right-2 w-6 h-6 rounded-full bg-primary-500 text-neutral-950 flex items-center justify-center shadow-lg">
-            <svg
-              className="w-3.5 h-3.5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2.5}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M5 13l4 4L19 7"
-              />
-            </svg>
-          </div>
-        )}
-
-        {/* Currently watching badge (only when not caught up) */}
-        {item._listType === "currently_watching" && !isCaughtUp && <WatchingBadge />}
-
-        {/* Remove button */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove(item._contentType, item.id, item._listType);
-          }}
-          title="Remove from watchlist"
-          className="absolute top-2 left-2 w-6 h-6 rounded-full bg-black/70 text-neutral-400 flex items-center justify-center opacity-0 group-hover/card:opacity-100 transition-opacity hover:text-white hover:bg-black/90"
-        >
-          <svg
-            className="w-3 h-3"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2.5}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M6 18L18 6M6 6l12 12"
-            />
-          </svg>
-        </button>
-      </div>
-
-      <div>
-        <p className="text-[13.5px] font-semibold text-neutral-100 leading-tight tracking-tight truncate">
-          {title}
-        </p>
-        {item.vote_average != null && item.vote_average > 0 && (
-          <p className="text-[11px] text-neutral-400 mt-0.5 flex items-center gap-1">
-            <svg className="w-3 h-3 text-yellow-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-            </svg>
-            {item.vote_average.toFixed(1)}
-          </p>
-        )}
-        {statusText && (
-          <p className="text-[11.5px] text-neutral-500 mt-1 flex items-center gap-1.5">
-            <span
-              className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isCaughtUp ? "bg-neutral-500" : "bg-primary-500"}`}
-            />
-            {statusText}
-          </p>
-        )}
-      </div>
-    </div>
+    <PosterCard
+      to={`/${item._contentType}/${item.id}`}
+      title={title}
+      posterPath={item.poster_path}
+      subtitle={getSubtitle(item)}
+      className="group/card"
+      corner={
+        <IconButton
+          label={`Remove ${title} from watchlist`}
+          icon={<CloseIcon className="w-3.5 h-3.5" />}
+          variant="overlay"
+          size="sm"
+          onClick={() => onRemove(item._contentType, item.id, item._listType)}
+          className="opacity-0 group-hover/card:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
+        />
+      }
+      footer={<CardFooter item={item} bingePlans={bingePlans} />}
+    />
   );
 });
 
@@ -321,7 +296,6 @@ const SortableWatchlistCard = memo(function SortableWatchlistCard({
   isFirst,
   isLast,
   isDragDisabled = false,
-  onNavigate,
   onRemove,
   onMoveUp,
   onMoveDown,
@@ -334,14 +308,12 @@ const SortableWatchlistCard = memo(function SortableWatchlistCard({
   isFirst: boolean;
   isLast: boolean;
   isDragDisabled?: boolean;
-  onNavigate: (type: "movie" | "tv", id: number) => void;
   onRemove: (type: "movie" | "tv", id: number, listType: ListType) => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
   onMoveToTop: () => void;
 }) {
   const {
-    attributes,
     listeners,
     setNodeRef,
     transform,
@@ -353,143 +325,89 @@ const SortableWatchlistCard = memo(function SortableWatchlistCard({
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.4 : 1,
+    cursor: isDragDisabled ? undefined : isDragging ? "grabbing" : "grab",
   };
 
-  const progress = getProgress(item, bingePlans);
-  const statusText = getStatusText(item, bingePlans);
   const isCaughtUp =
     item._contentType === "tv" &&
     bingePlans?.[String(item.id)]?.remaining_episodes === 0;
   const title = getTitle(item);
+  const stop = (e: { stopPropagation: () => void }) => e.stopPropagation();
 
   return (
-    <div ref={setNodeRef} style={style} className="flex flex-col gap-2 group/card">
-      <div className="relative">
-        <div
-          className="aspect-[2/3] rounded-xl overflow-hidden bg-neutral-800 transition-opacity duration-200 group-hover/card:opacity-85"
-          style={{ cursor: isDragDisabled ? "pointer" : isDragging ? "grabbing" : "grab" }}
-          onClick={() => onNavigate(item._contentType, item.id)}
-          {...(!isDragDisabled ? { ...attributes, ...listeners } : {})}
-        >
-          {item.poster_path ? (
-            <img
-              src={`${BASE_IMAGE_URL}/w342${item.poster_path}`}
-              alt={title}
-              className="w-full h-full object-cover"
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...(!isDragDisabled ? listeners : {})}
+    >
+      <PosterCard
+        to={`/${item._contentType}/${item.id}`}
+        title={title}
+        posterPath={item.poster_path}
+        subtitle={getSubtitle(item)}
+        className="group/card"
+        corner={
+          <span onPointerDown={stop}>
+            <IconButton
+              label={`Remove ${title} from watchlist`}
+              icon={<CloseIcon className="w-3.5 h-3.5" />}
+              variant="overlay"
+              size="sm"
+              onClick={() => onRemove(item._contentType, item.id, item._listType)}
+              className="opacity-0 group-hover/card:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
             />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center p-3 text-center">
-              <span className="text-neutral-600 text-xs leading-tight">{title}</span>
-            </div>
-          )}
-        </div>
-
-        {/* Progress bar */}
-        {progress > 0 && !isCaughtUp && (
-          <div className="absolute left-2 right-2 bottom-2 h-[3px] bg-black/50 rounded-full overflow-hidden pointer-events-none">
-            <div
-              className="h-full bg-primary-500 rounded-full"
-              style={{ width: `${Math.min(progress * 100, 100)}%` }}
-            />
-          </div>
-        )}
-
-        {/* Caught-up badge */}
-        {isCaughtUp && (
-          <div className="absolute top-2 right-2 w-6 h-6 rounded-full bg-primary-500 text-neutral-950 flex items-center justify-center shadow-lg pointer-events-none">
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-            </svg>
-          </div>
-        )}
-
-        {/* Rank badge — only for watchlist items */}
-        {!isCaughtUp && item._listType === "watchlist" && (
-          <div className="absolute top-2 right-2 min-w-[1.5rem] h-5 px-1.5 rounded-full bg-black/60 text-neutral-300 flex items-center justify-center text-[10px] font-bold leading-none pointer-events-none">
-            #{rank}
-          </div>
-        )}
-
-        {/* Currently watching badge */}
-        {!isCaughtUp && item._listType === "currently_watching" && <WatchingBadge />}
-
-        {/* Remove button */}
-        <button
-          onClick={(e) => { e.stopPropagation(); onRemove(item._contentType, item.id, item._listType); }}
-          onPointerDown={(e) => e.stopPropagation()}
-          title="Remove from watchlist"
-          className="absolute top-2 left-2 w-6 h-6 rounded-full bg-black/70 text-neutral-400 flex items-center justify-center opacity-0 group-hover/card:opacity-100 transition-opacity hover:text-white hover:bg-black/90"
-        >
-          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
-
-      <div>
-        <p className="text-[13.5px] font-semibold text-neutral-100 leading-tight tracking-tight truncate">
-          {title}
-        </p>
-        {item.vote_average != null && item.vote_average > 0 && (
-          <p className="text-[11px] text-neutral-400 mt-0.5 flex items-center gap-1">
-            <svg className="w-3 h-3 text-yellow-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-            </svg>
-            {item.vote_average.toFixed(1)}
-          </p>
-        )}
-        {statusText && (
-          <p className="text-[11.5px] text-neutral-500 mt-1 flex items-center gap-1.5">
-            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isCaughtUp ? "bg-neutral-500" : "bg-primary-500"}`} />
-            {statusText}
-          </p>
-        )}
-        {/* Reorder controls — only for watchlist items */}
-        {item._listType === "watchlist" && (
-        <div
-          className="flex items-center gap-1 mt-1.5 opacity-0 group-hover/card:opacity-100 transition-opacity"
-          onPointerDown={(e) => e.stopPropagation()}
-        >
-          <button
-            onClick={(e) => { e.stopPropagation(); onMoveToTop(); }}
-            disabled={isFirst}
-            title="Move to first"
-            className="w-5 h-5 rounded bg-neutral-700 text-neutral-400 flex items-center justify-center hover:text-neutral-200 hover:bg-neutral-600 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+          </span>
+        }
+        footer={
+          <CardFooter
+            item={item}
+            bingePlans={bingePlans}
+            rank={!isCaughtUp && item._listType === "watchlist" ? rank : undefined}
           >
-            <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M11 19l-7-7 7-7M19 19l-7-7 7-7" />
-            </svg>
-          </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); onMoveUp(); }}
-            disabled={isFirst}
-            title="Move left"
-            className="w-5 h-5 rounded bg-neutral-700 text-neutral-400 flex items-center justify-center hover:text-neutral-200 hover:bg-neutral-600 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
-          >
-            <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); onMoveDown(); }}
-            disabled={isLast}
-            title="Move right"
-            className="w-5 h-5 rounded bg-neutral-700 text-neutral-400 flex items-center justify-center hover:text-neutral-200 hover:bg-neutral-600 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
-          >
-            <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
-        </div>
-        )}
-      </div>
+            {/* Reorder controls: only for watchlist items */}
+            {item._listType === "watchlist" && (
+              <div
+                className="flex flex-wrap items-center gap-1 opacity-0 group-hover/card:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100 transition-opacity"
+                onPointerDown={stop}
+              >
+                <IconButton
+                  label={`Move ${title} to first`}
+                  icon={<ChevronDoubleLeftIcon className="w-4 h-4" strokeWidth={2} aria-hidden="true" />}
+                  variant="secondary"
+                  size="sm"
+                  shape="square"
+                  onClick={onMoveToTop}
+                  disabled={isFirst}
+                />
+                <IconButton
+                  label={`Move ${title} left`}
+                  icon={<ChevronLeftIcon />}
+                  variant="secondary"
+                  size="sm"
+                  shape="square"
+                  onClick={onMoveUp}
+                  disabled={isFirst}
+                />
+                <IconButton
+                  label={`Move ${title} right`}
+                  icon={<ChevronRightIcon />}
+                  variant="secondary"
+                  size="sm"
+                  shape="square"
+                  onClick={onMoveDown}
+                  disabled={isLast}
+                />
+              </div>
+            )}
+          </CardFooter>
+        }
+      />
     </div>
   );
 });
 
 export default function Watchlist() {
   usePageTitle("Watchlist");
-  const navigate = useNavigate();
   const { data, isPending: loading } = useWatchlist();
   const { data: cwData } = useCurrentlyWatching();
   const myProviderIds = useMyProviderIds();
@@ -570,13 +488,6 @@ export default function Watchlist() {
       }
     },
     [removeFromList],
-  );
-
-  const onNavigate = useCallback(
-    (type: "movie" | "tv", id: number) => {
-      navigate(`/${type === "movie" ? "movie" : "tv"}/${id}`);
-    },
-    [navigate],
   );
 
   const fireReorder = useCallback(
@@ -824,90 +735,77 @@ export default function Watchlist() {
     : gridItems.length > 0;
 
   return (
-    <div className="w-full px-6 sm:px-10 pt-8 pb-16">
-      {/* Header */}
-      <div data-tour="watchlist-header">
-        <p className="font-mono text-[11px] tracking-[0.12em] uppercase text-neutral-500">
-          {totalIncludingCW} title{totalIncludingCW !== 1 ? "s" : ""} tracking
-        </p>
-        <div className="flex items-baseline gap-4 mt-2 flex-wrap">
-          <h1
-            className="w-full sm:w-auto text-4xl font-normal leading-tight tracking-tight"
-            style={{ fontFamily: "var(--font-serif)" }}
-          >
-            Your{" "}
-            <em className="text-primary-400" style={{ fontStyle: "italic" }}>
-              watchlist
-            </em>
-          </h1>
-          <div className="flex-1 hidden sm:block" />
-          <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto sm:justify-end">
-            <button
-              onClick={() => setShowFilters((v) => !v)}
-              className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors ${
-                showFilters || activeFilterCount > 0
-                  ? "bg-primary-600/20 border-primary-600/40 text-primary-300"
-                  : "bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-neutral-200 hover:border-neutral-600"
-              }`}
-            >
-              <svg
-                className="w-3.5 h-3.5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
+    <div className="w-full px-6 sm:px-10 pt-6 pb-16 flex flex-col gap-6">
+      <div data-tour="watchlist-header" className="flex flex-col gap-6">
+        <PageHeader
+          title="Watchlist"
+          description={
+            loading
+              ? undefined
+              : `${totalIncludingCW} ${totalIncludingCW === 1 ? "title" : "titles"} you're tracking`
+          }
+          actions={
+            <>
+              <Button
+                onClick={() => setShowFilters((v) => !v)}
+                aria-expanded={showFilters}
+                icon={<FilterIcon />}
+                className={showFilters || activeFilterCount > 0 ? "border-primary-500/60 text-primary-200" : undefined}
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z"
-                />
-              </svg>
-              Filters
-              {activeFilterCount > 0 && (
-                <span className="bg-primary-600 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center leading-none">
-                  {activeFilterCount}
-                </span>
-              )}
-            </button>
-            <select
-              value={sort}
-              onChange={(e) => setSort(e.target.value as SortType)}
-              className="text-sm bg-neutral-800 border border-neutral-700 text-neutral-300 rounded-lg px-3 py-1.5 focus:outline-none focus:border-neutral-500 max-w-[160px] sm:max-w-none"
-            >
-              <option value="my_order">My Order</option>
-              <option value="added_desc">Recently Added</option>
-              <option value="added_asc">Oldest Added</option>
-              <option value="title_asc">Title: A → Z</option>
-              <option value="title_desc">Title: Z → A</option>
-              <option value="date_desc">Release Date: Newest</option>
-              <option value="date_asc">Release Date: Oldest</option>
-              <option value="popularity_desc">Most Popular</option>
-              <option value="tmdb_rating_desc">Rating: High → Low</option>
-              <option value="tmdb_rating_asc">Rating: Low → High</option>
-              <option value="time_remaining_asc">
-                Time Remaining: Shortest
-              </option>
-              <option value="time_remaining_desc">
-                Time Remaining: Longest
-              </option>
-            </select>
-          </div>
-        </div>
+                Filters
+                {activeFilterCount > 0 && (
+                  <span className="min-w-5 h-5 px-1 rounded-full bg-primary-500 text-neutral-950 text-caption font-semibold flex items-center justify-center">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </Button>
+              <label htmlFor="watchlist-sort" className="sr-only">
+                Sort
+              </label>
+              <select
+                id="watchlist-sort"
+                value={sort}
+                onChange={(e) => setSort(e.target.value as SortType)}
+                className={cx(selectClass, "max-w-[160px] sm:max-w-none")}
+              >
+                <option value="my_order">My order</option>
+                <option value="added_desc">Recently added</option>
+                <option value="added_asc">Oldest added</option>
+                <option value="title_asc">Title: A to Z</option>
+                <option value="title_desc">Title: Z to A</option>
+                <option value="date_desc">Release date: newest</option>
+                <option value="date_asc">Release date: oldest</option>
+                <option value="popularity_desc">Most popular</option>
+                <option value="tmdb_rating_desc">Rating: high to low</option>
+                <option value="tmdb_rating_asc">Rating: low to high</option>
+                <option value="time_remaining_asc">
+                  Time remaining: shortest
+                </option>
+                <option value="time_remaining_desc">
+                  Time remaining: longest
+                </option>
+              </select>
+            </>
+          }
+        />
 
         {/* Tabs — shrink to fit on mobile, then wrap to a second row if the
             viewport is still too narrow (e.g. tiny phones or large count
-            badges). Reverts to the roomier desktop sizing at sm+. */}
-        <div className="flex flex-wrap gap-x-0 gap-y-1 border-b border-neutral-800 mt-6">
+            badges). Reverts to the roomier desktop sizing at sm+. Five
+            options with counts is too wide for a Segmented on a phone. */}
+        <div className="flex flex-wrap gap-x-0 gap-y-1 border-b border-neutral-800">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`px-2 sm:px-3.5 py-3 text-[12.5px] sm:text-sm font-medium inline-flex items-center gap-1 sm:gap-1.5 border-b-2 -mb-px transition-colors whitespace-nowrap ${
+              aria-pressed={activeTab === tab.id}
+              className={cx(
+                "px-2 sm:px-3.5 py-3 text-label font-medium inline-flex items-center gap-1 sm:gap-1.5 border-b-2 -mb-px transition-colors whitespace-nowrap cursor-pointer",
+                focusRing,
                 activeTab === tab.id
                   ? "border-primary-500 text-neutral-100"
-                  : "border-transparent text-neutral-500 hover:text-neutral-300"
-              }`}
+                  : "border-transparent text-neutral-400 hover:text-neutral-200",
+              )}
             >
               {/* Long label visible from sm+; short label visible below sm. */}
               {tab.shortLabel ? (
@@ -918,7 +816,7 @@ export default function Watchlist() {
               ) : (
                 tab.label
               )}
-              <span className="font-mono text-[10px] sm:text-[10.5px] text-neutral-500 leading-none translate-y-px">
+              <span className="tabular text-caption text-neutral-500">
                 {tab.count}
               </span>
             </button>
@@ -928,49 +826,8 @@ export default function Watchlist() {
 
       {/* Search + filter panel */}
       {!loading && totalIncludingCW > 0 && (
-        <div className="mt-4 space-y-3">
-          <div className="relative max-w-xs">
-            <svg
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-500"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-              />
-            </svg>
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search…"
-              className="w-full bg-neutral-800/60 border border-neutral-700 text-neutral-200 placeholder-neutral-600 rounded-lg pl-8 pr-8 py-1.5 text-sm focus:outline-none focus:border-neutral-500"
-            />
-            {query && (
-              <button
-                onClick={() => setQuery("")}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-300"
-              >
-                <svg
-                  className="w-3.5 h-3.5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
-            )}
-          </div>
+        <div className="space-y-3">
+          <SearchField value={query} onChange={setQuery} label="Search watchlist" />
           {showFilters && (
             <ListFilterPanel
               filters={filters}
@@ -985,82 +842,56 @@ export default function Watchlist() {
 
       {/* Loading skeleton */}
       {loading && (
-        <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 2xl:grid-cols-posters gap-3 mt-8">
+        <div
+          className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 2xl:grid-cols-posters gap-3"
+          aria-hidden="true"
+        >
           {Array.from({ length: 12 }).map((_, i) => (
-            <div key={i} className="flex flex-col gap-2 animate-pulse">
-              <div className="aspect-[2/3] rounded-xl bg-neutral-800" />
-              <div className="h-3 bg-neutral-800 rounded w-3/4" />
-            </div>
+            <PosterCardSkeleton key={i} />
           ))}
         </div>
       )}
 
       {/* Empty watchlist */}
       {!loading && totalIncludingCW === 0 && (
-        <div className="flex flex-col items-center justify-center py-24 text-center mt-8">
-          <div className="w-16 h-16 rounded-full bg-neutral-800 border border-neutral-700 flex items-center justify-center mb-4">
-            <svg
-              className="w-8 h-8 text-neutral-500"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"
-              />
-            </svg>
-          </div>
-          <h3 className="text-neutral-300 font-medium mb-1">
-            Your watchlist is empty
-          </h3>
-          <p className="text-neutral-500 text-sm mb-4">
-            Browse Trending or Upcoming to find something to add
-          </p>
-          <button
-            onClick={() => navigate("/trending")}
-            className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-medium px-5 py-2 rounded-lg transition-colors"
-          >
-            Browse Trending
-          </button>
-        </div>
+        <EmptyState
+          title="Your watchlist is empty"
+          description="Browse Trending or Upcoming to find something to add."
+          action={
+            <ButtonLink to="/trending" variant="primary">
+              Browse trending
+            </ButtonLink>
+          }
+        />
       )}
 
       {/* No results */}
       {!loading && totalIncludingCW > 0 && !hasResults && (
-        <div className="flex flex-col items-center justify-center py-24 text-center mt-8">
-          <p className="text-neutral-400 font-medium mb-1">
-            {activeFilterCount > 0
+        <EmptyState
+          title={
+            activeFilterCount > 0
               ? "No results match your filters"
               : activeTab === "up_next"
                 ? "Nothing in progress yet"
                 : activeTab === "currently_watching"
                   ? "Nothing in your Currently Watching list"
-                  : `No results for "${query}"`}
-          </p>
-          {activeFilterCount > 0 ? (
-            <button
-              onClick={() => setFilters(DEFAULT_FILTERS)}
-              className="text-primary-400 hover:text-primary-300 text-sm mt-1 transition-colors"
-            >
-              Clear filters
-            </button>
-          ) : activeTab === "up_next" ? (
-            <p className="text-neutral-500 text-sm mt-1">
-              Start watching a show to see your progress here
-            </p>
-          ) : activeTab === "currently_watching" ? (
-            <p className="text-neutral-500 text-sm mt-1">
-              Mark a title as "Currently Watching" from its page to see it here
-            </p>
-          ) : (
-            <p className="text-neutral-500 text-sm">
-              Try a different search term
-            </p>
-          )}
-        </div>
+                  : `No results for "${query}"`
+          }
+          description={
+            activeFilterCount > 0
+              ? undefined
+              : activeTab === "up_next"
+                ? "Start watching a show to see your progress here."
+                : activeTab === "currently_watching"
+                  ? 'Mark a title as "Currently Watching" from its page to see it here.'
+                  : "Try a different search term."
+          }
+          action={
+            activeFilterCount > 0 ? (
+              <Button onClick={() => setFilters(DEFAULT_FILTERS)}>Clear filters</Button>
+            ) : undefined
+          }
+        />
       )}
 
       {/* ── My Order: All tab — DnD grid ── */}
@@ -1068,7 +899,7 @@ export default function Watchlist() {
         isMyOrder &&
         activeTab === "all" &&
         combinedItems.length > 0 && (
-          <div className="mt-8">
+          <div>
             <DndContext
               sensors={sensors}
               collisionDetection={closestCenter}
@@ -1088,7 +919,6 @@ export default function Watchlist() {
                       rank={idx + 1}
                       isFirst={idx === 0}
                       isLast={idx === combinedItems.length - 1}
-                      onNavigate={onNavigate}
                       onRemove={onRemove}
                       onMoveUp={() => {
                         const before = combinedItems[idx - 2] ?? null;
@@ -1134,7 +964,7 @@ export default function Watchlist() {
         activeTab !== "up_next" &&
         activeTab !== "currently_watching" &&
         myOrderFilteredItems.length > 0 && (
-          <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 2xl:grid-cols-posters gap-x-3 gap-y-5 mt-8">
+          <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 2xl:grid-cols-posters gap-x-3 gap-y-5">
             {myOrderFilteredItems.map((item) => {
               const allIdx = combinedItems.findIndex(
                 (c) => c._contentType === item._contentType && c.id === item.id,
@@ -1149,7 +979,6 @@ export default function Watchlist() {
                   isFirst={allIdx === 0}
                   isLast={allIdx === combinedItems.length - 1}
                   isDragDisabled
-                  onNavigate={onNavigate}
                   onRemove={onRemove}
                   onMoveUp={() => {
                     const before = combinedItems[allIdx - 2] ?? null;
@@ -1194,10 +1023,8 @@ export default function Watchlist() {
         (activeTab === "all" || activeTab === "movies" || activeTab === "shows") &&
         ((activeTab !== "shows" && cwFilteredMovies.length > 0) ||
           (activeTab !== "movies" && cwFilteredShows.length > 0)) && (
-          <div className="mt-10">
-            <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-neutral-500 mb-3">
-              Currently watching
-            </p>
+          <div className="flex flex-col gap-3">
+            <SectionHeader title="Currently watching" />
             <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 2xl:grid-cols-posters gap-x-3 gap-y-5">
               {[
                 ...(activeTab !== "shows"
@@ -1223,8 +1050,7 @@ export default function Watchlist() {
                     key={`cw-${item._contentType}-${item.id}`}
                     item={item}
                     bingePlans={bingePlans}
-                    onNavigate={onNavigate}
-                    onRemove={onRemove}
+                      onRemove={onRemove}
                   />
                 ))}
             </div>
@@ -1235,13 +1061,12 @@ export default function Watchlist() {
       {!loading &&
         (!isMyOrder || activeTab === "up_next" || activeTab === "currently_watching") &&
         gridItems.length > 0 && (
-          <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 2xl:grid-cols-posters gap-x-3 gap-y-5 mt-8">
+          <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 2xl:grid-cols-posters gap-x-3 gap-y-5">
             {gridItems.map((item) => (
               <WatchlistCard
                 key={`${item._contentType}-${item.id}`}
                 item={item}
                 bingePlans={bingePlans}
-                onNavigate={onNavigate}
                 onRemove={onRemove}
               />
             ))}

@@ -11,6 +11,9 @@ import { useSubmitReport, type ReportReason } from "../hooks/api/useModeration";
 import { useUserMe } from "../hooks/api/useUser";
 import { useNotificationPrefs } from "../hooks/api/useNotifications";
 import StarIcon from "./icons/StarIcon";
+import { ExclamationTriangleIcon, FlagIcon, HeartIcon as HeartOutline, PencilSquareIcon } from "@heroicons/react/24/outline";
+import { HeartIcon as HeartSolid } from "@heroicons/react/24/solid";
+import { Segmented, SectionHeader } from "./ui";
 
 const REPORT_REASONS: { value: ReportReason; label: string }[] = [
   { value: "spam", label: "Spam" },
@@ -245,36 +248,16 @@ export default function ReviewsSection({
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-neutral-400 text-xs uppercase tracking-wider font-semibold">
-          Reviews{" "}
-          {reviews.length > 0 && (
-            <span className="text-neutral-600 normal-case tracking-normal">
-              ({reviews.length})
-            </span>
-          )}
-        </h2>
-        <div className="flex items-center gap-1 bg-neutral-800 rounded-lg p-0.5">
-          <button
-            onClick={() => setSort("newest")}
-            className={`text-xs px-2.5 py-1 rounded-md transition-colors ${
-              sort === "newest"
-                ? "bg-neutral-700 text-neutral-200"
-                : "text-neutral-500 hover:text-neutral-300"
-            }`}
-          >
-            Newest
-          </button>
-          <button
-            onClick={() => setSort("top")}
-            className={`text-xs px-2.5 py-1 rounded-md transition-colors ${
-              sort === "top"
-                ? "bg-neutral-700 text-neutral-200"
-                : "text-neutral-500 hover:text-neutral-300"
-            }`}
-          >
-            Top
-          </button>
-        </div>
+        <SectionHeader title="Reviews" note={reviews.length > 0 ? reviews.length : undefined} />
+        <Segmented
+          label="Sort reviews"
+          value={sort}
+          onChange={setSort}
+          options={[
+            { value: "newest", label: "Newest" },
+            { value: "top", label: "Top" },
+          ]}
+        />
       </div>
 
       {/* Write / edit review */}
@@ -285,19 +268,7 @@ export default function ReviewsSection({
               onClick={startEditing}
               className="text-sm text-highlight-400 hover:text-highlight-300 transition-colors flex items-center gap-1.5"
             >
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-2a2 2 0 01.586-1.414z"
-                />
-              </svg>
+              <PencilSquareIcon className="w-4 h-4" strokeWidth={2} aria-hidden="true" />
               Write a review
             </button>
           ) : myReview && !editing ? (
@@ -305,7 +276,7 @@ export default function ReviewsSection({
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2 flex-wrap">
                   <Link to={`/user/${myReview.username}`} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-                    <div className="w-6 h-6 rounded-full bg-highlight-700 flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">
+                    <div className="w-6 h-6 rounded-full bg-highlight-700 flex items-center justify-center text-caption font-bold text-white flex-shrink-0">
                       {myReview.username[0]?.toUpperCase()}
                     </div>
                     <span className="text-sm font-medium text-highlight-300">
@@ -316,7 +287,7 @@ export default function ReviewsSection({
                     <MiniStars rating={myReview.rating} />
                   )}
                   {myReview.is_spoiler && (
-                    <span className="text-[10px] font-bold uppercase tracking-wider bg-warning-500/15 text-warning-400 border border-warning-500/30 rounded-full px-2 py-0.5">
+                    <span className="text-caption font-semibold bg-warning-500/15 text-warning-400 border border-warning-500/30 rounded-full px-2 py-0.5">
                       Spoiler
                     </span>
                   )}
@@ -327,9 +298,7 @@ export default function ReviewsSection({
                 <div className="flex items-center gap-2">
                   {myReview.like_count > 0 && (
                     <span className="flex items-center gap-1 text-xs text-neutral-500">
-                      <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0112 5.052 5.5 5.5 0 0116.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.219l-.022.012-.007.004-.003.001a.752.752 0 01-.704 0l-.003-.001z" />
-                      </svg>
+                      <HeartSolid className="w-3.5 h-3.5" aria-hidden="true" />
                       {myReview.like_count}
                     </span>
                   )}
@@ -430,7 +399,7 @@ export default function ReviewsSection({
               <div className="flex items-start justify-between gap-2 mb-2">
                 <div className="flex items-center gap-2 flex-wrap">
                   <Link to={`/user/${review.username}`} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-                    <div className="w-6 h-6 rounded-full bg-neutral-600 flex items-center justify-center text-[10px] font-bold text-neutral-300 flex-shrink-0">
+                    <div className="w-6 h-6 rounded-full bg-neutral-600 flex items-center justify-center text-caption font-bold text-neutral-300 flex-shrink-0">
                       {review.username[0]?.toUpperCase()}
                     </div>
                     <span className="text-sm font-medium text-neutral-300">
@@ -439,7 +408,7 @@ export default function ReviewsSection({
                   </Link>
                   {review.rating != null && <MiniStars rating={review.rating} />}
                   {review.is_spoiler && (
-                    <span className="text-[10px] font-bold uppercase tracking-wider bg-warning-500/15 text-warning-400 border border-warning-500/30 rounded-full px-2 py-0.5">
+                    <span className="text-caption font-semibold bg-warning-500/15 text-warning-400 border border-warning-500/30 rounded-full px-2 py-0.5">
                       Spoiler
                     </span>
                   )}
@@ -457,15 +426,11 @@ export default function ReviewsSection({
                     }`}
                     title={review.user_has_liked ? "Unlike" : "Like"}
                   >
-                    <svg
-                      className="w-3.5 h-3.5"
-                      fill={review.user_has_liked ? "currentColor" : "none"}
-                      stroke="currentColor"
-                      strokeWidth={review.user_has_liked ? 0 : 1.5}
-                      viewBox="0 0 24 24"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0112 5.052 5.5 5.5 0 0116.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.219l-.022.012-.007.004-.003.001a.752.752 0 01-.704 0l-.003-.001z" />
-                    </svg>
+                    {review.user_has_liked ? (
+                      <HeartSolid className="w-3.5 h-3.5" aria-hidden="true" />
+                    ) : (
+                      <HeartOutline className="w-3.5 h-3.5" strokeWidth={1.5} aria-hidden="true" />
+                    )}
                     {review.like_count > 0 && <span>{review.like_count}</span>}
                   </button>
                 )}
@@ -475,10 +440,8 @@ export default function ReviewsSection({
                   onClick={() => revealReview(review.id)}
                   className="w-full text-left bg-neutral-900/60 hover:bg-neutral-900 border border-warning-500/30 rounded-lg px-3 py-2.5 text-sm text-neutral-400 hover:text-neutral-200 transition-colors flex items-center gap-2"
                 >
-                  <svg className="w-4 h-4 text-warning-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-                  </svg>
-                  <span className="italic">This review contains spoilers — click to reveal</span>
+                  <ExclamationTriangleIcon className="w-4 h-4 text-warning-400 flex-shrink-0" strokeWidth={2} aria-hidden="true" />
+                  <span>This review contains spoilers — click to reveal</span>
                 </button>
               ) : (
                 <p className="text-neutral-400 text-sm leading-relaxed whitespace-pre-wrap">
@@ -492,10 +455,7 @@ export default function ReviewsSection({
                     className="text-neutral-600 hover:text-error-400 transition-colors text-xs flex items-center gap-1"
                     title="Report review"
                   >
-                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 3l1.5 1.5M21 3l-1.5 1.5M12 2v2m0 16v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2m16 0h2M6.34 17.66l-1.42 1.42M19.08 4.92l-1.42 1.42" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01" />
-                    </svg>
+                    <FlagIcon className="w-3 h-3" strokeWidth={2} aria-hidden="true" />
                     Report
                   </button>
                 </div>

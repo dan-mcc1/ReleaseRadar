@@ -6,6 +6,7 @@ import { useAuthUser } from "../hooks/useAuthUser";
 import { apiFetch } from "../utils/apiFetch";
 import { queryKeys } from "../hooks/api/queryKeys";
 import { CHECKOUT_ENABLED } from "../config/features";
+import { Button, ChevronRightIcon } from "./ui";
 
 interface Step {
   icon: string;
@@ -101,18 +102,18 @@ export default function OnboardingTutorial() {
       />
 
       {/* Card */}
-      <div className="relative w-full max-w-md bg-neutral-900 border border-neutral-700 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+      <div className="relative w-full max-w-md bg-neutral-900 border border-neutral-700 rounded-surface shadow-2xl flex flex-col overflow-hidden">
         {/* Progress bar */}
         <div className="h-1 bg-neutral-800">
           <div
-            className="h-full bg-violet-500 transition-all duration-300"
+            className="h-full bg-primary-500 transition-all duration-300"
             style={{ width: `${((step + 1) / STEPS.length) * 100}%` }}
           />
         </div>
 
         <div className="p-6 flex flex-col gap-4">
           {/* Step counter */}
-          <p className="text-xs text-neutral-500 font-medium tracking-widest uppercase">
+          <p className="text-caption text-neutral-400 font-medium tabular">
             {step + 1} / {STEPS.length}
           </p>
 
@@ -137,7 +138,7 @@ export default function OnboardingTutorial() {
                 onClick={() => setStep(i)}
                 className={`h-1.5 rounded-full transition-all duration-200 ${
                   i === step
-                    ? "w-6 bg-violet-500"
+                    ? "w-6 bg-primary-500"
                     : "w-1.5 bg-neutral-700 hover:bg-neutral-500"
                 }`}
               />
@@ -155,29 +156,17 @@ export default function OnboardingTutorial() {
 
             <div className="flex gap-2">
               {step > 0 && (
-                <button
-                  onClick={() => setStep((s) => s - 1)}
-                  className="px-4 py-2 rounded-lg text-sm font-medium bg-neutral-800 hover:bg-neutral-700 text-neutral-300 transition-colors"
-                >
-                  Back
-                </button>
+                <Button onClick={() => setStep((s) => s - 1)}>Back</Button>
               )}
 
               {current.cta && (
-                <button
-                  onClick={() => handleCta(current.cta!.path)}
-                  className="px-4 py-2 rounded-lg text-sm font-medium bg-neutral-800 hover:bg-neutral-700 text-neutral-300 transition-colors"
-                >
-                  {current.cta.label}
-                </button>
+                <Button onClick={() => handleCta(current.cta!.path)}>{current.cta.label}</Button>
               )}
 
-              <button
-                onClick={() => (isLast ? dismiss() : setStep((s) => s + 1))}
-                className="px-4 py-2 rounded-lg text-sm font-bold bg-violet-600 hover:bg-violet-500 text-white transition-colors"
-              >
-                {isLast ? "Get started" : "Next →"}
-              </button>
+              <Button variant="primary" onClick={() => (isLast ? dismiss() : setStep((s) => s + 1))}>
+                {isLast ? "Get started" : "Next"}
+                {!isLast && <ChevronRightIcon />}
+              </Button>
             </div>
           </div>
         </div>

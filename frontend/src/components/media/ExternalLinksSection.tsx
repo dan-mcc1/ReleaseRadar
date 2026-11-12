@@ -1,5 +1,6 @@
 // frontend/src/components/media/ExternalLinksSection.tsx
 import { ExternalLink } from "../InfoPageWidgets";
+import { SectionHeader } from "../ui";
 import type { MediaExternalIds } from "../../types/media";
 
 interface Props {
@@ -10,9 +11,7 @@ interface Props {
 export default function ExternalLinksSection({ externalIds, homepage }: Props) {
   return (
     <div>
-      <h2 className="text-neutral-400 text-xs uppercase tracking-wider font-semibold mb-3">
-        External Links
-      </h2>
+      <SectionHeader title="External links" className="mb-3" />
       <div className="flex flex-wrap gap-2">
         {homepage && (
           <ExternalLink href={homepage} label="Official Site" />

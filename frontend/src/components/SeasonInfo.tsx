@@ -18,6 +18,7 @@ import {
 import StarRating from "./StarRating";
 import EpisodeRow, { epKey } from "./EpisodeRow";
 import { useToast } from "./Toast";
+import { Button, CheckIcon, ChevronDownIcon, IconButton, SectionHeader } from "./ui";
 
 type FullSeason = Season & { episodes?: Episode[] };
 
@@ -227,8 +228,8 @@ export default function SeasonInfo({
 
   return (
     <div className="mt-6">
-      <h2 className="text-2xl font-semibold mb-2">Seasons</h2>
-      <div className="flex flex-col gap-4">
+      <SectionHeader title="Seasons" className="mb-2" />
+      <div className="flex flex-col divide-y divide-neutral-800">
         {seasons.map((season: Season) => {
           const expandedSeason = expandedSeasons[season.season_number];
           const loadingSeason = loadingSeasons[season.season_number];
@@ -241,7 +242,7 @@ export default function SeasonInfo({
           return (
             <div
               key={season.id}
-              className="border border-neutral-700 rounded-md p-2"
+              className="py-4"
             >
               <div className="flex items-start gap-3">
                 {season.poster_path && (
@@ -252,7 +253,7 @@ export default function SeasonInfo({
                     <img
                       src={`${BASE_IMAGE_URL}/w342${season.poster_path}`}
                       alt={season.name}
-                      className="w-16 sm:w-24 h-auto rounded-md object-cover"
+                      className="w-16 sm:w-24 h-auto rounded-control object-cover"
                     />
                   </Link>
                 )}
@@ -277,7 +278,7 @@ export default function SeasonInfo({
                           }}
                         />
                       </div>
-                      <span className="text-xs text-neutral-400">
+                      <span className="text-caption text-neutral-400 tabular">
                         {watchedCount}/{totalCount}
                       </span>
                     </div>
@@ -286,104 +287,36 @@ export default function SeasonInfo({
                 <div className="flex flex-col items-end gap-2 flex-shrink-0">
                   <div className="flex items-center gap-2">
                   {isLoggedIn && (
-                    <button
+                    <Button
+                      size="sm"
                       onClick={() => toggleSeasonWatched(season, allWatched)}
                       disabled={seasonToggling}
+                      loading={seasonToggling}
+                      icon={allWatched ? <CheckIcon /> : undefined}
                       title={
                         allWatched ? "Unwatch season" : "Mark season as watched"
                       }
-                      className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-medium transition-all duration-150 disabled:opacity-50 ${
-                        allWatched
-                          ? "bg-success-700/40 border border-success-600/60 text-success-400 hover:bg-error-900/30 hover:border-error-600/40 hover:text-error-400"
-                          : "bg-neutral-700 border border-neutral-600 text-neutral-400 hover:bg-success-900/30 hover:border-success-600/40 hover:text-success-400"
-                      }`}
                     >
-                      {seasonToggling ? (
-                        <svg
-                          className="w-3.5 h-3.5 animate-spin"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                        >
-                          <circle
-                            className="opacity-25"
-                            cx="12"
-                            cy="12"
-                            r="10"
-                            stroke="currentColor"
-                            strokeWidth="4"
-                          />
-                          <path
-                            className="opacity-75"
-                            fill="currentColor"
-                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                          />
-                        </svg>
-                      ) : allWatched ? (
-                        <svg
-                          className="w-3.5 h-3.5"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth={2.5}
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="M5 13l4 4L19 7"
-                          />
-                        </svg>
-                      ) : (
-                        <svg
-                          className="w-3.5 h-3.5"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth={2}
-                        >
-                          <circle cx="12" cy="12" r="9" />
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="M5 13l4 4L19 7"
-                          />
-                        </svg>
-                      )}
                       {allWatched ? "Watched" : "Mark watched"}
-                    </button>
+                    </Button>
                   )}
-                  <button
+                  <IconButton
+                    label={expandedSeason ? "Collapse season" : "Expand season"}
+                    size="sm"
                     onClick={() => toggleSeason(season)}
-                    className="text-neutral-400 hover:text-neutral-200 focus:outline-none"
-                    title={expandedSeason ? "Collapse" : "Expand"}
-                  >
-                    {loadingSeason ? (
-                      <svg
-                        className="w-4 h-4 animate-spin"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                      >
-                        <circle
-                          className="opacity-25"
-                          cx="12"
-                          cy="12"
-                          r="10"
-                          stroke="currentColor"
-                          strokeWidth="4"
+                    icon={
+                      loadingSeason ? (
+                        <span
+                          className="w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin"
+                          aria-hidden="true"
                         />
-                        <path
-                          className="opacity-75"
-                          fill="currentColor"
-                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                      ) : (
+                        <ChevronDownIcon
+                          className={`w-4 h-4 transition-transform ${expandedSeason ? "rotate-180" : ""}`}
                         />
-                      </svg>
-                    ) : (
-                      <span
-                        className={`transition-transform inline-block ${expandedSeason ? "rotate-180" : ""}`}
-                      >
-                        ▼
-                      </span>
-                    )}
-                  </button>
+                      )
+                    }
+                  />
                   </div>
                   <SeasonRatingBlock
                     showId={showId}

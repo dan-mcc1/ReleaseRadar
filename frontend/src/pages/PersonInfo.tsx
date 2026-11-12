@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { BASE_IMAGE_URL } from "../constants";
 import { formatLocalDate, parseLocalDate } from "../utils/date";
 import { safeHref } from "../utils/safeHref";
@@ -9,7 +9,20 @@ import { usePersonInfo } from "../hooks/api/usePersonInfo";
 import { useBulkWatchStatus } from "../hooks/api/useWatchStatus";
 import { useAuthUser } from "../hooks/useAuthUser";
 import type { WatchStatus } from "../components/WatchButton";
-import Segmented from "../components/Segmented";
+import {
+  BookmarkIcon,
+  Button,
+  Card,
+  CheckIcon,
+  EmptyState,
+  PageHeader,
+  PlayIcon,
+  PosterCard,
+  SectionHeader,
+  Segmented,
+  buttonClass,
+  selectClass,
+} from "../components/ui";
 
 type MediaType = "movie" | "tv";
 
@@ -69,8 +82,6 @@ type Credit = {
 type SeenFilter = "all" | "seen" | "unseen";
 type SortType = "newest" | "popular";
 
-const LABEL = "font-mono text-[10px] tracking-[0.15em] text-neutral-500 uppercase";
-const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-400";
 const FILMOGRAPHY_LIMIT = 40;
 // The status endpoint takes at most this many titles per request.
 const BULK_STATUS_MAX = 500;
@@ -148,12 +159,7 @@ const LONG_DATE: Intl.DateTimeFormatOptions = { year: "numeric", month: "long", 
 
 function ExternalLink({ href, label }: { href: string; label: string }) {
   return (
-    <a
-      href={safeHref(href)}
-      target="_blank"
-      rel="noopener noreferrer"
-      className={`inline-flex items-center h-10 px-3.5 text-sm text-neutral-300 hover:text-white bg-neutral-900 border border-neutral-700 hover:border-neutral-500 rounded-lg transition-colors ${FOCUS}`}
-    >
+    <a href={safeHref(href)} target="_blank" rel="noopener noreferrer" className={buttonClass("secondary")}>
       {label}
     </a>
   );
@@ -163,17 +169,17 @@ const STATUS_BADGES: Partial<Record<WatchStatus, { label: string; className: str
   Watched: {
     label: "Seen",
     className: "bg-primary-500 text-primary-950",
-    icon: <path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />,
+    icon: <CheckIcon className="w-4 h-4" />,
   },
   "Want To Watch": {
     label: "On your watchlist",
     className: "bg-neutral-950 text-primary-400 border border-primary-400",
-    icon: <path d="M5 3.5h6v9l-3-2.2-3 2.2z" fill="currentColor" />,
+    icon: <BookmarkIcon filled className="w-3.5 h-3.5" />,
   },
   "Currently Watching": {
     label: "Watching",
     className: "bg-neutral-950 text-primary-400 border border-primary-400",
-    icon: <path d="M6 4.2v7.6L12 8z" fill="currentColor" />,
+    icon: <PlayIcon className="w-3.5 h-3.5" />,
   },
 };
 
@@ -183,11 +189,9 @@ function StatusBadge({ status }: { status: WatchStatus }) {
   return (
     <span
       title={badge.label}
-      className={`absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center shadow-md shadow-black/40 ${badge.className}`}
+      className={`w-6 h-6 rounded-full flex items-center justify-center shadow-md shadow-black/40 ${badge.className}`}
     >
-      <svg viewBox="0 0 16 16" className="w-4 h-4" aria-hidden="true">
-        {badge.icon}
-      </svg>
+      {badge.icon}
       <span className="sr-only">{badge.label}</span>
     </span>
   );
@@ -197,54 +201,23 @@ function CreditCard({
   credit,
   status,
   sub,
-  className = "",
+  className,
 }: {
   credit: Credit;
   status: WatchStatus;
   sub: string;
   className?: string;
 }) {
-  return (
-    <Link to={`/${credit.type}/${credit.id}`} className={`group flex flex-col min-w-0 rounded-xl ${FOCUS} ${className}`}>
-      <div className="relative aspect-[2/3] rounded-xl overflow-hidden bg-neutral-800 border border-white/10 group-hover:border-white/40 transition-colors">
-        {credit.poster ? (
-          <img
-            src={`${BASE_IMAGE_URL}/w342${credit.poster}`}
-            alt=""
-            loading="lazy"
-            className="w-full h-full object-cover"
-          />
-        ) : (
-          <div aria-hidden="true" className="w-full h-full flex items-center justify-center p-2 text-center text-xs text-neutral-400">
-            {credit.title}
-          </div>
-        )}
-        <StatusBadge status={status} />
-      </div>
-      <span className="mt-2 text-[13px] font-semibold leading-tight text-neutral-100 group-hover:text-white truncate">
-        {credit.title}
-      </span>
-      {sub && <span className="mt-0.5 text-xs text-neutral-400 truncate">{sub}</span>}
-    </Link>
+  const card = (
+    <PosterCard
+      to={`/${credit.type}/${credit.id}`}
+      title={credit.title}
+      posterPath={credit.poster}
+      subtitle={sub || undefined}
+      corner={<StatusBadge status={status} />}
+    />
   );
-}
-
-function Stat({ value, label, className = "text-neutral-100" }: { value: ReactNode; label: string; className?: string }) {
-  return (
-    <div className="flex flex-col-reverse">
-      <dt className={`${LABEL} mt-1`}>{label}</dt>
-      <dd className={`text-3xl font-semibold tabular-nums ${className}`}>{value}</dd>
-    </div>
-  );
-}
-
-function SectionHeader({ title, children }: { title: string; children?: ReactNode }) {
-  return (
-    <div className="flex flex-wrap items-center gap-x-5 gap-y-3 pb-3 mb-4 border-b border-neutral-800">
-      <h2 className="text-lg font-semibold text-neutral-100">{title}</h2>
-      {children}
-    </div>
-  );
+  return className ? <div className={className}>{card}</div> : card;
 }
 
 function PersonPage({ person }: { person: FullPersonData }) {
@@ -362,14 +335,14 @@ function PersonPage({ person }: { person: FullPersonData }) {
               srcSet={`${BASE_IMAGE_URL}/w185${person.profile_path} 185w, ${BASE_IMAGE_URL}/h632${person.profile_path} 421w`}
               sizes="(min-width: 1024px) 280px, 96px"
               alt={`Photo of ${person.name}`}
-              className="col-start-1 row-start-1 w-full aspect-[2/3] object-cover rounded-xl shadow-2xl border border-white/10"
+              className="col-start-1 row-start-1 w-full aspect-[2/3] object-cover rounded-surface shadow-2xl border border-white/10"
             />
           ) : (
-            <div aria-hidden="true" className="col-start-1 row-start-1 w-full aspect-[2/3] rounded-xl bg-neutral-800 border border-white/10" />
+            <div aria-hidden="true" className="col-start-1 row-start-1 w-full aspect-[2/3] rounded-surface bg-neutral-800 border border-white/10" />
           )}
 
           <div className="col-span-2 pt-4 border-t border-neutral-800">
-            <div className={`${LABEL} mb-3`}>Key facts</div>
+            <SectionHeader title="Key facts" className="mb-3" />
             <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
               {department && (
                 <>
@@ -420,81 +393,85 @@ function PersonPage({ person }: { person: FullPersonData }) {
           )}
         </div>
 
-        <h1 className="col-start-2 row-start-1 self-center lg:self-start min-w-0 text-3xl sm:text-4xl lg:text-5xl 2xl:text-[3.5rem] font-semibold tracking-tight leading-[1.05] text-white text-balance">
-          {person.name}
-        </h1>
+        <PageHeader title={person.name} className="col-start-2 row-start-1 self-center lg:self-start min-w-0" />
 
         <div className="@container col-span-2 lg:col-span-1 lg:col-start-2 lg:row-start-2 min-w-0 flex flex-col gap-10">
           {user && total > 0 && (
-            <section
+            <Card
+              as="section"
               aria-label={`Your history with ${person.name}`}
-              className="flex flex-wrap items-center gap-x-12 gap-y-5 px-6 py-5 bg-neutral-900 border border-neutral-800 rounded-2xl"
+              padding="md"
             >
-              <div className="flex-1 basis-80 min-w-0">
-                <div className={LABEL}>Your history</div>
-                <p className="mt-2.5 mb-3.5 text-lg sm:text-xl text-neutral-100">
-                  {!statusReady ? (
-                    "Checking your lists…"
-                  ) : tally.seen === 0 ? (
-                    <>You haven't seen any of {person.name}'s {total} titles yet.</>
-                  ) : (
-                    <>
-                      You've seen <strong className="font-semibold">{tally.seen}</strong> of {person.name}'s {total}{" "}
-                      titles.
-                    </>
-                  )}
-                </p>
-                <div
-                  role="img"
-                  aria-label={`${tally.seen} seen, ${tally.watching + tally.watchlist} watching or on your watchlist, out of ${total}`}
-                  className="flex gap-0.5 h-2 rounded-full overflow-hidden bg-neutral-800"
-                >
-                  {tally.seen > 0 && (
-                    <div className="bg-primary-500" style={{ width: `${(tally.seen / total) * 100}%` }} />
-                  )}
-                  {tally.watching + tally.watchlist > 0 && (
-                    <div
-                      className="bg-primary-200"
-                      style={{ width: `${((tally.watching + tally.watchlist) / total) * 100}%` }}
-                    />
-                  )}
-                </div>
+              <div className="text-caption text-neutral-400">Your history</div>
+              <p className="mt-2 mb-3.5 text-title text-neutral-100">
+                {!statusReady ? (
+                  "Checking your lists…"
+                ) : tally.seen === 0 ? (
+                  <>You haven't seen any of {person.name}'s {total} titles yet.</>
+                ) : (
+                  <>
+                    You've seen <strong className="font-semibold">{tally.seen}</strong> of {person.name}'s {total}{" "}
+                    titles.
+                  </>
+                )}
+              </p>
+              <div
+                role="img"
+                aria-label={`${tally.seen} seen, ${tally.watching + tally.watchlist} watching or on your watchlist, out of ${total}`}
+                className="flex gap-0.5 h-2 rounded-full overflow-hidden bg-neutral-800"
+              >
+                {tally.seen > 0 && (
+                  <div className="bg-primary-500" style={{ width: `${(tally.seen / total) * 100}%` }} />
+                )}
+                {tally.watching + tally.watchlist > 0 && (
+                  <div
+                    className="bg-primary-200"
+                    style={{ width: `${((tally.watching + tally.watchlist) / total) * 100}%` }}
+                  />
+                )}
               </div>
-              <dl className="flex gap-10">
-                <Stat value={statusReady ? tally.seen : "–"} label="Seen" className="text-primary-400" />
-                {tally.watching > 0 && <Stat value={tally.watching} label="Watching" className="text-primary-200" />}
-                <Stat value={statusReady ? tally.watchlist : "–"} label="On watchlist" className="text-primary-200" />
-                <Stat value={statusReady ? total - tally.seen : "–"} label="Not seen" />
-              </dl>
-            </section>
+              {statusReady && (
+                <p className="tabular mt-3 text-label text-neutral-400">
+                  {[
+                    `${tally.seen} seen`,
+                    tally.watching > 0 && `${tally.watching} watching`,
+                    `${tally.watchlist} on watchlist`,
+                    `${total - tally.seen} not seen`,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
+              )}
+            </Card>
           )}
 
           {person.biography && (
             <section aria-label="Biography" className="max-w-[75ch]">
               <p
                 ref={bioRef}
-                className={`text-base sm:text-[17px] leading-relaxed text-neutral-300 whitespace-pre-line ${
+                className={`text-body sm:text-title leading-relaxed text-neutral-300 whitespace-pre-line ${
                   bioExpanded ? "" : "line-clamp-5"
                 }`}
               >
                 {person.biography}
               </p>
               {bioOverflows && (
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="sm"
                   aria-expanded={bioExpanded}
                   onClick={() => setBioExpanded(!bioExpanded)}
-                  className={`mt-2 py-1.5 text-sm font-medium text-primary-400 hover:text-primary-300 rounded ${FOCUS}`}
+                  className="mt-2 -ml-3"
                 >
                   {bioExpanded ? "Show less" : "Read more"}
-                </button>
+                </Button>
               )}
             </section>
           )}
 
           {knownFor.length > 0 && (
             <section aria-label="Known for">
-              <SectionHeader title="Known for" />
+              <SectionHeader title="Known for" divider className="mb-4" />
               <div className="grid grid-cols-3 @md:grid-cols-4 @2xl:grid-cols-6 @4xl:grid-cols-8 gap-x-4 gap-y-6">
                 {knownFor.map((c, i) => (
                   <CreditCard
@@ -503,7 +480,7 @@ function PersonPage({ person }: { person: FullPersonData }) {
                     status={statusOf(c)}
                     sub={c.role}
                     // Three and six across show six, so the rows stay full.
-                    className={i >= 6 ? "hidden @md:flex @2xl:hidden @4xl:flex" : ""}
+                    className={i >= 6 ? "hidden @md:block @2xl:hidden @4xl:block" : undefined}
                   />
                 ))}
               </div>
@@ -512,48 +489,53 @@ function PersonPage({ person }: { person: FullPersonData }) {
 
           {total > 0 && (
             <section aria-label="Filmography">
-              <SectionHeader title="Filmography">
-                {movies.length > 0 && shows.length > 0 && (
-                  <Segmented
-                    label="Type"
-                    value={tab}
-                    onChange={(t) => {
-                      setTab(t);
-                      setShowAll(false);
-                    }}
-                    options={[
-                      { value: "movie", label: <>Movies <span className="ml-1 tabular-nums opacity-70">{movies.length}</span></> },
-                      { value: "tv", label: <>TV shows <span className="ml-1 tabular-nums opacity-70">{shows.length}</span></> },
-                    ]}
-                  />
-                )}
-                <div className="flex flex-wrap items-center gap-3 sm:ml-auto">
-                  {user && (
-                    <Segmented
-                      label="Show"
-                      value={filter}
-                      onChange={setFilter}
-                      options={[
-                        { value: "all", label: "All" },
-                        { value: "seen", label: "Seen" },
-                        { value: "unseen", label: "Not seen" },
-                      ]}
-                    />
-                  )}
-                  <select
-                    aria-label="Sort"
-                    value={sort}
-                    onChange={(e) => setSort(e.target.value as SortType)}
-                    className="h-[42px] text-sm bg-neutral-900 border border-neutral-800 text-neutral-200 rounded-xl px-3 focus:outline-none focus:border-neutral-500"
-                  >
-                    <option value="newest">Newest first</option>
-                    <option value="popular">Most popular</option>
-                  </select>
-                </div>
-              </SectionHeader>
+              <SectionHeader
+                title="Filmography"
+                divider
+                className="mb-4"
+                action={
+                  <div className="flex flex-wrap items-center gap-3">
+                    {movies.length > 0 && shows.length > 0 && (
+                      <Segmented
+                        label="Type"
+                        value={tab}
+                        onChange={(t) => {
+                          setTab(t);
+                          setShowAll(false);
+                        }}
+                        options={[
+                          { value: "movie", label: <>Movies <span className="ml-1 tabular opacity-70">{movies.length}</span></> },
+                          { value: "tv", label: <>TV shows <span className="ml-1 tabular opacity-70">{shows.length}</span></> },
+                        ]}
+                      />
+                    )}
+                    {user && (
+                      <Segmented
+                        label="Show"
+                        value={filter}
+                        onChange={setFilter}
+                        options={[
+                          { value: "all", label: "All" },
+                          { value: "seen", label: "Seen" },
+                          { value: "unseen", label: "Not seen" },
+                        ]}
+                      />
+                    )}
+                    <select
+                      aria-label="Sort"
+                      value={sort}
+                      onChange={(e) => setSort(e.target.value as SortType)}
+                      className={selectClass}
+                    >
+                      <option value="newest">Newest first</option>
+                      <option value="popular">Most popular</option>
+                    </select>
+                  </div>
+                }
+              />
 
               {visible.length === 0 ? (
-                <p className="py-6 text-neutral-400">{emptyMessage}</p>
+                <EmptyState title={emptyMessage} className="py-10" />
               ) : (
                 <div className="grid grid-cols-3 @md:grid-cols-4 @2xl:grid-cols-6 @4xl:grid-cols-8 @6xl:grid-cols-10 gap-x-4 gap-y-6">
                   {displayed.map((c) => (
@@ -568,13 +550,9 @@ function PersonPage({ person }: { person: FullPersonData }) {
               )}
 
               {visible.length > FILMOGRAPHY_LIMIT && (
-                <button
-                  type="button"
-                  onClick={() => setShowAll(!showAll)}
-                  className={`mt-6 h-10 px-4 text-sm font-medium text-neutral-100 bg-neutral-900 border border-neutral-700 hover:border-neutral-500 rounded-xl transition-colors ${FOCUS}`}
-                >
+                <Button className="mt-6" onClick={() => setShowAll(!showAll)}>
                   {showAll ? "Show fewer" : `Show ${visible.length - FILMOGRAPHY_LIMIT} more`}
-                </button>
+                </Button>
               )}
             </section>
           )}
@@ -598,12 +576,12 @@ export default function PersonInfo() {
       <div className="flex items-center justify-center min-h-64">
         <div className="flex flex-col items-center gap-3">
           <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-neutral-400 text-sm">Loading…</p>
+          <p className="text-neutral-400 text-body">Loading…</p>
         </div>
       </div>
     );
-  if (error) return <p className="text-error-400 p-6">{error?.message}</p>;
-  if (!person) return <p className="text-neutral-400 p-6">Person not found.</p>;
+  if (error) return <EmptyState title="Couldn't load this person" description={error?.message} />;
+  if (!person) return <EmptyState title="Person not found" />;
 
   // Keyed so the tab, filter and expanded sections reset when moving to another person.
   return <PersonPage key={person.id} person={person} />;

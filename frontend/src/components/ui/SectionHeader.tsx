@@ -41,7 +41,9 @@ export default function SectionHeader({
       >
         {title}
       </Heading>
-      {note && <span className="text-label text-neutral-400">{note}</span>}
+      {note != null && note !== false && note !== "" && (
+        <span className="text-label text-neutral-400">{note}</span>
+      )}
       {action && <div className="ml-auto">{action}</div>}
     </div>
   );

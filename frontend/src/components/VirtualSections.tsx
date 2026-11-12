@@ -147,8 +147,8 @@ export default function VirtualSections<T>({
               {row.kind === "heading" ? (
                 <div className={row.first ? "" : "pt-10"}>
                   <div className="flex items-baseline gap-3 pb-3 mb-4 border-b border-neutral-800">
-                    <h2 className="text-lg font-semibold text-neutral-100">{row.title}</h2>
-                    {row.note && <span className="text-[13px] text-neutral-400">{row.note}</span>}
+                    <h2 className="text-title font-semibold text-neutral-100">{row.title}</h2>
+                    {row.note && <span className="text-label text-neutral-400">{row.note}</span>}
                   </div>
                 </div>
               ) : (

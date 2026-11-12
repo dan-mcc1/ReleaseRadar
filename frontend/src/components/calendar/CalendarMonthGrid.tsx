@@ -47,7 +47,7 @@ export default function CalendarMonthGrid({
         {DAY_NAMES.map(([letter, rest], i) => (
           <div
             key={i}
-            className="px-2 sm:px-3 py-2.5 font-mono text-[11px] tracking-[0.14em] uppercase text-neutral-500"
+            className="px-2 sm:px-3 py-2.5 text-caption font-medium text-neutral-500"
           >
             {letter}
             <span className="hidden sm:inline">{rest}</span>

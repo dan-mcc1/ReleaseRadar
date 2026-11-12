@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { CheckIcon } from "./ui";
 import {
   useStreamingOptimizer,
   type OptimizerItem,
@@ -148,8 +149,8 @@ export default function StreamingOptimizer() {
     <div className="space-y-4">
       {/* Coverage overview */}
       <div className="bg-neutral-800 shadow-md rounded-lg p-4 space-y-4">
-        <h2 className="text-sm font-semibold text-neutral-400 uppercase tracking-wider">
-          Coverage Overview
+        <h2 className="text-title font-semibold text-neutral-100">
+          Coverage overview
         </h2>
         <CoverageBar
           covered={data.my_services_coverage}
@@ -175,8 +176,8 @@ export default function StreamingOptimizer() {
       {suggestionsNotOwned.length > 0 && (
         <div className="bg-neutral-800 shadow-md rounded-lg p-4 space-y-3">
           <div>
-            <h2 className="text-sm font-semibold text-neutral-400 uppercase tracking-wider">
-              Recommended Services
+            <h2 className="text-title font-semibold text-neutral-100">
+              Recommended services
             </h2>
             <p className="text-neutral-500 text-xs mt-0.5">
               Add these to maximize your watchlist coverage
@@ -240,8 +241,8 @@ export default function StreamingOptimizer() {
       {/* All providers ranked */}
       {data.coverage_by_provider.length > 0 && (
         <div className="bg-neutral-800 shadow-md rounded-lg p-4 space-y-3">
-          <h2 className="text-sm font-semibold text-neutral-400 uppercase tracking-wider">
-            All Services by Coverage
+          <h2 className="text-title font-semibold text-neutral-100">
+            All services by coverage
           </h2>
           <div className="space-y-2">
             {visibleProviders.map((p) => {
@@ -264,7 +265,7 @@ export default function StreamingOptimizer() {
                         {p.name}
                         {p.you_have && (
                           <span className="ml-1.5 text-primary-400 text-xs">
-                            ✓ yours
+                            <CheckIcon className="w-3 h-3 inline -mt-0.5" /> yours
                           </span>
                         )}
                       </span>
@@ -300,8 +301,8 @@ export default function StreamingOptimizer() {
       {data.uncovered_items.length > 0 && (
         <div className="bg-neutral-800 shadow-md rounded-lg p-4 space-y-3">
           <div>
-            <h2 className="text-sm font-semibold text-neutral-400 uppercase tracking-wider">
-              Not Covered by Your Services
+            <h2 className="text-title font-semibold text-neutral-100">
+              Not covered by your services
             </h2>
             <p className="text-neutral-500 text-xs mt-0.5">
               {data.uncovered_items.length} item
@@ -363,8 +364,8 @@ export default function StreamingOptimizer() {
       {data.no_streaming_items.length > 0 && (
         <div className="bg-neutral-800 shadow-md rounded-lg p-4 space-y-3">
           <div>
-            <h2 className="text-sm font-semibold text-neutral-400 uppercase tracking-wider">
-              Not Available to Stream
+            <h2 className="text-title font-semibold text-neutral-100">
+              Not available to stream
             </h2>
             <p className="text-neutral-500 text-xs mt-0.5">
               {data.no_streaming_items.length} item

@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { ExclamationTriangleIcon, NoSymbolIcon } from "@heroicons/react/24/outline";
+import { Button, CheckIcon } from "./ui";
 import { useAccountStatus, useSubmitAppeal } from "../hooks/api/useUser";
 
 export default function SuspensionBanModal({ asPage = false }: { asPage?: boolean }) {
@@ -33,24 +35,22 @@ export default function SuspensionBanModal({ asPage = false }: { asPage?: boolea
 
   return (
     <div className={wrapperClass}>
-      <div className="bg-neutral-900 border border-neutral-700 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+      <div className="bg-neutral-900 border border-neutral-700 rounded-surface w-full max-w-md shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className={`px-6 py-5 border-b border-neutral-800 ${isBan ? "bg-red-950/40" : "bg-warning-950/30"}`}>
+        <div className={`px-6 py-5 border-b border-neutral-800 ${isBan ? "bg-error-950/40" : "bg-warning-950/30"}`}>
           <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isBan ? "bg-red-900/60" : "bg-warning-900/60"}`}>
-              <svg className={`w-5 h-5 ${isBan ? "text-red-400" : "text-warning-400"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                {isBan ? (
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-                ) : (
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                )}
-              </svg>
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isBan ? "bg-error-900/60" : "bg-warning-900/60"}`}>
+              {isBan ? (
+                <NoSymbolIcon className="w-5 h-5 text-error-400" strokeWidth={2} aria-hidden="true" />
+              ) : (
+                <ExclamationTriangleIcon className="w-5 h-5 text-warning-400" strokeWidth={2} aria-hidden="true" />
+              )}
             </div>
             <div>
               <h2 className="text-white font-semibold text-lg">
                 {isBan ? "Account Banned" : "Account Suspended"}
               </h2>
-              <p className={`text-xs font-medium ${isBan ? "text-red-400" : "text-warning-400"}`}>
+              <p className={`text-xs font-medium ${isBan ? "text-error-400" : "text-warning-400"}`}>
                 {isBan
                   ? "Your account has been permanently banned"
                   : untilDate
@@ -65,7 +65,7 @@ export default function SuspensionBanModal({ asPage = false }: { asPage?: boolea
           {/* Reason */}
           {(isBan ? status.ban_reason : status.suspension_reason) && (
             <div className="bg-neutral-800 rounded-lg px-4 py-3">
-              <p className="text-xs text-neutral-500 font-medium uppercase tracking-wide mb-1">Reason</p>
+              <p className="text-caption text-neutral-400 mb-1">Reason</p>
               <p className="text-sm text-neutral-300">
                 {isBan ? status.ban_reason : status.suspension_reason}
               </p>
@@ -92,9 +92,7 @@ export default function SuspensionBanModal({ asPage = false }: { asPage?: boolea
 
             {status.has_pending_appeal || submitted ? (
               <div className="flex items-center gap-2 bg-neutral-800 rounded-lg px-4 py-3">
-                <svg className="w-4 h-4 text-success-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
+                <CheckIcon className="w-4 h-4 text-success-400 shrink-0" />
                 <p className="text-sm text-neutral-300">Your appeal has been submitted and is under review.</p>
               </div>
             ) : (
@@ -122,13 +120,12 @@ export default function SuspensionBanModal({ asPage = false }: { asPage?: boolea
                 )}
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-neutral-600">{message.length}/2000</span>
-                  <button
+                  <Button
                     onClick={handleSubmit}
                     disabled={!message.trim() || submitAppeal.isPending}
-                    className="bg-neutral-700 hover:bg-neutral-600 disabled:opacity-40 text-white text-sm font-medium px-5 py-2 rounded-lg transition-colors"
                   >
                     {submitAppeal.isPending ? "Submitting…" : "Submit appeal"}
-                  </button>
+                  </Button>
                 </div>
                 {submitAppeal.isError && (
                   <p className="text-xs text-error-400">Something went wrong. Please try again.</p>

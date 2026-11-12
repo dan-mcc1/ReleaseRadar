@@ -7,6 +7,7 @@ import {
   useItemGroupMembership,
   type Community,
 } from "../hooks/api/useCommunities";
+import { Button, CheckIcon, ChevronRightIcon, CloseIcon, moreLinkClass } from "./ui";
 
 interface Props {
   contentType: "movie" | "tv";
@@ -54,11 +55,11 @@ export default function AddToGroupModal({
       onClick={onClose}
     >
       <div
-        className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 w-full max-w-md max-h-[80vh] flex flex-col"
+        className="bg-neutral-900 border border-neutral-800 rounded-surface p-6 w-full max-w-md max-h-[80vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="text-[18px] font-semibold text-white mb-1">Add to group</h3>
-        <p className="text-[13px] text-neutral-400 mb-4 line-clamp-1">
+        <h3 className="text-title font-semibold text-white mb-1">Add to group</h3>
+        <p className="text-label text-neutral-400 mb-4 line-clamp-1">
           <span className="text-neutral-300 font-medium">{title}</span>
         </p>
 
@@ -67,7 +68,7 @@ export default function AddToGroupModal({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Filter your groups…"
-            className="bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm text-white placeholder-neutral-600 outline-none focus:border-neutral-600 mb-3"
+            className="bg-neutral-950 border border-neutral-800 rounded-control px-3 py-2 text-body text-white placeholder-neutral-500 outline-none focus:border-neutral-400 mb-3"
           />
         )}
 
@@ -82,16 +83,13 @@ export default function AddToGroupModal({
                   : "None of your groups let you add titles."}
               </p>
               {groups.length > 0 && (
-                <p className="text-[11px] text-neutral-500 mt-1">
+                <p className="text-caption text-neutral-400 mt-1">
                   Only the owner and admins can add titles by default.
                 </p>
               )}
-              <Link
-                to="/groups"
-                onClick={onClose}
-                className="mt-2 inline-block text-sm text-primary-400 hover:text-primary-300"
-              >
-                Browse groups →
+              <Link to="/groups" onClick={onClose} className={`mt-2 ${moreLinkClass}`}>
+                Browse groups
+                <ChevronRightIcon />
               </Link>
             </div>
           ) : (
@@ -99,7 +97,7 @@ export default function AddToGroupModal({
               {eligible.map((g: Community) => (
                 <li
                   key={g.id}
-                  className="flex items-center gap-3 p-2.5 rounded-xl border border-neutral-800 hover:border-neutral-700 transition-colors"
+                  className="flex items-center gap-3 p-2.5 rounded-control border border-neutral-800 hover:border-neutral-700 transition-colors"
                 >
                   <div
                     className="w-9 h-9 rounded-lg shrink-0"
@@ -108,8 +106,8 @@ export default function AddToGroupModal({
                     }}
                   />
                   <div className="flex-1 min-w-0">
-                    <p className="text-[14px] font-medium text-white truncate">{g.name}</p>
-                    <p className="text-[11px] text-neutral-500 font-mono">
+                    <p className="text-body font-medium text-white truncate">{g.name}</p>
+                    <p className="text-caption text-neutral-400">
                       {g.member_count} member{g.member_count === 1 ? "" : "s"}
                     </p>
                   </div>
@@ -128,12 +126,9 @@ export default function AddToGroupModal({
 
         {error && <p className="text-error-400 text-sm mt-3">{error}</p>}
 
-        <button
-          onClick={onClose}
-          className="mt-4 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-sm py-2.5 rounded-xl"
-        >
+        <Button className="mt-4" onClick={onClose}>
           Done
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -179,48 +174,23 @@ function ToggleBtn({
 
   if (isAdded) {
     return (
-      <button
+      <Button
+        size="sm"
         onClick={handle}
-        disabled={isPending}
+        loading={isPending}
         title="Remove from this group"
-        className="group/btn flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-primary-400 hover:text-error-400 border border-primary-500/40 hover:border-error-500/40 bg-primary-500/10 hover:bg-error-500/10 px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+        className="group/btn"
       >
-        {isPending ? (
-          <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
-        ) : (
-          <>
-            <svg
-              className="w-3 h-3 group-hover/btn:hidden"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={3}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-            </svg>
-            <svg
-              className="w-3 h-3 hidden group-hover/btn:inline"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={3}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-            <span className="group-hover/btn:hidden">Added</span>
-            <span className="hidden group-hover/btn:inline">Remove</span>
-          </>
-        )}
-      </button>
+        <CheckIcon className="w-3 h-3 group-hover/btn:hidden" />
+        <CloseIcon className="w-3 h-3 hidden group-hover/btn:inline" />
+        <span className="group-hover/btn:hidden">Added</span>
+        <span className="hidden group-hover/btn:inline">Remove</span>
+      </Button>
     );
   }
   return (
-    <button
-      onClick={handle}
-      disabled={isPending}
-      className="text-xs font-semibold bg-primary-600 hover:bg-primary-500 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg"
-    >
+    <Button variant="primary" size="sm" onClick={handle} loading={isPending}>
       {isPending ? "Adding…" : "Add"}
-    </button>
+    </Button>
   );
 }

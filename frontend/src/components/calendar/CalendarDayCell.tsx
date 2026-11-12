@@ -26,9 +26,9 @@ const dayLabelFormatter = new Intl.DateTimeFormat(undefined, {
 
 /**
  * One title on a day: a movie, an episode, or several episodes of one show
- * drawn as a stack. It's a picture only: the day's button covers the whole
- * cell, and picking the day lists its releases, with their links, beside the
- * grid.
+ * (counted in the corner). It's a picture only: the day's button covers the
+ * whole cell, and picking the day lists its releases, with their links,
+ * beside the grid.
  */
 function Tile({ items }: { items: CalendarItem[] }) {
   const first = items[0];
@@ -46,9 +46,8 @@ function Tile({ items }: { items: CalendarItem[] }) {
     const episodes = items as TvItem[];
     name = first.showData.name;
     const code = episodeCode(episodes);
-    const count = `${items.length} episodes`;
-    badge = code ?? count;
-    extra = stacked ? (code ? count : null) : (episodeTag(episodes)?.short ?? null);
+    badge = code ?? `${items.length} episodes`;
+    extra = stacked ? null : (episodeTag(episodes)?.short ?? null);
     time = formatAirTimeToLocal(
       first.showData.air_time,
       first.showData.air_timezone,
@@ -57,14 +56,7 @@ function Tile({ items }: { items: CalendarItem[] }) {
   }
 
   return (
-    <div
-      aria-hidden="true"
-      className={`relative mt-1.5 h-10 sm:h-[78px] rounded-md sm:rounded-lg ${
-        stacked
-          ? "sm:mt-[13px] sm:mr-[7px] sm:shadow-[4px_-4px_0_0_var(--color-neutral-700),7px_-7px_0_0_var(--color-neutral-800)]"
-          : ""
-      }`}
-    >
+    <div aria-hidden="true" className="relative mt-1.5 h-10 sm:h-[78px] rounded-md sm:rounded-lg">
       <span className="absolute inset-0 rounded-[inherit] overflow-hidden bg-neutral-800">
         {show.backdrop_path && (
           <img
@@ -83,13 +75,18 @@ function Tile({ items }: { items: CalendarItem[] }) {
             className="max-h-5 sm:max-h-9 max-w-full object-contain drop-shadow-md"
           />
         ) : (
-          <span className="text-white text-[10px] sm:text-[13px] font-bold uppercase tracking-wide text-center line-clamp-2 leading-tight drop-shadow">
+          <span className="text-white text-caption sm:text-label font-semibold text-center line-clamp-2 leading-tight drop-shadow">
             {name}
           </span>
         )}
       </span>
-      <span className="absolute inset-x-1.5 bottom-1.5 hidden sm:flex items-end justify-between gap-1.5 font-mono text-[11px] leading-none">
-        <span className="min-w-0 truncate rounded px-1.5 py-[3px] bg-black/80 text-white">
+      {stacked && (
+        <span className="absolute top-1.5 right-1.5 hidden sm:block rounded px-1.5 py-[3px] bg-black/80 text-caption leading-none font-medium text-white tabular">
+          {items.length} eps
+        </span>
+      )}
+      <span className="absolute inset-x-1.5 bottom-1.5 hidden sm:flex items-end justify-between gap-1.5 text-caption leading-none tabular">
+        <span className="min-w-0 truncate rounded px-1.5 py-[3px] bg-black/80 font-mono text-white">
           {badge}
           {extra && <span className="hidden @min-[210px]:inline"> · {extra}</span>}
         </span>
@@ -135,7 +132,7 @@ export default function CalendarDayCell({
         aria-label={`${dayLabelFormatter.format(day.date)}${
           count > 0 ? `, ${count} ${count === 1 ? "release" : "releases"}` : ""
         }`}
-        className={`block cursor-pointer font-mono text-xs after:absolute after:inset-0 after:z-10 focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:-outline-offset-2 focus-visible:after:outline-primary-400 ${
+        className={`block cursor-pointer text-label tabular after:absolute after:inset-0 after:z-10 focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:-outline-offset-2 focus-visible:after:outline-primary-400 ${
           isToday
             ? "font-semibold text-primary-300"
             : isSelected
@@ -144,7 +141,7 @@ export default function CalendarDayCell({
         }`}
       >
         <time dateTime={toLocalISODate(day.date)}>
-          {day.date.getDate().toString().padStart(2, "0")}
+          {day.date.getDate()}
         </time>
         {isToday && <span className="hidden @min-[110px]:inline"> · Today</span>}
       </button>
