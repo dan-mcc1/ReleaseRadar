@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { escapeHtml, injectPreviewTags, trimDescription } from "./previewTags.ts";
+import { escapeHtml, injectPreviewTags, isPreviewBot, trimDescription } from "./previewTags";
 
 const PAGE = `<!doctype html>
 <html lang="en">
@@ -78,8 +78,7 @@ describe("escapeHtml", () => {
 });
 
 describe("isPreviewBot", () => {
-  it("matches link unfurlers and crawlers but not browsers", async () => {
-    const { isPreviewBot } = await import("../middleware");
+  it("matches link unfurlers and crawlers but not browsers", () => {
     for (const ua of [
       "Slackbot-LinkExpanding 1.0 (+https://api.slack.com/robots)",
       "Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)",

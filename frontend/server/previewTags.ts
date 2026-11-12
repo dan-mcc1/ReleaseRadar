@@ -67,6 +67,15 @@ const STRIP_PATTERNS: RegExp[] = [
   /[ \t]*<link\s[^>]*?\brel=["']canonical["'][^>]*>[ \t]*\r?\n?/gi,
 ];
 
+// Only link unfurlers and search crawlers get the rewritten page; people get
+// the plain SPA with no extra round trips before it starts.
+const PREVIEW_BOTS =
+  /bot\b|crawler|spider|facebookexternalhit|facebookcatalog|slackbot|discordbot|twitterbot|whatsapp|telegrambot|linkedinbot|skypeuripreview|embedly|redditbot|pinterest|applebot|googlebot|bingbot|duckduckbot|yandex|iframely|vkshare|outbrain|quora link preview|mastodon/i;
+
+export function isPreviewBot(userAgent: string | null): boolean {
+  return !!userAgent && PREVIEW_BOTS.test(userAgent);
+}
+
 /** Replaces the page's title, description, canonical, og:* and twitter:* tags. */
 export function injectPreviewTags(html: string, input: PreviewInput): string {
   let out = html;
