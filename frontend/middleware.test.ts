@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { escapeHtml, injectPreviewTags, isPreviewBot, trimDescription } from "./previewTags";
+import { escapeHtml, injectPreviewTags, isPreviewBot, trimDescription } from "./middleware";
 
 const PAGE = `<!doctype html>
 <html lang="en">
