@@ -12,6 +12,20 @@ import {
 } from "../hooks/api/useEpisodes";
 import { useNotificationPrefs } from "../hooks/api/useNotifications";
 import { useAuthUser } from "../hooks/useAuthUser";
+import { ExclamationTriangleIcon } from "@heroicons/react/24/outline";
+import {
+  Button,
+  ButtonLink,
+  CheckIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  PageHeader,
+  PlusIcon,
+  SectionHeader,
+  StarIcon,
+  cx,
+  focusRing,
+} from "../components/ui";
 
 interface CastMember {
   id: number;
@@ -88,7 +102,7 @@ function formatAirDate(dateStr: string) {
     month: "short",
     day: "numeric",
     year: "numeric",
-  }).toUpperCase();
+  });
 }
 
 export default function EpisodeInfo() {
@@ -233,16 +247,13 @@ export default function EpisodeInfo() {
   if (episodeQuery.isError || !data) {
     return (
       <div className="w-full max-w-3xl mx-auto px-6 py-16 text-center">
-        <p className="text-error-400 text-lg">
+        <p className="text-error-400 text-title">
           {episodeQuery.error?.message ?? "Episode not found."}
         </p>
         {showId && (
-          <Link
-            to={`/tv/${showId}`}
-            className="text-primary-400 hover:text-primary-300 text-sm mt-4 inline-block"
-          >
-            ← Back to show
-          </Link>
+          <ButtonLink to={`/tv/${showId}`} icon={<ChevronLeftIcon />} className="mt-4">
+            Back to show
+          </ButtonLink>
         )}
       </div>
     );
@@ -266,8 +277,8 @@ export default function EpisodeInfo() {
     showInProduction,
   );
 
-  const seasonCode = `S${String(data.season_number).padStart(2, "0")}`;
-  const episodeCode = `E${String(data.episode_number).padStart(2, "0")}`;
+  const seasonCode = `S${data.season_number}`;
+  const episodeCode = `E${data.episode_number}`;
 
   const prevEp = prevEpisodeQuery.data;
   const nextEp = nextEpisodeQuery.data;
@@ -276,24 +287,24 @@ export default function EpisodeInfo() {
     <div className="min-h-screen bg-neutral-950 text-neutral-100">
 
       {/* Breadcrumb */}
-      <div className="px-6 md:px-10 pt-6 pb-3 flex items-center gap-2.5 font-mono text-[11.5px] tracking-wider flex-wrap">
+      <div className="px-6 md:px-10 pt-6 pb-3 flex items-center gap-2.5 text-label flex-wrap">
         {showName && showId && (
           <>
-            <Link to={`/tv/${showId}`} className="text-neutral-500 hover:text-neutral-300 transition-colors">
+            <Link to={`/tv/${showId}`} className="text-neutral-400 hover:text-neutral-200 transition-colors">
               {showName}
             </Link>
-            <span className="text-neutral-700">/</span>
+            <span className="text-neutral-600">/</span>
           </>
         )}
         <Link
           to={`/tv/${showId}/season/${data.season_number}`}
-          className="text-neutral-500 hover:text-neutral-300 transition-colors"
+          className="text-neutral-400 hover:text-neutral-200 transition-colors"
         >
           Season {data.season_number}
         </Link>
-        <span className="text-neutral-700">/</span>
+        <span className="text-neutral-600">/</span>
         <span className="text-neutral-200 font-medium">
-          Episode {String(data.episode_number).padStart(2, "0")}
+          Episode {data.episode_number}
         </span>
       </div>
 
@@ -301,7 +312,7 @@ export default function EpisodeInfo() {
       {heroSrc && (
         <div className="px-6 md:px-10 pb-7 flex justify-center">
           <div
-            className="relative rounded-2xl overflow-hidden w-full max-w-5xl"
+            className="relative rounded-surface overflow-hidden w-full max-w-5xl"
             style={{ aspectRatio: "16/9" }}
           >
             <img
@@ -319,154 +330,130 @@ export default function EpisodeInfo() {
         <div>
           {/* Badge row */}
           <div className="flex items-center gap-2 mb-3 flex-wrap">
-            <span className="px-2.5 py-1 font-mono text-[11px] font-semibold tracking-widest bg-primary-500/15 text-primary-400 rounded-md">
-              {seasonCode} · {episodeCode}
+            <span className="px-2.5 py-1 font-mono text-caption font-semibold bg-neutral-800 text-neutral-200 border border-neutral-700 rounded-md">
+              {seasonCode} {episodeCode}
             </span>
             {episodeTag && (
-              <span className={`px-2.5 py-1 text-[11px] font-semibold tracking-wide uppercase rounded-md ${episodeTag.bg} ${episodeTag.color}`}>
+              <span className={`px-2.5 py-1 text-caption font-semibold rounded-md ${episodeTag.bg} ${episodeTag.color}`}>
                 {episodeTag.label}
               </span>
             )}
             {data.vote_average != null && data.vote_average > 0 && (
-              <span className="px-2.5 py-1 text-[11px] font-semibold bg-warning-400/12 text-warning-400 rounded-md">
-                ★ {data.vote_average.toFixed(1)}
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 text-caption font-semibold bg-warning-400/12 text-warning-400 rounded-md">
+                <StarIcon className="w-3 h-3" />
+                {data.vote_average.toFixed(1)}
                 {data.vote_count != null && data.vote_count > 0 && (
                   <span className="text-warning-600 ml-1">· {data.vote_count.toLocaleString()}</span>
                 )}
               </span>
             )}
             {data.runtime != null && data.runtime > 0 && (
-              <span className="px-2.5 py-1 text-[11px] font-semibold font-mono tracking-widest bg-neutral-800 text-neutral-400 border border-neutral-700 rounded-md">
-                {formatRuntime(data.runtime).toUpperCase()}
+              <span className="px-2.5 py-1 text-caption font-semibold bg-neutral-800 text-neutral-400 border border-neutral-700 rounded-md">
+                {formatRuntime(data.runtime)}
               </span>
             )}
             {data.air_date && (
-              <span className="font-mono text-[11px] text-neutral-600 tracking-widest">
+              <span className="text-caption text-neutral-500">
                 · {formatAirDate(data.air_date)}
               </span>
             )}
           </div>
 
-          {/* Episode label */}
-          <div className="font-mono text-[10.5px] tracking-[0.15em] uppercase text-neutral-600 mb-1.5">
-            Episode title
-          </div>
-
-          {/* Main title */}
-          <h1 className="font-sans font-light italic text-5xl md:text-6xl lg:text-7xl tracking-tight leading-[0.95] text-neutral-50 mb-0">
-            {data.name}
-          </h1>
+          <PageHeader title={data.name} />
         </div>
 
         {/* Watched panel */}
-        <div
-          className={`rounded-2xl p-4 border transition-all ${
-            isWatched
-              ? "bg-primary-500/10 border-transparent"
-              : "bg-neutral-900 border-neutral-800"
-          }`}
-        >
-          <div className="flex items-center gap-3">
-            <button
-              onClick={toggleWatched}
-              disabled={toggleEpisode.isPending}
-              className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 transition-all disabled:opacity-50 ${
-                isWatched
-                  ? "bg-primary-500 text-neutral-950"
-                  : "bg-neutral-800 text-neutral-500 border border-neutral-700 hover:border-primary-500/50"
-              }`}
-            >
-              {toggleEpisode.isPending ? (
-                <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-              ) : isWatched ? (
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
-              ) : (
-                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14M5 12h14" />
-                </svg>
-              )}
-            </button>
-            <div className="flex-1 min-w-0">
-              <div className="text-[13.5px] font-semibold">
-                {isWatched ? "Watched" : "Mark as watched"}
+        <div className="flex flex-col gap-2">
+          {isWatched ? (
+            <>
+              <div className="flex items-center gap-2 text-label font-semibold text-neutral-100">
+                <CheckIcon className="w-4 h-4 text-primary-400" />
+                Watched
               </div>
-              <div className="text-[11px] text-neutral-500 mt-0.5">
-                {isWatched ? "Logged to your activity" : "Logs to your activity"}
-              </div>
-            </div>
-          </div>
-          {isWatched && (
-            <button
-              onClick={toggleWatched}
-              disabled={toggleEpisode.isPending}
-              className="mt-3 w-full py-1.5 text-[11.5px] font-medium bg-transparent text-neutral-500 border border-neutral-700 rounded-lg hover:text-neutral-300 hover:border-neutral-600 transition-colors disabled:opacity-50"
-            >
-              Unmark watched
-            </button>
+              <div className="text-caption text-neutral-400">Logged to your activity</div>
+              <Button
+                onClick={toggleWatched}
+                disabled={toggleEpisode.isPending}
+                loading={toggleEpisode.isPending}
+                className="w-full"
+              >
+                Unmark watched
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button
+                variant="primary"
+                icon={<PlusIcon />}
+                onClick={toggleWatched}
+                disabled={toggleEpisode.isPending}
+                loading={toggleEpisode.isPending}
+                className="w-full"
+              >
+                Mark as watched
+              </Button>
+              <div className="text-caption text-neutral-400">Logs to your activity</div>
+            </>
           )}
         </div>
       </div>
 
       {/* Rating + Notes — only when watched */}
       {isWatched && (
-        <div className="px-6 md:px-10 pb-7 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="px-6 md:px-10 pb-7 grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-6">
           {/* Rating */}
-          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
-            <div className="font-mono text-[10.5px] tracking-[0.15em] uppercase text-neutral-600 mb-4">
-              Your rating
-            </div>
+          <div>
+            <SectionHeader title="Your rating" className="mb-4" />
             <div className="flex items-center gap-2">
               {[1, 2, 3, 4, 5].map((star) => (
                 <button
                   key={star}
+                  aria-label={`Rate ${star} out of 5`}
                   onClick={() =>
                     setEpisodeRating(watchedEntry?.rating === star ? null : star)
                   }
                   disabled={annotateEpisode.isPending}
-                  className="disabled:opacity-50 transition-transform hover:scale-110"
+                  className={cx("disabled:opacity-50 transition-transform hover:scale-110 rounded", focusRing)}
                 >
-                  <svg
+                  <StarIcon
                     className={`w-8 h-8 transition-colors ${
                       (watchedEntry?.rating ?? 0) >= star
-                        ? "fill-warning-400 text-warning-400"
-                        : "fill-neutral-800 text-neutral-800 hover:fill-warning-400/40"
+                        ? "text-warning-400"
+                        : "text-neutral-800 hover:text-warning-400/40"
                     }`}
-                    viewBox="0 0 24 24"
-                  >
-                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-                  </svg>
+                  />
                 </button>
               ))}
               {watchedEntry?.rating != null && (
-                <span className="ml-3 font-sans italic text-[32px] leading-none text-warning-400 tracking-tight">
+                <span className="ml-3 text-heading font-semibold leading-none text-warning-400 tabular">
                   {watchedEntry.rating}
-                  <span className="text-neutral-600 not-italic text-2xl">/5</span>
+                  <span className="text-neutral-500 text-title">/5</span>
                 </span>
               )}
             </div>
           </div>
 
           {/* Notes */}
-          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <span className="font-mono text-[10.5px] tracking-[0.15em] uppercase text-neutral-600">
-                Your notes
-              </span>
-              <span className="flex-1" />
-              {!notesOpen && (
-                <button
-                  onClick={() => {
-                    setNotesDraft(watchedEntry?.notes ?? "");
-                    setNotesOpen(true);
-                  }}
-                  className="text-[11.5px] text-primary-400 hover:text-primary-300 font-medium transition-colors"
-                >
-                  {watchedEntry?.notes ? "Edit" : "+ Add note"}
-                </button>
-              )}
-            </div>
+          <div>
+            <SectionHeader
+              title="Your notes"
+              className="mb-4"
+              action={
+                !notesOpen && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={watchedEntry?.notes ? undefined : <PlusIcon />}
+                    onClick={() => {
+                      setNotesDraft(watchedEntry?.notes ?? "");
+                      setNotesOpen(true);
+                    }}
+                  >
+                    {watchedEntry?.notes ? "Edit" : "Add note"}
+                  </Button>
+                )
+              }
+            />
             {notesOpen ? (
               <div className="space-y-2">
                 <textarea
@@ -475,30 +462,28 @@ export default function EpisodeInfo() {
                   maxLength={2000}
                   rows={3}
                   placeholder="What did you think?"
-                  className="w-full bg-neutral-800 border border-neutral-700 rounded-xl px-3 py-2 text-sm text-neutral-200 placeholder-neutral-600 resize-none focus:outline-none focus:border-primary-500 font-sans"
+                  className="w-full bg-neutral-800 border border-neutral-700 rounded-control px-3 py-2 text-body text-neutral-200 placeholder-neutral-600 resize-none focus:outline-none focus:border-primary-500 font-sans"
                 />
                 <div className="flex items-center gap-2 justify-end">
-                  <button
-                    onClick={() => setNotesOpen(false)}
-                    className="text-sm text-neutral-500 hover:text-neutral-300 transition-colors"
-                  >
+                  <Button variant="ghost" size="sm" onClick={() => setNotesOpen(false)}>
                     Cancel
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
                     onClick={submitNotes}
                     disabled={annotateEpisode.isPending}
-                    className="text-sm px-3 py-1.5 bg-primary-600 hover:bg-primary-500 disabled:opacity-50 text-white rounded-lg transition-colors"
                   >
                     {annotateEpisode.isPending ? "Saving…" : "Save"}
-                  </button>
+                  </Button>
                 </div>
               </div>
             ) : watchedEntry?.notes ? (
-              <p className="font-sans italic text-base text-neutral-300 leading-relaxed">
+              <p className="text-body text-neutral-300 leading-relaxed">
                 "{watchedEntry.notes}"
               </p>
             ) : (
-              <p className="font-sans italic text-sm text-neutral-600">
+              <p className="text-label text-neutral-500">
                 No notes yet.
               </p>
             )}
@@ -511,22 +496,20 @@ export default function EpisodeInfo() {
         <div className="px-6 md:px-10 pb-7 grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-9">
           {data.overview && (
             <div>
-              <div className="mb-4">
-                <div className="font-mono text-[10.5px] tracking-[0.12em] uppercase text-neutral-500">Synopsis</div>
-                <div className="h-px w-full bg-neutral-800 mt-2" />
-              </div>
+              <SectionHeader title="Synopsis" divider className="mb-4" />
               {shouldHideOverview && !overviewRevealed ? (
                 <button
                   onClick={() => setOverviewRevealed(true)}
-                  className="inline-flex items-center gap-2 bg-neutral-900/60 hover:bg-neutral-900 border border-warning-500/30 rounded-lg px-4 py-3 text-sm text-neutral-300 hover:text-neutral-100 transition-colors"
+                  className={cx(
+                    "inline-flex items-center gap-2 bg-neutral-900/60 hover:bg-neutral-900 border border-warning-500/30 rounded-control px-4 py-3 text-body text-neutral-300 hover:text-neutral-100 transition-colors",
+                    focusRing,
+                  )}
                 >
-                  <svg className="w-4 h-4 text-warning-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-                  </svg>
-                  <span className="italic">Synopsis hidden — you haven't reached this episode yet. Click to reveal.</span>
+                  <ExclamationTriangleIcon className="w-4 h-4 text-warning-400 flex-shrink-0" strokeWidth={2} aria-hidden="true" />
+                  <span>Synopsis hidden — you haven't reached this episode yet. Click to reveal.</span>
                 </button>
               ) : (
-                <p className="font-sans font-light text-xl md:text-2xl leading-relaxed text-neutral-200 max-w-2xl">
+                <p className="font-light text-title md:text-heading leading-relaxed text-neutral-200 max-w-2xl">
                   {data.overview}
                 </p>
               )}
@@ -535,26 +518,24 @@ export default function EpisodeInfo() {
 
           {(directors.length > 0 || writers.length > 0) && (
             <div>
-              <div className="font-mono text-[10.5px] tracking-[0.15em] uppercase text-neutral-600 mb-4">
-                Crew
-              </div>
+              <SectionHeader title="Crew" className="mb-4" />
               <div className="flex flex-col gap-4">
                 {directors.length > 0 && (
                   <div>
-                    <div className="font-mono text-[10px] text-neutral-600 tracking-[0.08em] uppercase">
+                    <div className="text-caption text-neutral-400">
                       Directed by
                     </div>
-                    <div className="font-sans italic text-lg mt-1 tracking-tight text-neutral-200">
+                    <div className="text-body mt-1 text-neutral-200">
                       {directors.map((d) => d.name).join(", ")}
                     </div>
                   </div>
                 )}
                 {writers.length > 0 && (
                   <div>
-                    <div className="font-mono text-[10px] text-neutral-600 tracking-[0.08em] uppercase">
+                    <div className="text-caption text-neutral-400">
                       Written by
                     </div>
-                    <div className="font-sans italic text-lg mt-1 tracking-tight text-neutral-200">
+                    <div className="text-body mt-1 text-neutral-200">
                       {writers.map((w) => w.name).join(", ")}
                     </div>
                   </div>
@@ -568,13 +549,7 @@ export default function EpisodeInfo() {
       {/* Cast */}
       {allCast.length > 0 && (
         <div className="px-6 md:px-10 pb-7">
-          <div className="mb-5">
-            <div className="flex items-center justify-between">
-              <div className="font-mono text-[10.5px] tracking-[0.12em] uppercase text-neutral-500">Cast</div>
-              <span className="font-mono text-[10px] text-neutral-700">{allCast.length}</span>
-            </div>
-            <div className="h-px w-full bg-neutral-800 mt-2" />
-          </div>
+          <SectionHeader title="Cast" note={allCast.length} divider className="mb-5" />
           <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-4">
             {allCast.map((person) => (
               <Link
@@ -595,11 +570,11 @@ export default function EpisodeInfo() {
                     </div>
                   )}
                 </div>
-                <p className="text-[12px] font-semibold text-neutral-200 leading-tight line-clamp-2 group-hover:text-white transition-colors">
+                <p className="text-caption font-semibold text-neutral-200 leading-tight line-clamp-2 group-hover:text-white transition-colors">
                   {person.name}
                 </p>
                 {person.character && (
-                  <p className="text-[11px] text-neutral-500 mt-0.5 line-clamp-1">
+                  <p className="text-caption text-neutral-500 mt-0.5 line-clamp-1">
                     as {person.character}
                   </p>
                 )}
@@ -620,20 +595,20 @@ export default function EpisodeInfo() {
               navigate(`/tv/${showId}/episode/${season}/${prevEp.episode_number}`)
             }
             disabled={!prevEp && prevEpNum >= 1}
-            className={`flex items-center gap-4 p-4 rounded-xl border text-left transition-all ${
+            className={cx(
+              "flex items-center gap-4 p-4 rounded-surface border text-left transition-colors",
+              focusRing,
               prevEp
-                ? "bg-neutral-900 border-neutral-800 hover:border-neutral-700 cursor-pointer"
-                : "bg-neutral-900/40 border-neutral-800/40 opacity-40 cursor-default"
-            }`}
+                ? "bg-neutral-900 border-neutral-800 hover:border-neutral-600 cursor-pointer"
+                : "bg-neutral-900/40 border-neutral-800/40 opacity-40 cursor-default",
+            )}
           >
-            <svg className="w-4 h-4 text-neutral-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
+            <ChevronLeftIcon className="w-4 h-4 text-neutral-400 flex-shrink-0" />
             <div className="min-w-0">
-              <div className="font-mono text-[10px] text-neutral-600 tracking-[0.08em] uppercase mb-1">
-                ← Previous · {seasonCode} E{String(prevEpNum).padStart(2, "0")}
+              <div className="text-caption text-neutral-400 mb-1">
+                Previous · <span className="font-mono">{seasonCode} E{prevEpNum}</span>
               </div>
-              <div className="font-sans italic text-[17px] tracking-tight text-neutral-200 truncate">
+              <div className="text-title text-neutral-200 truncate">
                 {prevEp?.name ?? "—"}
               </div>
             </div>
@@ -646,23 +621,23 @@ export default function EpisodeInfo() {
               navigate(`/tv/${showId}/episode/${season}/${nextEp.episode_number}`)
             }
             disabled={!nextEp}
-            className={`flex items-center gap-4 p-4 rounded-xl border text-right justify-end transition-all ${
+            className={cx(
+              "flex items-center gap-4 p-4 rounded-surface border text-right justify-end transition-colors",
+              focusRing,
               nextEp
-                ? "bg-primary-500/10 border-transparent hover:bg-primary-500/15 cursor-pointer"
-                : "bg-neutral-900/40 border-neutral-800/40 opacity-40 cursor-default"
-            }`}
+                ? "bg-neutral-900 border-neutral-800 hover:border-neutral-600 cursor-pointer"
+                : "bg-neutral-900/40 border-neutral-800/40 opacity-40 cursor-default",
+            )}
           >
             <div className="min-w-0">
-              <div className="font-mono text-[10px] text-primary-600 tracking-[0.08em] uppercase mb-1">
-                Next · {seasonCode} E{String(nextEpNum).padStart(2, "0")} →
+              <div className="text-caption text-neutral-400 mb-1">
+                Next · <span className="font-mono">{seasonCode} E{nextEpNum}</span>
               </div>
-              <div className="font-sans italic text-[17px] tracking-tight text-neutral-200 truncate">
+              <div className="text-title text-neutral-200 truncate">
                 {nextEp?.name ?? "—"}
               </div>
             </div>
-            <svg className="w-4 h-4 text-primary-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-            </svg>
+            <ChevronRightIcon className="w-4 h-4 text-neutral-400 flex-shrink-0" />
           </button>
         </div>
       </div>

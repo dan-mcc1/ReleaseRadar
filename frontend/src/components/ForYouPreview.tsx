@@ -1,10 +1,10 @@
 import { Link } from "react-router-dom";
 import MediaList from "./MediaList";
 import type { Movie, Show } from "../types/calendar";
-import { useForYouPreview } from "../hooks/api/useRecommendations";
+import { useForYou } from "../hooks/api/useRecommendations";
 
 export default function ForYouPreview() {
-  const { data } = useForYouPreview();
+  const { data } = useForYou();
   const movies = ((data?.movies ?? []) as Movie[]).slice(0, 4);
   const shows = ((data?.shows ?? []) as Show[]).slice(0, 4);
 

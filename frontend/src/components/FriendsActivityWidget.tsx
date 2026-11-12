@@ -1,5 +1,5 @@
 import { useFriendsContentActivity } from "../hooks/api/useFriends";
-import StarIcon from "./icons/StarIcon";
+import { Card, SectionHeader, StarIcon } from "./ui";
 
 interface Props {
   contentType: "movie" | "tv";
@@ -18,7 +18,7 @@ function StarRating({ rating }: { rating: number }) {
 const STATUS_CONFIG = {
   "Watched": { color: "text-success-400", dot: "bg-success-400" },
   "Currently Watching": { color: "text-highlight-400", dot: "bg-highlight-400" },
-  "Want To Watch": { color: "text-primary-400", dot: "bg-primary-400" },
+  "Want To Watch": { color: "text-neutral-300", dot: "bg-neutral-300" },
 } as const;
 
 export default function FriendsActivityWidget({ contentType, contentId }: Props) {
@@ -26,7 +26,7 @@ export default function FriendsActivityWidget({ contentType, contentId }: Props)
 
   if (isPending) {
     return (
-      <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5 animate-pulse">
+      <Card padding="sm" className="animate-pulse">
         <div className="h-2.5 bg-neutral-800 rounded w-24 mb-4" />
         <div className="space-y-3">
           {[1, 2].map((i) => (
@@ -36,7 +36,7 @@ export default function FriendsActivityWidget({ contentType, contentId }: Props)
             </div>
           ))}
         </div>
-      </div>
+      </Card>
     );
   }
 
@@ -56,9 +56,8 @@ export default function FriendsActivityWidget({ contentType, contentId }: Props)
     summaryParts.push(`${wantToWatch.length} want to watch`);
 
   return (
-    <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
-      <div className="font-mono text-[10px] tracking-[0.15em] text-neutral-500 uppercase mb-1">Friends</div>
-      <p className="text-xs text-neutral-400 mb-4">{summaryParts.join(" · ")}</p>
+    <Card padding="sm">
+      <SectionHeader title="Friends" note={summaryParts.join(" · ")} className="mb-4" />
 
       <div className="flex flex-col gap-2.5">
         {data.map((friend) => {
@@ -66,7 +65,7 @@ export default function FriendsActivityWidget({ contentType, contentId }: Props)
           return (
             <div key={friend.username} className="flex items-center gap-2.5">
               {/* Avatar placeholder */}
-              <div className="w-6 h-6 rounded-full bg-neutral-700 flex-shrink-0 flex items-center justify-center text-[10px] font-semibold text-neutral-300 uppercase">
+              <div className="w-6 h-6 rounded-full bg-neutral-700 flex-shrink-0 flex items-center justify-center text-caption font-semibold text-neutral-300 uppercase">
                 {friend.username[0]}
               </div>
               <span className="text-sm text-neutral-200 font-medium flex-1 min-w-0 truncate">
@@ -92,6 +91,6 @@ export default function FriendsActivityWidget({ contentType, contentId }: Props)
           </div>
         );
       })()}
-    </div>
+    </Card>
   );
 }

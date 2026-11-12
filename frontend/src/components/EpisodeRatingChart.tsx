@@ -74,8 +74,8 @@ export default function EpisodeRatingChart({ showId }: { showId: number }) {
 
   return (
     <div>
-      <h2 className="text-neutral-400 text-xs uppercase tracking-wider font-semibold mb-4">
-        Episode Ratings
+      <h2 className="text-title font-semibold text-neutral-100 mb-4">
+        Episode ratings
       </h2>
 
       <div className="bg-neutral-800/50 rounded-xl border border-neutral-700/50 p-4 overflow-x-auto relative">

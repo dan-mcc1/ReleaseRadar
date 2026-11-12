@@ -189,7 +189,7 @@ export function ShelfPicker({
           >
             <span className="truncate pr-2">{shelf.name}</span>
             {isOn && (
-              <span className="text-sky-400 shrink-0">
+              <span className="text-info-400 shrink-0">
                 <IconCheck />
               </span>
             )}
@@ -216,12 +216,12 @@ export function ShelfPicker({
             }}
             placeholder="Shelf name…"
             aria-label="New shelf name"
-            className="flex-1 min-w-0 bg-neutral-700 border border-neutral-600 rounded-lg px-3 py-1.5 text-sm text-neutral-100 placeholder-neutral-500 outline-none focus:border-sky-500"
+            className="flex-1 min-w-0 bg-neutral-700 border border-neutral-600 rounded-lg px-3 py-1.5 text-sm text-neutral-100 placeholder-neutral-500 outline-none focus:border-info-500"
           />
           <button
             onClick={handleCreateShelf}
             disabled={!newShelfName.trim() || createShelf.isPending}
-            className="px-3 py-1.5 text-sm font-semibold bg-sky-600 hover:bg-sky-500 text-white rounded-lg disabled:opacity-50 transition-colors"
+            className="px-3 py-1.5 text-sm font-semibold bg-info-600 hover:bg-info-500 text-white rounded-lg disabled:opacity-50 transition-colors"
           >
             {createShelf.isPending ? <IconSpinner /> : "Add"}
           </button>
@@ -267,10 +267,10 @@ export default function ShelfButton({ contentType, contentId, compact = false }:
   }, []);
 
   const mainClass = hasAnyShelves
-    ? "bg-neutral-700 hover:bg-neutral-600 text-sky-300 border border-sky-500/60"
+    ? "bg-neutral-700 hover:bg-neutral-600 text-info-300 border border-info-500/60"
     : "bg-neutral-800 hover:bg-neutral-700 text-neutral-300 border border-neutral-600";
   const chevronClass = hasAnyShelves
-    ? "bg-neutral-700 hover:bg-neutral-600 border-l border-sky-500/40 text-sky-400"
+    ? "bg-neutral-700 hover:bg-neutral-600 border-l border-info-500/40 text-info-400"
     : "bg-neutral-800 hover:bg-neutral-700 border-l border-neutral-600 text-neutral-400";
 
   return (

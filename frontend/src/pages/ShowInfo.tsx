@@ -7,7 +7,7 @@ import WhereToWatch from "../components/WhereToWatch";
 import CastBar from "../components/CastBar";
 import WatchButton from "../components/WatchButton";
 import ReviewsSection from "../components/ReviewsSection";
-import { useAuthUser } from "../hooks/useAuthUser";
+import { useAuthLoading, useAuthUser } from "../hooks/useAuthUser";
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useMediaInfo } from "../hooks/useMediaInfo";
 import RatingsRow from "../components/media/RatingsRow";
@@ -23,7 +23,7 @@ import RewatchSection from "../components/RewatchSection";
 import EpisodeRatingChart from "../components/EpisodeRatingChart";
 import { BASE_IMAGE_URL } from "../constants";
 import FriendsActivityWidget from "../components/FriendsActivityWidget";
-import StarIcon from "../components/icons/StarIcon";
+import { ButtonLink, PlusIcon, SectionHeader, StarIcon } from "../components/ui";
 
 type FullShowData = Show & {
   vote_average?: number;
@@ -79,6 +79,9 @@ export default function ShowInfo() {
     fetchUrl: `/tv/${id}/full`,
   });
   const user = useAuthUser();
+  const authLoading = useAuthLoading();
+  // Only once auth has answered, so signed-in visitors never see it flash.
+  const signedOut = !user && !authLoading;
   usePageTitle(show?.name);
 
   if (loading)
@@ -152,7 +155,7 @@ export default function ShowInfo() {
 
   const keyFacts = (
     <>
-      <div className="font-mono text-[10px] tracking-[0.15em] text-neutral-500 uppercase mb-3">Key facts</div>
+      <SectionHeader title="Key facts" className="mb-3" />
       <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
         {show.created_by && show.created_by.length > 0 && (
           <>
@@ -162,7 +165,8 @@ export default function ShowInfo() {
         )}
         <span className="text-neutral-500">Status</span>
         <span className={`font-medium ${isOngoing ? "text-primary-400" : ""}`}>
-          {isOngoing ? "● " : ""}{show.status}
+          {isOngoing && <span className="inline-block size-1.5 rounded-full bg-primary-400 mr-2 align-middle" aria-hidden="true" />}
+          {show.status}
         </span>
         <span className="text-neutral-500">Seasons</span>
         <span className="font-medium">{show.number_of_seasons}</span>
@@ -213,17 +217,17 @@ export default function ShowInfo() {
                 srcSet={`${BASE_IMAGE_URL}/w342${show.poster_path} 342w, ${BASE_IMAGE_URL}/w500${show.poster_path} 500w`}
                 sizes="(min-width: 1024px) 280px, 96px"
                 alt={`${show.name} poster`}
-                className="w-24 lg:w-full rounded-xl shadow-2xl border border-white/10"
+                className="w-24 lg:w-full rounded-surface border border-white/10"
               />
             ) : (
-              <div className="w-24 lg:w-full aspect-[2/3] rounded-xl bg-neutral-800 border border-white/10" />
+              <div className="w-24 lg:w-full aspect-[2/3] rounded-surface bg-neutral-800 border border-white/10" />
             )}
 
             <div className="min-w-0 lg:mt-4">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-neutral-300">
                 {show.vote_average != null && show.vote_average > 0 && (
                   <span className="flex items-center gap-1.5">
-                    <StarIcon filled className="w-3.5 h-3.5 text-yellow-400" />
+                    <StarIcon filled className="w-3.5 h-3.5 text-warning-400" />
                     {show.vote_average.toFixed(1)}
                   </span>
                 )}
@@ -244,8 +248,18 @@ export default function ShowInfo() {
             </div>
           </div>
 
-          {((user && statusReady) || (trailer && !show.backdrop_path)) && (
+          {((user && statusReady) || signedOut || (trailer && !show.backdrop_path)) && (
             <div className="flex flex-wrap items-start gap-2">
+              {/* Signed out: the way in is to track it, which needs an account. */}
+              {signedOut && (
+                <ButtonLink
+                  to={`/signIn?next=${encodeURIComponent(`/tv/${show.id}`)}`}
+                  variant="primary"
+                  icon={<PlusIcon />}
+                >
+                  Track this show
+                </ButtonLink>
+              )}
               {user && statusReady && (
                 <WatchButton
                   contentType="tv"
@@ -258,6 +272,9 @@ export default function ShowInfo() {
               {/* With no backdrop to sit on, the trailer button goes here. */}
               {trailer && !show.backdrop_path && <TrailerButton trailerKey={trailer.key} />}
             </div>
+          )}
+          {signedOut && (
+            <p className="-mt-1 text-caption text-neutral-400">Tracking puts every new episode on your calendar, on the day it airs.</p>
           )}
 
           {user && (
@@ -298,7 +315,7 @@ export default function ShowInfo() {
                 >
                   <div className="space-y-10 min-w-0">
                     {show.overview && (
-                      <p className="text-[1.25rem] leading-relaxed text-neutral-100 tracking-tight max-w-3xl font-light">
+                      <p className="text-title leading-relaxed text-neutral-100 max-w-3xl">
                         {show.overview}
                       </p>
                     )}
@@ -312,9 +329,7 @@ export default function ShowInfo() {
 
                   {hasProviders && show.providers && (
                     <div>
-                      <div className="flex items-baseline gap-3 mb-1 pb-3 border-b border-neutral-800">
-                        <h2 className="text-lg font-semibold tracking-tight">Where to watch</h2>
-                      </div>
+                      <SectionHeader title="Where to watch" divider className="mb-1" />
                       <WhereToWatch providers={show.providers} hideTitle />
                     </div>
                   )}
@@ -333,9 +348,7 @@ export default function ShowInfo() {
                 {/* Videos */}
                 {(show.videos?.results?.length ?? 0) >= 2 && (
                   <div>
-                    <div className="flex items-baseline gap-3 mb-4 pb-3 border-b border-neutral-800">
-                      <h2 className="text-lg font-semibold tracking-tight">Trailers &amp; clips</h2>
-                    </div>
+                    <SectionHeader title="Trailers & clips" divider className="mb-4" />
                     <VideoGallery videos={show.videos.results} hideTitle />
                   </div>
                 )}
@@ -381,7 +394,7 @@ export default function ShowInfo() {
         </div>
 
         {/* Below lg the key facts leave the side panel and sit under the main column. */}
-        <div className="lg:hidden bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
+        <div className="lg:hidden pt-4 border-t border-neutral-800">
           {keyFacts}
         </div>
 
@@ -392,8 +405,8 @@ export default function ShowInfo() {
 
             {/* The TMDb score is beside the title, so this card holds the rest. */}
             {hasOtherRatings && (
-              <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
-                <div className="font-mono text-[10px] tracking-[0.15em] text-neutral-500 uppercase mb-4">More ratings</div>
+              <div>
+                <SectionHeader title="More ratings" className="mb-4" />
                 <RatingsRow
                   externalScores={externalScores}
                   aggRating={aggRating}
@@ -403,8 +416,8 @@ export default function ShowInfo() {
             )}
 
             {recommendations.length > 0 && (
-              <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
-                <div className="font-mono text-[10px] tracking-[0.15em] text-neutral-500 uppercase mb-4">You might also like</div>
+              <div>
+                <SectionHeader title="You might also like" className="mb-4" />
                 <div className="flex flex-col gap-3">
                   {recommendations.slice(0, 8).map((rec) => (
                     <Link

@@ -2,6 +2,17 @@ import { Link, useSearchParams } from "react-router-dom";
 import { BASE_IMAGE_URL } from "../constants";
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useBoxOffice, useAllTimeBoxOffice, type BoxOfficeMovie } from "../hooks/api/useBoxOffice";
+import {
+  Button,
+  ButtonLink,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  Chip,
+  EmptyState,
+  PageHeader,
+  Segmented,
+  selectClass,
+} from "../components/ui";
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -90,127 +101,89 @@ export default function BoxOffice() {
 
   return (
     <div className="w-full px-4 sm:px-8 lg:px-10 py-8 pb-20">
-      {/* Page header */}
-      <div className="mb-2" data-tour="box-office-header">
-        <div className="font-mono text-[10px] tracking-widest text-neutral-500 uppercase mb-2">
-          Discover · {subtitle}
-        </div>
-        <h1 className="text-4xl sm:text-5xl font-light tracking-tight leading-none" style={{ fontFamily: "'Georgia', serif" }}>
-          The <em className="italic text-primary-400 not-italic" style={{ fontStyle: "italic" }}>box office</em>
-        </h1>
+      <div data-tour="box-office-header">
+        <PageHeader title="Box office" description={subtitle} />
       </div>
 
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-2 mt-6 mb-7">
         {/* Mode toggle */}
-        <div className="flex bg-neutral-800/80 border border-white/10 rounded-xl p-1 gap-0.5">
-          {(["Yearly", "Monthly", "All Time"] as const).map((l) => {
-            const v = l.toLowerCase().replace(" ", "-") as "yearly" | "monthly" | "all-time";
-            return (
-              <button
-                key={v}
-                onClick={() => setMode(v)}
-                className={`px-4 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-                  v === mode
-                    ? "bg-neutral-700 text-white"
-                    : "text-neutral-400 hover:text-neutral-200"
-                }`}
-              >
-                {l}
-              </button>
-            );
-          })}
-        </div>
+        <Segmented
+          label="Period"
+          value={mode}
+          onChange={setMode}
+          options={[
+            { value: "yearly", label: "Yearly" },
+            { value: "monthly", label: "Monthly" },
+            { value: "all-time", label: "All time" },
+          ]}
+        />
 
-        {/* Year pill selector — hidden in all-time mode */}
+        {/* Year selector — hidden in all-time mode */}
         {mode !== "all-time" && (
-          <div className="flex items-center bg-neutral-800/80 border border-white/10 rounded-xl p-1 gap-0.5">
-            {yearWindow.map((y) => (
-              <button
-                key={y}
-                onClick={() => setYear(y)}
-                className={`px-2 py-1 sm:px-3.5 sm:py-1.5 text-xs sm:text-sm font-mono font-medium rounded-lg transition-colors ${
-                  y === year
-                    ? "bg-neutral-700 text-white"
-                    : "text-neutral-400 hover:text-neutral-200"
-                }`}
-              >
-                {y}
-              </button>
-            ))}
-            {showMoreYears && (
-              <button className="px-2 py-1 sm:px-3.5 sm:py-1.5 text-xs sm:text-sm font-mono font-medium rounded-lg bg-neutral-700 text-white">
-                {year}
-              </button>
-            )}
+          <>
+            <Segmented
+              label="Year"
+              value={String(year)}
+              onChange={(v) => setYear(Number(v))}
+              options={[...(showMoreYears ? [year] : []), ...yearWindow].map((y) => ({
+                value: String(y),
+                label: <span className="tabular">{y}</span>,
+              }))}
+            />
             <select
               value={yearWindow.includes(year) ? "" : year}
               onChange={(e) => e.target.value && setYear(Number(e.target.value))}
-              className="appearance-none bg-neutral-800 text-neutral-200 text-xs pl-1 pr-2 cursor-pointer focus:outline-none"
+              className={selectClass}
               aria-label="More years"
             >
-              <option value="">…</option>
+              <option value="">More years</option>
               {Array.from({ length: currentYear - 1979 }, (_, i) => currentYear - i)
                 .filter((y) => !yearWindow.includes(y))
                 .map((y) => (
                   <option key={y} value={y}>{y}</option>
                 ))}
             </select>
-          </div>
+          </>
         )}
-
-        {/* Month selector */}
-        {mode === "monthly" && (
-          <div className="flex bg-neutral-800/80 border border-white/10 rounded-xl p-1 gap-0.5 flex-wrap">
-            {MONTH_NAMES.map((name, i) => (
-              <button
-                key={i + 1}
-                onClick={() => setMonth(i + 1)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-                  i + 1 === month
-                    ? "bg-neutral-700 text-white"
-                    : "text-neutral-400 hover:text-neutral-200"
-                }`}
-              >
-                {name.slice(0, 3)}
-              </button>
-            ))}
-          </div>
-        )}
-
-        <span className="flex-1" />
-        <span className="font-mono text-[10px] tracking-wider text-neutral-600 uppercase">Source: TMDB</span>
       </div>
+
+      {/* Month selector */}
+      {mode === "monthly" && (
+        <div role="group" aria-label="Month" className="flex flex-wrap gap-2 mb-7">
+          {MONTH_NAMES.map((name, i) => (
+            <Chip key={i + 1} pressed={i + 1 === month} onClick={() => setMonth(i + 1)}>
+              {name.slice(0, 3)}
+            </Chip>
+          ))}
+        </div>
+      )}
 
       {/* Loading */}
       {loading && (
         <div className="flex items-center justify-center py-32">
           <div className="flex flex-col items-center gap-3">
             <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
-            <p className="text-neutral-400 text-sm">Loading…</p>
+            <p className="text-neutral-400 text-body">Loading…</p>
           </div>
         </div>
       )}
 
       {/* Error */}
       {!loading && error && (
-        <div className="flex flex-col items-center justify-center py-32 text-center">
-          <p className="text-red-400">{error?.message}</p>
-        </div>
+        <EmptyState title="Couldn't load box office data" description={error?.message} />
       )}
 
       {/* Empty */}
       {!loading && !error && movies.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-32 text-center">
-          <p className="text-neutral-400">No box office data available for this period.</p>
-        </div>
+        <EmptyState title="No box office data" description="Nothing is available for this period." />
       )}
 
       {/* Content */}
       {!loading && !error && movies.length > 0 && (
         <>
-          {/* KPI cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+          {/* Totals */}
+          <dl className="grid grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-4 mb-6">
             {[
               {
                 label: "Top 10 revenue",
@@ -240,34 +213,33 @@ export default function BoxOffice() {
                   : "",
               },
             ].map((k) => (
-              <div key={k.label} className="bg-neutral-800/60 border border-white/8 rounded-xl px-3 py-2.5 sm:px-4 sm:py-3.5">
-                <div className="font-mono text-[9.5px] tracking-widest text-neutral-500 uppercase">{k.label}</div>
-                <div
-                  className={`text-xl sm:text-3xl font-light tracking-tight leading-tight mt-1 ${k.highlight ? "text-primary-400" : "text-white"}`}
-                  style={{ fontFamily: "'Georgia', serif" }}
+              <div key={k.label} className="min-w-0">
+                <dt className="text-caption text-neutral-400">{k.label}</dt>
+                <dd
+                  className={`tabular text-heading font-semibold leading-tight mt-1 ${k.highlight ? "text-success-400" : "text-neutral-50"}`}
                 >
                   {k.value}
-                </div>
-                <div className="text-[11px] text-neutral-500 mt-1 truncate">{k.sub}</div>
+                </dd>
+                <dd className="text-caption text-neutral-400 mt-1 truncate">{k.sub}</dd>
               </div>
             ))}
-          </div>
+          </dl>
 
           {/* Hero + leaderboard */}
-          <div className="grid grid-cols-1 xl:grid-cols-[380px_1fr] gap-5">
+          <div className="grid grid-cols-1 xl:grid-cols-[380px_1fr] items-start gap-5">
             {/* #1 hero card */}
             {hero && <HeroCard movie={hero} year={year} mode={mode} month={month} />}
 
             {/* Leaderboard table */}
-            <div className="bg-neutral-800/60 border border-white/8 rounded-2xl overflow-hidden">
+            <div className="bg-neutral-800/60 border border-white/8 rounded-surface overflow-hidden">
               {/* Table header */}
-              <div className="grid grid-cols-[36px_52px_1fr_100px] sm:grid-cols-[44px_64px_1fr_110px_96px_120px] gap-0 items-center px-4 sm:px-5 py-3 border-b border-white/8 font-mono text-[9.5px] text-neutral-500 tracking-widest uppercase">
+              <div className="grid grid-cols-[36px_52px_1fr_100px] sm:grid-cols-[44px_64px_1fr_110px_96px_120px] gap-0 items-center px-4 sm:px-5 py-3 border-b border-white/8 text-caption text-neutral-400">
                 <span>#</span>
                 <span></span>
                 <span>Movie</span>
                 <span className="text-right">Revenue</span>
                 <span className="text-right hidden sm:block">Budget</span>
-                <span className="text-right hidden sm:block">Profit / Loss</span>
+                <span className="text-right hidden sm:block">Profit / loss</span>
               </div>
 
               {/* Rows */}
@@ -276,19 +248,19 @@ export default function BoxOffice() {
                 const positive = profit >= 0;
                 const ratio = movie.budget > 0 ? movie.revenue / movie.budget : 0;
                 const rankColor =
-                  movie.rank === 1 ? "text-amber-400" :
+                  movie.rank === 1 ? "text-warning-400" :
                   movie.rank === 2 ? "text-neutral-200" :
-                  movie.rank === 3 ? "text-amber-700" :
+                  movie.rank === 3 ? "text-warning-700" :
                   "text-neutral-500";
                 const rankSize =
-                  movie.rank <= 3 ? "text-3xl" : "text-2xl";
+                  movie.rank <= 3 ? "text-heading" : "text-title";
 
                 const revenueClass =
                   movie.rank === 1
-                    ? "font-mono text-base font-bold text-primary-400 text-right"
+                    ? "tabular text-body font-bold text-white text-right"
                     : movie.rank <= 3
-                      ? "font-mono text-sm font-semibold text-white text-right"
-                      : "font-mono text-sm text-neutral-300 text-right";
+                      ? "tabular text-body font-semibold text-white text-right"
+                      : "tabular text-body text-neutral-300 text-right";
 
                 return (
                   <Link
@@ -297,8 +269,7 @@ export default function BoxOffice() {
                     className="grid grid-cols-[36px_52px_1fr_100px] sm:grid-cols-[44px_64px_1fr_110px_96px_120px] gap-0 items-center px-4 sm:px-5 py-3 hover:bg-white/[0.03] transition-colors border-b border-white/5 last:border-0"
                   >
                     <span
-                      className={`font-light tracking-tight leading-none ${rankColor} ${rankSize}`}
-                      style={{ fontFamily: "'Georgia', serif", fontStyle: movie.rank === 1 ? "italic" : "normal" }}
+                      className={`tabular font-semibold leading-none ${rankColor} ${rankSize}`}
                     >
                       {movie.rank}
                     </span>
@@ -311,16 +282,16 @@ export default function BoxOffice() {
                           className="w-full h-full object-cover"
                         />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center text-neutral-500 text-xs">?</div>
+                        <div className="w-full h-full flex items-center justify-center text-neutral-500 text-caption">?</div>
                       )}
                     </div>
 
                     <div className="min-w-0 px-2 sm:px-3">
-                      <p className="text-sm font-semibold text-white line-clamp-1 leading-snug tracking-tight">
+                      <p className="text-body font-semibold text-white line-clamp-1 leading-snug">
                         {movie.title}
                       </p>
                       {movie.release_date && (
-                        <p className="font-mono text-[10.5px] text-neutral-500 mt-1 tracking-wide">
+                        <p className="text-caption text-neutral-400 mt-1">
                           {new Date(movie.release_date + "T00:00:00").toLocaleDateString(undefined, {
                             month: "short",
                             day: "numeric",
@@ -334,22 +305,22 @@ export default function BoxOffice() {
                       {formatMoney(movie.revenue)}
                     </span>
 
-                    <span className="hidden sm:block font-mono text-sm text-neutral-400 text-right">
+                    <span className="hidden sm:block tabular text-body text-neutral-400 text-right">
                       {movie.budget > 0 ? formatMoney(movie.budget) : "—"}
                     </span>
 
                     <div className="hidden sm:block text-right">
                       {movie.budget > 0 ? (
                         <>
-                          <div className={`font-mono text-sm font-semibold ${positive ? "text-emerald-400" : "text-red-400"}`}>
+                          <div className={`tabular text-body font-semibold ${positive ? "text-success-400" : "text-error-400"}`}>
                             {positive ? "+" : "-"}{formatMoney(Math.abs(profit))}
                           </div>
-                          <div className="font-mono text-[9.5px] text-neutral-600 mt-0.5">
+                          <div className="tabular text-caption text-neutral-500 mt-0.5">
                             {ratio.toFixed(1)}× return
                           </div>
                         </>
                       ) : (
-                        <span className="font-mono text-sm text-neutral-600">—</span>
+                        <span className="text-body text-neutral-500">—</span>
                       )}
                     </div>
                   </Link>
@@ -361,29 +332,29 @@ export default function BoxOffice() {
           {/* Pagination — all-time only */}
           {mode === "all-time" && (
             <div className="flex items-center justify-center gap-2 mt-6">
-              <button
+              <Button
+                icon={<ChevronLeftIcon />}
                 onClick={() => setAllTimePage(allTimePage - 1)}
                 disabled={allTimePage <= 1}
-                className="px-4 py-2 text-sm font-medium rounded-lg bg-neutral-800/80 border border-white/10 text-neutral-300 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               >
-                ← Prev
-              </button>
-              <span className="font-mono text-xs text-neutral-500 px-2">
+                Previous
+              </Button>
+              <span className="tabular text-label text-neutral-300 px-2">
                 Page {allTimePage} · #{(allTimePage - 1) * 20 + 1}–{allTimePage * 20}
               </span>
-              <button
+              <Button
                 onClick={() => setAllTimePage(allTimePage + 1)}
                 disabled={allTimePage >= 20}
-                className="px-4 py-2 text-sm font-medium rounded-lg bg-neutral-800/80 border border-white/10 text-neutral-300 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               >
-                Next →
-              </button>
+                Next
+                <ChevronRightIcon />
+              </Button>
             </div>
           )}
         </>
       )}
 
-      <p className="text-[11px] text-neutral-600 mt-8 text-center italic">
+      <p className="text-caption text-neutral-500 mt-8 text-center">
         Revenue and budget figures sourced from TMDB. Some titles may have incomplete data.
       </p>
     </div>
@@ -399,7 +370,7 @@ function HeroCard({ movie, year, mode, month }: { movie: BoxOfficeMovie; year: n
     : "";
 
   return (
-    <div className="bg-neutral-800/60 border border-white/8 rounded-2xl overflow-hidden flex flex-col">
+    <div className="bg-neutral-800/60 border border-white/8 rounded-surface overflow-hidden flex flex-col">
       {/* Backdrop */}
       <div className="relative aspect-video overflow-hidden bg-neutral-900">
         {movie.backdrop_path ? (
@@ -415,25 +386,22 @@ function HeroCard({ movie, year, mode, month }: { movie: BoxOfficeMovie; year: n
             className="w-full h-full object-cover"
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-neutral-600 text-4xl">🎬</div>
+          <div className="w-full h-full" />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-transparent" />
 
         {/* Badge */}
-        <div className="absolute top-3.5 left-3.5 font-mono text-[9.5px] tracking-widest bg-black/50 backdrop-blur-sm text-white px-2.5 py-1 rounded uppercase">
-          ◉ #{movie.rank} of {mode === "all-time" ? "All Time" : mode === "monthly" ? `${MONTH_NAMES[month - 1]} ${year}` : year}
+        <div className="absolute top-3.5 left-3.5 text-caption bg-black/60 backdrop-blur-sm text-white px-2.5 py-1 rounded">
+          #{movie.rank} of {mode === "all-time" ? "all time" : mode === "monthly" ? `${MONTH_NAMES[month - 1]} ${year}` : year}
         </div>
 
         {/* Title overlay */}
         <div className="absolute left-4 right-4 bottom-4 text-white">
-          <div
-            className="text-3xl leading-tight tracking-tight"
-            style={{ fontFamily: "'Georgia', serif", fontWeight: 400 }}
-          >
+          <div className="text-heading font-semibold leading-tight">
             {movie.title}
           </div>
           {(genreLabel || runtime) && (
-            <div className="text-xs text-white/75 mt-1.5">
+            <div className="text-caption text-white/75 mt-1.5">
               {[genreLabel, runtime].filter(Boolean).join(" · ")}
             </div>
           )}
@@ -454,7 +422,7 @@ function HeroCard({ movie, year, mode, month }: { movie: BoxOfficeMovie; year: n
         )}
         {movie.vote_average > 0 && (
           <Kpi
-            label="TMDb Rating"
+            label="TMDb rating"
             value={`${movie.vote_average.toFixed(1)}`}
             sub="audience score"
           />
@@ -463,12 +431,10 @@ function HeroCard({ movie, year, mode, month }: { movie: BoxOfficeMovie; year: n
 
       {/* View button */}
       <div className="px-5 pb-5">
-        <Link
-          to={`/movie/${movie.id}`}
-          className="block w-full text-center py-2 text-sm font-semibold bg-primary-600/20 hover:bg-primary-600/30 text-primary-400 border border-primary-600/30 rounded-lg transition-colors"
-        >
-          View {movie.title} →
-        </Link>
+        <ButtonLink to={`/movie/${movie.id}`} className="w-full">
+          <span className="truncate">View {movie.title}</span>
+          <ChevronRightIcon />
+        </ButtonLink>
       </div>
     </div>
   );
@@ -477,14 +443,13 @@ function HeroCard({ movie, year, mode, month }: { movie: BoxOfficeMovie; year: n
 function Kpi({ label, value, sub, highlight }: { label: string; value: string; sub: string; highlight?: boolean }) {
   return (
     <div>
-      <div className="font-mono text-[9.5px] tracking-widest text-neutral-500 uppercase">{label}</div>
+      <div className="text-caption text-neutral-400">{label}</div>
       <div
-        className={`text-2xl font-light tracking-tight leading-tight mt-0.5 ${highlight ? "text-primary-400" : "text-white"}`}
-        style={{ fontFamily: "'Georgia', serif" }}
+        className={`tabular text-heading font-semibold leading-tight mt-0.5 ${highlight ? "text-success-400" : "text-white"}`}
       >
         {value}
       </div>
-      <div className="text-[11px] text-neutral-500 mt-0.5">{sub}</div>
+      <div className="text-caption text-neutral-400 mt-0.5">{sub}</div>
     </div>
   );
 }

@@ -1,4 +1,12 @@
 import { useState, useMemo } from "react";
+import {
+  Button,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  FilterIcon,
+  IconButton,
+  Segmented,
+} from "../ui";
 import { useShelfCalendarData } from "../../hooks/useShelfCalendarData";
 import CalendarMonthGrid from "./CalendarMonthGrid";
 import CalendarTimeline from "./CalendarTimeline";
@@ -122,145 +130,92 @@ export default function ShelfCalendarView({ shelfId, shelfName }: Props) {
     <div className="w-full">
       {/* Header */}
       <div className="px-6 lg:px-10 pt-5 bg-neutral-950">
-        <p className="font-mono text-sm tracking-[0.12em] uppercase text-neutral-500 mb-3">
-          {shelfName ?? "Shelf"} Calendar
-          {viewMode === "month" && upcomingThisMonth > 0 && (
-            <span className="text-neutral-600">
-              {" "}· {upcomingThisMonth} upcoming releases this month
-            </span>
-          )}
-        </p>
+        <div className="flex items-end gap-2 flex-wrap mb-5">
+          <div className="flex-1 basis-60 min-w-0 mr-1">
+            <h2 className="text-heading font-semibold text-neutral-50">
+              {viewMode === "week"
+                ? weekDays[0].date.getMonth() === weekDays[6].date.getMonth()
+                  ? `${monthNames[weekDays[0].date.getMonth()]} ${weekDays[0].date.getDate()}–${weekDays[6].date.getDate()} ${weekDays[6].date.getFullYear()}`
+                  : `${monthNames[weekDays[0].date.getMonth()].slice(0, 3)} ${weekDays[0].date.getDate()} – ${monthNames[weekDays[6].date.getMonth()].slice(0, 3)} ${weekDays[6].date.getDate()} ${weekDays[6].date.getFullYear()}`
+                : `${monthNames[currentMonth]} ${currentYear}`}
+            </h2>
+            <p className="mt-1 text-body text-neutral-400">
+              {shelfName ?? "Shelf"} calendar
+              {viewMode === "month" &&
+                upcomingThisMonth > 0 &&
+                ` · ${upcomingThisMonth} upcoming ${upcomingThisMonth === 1 ? "release" : "releases"} this month`}
+            </p>
+          </div>
 
-        <div className="flex items-center gap-2 flex-wrap mb-5">
-          {/* Month + Year heading */}
-          <h2
-            className="text-5xl tracking-tight leading-none mr-1"
-            style={{ fontFamily: "var(--font-serif)" }}
-          >
-            {viewMode === "week" ? (
-              <>
-                {weekDays[0].date.getMonth() === weekDays[6].date.getMonth()
-                  ? `${monthNames[weekDays[0].date.getMonth()]} ${weekDays[0].date.getDate()}–${weekDays[6].date.getDate()}`
-                  : `${monthNames[weekDays[0].date.getMonth()].slice(0, 3)} ${weekDays[0].date.getDate()} – ${monthNames[weekDays[6].date.getMonth()].slice(0, 3)} ${weekDays[6].date.getDate()}`}
-                {" "}
-                <em className="text-primary-400" style={{ fontStyle: "italic" }}>
-                  {weekDays[6].date.getFullYear()}
-                </em>
-              </>
-            ) : (
-              <>
-                {monthNames[currentMonth]}{" "}
-                <em className="text-primary-400" style={{ fontStyle: "italic" }}>
-                  {currentYear}
-                </em>
-              </>
-            )}
-          </h2>
-
-          <div className="flex-1" />
-
-          {/* ← Today → navigation */}
-          <div className="flex items-center gap-1">
-            <button
+          <div className="flex items-center gap-1.5">
+            <IconButton
+              label="Previous"
+              icon={<ChevronLeftIcon />}
+              variant="secondary"
+              shape="square"
               onClick={handlePrev}
-              className="h-8 w-8 flex items-center justify-center rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
-            <button
-              onClick={goToToday}
-              className="h-8 px-3 text-xs font-semibold rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-200 hover:bg-neutral-800 hover:text-white transition-colors"
-            >
-              Today
-            </button>
-            <button
+            />
+            <Button onClick={goToToday}>Today</Button>
+            <IconButton
+              label="Next"
+              icon={<ChevronRightIcon />}
+              variant="secondary"
+              shape="square"
               onClick={handleNext}
-              className="h-8 w-8 flex items-center justify-center rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
+            />
           </div>
 
-          {/* View mode toggle */}
-          <div className="flex items-center bg-neutral-900 border border-neutral-800 rounded-lg p-0.5">
-            {[
-              { mode: "month" as ViewMode, label: "Calendar" },
-              { mode: "week" as ViewMode, label: "Timeline" },
-            ].map(({ mode, label }) => (
-              <button
-                key={mode}
-                onClick={() => setViewMode(mode)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                  viewMode === mode || (mode === "month" && viewMode === "day")
-                    ? "bg-neutral-700 text-white"
-                    : "text-neutral-400 hover:text-neutral-200"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          <Segmented
+            label="View"
+            value={viewMode === "week" ? "week" : "month"}
+            onChange={(mode) => setViewMode(mode)}
+            options={[
+              { value: "month", label: "Calendar" },
+              { value: "week", label: "Timeline" },
+            ]}
+          />
 
           {/* Filters */}
           <div className="relative">
-            <button
+            <Button
               onClick={() => setShowFilters((v) => !v)}
-              className={`flex items-center gap-1.5 h-8 px-3 text-xs font-medium rounded-lg border transition-colors ${
-                showFilters || hasActiveFilters
-                  ? "bg-neutral-800 border-neutral-700 text-white"
-                  : "bg-neutral-900 border-neutral-800 text-neutral-400 hover:text-neutral-200 hover:border-neutral-700"
-              }`}
+              aria-expanded={showFilters}
+              icon={<FilterIcon />}
+              className={showFilters || hasActiveFilters ? "border-neutral-500" : undefined}
             >
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 4h18M7 8h10M11 12h2" />
-              </svg>
               Filters
               {hasActiveFilters && (
-                <span className="w-1.5 h-1.5 rounded-full bg-primary-400" />
+                <span className="w-1.5 h-1.5 rounded-full bg-primary-400" aria-hidden="true" />
               )}
-            </button>
+            </Button>
 
             {showFilters && (
-              <div className="absolute right-0 top-full mt-2 z-20 w-56 rounded-xl border border-neutral-700 bg-neutral-900 shadow-2xl p-3 flex flex-col gap-3">
+              <div className="absolute right-0 top-full mt-2 z-20 w-max rounded-surface border border-neutral-700 bg-neutral-900 shadow-2xl shadow-black/50 p-4 flex flex-col items-start gap-4">
                 <div>
-                  <p className="font-mono text-[10px] tracking-widest uppercase text-neutral-500 mb-2">Type</p>
-                  <div className="flex rounded-lg border border-neutral-700 overflow-hidden">
-                    {(["all", "movie", "tv"] as const).map((value, idx, arr) => (
-                      <button
-                        key={value}
-                        onClick={() => setFilterType(value)}
-                        className={`flex-1 py-1.5 text-xs font-medium transition-colors ${
-                          filterType === value
-                            ? "bg-primary-600 text-white"
-                            : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700"
-                        } ${idx < arr.length - 1 ? "border-r border-neutral-700" : ""}`}
-                      >
-                        {value === "all" ? "All" : value === "movie" ? "Movies" : "TV"}
-                      </button>
-                    ))}
-                  </div>
+                  <p className="mb-2 text-caption text-neutral-400">Type</p>
+                  <Segmented
+                    label="Type"
+                    value={filterType}
+                    onChange={setFilterType}
+                    options={[
+                      { value: "all", label: "All" },
+                      { value: "movie", label: "Movies" },
+                      { value: "tv", label: "TV" },
+                    ]}
+                  />
                 </div>
                 <div>
-                  <p className="font-mono text-[10px] tracking-widest uppercase text-neutral-500 mb-2">Status</p>
-                  <div className="flex rounded-lg border border-neutral-700 overflow-hidden">
-                    {(["all", "unwatched", "watched"] as const).map((value, idx, arr) => (
-                      <button
-                        key={value}
-                        onClick={() => setWatchFilter(value)}
-                        className={`flex-1 py-1.5 text-xs font-medium transition-colors ${
-                          watchFilter === value
-                            ? "bg-primary-600 text-white"
-                            : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700"
-                        } ${idx < arr.length - 1 ? "border-r border-neutral-700" : ""}`}
-                      >
-                        {value === "all" ? "All" : value === "watched" ? "Watched" : "Unwatched"}
-                      </button>
-                    ))}
-                  </div>
+                  <p className="mb-2 text-caption text-neutral-400">Status</p>
+                  <Segmented
+                    label="Status"
+                    value={watchFilter}
+                    onChange={setWatchFilter}
+                    options={[
+                      { value: "all", label: "All" },
+                      { value: "unwatched", label: "Unwatched" },
+                      { value: "watched", label: "Watched" },
+                    ]}
+                  />
                 </div>
                 {hasActiveFilters && (
                   <button

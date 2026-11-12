@@ -121,19 +121,19 @@ function TimelineItem({ item }: { item: CalendarItem }) {
         <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
           {isTv && tvItem && (
             <span className="font-mono text-xs text-neutral-500">
-              S{String(tvItem.season_number).padStart(2, "0")}E{String(tvItem.episode_number).padStart(2, "0")}
+              S{tvItem.season_number} E{tvItem.episode_number}
             </span>
           )}
           {airTime && (
             <span className="font-mono text-xs text-neutral-500">{airTime}</span>
           )}
           {episodeTag && (
-            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${episodeTag.classes}`}>
+            <span className={`text-caption font-semibold px-1.5 py-0.5 rounded ${episodeTag.classes}`}>
               {episodeTag.label}
             </span>
           )}
           {!isTv && (
-            <span className="text-xs text-amber-400/80 font-medium">Movie</span>
+            <span className="text-caption text-neutral-400 font-medium">Movie</span>
           )}
         </div>
         {tvItem?.name && (
@@ -206,22 +206,16 @@ export default function CalendarTimeline({ weekDays, today, isLoading }: Props) 
             {/* Date column */}
             <div className="flex flex-col">
               <span
-                className={`font-mono text-[10px] tracking-[0.12em] uppercase ${isToday ? "text-primary-400" : "text-neutral-500"}`}
+                className={`text-caption font-semibold ${isToday ? "text-primary-400" : "text-neutral-500"}`}
               >
                 {DOW[day.date.getDay()]}
               </span>
               <span
-                className={`leading-none mt-1 ${isToday ? "text-primary-400" : "text-neutral-100"}`}
-                style={{
-                  fontFamily: "var(--font-serif)",
-                  fontSize: 36,
-                  letterSpacing: "-0.02em",
-                  fontStyle: isToday ? "italic" : "normal",
-                }}
+                className={`mt-1 text-display font-semibold tabular ${isToday ? "text-primary-400" : "text-neutral-100"}`}
               >
                 {day.date.getDate()}
               </span>
-              <span className="font-mono text-[10px] text-neutral-600 mt-1">
+              <span className="text-caption text-neutral-500 mt-1">
                 {MONTH_SHORT[day.date.getMonth()]}
               </span>
             </div>

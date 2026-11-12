@@ -79,23 +79,42 @@ export default function Footer() {
             </Link>
           </div>
 
-          {/* TMDB attribution */}
-          <div className="flex items-center gap-2 text-xs text-neutral-600">
-            <span>Data provided by</span>
+          {/* Data attribution: TMDb's terms require its logo, JustWatch's
+              require a credit wherever its streaming data is shown. Served
+              from /public because TMDb's hosted logo URLs change. */}
+          <div className="flex items-center gap-3 text-caption text-neutral-400">
             <a
               href="https://www.themoviedb.org"
               target="_blank"
               rel="noopener noreferrer"
-              className="hover:opacity-80 transition-opacity"
+              className="shrink-0 hover:opacity-80 transition-opacity"
             >
               <img
-                src="https://www.themoviedb.org/assets/2/v4/logos/v2/blue_short-8e7b30f73a4020692ccca9c88bafe5dcb6f8a62a4c6bc55cd9ba82bb2cd95f6c.svg"
-                alt="The Movie Database"
-                className="h-4 w-auto"
+                src="/tmdb-logo.svg"
+                alt="The Movie Database (TMDB)"
+                width={185}
+                height={133}
+                className="h-8 w-auto"
               />
             </a>
+            <span>
+              Streaming data by{" "}
+              <a
+                href="https://www.justwatch.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-neutral-200 hover:text-white transition-colors"
+              >
+                JustWatch
+              </a>
+            </span>
           </div>
         </div>
+
+        <p className="mt-6 text-center sm:text-left text-caption text-neutral-400">
+          This product uses the TMDB API but is not endorsed or certified by
+          TMDB.
+        </p>
       </div>
     </footer>
   );

@@ -1,5 +1,4 @@
-from typing import Literal
-from fastapi import APIRouter, Depends, BackgroundTasks, Query, Request
+from fastapi import APIRouter, Depends, BackgroundTasks, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from app.db.session import get_db
@@ -30,8 +29,6 @@ from app.schemas.common import (
 
 router = APIRouter()
 
-ForYouMode = Literal["recent", "top_rated"]
-
 
 class RecommendationSend(BaseModel):
     recipient_username: str = Field(
@@ -47,11 +44,10 @@ class RecommendationSend(BaseModel):
 
 @router.get("/for-you")
 def for_you(
-    mode: ForYouMode = Query("recent"),
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
-    return get_for_you_recommendations(db, uid, mode)
+    return get_for_you_recommendations(db, uid)
 
 
 @router.post("/send", dependencies=[Depends(track_budget)])

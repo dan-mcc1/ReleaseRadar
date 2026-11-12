@@ -1,0 +1,51 @@
+Copyright (c) 2026 Dan McCabe. All rights reserved.
+
+This repository is source-available, not open source. Its source code,
+assets and documentation (the "Software") are published so they can be read
+and so people can contribute. No other rights are granted.
+
+1. Permitted uses
+
+   You may:
+   a. view the Software, and fork it on GitHub as GitHub's Terms of Service
+      allow;
+   b. run and modify a copy of the Software on your own machine, solely to
+      develop, test and submit a contribution (a pull request, patch or issue)
+      to this repository.
+
+2. Prohibited uses
+
+   Except as permitted in section 1, you may not, in whole or in part:
+   a. run, deploy, host or operate the Software, or any work derived from it,
+      as a website, app, API or other service, whether public or private, paid
+      or free;
+   b. copy, distribute, publish, sublicense or sell the Software or any work
+      derived from it;
+   c. use the Software or any part of it in another product or service.
+
+3. Contributions
+
+   By submitting a contribution to this repository, you:
+   a. confirm that you wrote it, or otherwise have the right to submit it;
+   b. grant Dan McCabe a perpetual, worldwide, irrevocable, royalty-free,
+      non-exclusive licence to use, copy, modify, distribute, sublicense and
+      commercially exploit it, as part of the Software or otherwise.
+   You keep the copyright in your contribution.
+
+4. Third-party components
+
+   Third-party libraries in this repository, and those installed as
+   dependencies, are covered by their own licences. Data from TMDB and
+   JustWatch is subject to those providers' terms.
+
+5. No warranty
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED. IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM,
+   DAMAGES OR OTHER LIABILITY ARISING FROM THE SOFTWARE OR ITS USE.
+
+Versions of this repository published before this file was added were marked
+as MIT-licensed. Those earlier versions remain available under MIT to anyone
+who obtained them; this licence applies to all later versions.
+
+For any other use, contact the copyright holder.

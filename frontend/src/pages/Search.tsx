@@ -7,6 +7,17 @@ import WatchButton, { type WatchStatus } from "../components/WatchButton";
 import { useBulkWatchStatus } from "../hooks/api/useWatchStatus";
 import type { Movie, Show, Person, CollectionResult } from "../types/calendar";
 import { parseLocalDate } from "../utils/date";
+import {
+  Button,
+  ButtonLink,
+  ChevronRightIcon,
+  Chip,
+  EmptyState,
+  PageHeader,
+  PosterCard,
+  SectionHeader,
+  StarIcon,
+} from "../components/ui";
 
 type Tab = "all" | "movies" | "tv" | "people" | "collections";
 
@@ -21,7 +32,7 @@ function getTitle(item: Movie | Show): string {
 
 // ── Poster grid card ───────────────────────────────────────────────────────
 
-function PosterCard({
+function ResultCard({
   item,
   type,
 }: {
@@ -36,45 +47,29 @@ function PosterCard({
       ?.slice(0, 2)
       .map((g) => g.name)
       .join(" · ") ?? "";
+  const lead = [year, genres].filter(Boolean).join(" · ");
+  const rating = item.vote_average ? item.vote_average.toFixed(1) : null;
 
   return (
-    <Link to={href} className="group block cursor-pointer">
-      <div className="relative rounded-xl overflow-hidden bg-neutral-800 aspect-[2/3]">
-        {item.poster_path ? (
-          <img
-            src={`${BASE_IMAGE_URL}/w342${item.poster_path}`}
-            alt={title}
-            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <svg
-              className="w-10 h-10 text-neutral-600"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1}
-                d="M15 10l4.553-2.069A1 1 0 0121 8.87v6.26a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-              />
-            </svg>
-          </div>
-        )}
-      </div>
-      <div className="mt-2.5">
-        <p className="text-sm font-semibold text-neutral-100 group-hover:text-white transition-colors leading-tight line-clamp-1 tracking-tight">
-          {title}
-        </p>
-        <p className="text-[11.5px] text-neutral-500 mt-0.5 font-mono">
-          {[year, genres, item.vote_average ? `★ ${item.vote_average.toFixed(1)}` : null]
-            .filter(Boolean)
-            .join(" · ")}
-        </p>
-      </div>
-    </Link>
+    <PosterCard
+      to={href}
+      title={title}
+      posterPath={item.poster_path}
+      subtitle={
+        lead || rating ? (
+          <>
+            {lead}
+            {lead && rating && " · "}
+            {rating && (
+              <span className="inline-flex items-center gap-1">
+                <StarIcon className="w-3 h-3 text-warning-400" />
+                {rating}
+              </span>
+            )}
+          </>
+        ) : undefined
+      }
+    />
   );
 }
 
@@ -107,11 +102,9 @@ function TopResultHero({
 
   return (
     <div className="mb-8">
-      <p className="font-mono text-[10.5px] tracking-widest uppercase text-neutral-500 mb-3">
-        Top result · {typeLabel}
-      </p>
+      <SectionHeader title="Top result" note={typeLabel} className="mb-3" />
       <div
-        className="relative rounded-2xl overflow-hidden"
+        className="relative rounded-surface overflow-hidden"
         style={{ minHeight: 200, background: "#111" }}
       >
         {item.backdrop_path && (
@@ -140,39 +133,34 @@ function TopResultHero({
             </Link>
           )}
           <div className="flex-1 text-white min-w-0">
-            <p className="font-mono text-[10.5px] tracking-widest uppercase opacity-60 mb-2">
-              {[typeLabel, genres, item.vote_average ? `★ ${item.vote_average.toFixed(1)}` : null]
-                .filter(Boolean)
-                .join(" · ")}
+            <p className="text-caption text-white/70 mb-2 flex items-center gap-1">
+              {[typeLabel, genres].filter(Boolean).join(" · ")}
+              {item.vote_average ? (
+                <>
+                  {" · "}
+                  <StarIcon className="w-3 h-3 text-warning-400" />
+                  {item.vote_average.toFixed(1)}
+                </>
+              ) : null}
             </p>
-            <h2
-              className="font-sans font-light italic tracking-tight leading-none mb-3 line-clamp-2 text-[24px] sm:text-[40px]"
-            >
+            <h2 className="font-semibold tracking-tight leading-tight mb-3 line-clamp-2 text-heading sm:text-display">
               {title}
             </h2>
             <div className="flex items-center gap-4 mb-4">
               {year && (
-                <span className="font-mono text-[12px] opacity-80">{year}</span>
+                <span className="tabular text-label opacity-80">{year}</span>
               )}
               {statusEntry?.status && statusEntry.status !== "none" && (
-                <span
-                  className="px-2 py-0.5 rounded-full font-mono text-[10.5px] uppercase tracking-wide"
-                  style={{
-                    background: "rgba(16,185,129,0.2)",
-                    color: "#34d399",
-                  }}
-                >
+                <span className="px-2 py-0.5 rounded-full text-caption bg-primary-500/20 text-primary-300">
                   {statusEntry.status}
                 </span>
               )}
             </div>
             <div className="flex items-center gap-3">
-              <Link
-                to={href}
-                className="px-4 py-2 rounded-lg text-sm font-medium bg-primary-600 hover:bg-primary-500 transition-colors text-white"
-              >
-                View {typeLabel} →
-              </Link>
+              <ButtonLink variant="primary" to={href}>
+                View {typeLabel}
+                <ChevronRightIcon />
+              </ButtonLink>
               <WatchButton
                 contentType={type}
                 contentId={item.id}
@@ -191,7 +179,7 @@ function TopResultHero({
 
 // ── Section header ─────────────────────────────────────────────────────────
 
-function SectionHeader({
+function ResultsHeader({
   title,
   count,
   onSeeAll,
@@ -201,21 +189,19 @@ function SectionHeader({
   onSeeAll?: () => void;
 }) {
   return (
-    <div className="flex items-baseline gap-3 mb-5">
-      <h2 className="m-0 font-sans font-light italic tracking-tight text-2xl text-neutral-100">
-        {title}
-      </h2>
-      <span className="font-mono text-[11px] text-neutral-600">· {count}</span>
-      <div className="flex-1" />
-      {onSeeAll && (
-        <button
-          onClick={onSeeAll}
-          className="text-[12.5px] text-neutral-400 hover:text-neutral-200 transition-colors font-medium"
-        >
-          See all →
-        </button>
-      )}
-    </div>
+    <SectionHeader
+      title={title}
+      note={<span className="tabular">{count}</span>}
+      className="mb-5"
+      action={
+        onSeeAll && (
+          <Button variant="ghost" size="sm" onClick={onSeeAll}>
+            See all
+            <ChevronRightIcon />
+          </Button>
+        )
+      }
+    />
   );
 }
 
@@ -236,10 +222,10 @@ function PersonCard({ person }: { person: Person }) {
   return (
     <Link
       to={`/person/${person.id}`}
-      className="flex items-center gap-3.5 p-3 rounded-xl border border-neutral-800 bg-neutral-900/40 hover:bg-neutral-800/50 hover:border-neutral-700 transition-all group"
+      className="flex items-center gap-3.5 p-3 rounded-surface border border-neutral-800 bg-neutral-900/40 hover:bg-neutral-800/50 hover:border-neutral-700 transition-all group"
     >
       <div
-        className="w-12 h-12 rounded-full flex-shrink-0 flex items-center justify-center font-semibold text-white text-base overflow-hidden"
+        className="w-12 h-12 rounded-full flex-shrink-0 flex items-center justify-center font-semibold text-white text-body overflow-hidden"
         style={{
           background: `linear-gradient(135deg, oklch(0.6 0.13 ${hue}), oklch(0.4 0.13 ${(hue + 40) % 360}))`,
         }}
@@ -255,28 +241,16 @@ function PersonCard({ person }: { person: Person }) {
         )}
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-neutral-100 group-hover:text-white transition-colors line-clamp-1">
+        <p className="text-body font-semibold text-neutral-100 group-hover:text-white transition-colors line-clamp-1">
           {person.name}
         </p>
         {person.known_for_department && (
-          <p className="font-mono text-[10px] text-neutral-500 mt-0.5 uppercase tracking-wide">
+          <p className="text-caption text-neutral-400 mt-0.5">
             {person.known_for_department}
           </p>
         )}
       </div>
-      <svg
-        className="w-3.5 h-3.5 text-neutral-600 flex-shrink-0"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={2}
-          d="M9 5l7 7-7 7"
-        />
-      </svg>
+      <ChevronRightIcon className="w-3.5 h-3.5 text-neutral-500 flex-shrink-0" />
     </Link>
   );
 }
@@ -289,7 +263,7 @@ function CollectionCard({ collection }: { collection: CollectionResult }) {
   return (
     <Link
       to={`/collection/${collection.id}`}
-      className="relative overflow-hidden rounded-xl border border-neutral-800 group block"
+      className="relative overflow-hidden rounded-surface border border-neutral-800 group block"
       style={{
         background: `linear-gradient(135deg, oklch(0.25 0.10 ${hue}) 0%, oklch(0.15 0.06 ${hue}) 100%)`,
       }}
@@ -319,10 +293,10 @@ function CollectionCard({ collection }: { collection: CollectionResult }) {
           <div className="w-10 h-14 rounded-md bg-neutral-700/50 flex-shrink-0" />
         )}
         <div className="flex-1 min-w-0 text-white">
-          <p className="font-sans font-light italic text-lg leading-tight line-clamp-1">
+          <p className="font-semibold text-title leading-tight line-clamp-1">
             {collection.name}
           </p>
-          <p className="font-mono text-[10px] opacity-60 tracking-widest uppercase mt-1">
+          <p className="text-caption text-white/70 mt-1">
             Collection
           </p>
         </div>
@@ -391,51 +365,26 @@ export default function Search() {
     <div className="min-h-screen pb-16">
       {/* ── Page header ── */}
       <div className="px-6 sm:px-10 pt-7 pb-5">
-        <p className="font-mono text-[11px] tracking-widest uppercase text-neutral-500 mb-2">
-          {query
-            ? `Search · ${total} result${total !== 1 ? "s" : ""}`
-            : "Search"}
-        </p>
-        <h1
-          className="font-sans font-light tracking-tight leading-none m-0"
-          style={{ fontSize: 40 }}
-        >
-          {query ? (
-            <>
-              Results for{" "}
-              <em className="italic text-primary-400 not-italic" style={{ fontStyle: "italic" }}>
-                &ldquo;{query}&rdquo;
-              </em>
-            </>
-          ) : (
-            "Search"
-          )}
-        </h1>
+        <PageHeader
+          title={query ? <>Results for &ldquo;{query}&rdquo;</> : "Search"}
+          description={query ? `${total} result${total !== 1 ? "s" : ""}` : undefined}
+        />
       </div>
 
       {/* ── Tabs ── */}
       {!loading && total > 0 && (
         <div className="px-6 sm:px-10 pb-6">
-          <div className="flex gap-1.5 flex-wrap">
-            {tabs.map((t) => {
-              const active = t.key === activeTab;
-              return (
-                <button
-                  key={t.key}
-                  onClick={() => setActiveTab(t.key)}
-                  className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[12.5px] font-medium border transition-colors ${
-                    active
-                      ? "bg-neutral-800 border-neutral-600 text-white"
-                      : "bg-neutral-900 border-neutral-800 text-neutral-400 hover:text-neutral-200 hover:border-neutral-700"
-                  }`}
-                >
-                  {t.label}
-                  <span className="font-mono text-[10.5px] text-neutral-500 leading-none self-center">
-                    {t.count}
-                  </span>
-                </button>
-              );
-            })}
+          <div role="group" aria-label="Result type" className="flex gap-2 flex-wrap">
+            {tabs.map((t) => (
+              <Chip
+                key={t.key}
+                pressed={t.key === activeTab}
+                count={t.count}
+                onClick={() => setActiveTab(t.key)}
+              >
+                {t.label}
+              </Chip>
+            ))}
           </div>
         </div>
       )}
@@ -445,7 +394,7 @@ export default function Search() {
         <div className="flex items-center justify-center py-24">
           <div className="flex flex-col items-center gap-3">
             <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
-            <p className="font-mono text-[12px] text-neutral-500 tracking-wide">
+            <p className="text-label text-neutral-400">
               Searching…
             </p>
           </div>
@@ -454,27 +403,7 @@ export default function Search() {
 
       {/* ── Empty state ── */}
       {!loading && query && total === 0 && (
-        <div className="flex flex-col items-center justify-center py-24 text-center px-6">
-          <div className="w-16 h-16 rounded-full bg-neutral-900 border border-neutral-800 flex items-center justify-center mb-5">
-            <svg
-              className="w-8 h-8 text-neutral-600"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-              />
-            </svg>
-          </div>
-          <h3 className="text-neutral-200 font-semibold mb-1">No results found</h3>
-          <p className="font-mono text-[12px] text-neutral-600">
-            Try a different search term
-          </p>
-        </div>
+        <EmptyState title="No results found" description="Try a different search term." />
       )}
 
       {/* ── "All" tab content ── */}
@@ -492,28 +421,28 @@ export default function Search() {
           {(() => {
             const showsBlock = previewShows.length > 0 && (
               <div className="mb-8" key="shows">
-                <SectionHeader
+                <ResultsHeader
                   title="TV Shows"
                   count={shows.length}
                   onSeeAll={shows.length > 8 ? () => setActiveTab("tv") : undefined}
                 />
                 <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 2xl:grid-cols-posters gap-3">
                   {previewShows.map((s) => (
-                    <PosterCard key={s.id} item={s} type="tv" />
+                    <ResultCard key={s.id} item={s} type="tv" />
                   ))}
                 </div>
               </div>
             );
             const moviesBlock = previewMovies.length > 0 && (
               <div className="mb-8" key="movies">
-                <SectionHeader
+                <ResultsHeader
                   title="Movies"
                   count={movies.length}
                   onSeeAll={movies.length > 8 ? () => setActiveTab("movies") : undefined}
                 />
                 <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 2xl:grid-cols-posters gap-3">
                   {previewMovies.map((m) => (
-                    <PosterCard key={m.id} item={m} type="movie" />
+                    <ResultCard key={m.id} item={m} type="movie" />
                   ))}
                 </div>
               </div>
@@ -540,7 +469,7 @@ export default function Search() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
               {people.length > 0 && (
                 <div>
-                  <SectionHeader
+                  <ResultsHeader
                     title="People"
                     count={people.length}
                     onSeeAll={people.length > 5 ? () => setActiveTab("people") : undefined}
@@ -554,7 +483,7 @@ export default function Search() {
               )}
               {collections.length > 0 && (
                 <div>
-                  <SectionHeader
+                  <ResultsHeader
                     title="Collections"
                     count={collections.length}
                     onSeeAll={collections.length > 5 ? () => setActiveTab("collections") : undefined}
@@ -574,10 +503,10 @@ export default function Search() {
       {/* ── Individual tab full lists ── */}
       {!loading && activeTab === "tv" && (
         <div className="px-6 sm:px-10">
-          <SectionHeader title="TV Shows" count={shows.length} />
+          <ResultsHeader title="TV Shows" count={shows.length} />
           <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 2xl:grid-cols-posters gap-3">
             {shows.map((s) => (
-              <PosterCard key={s.id} item={s} type="tv" />
+              <ResultCard key={s.id} item={s} type="tv" />
             ))}
           </div>
         </div>
@@ -585,10 +514,10 @@ export default function Search() {
 
       {!loading && activeTab === "movies" && (
         <div className="px-6 sm:px-10">
-          <SectionHeader title="Movies" count={movies.length} />
+          <ResultsHeader title="Movies" count={movies.length} />
           <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 2xl:grid-cols-posters gap-3">
             {movies.map((m) => (
-              <PosterCard key={m.id} item={m} type="movie" />
+              <ResultCard key={m.id} item={m} type="movie" />
             ))}
           </div>
         </div>
@@ -596,7 +525,7 @@ export default function Search() {
 
       {!loading && activeTab === "people" && (
         <div className="px-6 sm:px-10">
-          <SectionHeader title="People" count={people.length} />
+          <ResultsHeader title="People" count={people.length} />
           <div className="flex flex-col gap-2">
             {people.map((p) => (
               <PersonCard key={p.id} person={p} />
@@ -607,7 +536,7 @@ export default function Search() {
 
       {!loading && activeTab === "collections" && (
         <div className="px-6 sm:px-10">
-          <SectionHeader title="Collections" count={collections.length} />
+          <ResultsHeader title="Collections" count={collections.length} />
           <div className="flex flex-col gap-2.5">
             {collections.map((c) => (
               <CollectionCard key={c.id} collection={c} />
@@ -618,9 +547,9 @@ export default function Search() {
 
       {/* ── Keyboard tip ── */}
       {!loading && total > 0 && (
-        <p className="px-6 sm:px-10 pt-10 text-center font-mono text-[11.5px] text-neutral-700 italic">
+        <p className="px-6 sm:px-10 pt-10 text-center text-caption text-neutral-500">
           Tip — press{" "}
-          <kbd className="px-1.5 py-0.5 rounded bg-neutral-900 border border-neutral-800 not-italic text-neutral-500">
+          <kbd className="px-1.5 py-0.5 rounded bg-neutral-900 border border-neutral-800 text-neutral-400">
             Esc
           </kbd>{" "}
           to clear search

@@ -7,7 +7,23 @@ from app.services.streaming_notification_service import (
     send_user_streaming_alerts,
 )
 from app.services.trailer_notification_service import refresh_trailers, send_user_trailer_alerts
+from app.services.title_recs_service import refresh_title_recs
 from app.services.vote_update_service import update_all_vote_averages
+
+
+@logged_task(max_execution_seconds=1800)
+def refresh_title_recommendations() -> None:
+    """
+    Fetch TMDb's recommendations for tracked titles that have none stored or
+    whose stored list is a month old, a batch per run, and prune what nobody
+    tracks any more. For You is built from these. Upserts, so a retry is
+    harmless; a title TMDb couldn't serve is picked up again next run.
+    """
+    db = SessionLocal()
+    try:
+        refresh_title_recs(db)
+    finally:
+        db.close()
 
 
 @logged_task(max_execution_seconds=1800)

@@ -7,6 +7,20 @@ import { useAuthUser } from "../hooks/useAuthUser";
 import { needsEmailVerification } from "../utils/emailVerification";
 import { useSubscription } from "../hooks/api/useSubscription";
 import { useNavigate, Link, useLocation } from "react-router-dom";
+import { DocumentDuplicateIcon, LockClosedIcon } from "@heroicons/react/24/outline";
+import {
+  Button,
+  CheckIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  CloseIcon,
+  PageHeader,
+  PlusIcon,
+  SearchField,
+  IconButton,
+  SectionHeader,
+  Segmented,
+} from "../components/ui";
 import {
   AVATAR_PRESETS,
   getAvatarColor,
@@ -133,13 +147,11 @@ function SectionCard({
   return (
     <section
       id={`settings-${id}`}
-      className="bg-neutral-800/50 border border-neutral-700/40 rounded-2xl p-7"
+      className="pb-8 border-b border-neutral-800 last:border-b-0"
     >
-      <h2 className="text-xl font-semibold tracking-tight text-white mb-1">
-        {title}
-      </h2>
+      <SectionHeader title={title} className="mb-1" />
       {subtitle && (
-        <p className="text-[13px] text-neutral-400 mb-6">{subtitle}</p>
+        <p className="text-label text-neutral-400 mb-6">{subtitle}</p>
       )}
       {children}
     </section>
@@ -155,7 +167,7 @@ function FieldWrap({
 }) {
   return (
     <label className="flex flex-col gap-1.5">
-      <span className="text-[12px] text-neutral-400 font-medium">{label}</span>
+      <span className="text-caption text-neutral-400 font-medium">{label}</span>
       {children}
     </label>
   );
@@ -183,7 +195,7 @@ function FieldInput({
   return (
     <div className="flex items-center bg-neutral-900/70 border border-neutral-700/50 rounded-xl px-3 gap-1">
       {prefix && (
-        <span className="text-neutral-500 text-[14px] shrink-0">{prefix}</span>
+        <span className="text-neutral-500 text-body shrink-0">{prefix}</span>
       )}
       {multiline ? (
         <textarea
@@ -193,7 +205,7 @@ function FieldInput({
           placeholder={placeholder}
           maxLength={maxLength}
           rows={2}
-          className="flex-1 bg-transparent text-neutral-100 placeholder-neutral-600 text-[14px] py-2.5 outline-none resize-none"
+          className="flex-1 bg-transparent text-neutral-100 placeholder-neutral-600 text-body py-2.5 outline-none resize-none"
         />
       ) : (
         <input
@@ -202,7 +214,7 @@ function FieldInput({
           readOnly={readOnly}
           placeholder={placeholder}
           maxLength={maxLength}
-          className="flex-1 bg-transparent text-neutral-100 placeholder-neutral-600 text-[14px] py-2.5 outline-none min-w-0"
+          className="flex-1 bg-transparent text-neutral-100 placeholder-neutral-600 text-body py-2.5 outline-none min-w-0"
         />
       )}
       {suffix}
@@ -679,14 +691,7 @@ export default function Settings() {
   return (
     <div className="pb-24">
       {/* Page header */}
-      <div className="px-6 lg:px-10 pt-8 pb-2">
-        <p className="font-mono text-[10px] tracking-[0.14em] text-neutral-500 uppercase mb-2">
-          Account
-        </p>
-        <h1 className="text-3xl lg:text-4xl font-semibold tracking-tight text-white">
-          Settings
-        </h1>
-      </div>
+      <PageHeader className="px-6 lg:px-10 pt-8 pb-2" title="Settings" />
 
       <div className="px-6 lg:px-10 pt-6 pb-10 flex gap-10">
         {/* ── Left nav ── */}
@@ -697,7 +702,7 @@ export default function Settings() {
               onClick={() => {
                 scrollToSection(item.id);
               }}
-              className={`px-3.5 py-2.5 text-[13.5px] font-medium rounded-xl text-left transition-colors ${
+              className={`px-3.5 py-2.5 text-label font-medium rounded-xl text-left transition-colors ${
                 activeSection === item.id
                   ? "bg-neutral-800 text-white"
                   : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/50"
@@ -724,10 +729,10 @@ export default function Settings() {
                 size={68}
               />
               <div>
-                <p className="text-[16px] font-semibold tracking-tight text-white">
+                <p className="text-title font-semibold tracking-tight text-white">
                   {userMe?.display_name || (userMe?.username ? `@${userMe.username}` : user.email)}
                 </p>
-                <p className="text-[13px] text-neutral-400 mt-0.5">
+                <p className="text-label text-neutral-400 mt-0.5">
                   {userMe?.display_name && userMe?.username ? `@${userMe.username} · ` : ""}{user.email}
                 </p>
               </div>
@@ -735,7 +740,7 @@ export default function Settings() {
 
             {/* Avatar color picker */}
             <div className="mb-6">
-              <p className="text-[12px] text-neutral-400 font-medium mb-2.5">
+              <p className="text-caption text-neutral-400 font-medium mb-2.5">
                 Avatar color
               </p>
               <div className="flex flex-wrap gap-2 mb-3">
@@ -771,17 +776,18 @@ export default function Settings() {
                 ))}
               </div>
               {avatarChanged && (
-                <button
+                <Button
+                  variant="primary"
+                  size="sm"
                   onClick={saveAvatar}
                   disabled={updateAvatarMutation.isPending}
-                  className="text-sm bg-primary-600 hover:bg-primary-500 disabled:opacity-50 text-white px-4 py-1.5 rounded-lg transition-colors"
                 >
                   {updateAvatarMutation.isPending
                     ? "Saving…"
                     : avatarSaved
                       ? "Saved!"
                       : "Save avatar"}
-                </button>
+                </Button>
               )}
             </div>
 
@@ -793,7 +799,7 @@ export default function Settings() {
                   readOnly
                   suffix={
                     userMe && !userMe.email && needsEmailVerification(user) ? (
-                      <span className="text-[12px] text-warning-300 shrink-0">
+                      <span className="text-caption text-warning-300 shrink-0">
                         (not verified)
                       </span>
                     ) : undefined
@@ -814,26 +820,27 @@ export default function Settings() {
                       placeholder="username"
                       suffix={
                         <div className="flex items-center gap-1 shrink-0">
-                          <button
+                          <Button
+                            variant="primary"
+                            size="sm"
                             onClick={saveUsername}
                             disabled={
                               updateUsernameMutation.isPending ||
                               usernameAvailable === false
                             }
-                            className="text-xs bg-primary-600 hover:bg-primary-500 disabled:opacity-50 text-white px-2.5 py-1 rounded-lg"
                           >
                             Save
-                          </button>
-                          <button
+                          </Button>
+                          <IconButton
+                            label="Cancel"
+                            size="sm"
                             onClick={() => {
                               setEditingUsername(false);
                               setNewUsername("");
                               setUsernameError(null);
                             }}
-                            className="text-neutral-400 hover:text-neutral-200 text-xs px-1.5 py-1"
-                          >
-                            ✕
-                          </button>
+                            icon={<CloseIcon />}
+                          />
                         </div>
                       }
                     />
@@ -869,15 +876,17 @@ export default function Settings() {
                     value={userMe?.username ? `@${userMe.username}` : "Not set"}
                     readOnly
                     suffix={
-                      <button
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="shrink-0"
                         onClick={() => {
                           setEditingUsername(true);
                           setNewUsername(userMe?.username ?? "");
                         }}
-                        className="text-xs text-primary-400 hover:text-primary-300 shrink-0 py-2.5"
                       >
                         {userMe?.username ? "Change" : "Set"}
-                      </button>
+                      </Button>
                     }
                   />
                 )}
@@ -896,20 +905,21 @@ export default function Settings() {
                   <span className="text-xs text-neutral-600">
                     {displayName.length}/50 · Shown on your profile instead of your @handle
                   </span>
-                  <button
+                  <Button
+                    variant="primary"
+                    size="sm"
                     onClick={saveDisplayName}
                     disabled={
                       updateDisplayNameMutation.isPending ||
                       displayName.trim() === (userMe?.display_name ?? "")
                     }
-                    className="text-sm bg-primary-600 enabled:hover:bg-primary-500 disabled:opacity-40 text-white px-4 py-1.5 rounded-lg transition-colors"
                   >
                     {updateDisplayNameMutation.isPending
                       ? "Saving…"
                       : displayNameSaved
                         ? "Saved!"
                         : "Save name"}
-                  </button>
+                  </Button>
                 </div>
               </div>
 
@@ -927,29 +937,30 @@ export default function Settings() {
                   <span className="text-xs text-neutral-600">
                     {bio.length}/300
                   </span>
-                  <button
+                  <Button
+                    variant="primary"
+                    size="sm"
                     onClick={saveBio}
                     disabled={
                       updateBioMutation.isPending || bio === (userMe?.bio ?? "")
                     }
-                    className="text-sm bg-primary-600 enabled:hover:bg-primary-500 disabled:opacity-40 text-white px-4 py-1.5 rounded-lg transition-colors"
                   >
                     {updateBioMutation.isPending
                       ? "Saving…"
                       : bioSaved
                         ? "Saved!"
                         : "Save bio"}
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
 
             <div className="flex items-center justify-between gap-6 mt-6 pt-6 border-t border-neutral-700/40">
               <div>
-                <p className="text-[14px] font-semibold text-white">
+                <p className="text-body font-semibold text-white">
                   Hide spoilers
                 </p>
-                <p className="text-[12.5px] text-neutral-400 mt-0.5">
+                <p className="text-label text-neutral-400 mt-0.5">
                   Blur reviews marked "contains spoilers" and hide synopses for
                   episodes you haven't reached yet. Click to reveal.
                 </p>
@@ -974,10 +985,10 @@ export default function Settings() {
               className="flex items-center justify-between py-3.5 border-b border-neutral-700/40"
             >
               <div>
-                <p className="text-[14px] font-semibold text-white">
+                <p className="text-body font-semibold text-white">
                   Email notifications
                 </p>
-                <p className="text-[12.5px] text-neutral-400 mt-0.5">
+                <p className="text-label text-neutral-400 mt-0.5">
                   Digest of upcoming releases and friend recommendations.
                 </p>
               </div>
@@ -996,7 +1007,7 @@ export default function Settings() {
             {emailNotifications && (
               <div className="py-4 border-b border-neutral-700/40 space-y-4">
                 <div>
-                  <p className="text-[13px] font-medium text-white mb-2">
+                  <p className="text-label font-medium text-white mb-2">
                     Digest frequency
                   </p>
                   <div className="flex gap-2">
@@ -1024,19 +1035,7 @@ export default function Settings() {
                         >
                           {freq.charAt(0).toUpperCase() + freq.slice(1)}
                           {locked && (
-                            <svg
-                              className="w-3.5 h-3.5 text-neutral-400"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                              strokeWidth={2}
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-                              />
-                            </svg>
+                            <LockClosedIcon className="w-3.5 h-3.5 text-neutral-400" strokeWidth={2} aria-hidden="true" />
                           )}
                         </button>
                       );
@@ -1045,7 +1044,7 @@ export default function Settings() {
                 </div>
 
                 <div>
-                  <p className="text-[13px] font-medium text-white mb-2">
+                  <p className="text-label font-medium text-white mb-2">
                     Digest time
                   </p>
                   <div className="flex flex-wrap gap-3">
@@ -1081,19 +1080,7 @@ export default function Settings() {
                             ([v]) => v === digestTimezone,
                           )?.[1] ?? digestTimezone}
                         </span>
-                        <svg
-                          className={`w-3.5 h-3.5 text-neutral-400 transition-transform ${timezoneOpen ? "rotate-180" : ""}`}
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                          strokeWidth={2}
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="M19 9l-7 7-7-7"
-                          />
-                        </svg>
+                        <ChevronDownIcon className={`w-3.5 h-3.5 text-neutral-400 transition-transform ${timezoneOpen ? "rotate-180" : ""}`} />
                       </button>
                       {timezoneOpen && (
                         <ul className="absolute left-0 top-full mt-1 z-50 bg-neutral-800 border border-neutral-700 rounded-xl shadow-xl overflow-y-auto max-h-[170px] min-w-full">
@@ -1151,15 +1138,15 @@ export default function Settings() {
                 }`}
               >
                 <div>
-                  <p className="text-[14px] font-semibold text-white flex items-center gap-2">
+                  <p className="text-body font-semibold text-white flex items-center gap-2">
                     {item.label}
                     {!isPremium && (
-                      <span className="text-[10px] font-bold uppercase tracking-wider bg-amber-400/15 text-amber-400 border border-amber-400/30 rounded-full px-2 py-0.5">
+                      <span className="text-caption font-semibold border border-neutral-600 text-neutral-300 rounded-full px-2 py-0.5">
                         Premium
                       </span>
                     )}
                   </p>
-                  <p className="text-[12.5px] text-neutral-400 mt-0.5">
+                  <p className="text-label text-neutral-400 mt-0.5">
                     {item.desc}
                   </p>
                 </div>
@@ -1179,15 +1166,15 @@ export default function Settings() {
             <div className="mt-5 pt-5 border-t border-neutral-700/40">
               <div className="flex items-start justify-between gap-3 mb-3">
                 <div>
-                  <p className="text-[13.5px] font-semibold text-white">
+                  <p className="text-label font-semibold text-white">
                     Notification subscriptions
                   </p>
-                  <p className="text-[12px] text-neutral-500 mt-0.5">
+                  <p className="text-caption text-neutral-500 mt-0.5">
                     Control which watchlisted titles appear in your digest.
                   </p>
                 </div>
                 {!isPremium && (
-                  <span className="flex-shrink-0 text-xs font-semibold text-amber-400 bg-amber-400/10 border border-amber-400/30 rounded-full px-2 py-0.5">
+                  <span className="flex-shrink-0 text-xs font-semibold text-warning-400 bg-warning-400/10 border border-warning-400/30 rounded-full px-2 py-0.5">
                     Premium
                   </span>
                 )}
@@ -1197,43 +1184,23 @@ export default function Settings() {
                 watchlistNotifyItems && watchlistNotifyItems.length > 0 ? (
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
-                      <div className="relative flex-1 min-w-0">
-                        <svg
-                          className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-500 pointer-events-none"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                          strokeWidth={2}
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                          />
-                        </svg>
-                        <input
-                          type="text"
-                          placeholder="Search titles…"
-                          value={notifySearch}
-                          onChange={(e) => setNotifySearch(e.target.value)}
-                          className="w-full bg-neutral-900/70 border border-neutral-700/50 rounded-xl pl-8 pr-3 py-1.5 text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-primary-500"
-                        />
-                      </div>
-                      <div className="inline-flex rounded-xl border border-neutral-700/50 overflow-hidden shrink-0">
-                        {(["all", "tv", "movie"] as const).map((t, i, arr) => (
-                          <button
-                            key={t}
-                            onClick={() => setNotifyTypeFilter(t)}
-                            className={`px-2.5 py-1.5 text-xs font-medium transition-colors ${
-                              notifyTypeFilter === t
-                                ? "bg-primary-600 text-white"
-                                : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700"
-                            } ${i < arr.length - 1 ? "border-r border-neutral-700/50" : ""}`}
-                          >
-                            {t === "all" ? "All" : t === "tv" ? "TV" : "Film"}
-                          </button>
-                        ))}
-                      </div>
+                      <SearchField
+                        className="flex-1 min-w-0 w-auto"
+                        label="Search titles"
+                        placeholder="Search titles…"
+                        value={notifySearch}
+                        onChange={setNotifySearch}
+                      />
+                      <Segmented
+                        label="Type"
+                        value={notifyTypeFilter}
+                        onChange={setNotifyTypeFilter}
+                        options={[
+                          { value: "all", label: "All" },
+                          { value: "tv", label: "TV" },
+                          { value: "movie", label: "Film" },
+                        ]}
+                      />
                       <button
                         onClick={() =>
                           bulkToggleWatchlistNotify.mutate({
@@ -1276,7 +1243,7 @@ export default function Settings() {
                             className="flex items-center justify-between gap-3 px-3 py-2.5"
                           >
                             <div className="flex items-center gap-2 min-w-0">
-                              <span className="text-[10px] font-medium uppercase tracking-wider text-neutral-500 shrink-0 w-6">
+                              <span className="text-caption font-medium text-neutral-400 shrink-0 w-6">
                                 {item.content_type === "tv" ? "TV" : "Film"}
                               </span>
                               <span className="text-sm text-white truncate">
@@ -1375,19 +1342,7 @@ export default function Settings() {
                   onClick={() => setShowUpgradeModal(true)}
                   className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-dashed border-neutral-600 text-sm text-neutral-400 hover:text-white hover:border-neutral-500 transition-colors"
                 >
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-                    />
-                  </svg>
+                  <LockClosedIcon className="w-4 h-4" strokeWidth={2} aria-hidden="true" />
                   Upgrade to Premium to customize notifications
                 </button>
               )}
@@ -1404,7 +1359,7 @@ export default function Settings() {
               {/* My services */}
               {myServices && myServices.length > 0 && (
                 <div>
-                  <p className="text-[12px] text-neutral-400 font-medium uppercase tracking-wider mb-3">
+                  <p className="text-caption text-neutral-400 font-medium mb-3">
                     My services
                   </p>
                   <div className="flex flex-wrap gap-3">
@@ -1421,19 +1376,7 @@ export default function Settings() {
                           className="w-14 h-14 rounded-xl ring-2 ring-primary-500 object-cover"
                         />
                         <span className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <svg
-                            className="w-5 h-5 text-white"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            strokeWidth={2}
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              d="M6 18L18 6M6 6l12 12"
-                            />
-                          </svg>
+                          <CloseIcon className="w-5 h-5 text-white" />
                         </span>
                       </button>
                     ))}
@@ -1446,29 +1389,15 @@ export default function Settings() {
 
               {/* Add services */}
               <div data-tour="streaming-settings">
-                <p className="text-[12px] text-neutral-400 font-medium uppercase tracking-wider mb-3">
+                <p className="text-caption text-neutral-400 font-medium mb-3">
                   Add services
                 </p>
-                <div className="relative mb-3">
-                  <svg
-                    className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-500 pointer-events-none"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                    />
-                  </svg>
-                  <input
-                    type="text"
+                <div className="mb-3">
+                  <SearchField
+                    label="Search providers"
                     placeholder="Search providers…"
                     value={providerSearch}
-                    onChange={(e) => setProviderSearch(e.target.value)}
-                    className="w-full bg-neutral-900/70 border border-neutral-700/50 rounded-xl pl-8 pr-3 py-1.5 text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-primary-500"
+                    onChange={setProviderSearch}
                   />
                 </div>
                 <div className="flex flex-wrap gap-3 max-h-80 overflow-y-auto">
@@ -1493,19 +1422,7 @@ export default function Settings() {
                           className="w-14 h-14 rounded-xl object-cover ring-1 ring-neutral-600"
                         />
                         <span className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <svg
-                            className="w-5 h-5 text-white"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            strokeWidth={2}
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              d="M12 4v16m8-8H4"
-                            />
-                          </svg>
+                          <PlusIcon className="w-5 h-5 text-white" />
                         </span>
                       </button>
                     ))}
@@ -1527,7 +1444,7 @@ export default function Settings() {
 
               {/* Optimizer */}
               <div>
-                <p className="text-[12px] text-neutral-400 font-medium uppercase tracking-wider mb-3">
+                <p className="text-caption text-neutral-400 font-medium mb-3">
                   Watchlist optimizer
                 </p>
                 <StreamingOptimizer />
@@ -1542,7 +1459,7 @@ export default function Settings() {
             subtitle="Subscribe to your personal iCal feed and see releases in any calendar app."
           >
             <div className="mb-5">
-              <p className="text-[12px] text-neutral-400 font-medium uppercase tracking-wider mb-2">
+              <p className="text-caption text-neutral-400 font-medium mb-2">
                 Your feed URL
               </p>
               <div className="flex items-stretch gap-2">
@@ -1562,42 +1479,18 @@ export default function Settings() {
                   disabled={!feedUrl || calLoading}
                   className={`shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all border ${
                     calCopied
-                      ? "bg-emerald-600/20 border-emerald-600/40 text-emerald-400"
+                      ? "bg-primary-600/20 border-primary-600/40 text-primary-400"
                       : "bg-neutral-700 border-neutral-700/60 text-neutral-200 hover:bg-neutral-600 hover:text-white disabled:opacity-40"
                   }`}
                 >
                   {calCopied ? (
                     <>
-                      <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth={2}
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M5 13l4 4L19 7"
-                        />
-                      </svg>
+                      <CheckIcon className="w-4 h-4" />
                       Copied
                     </>
                   ) : (
                     <>
-                      <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth={2}
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                        />
-                      </svg>
+                      <DocumentDuplicateIcon className="w-4 h-4" strokeWidth={2} aria-hidden="true" />
                       Copy
                     </>
                   )}
@@ -1616,7 +1509,7 @@ export default function Settings() {
               </p>
             </div>
 
-            <p className="text-[12px] text-neutral-400 font-medium uppercase tracking-wider mb-2">
+            <p className="text-caption text-neutral-400 font-medium mb-2">
               How to subscribe
             </p>
             <div className="flex flex-col gap-1.5">
@@ -1663,21 +1556,9 @@ export default function Settings() {
                     <span className="text-sm font-medium text-neutral-200">
                       {app.name}
                     </span>
-                    <svg
-                      className={`w-4 h-4 text-neutral-400 transition-transform duration-200 ${
+                    <ChevronDownIcon className={`w-4 h-4 text-neutral-400 transition-transform duration-200 ${
                         openInstructions === app.name ? "rotate-180" : ""
-                      }`}
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth={2}
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M19 9l-7 7-7-7"
-                      />
-                    </svg>
+                      }`} />
                   </button>
                   {openInstructions === app.name && (
                     <ol className="px-4 py-3 flex flex-col gap-2 border-t border-neutral-700/40 bg-neutral-950/20">
@@ -1686,7 +1567,7 @@ export default function Settings() {
                           key={i}
                           className="flex items-start gap-2.5 text-sm text-neutral-300"
                         >
-                          <span className="flex-shrink-0 w-5 h-5 rounded-full bg-primary-600/20 text-primary-400 text-xs font-semibold flex items-center justify-center mt-0.5">
+                          <span className="flex-shrink-0 w-5 h-5 rounded-full bg-neutral-700 text-neutral-300 text-caption font-semibold flex items-center justify-center mt-0.5">
                             {i + 1}
                           </span>
                           {step}
@@ -1700,7 +1581,7 @@ export default function Settings() {
 
             {isAdmin && (
             <div className="mt-6">
-              <p className="text-[12px] text-neutral-400 font-medium uppercase tracking-wider mb-2">
+              <p className="text-caption text-neutral-400 font-medium mb-2">
                 Sync token
               </p>
               <div className="flex items-stretch gap-2">
@@ -1720,7 +1601,7 @@ export default function Settings() {
                   disabled={!syncToken || syncLoading}
                   className={`shrink-0 px-3 py-2 rounded-xl text-sm font-medium transition-all border ${
                     syncCopied
-                      ? "bg-emerald-600/20 border-emerald-600/40 text-emerald-400"
+                      ? "bg-primary-600/20 border-primary-600/40 text-primary-400"
                       : "bg-neutral-700 border-neutral-700/60 text-neutral-200 hover:bg-neutral-600 hover:text-white disabled:opacity-40"
                   }`}
                 >
@@ -1749,7 +1630,7 @@ export default function Settings() {
             title="Privacy"
             subtitle="Control who can see your watchlist and activity."
           >
-            <p className="text-[13px] font-semibold text-white mb-3">
+            <p className="text-label font-semibold text-white mb-3">
               Profile visibility
             </p>
             <div className="space-y-2 mb-6">
@@ -1807,7 +1688,7 @@ export default function Settings() {
               ))}
             </div>
 
-            <p className="text-[13px] font-semibold text-white mb-3">
+            <p className="text-label font-semibold text-white mb-3">
               Blocked users
             </p>
             {blocks.length === 0 ? (
@@ -1845,15 +1726,15 @@ export default function Settings() {
           >
             <div className="flex items-center justify-between py-3.5 border-b border-neutral-700/40 mb-5">
               <div>
-                <p className="text-[14px] font-semibold text-white">
+                <p className="text-body font-semibold text-white">
                   Current plan
                 </p>
-                <p className="text-[13px] text-neutral-400 mt-0.5 capitalize">
+                <p className="text-label text-neutral-400 mt-0.5 capitalize">
                   {userMe?.subscription_tier ?? "Free"}
                 </p>
               </div>
               {/* {!isPremium && (
-                <span className="text-[10px] font-bold uppercase tracking-wider bg-amber-400/15 text-amber-400 border border-amber-400/30 rounded-full px-2 py-0.5">
+                <span className="text-caption font-semibold border border-neutral-600 text-neutral-300 rounded-full px-2 py-0.5">
                   Upgrade available
                 </span>
               )} */}
@@ -1863,19 +1744,7 @@ export default function Settings() {
               className="flex items-center justify-between w-full bg-neutral-900/50 hover:bg-neutral-800/70 border border-neutral-700/40 text-neutral-200 py-3 px-4 rounded-xl transition-colors text-sm"
             >
               <span>{isPremium ? "Manage billing" : "Upgrade to Premium"}</span>
-              <svg
-                className="w-4 h-4 text-neutral-400"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M9 5l7 7-7 7"
-                />
-              </svg>
+              <ChevronRightIcon className="w-4 h-4 text-neutral-400" />
             </Link> */}
           </SectionCard>
 
@@ -1900,17 +1769,13 @@ export default function Settings() {
                       <span className={`w-2 h-2 rounded-full ${linked ? "bg-success-400" : "bg-neutral-600"}`} />
                       <span className="text-sm text-neutral-200">{label}</span>
                     </div>
-                    <button
+                    <Button
+                      size="sm"
                       onClick={() => linked ? handleUnlinkProvider(id) : handleLinkProvider(id, provider)}
                       disabled={loading}
-                      className={`text-xs font-medium px-3 py-1.5 rounded-lg transition-colors disabled:opacity-40 ${
-                        linked
-                          ? "bg-neutral-700 text-neutral-300 hover:bg-neutral-600"
-                          : "bg-primary-600/20 text-primary-400 border border-primary-600/30 hover:bg-primary-600/30"
-                      }`}
                     >
                       {loading ? "…" : linked ? "Unlink" : "Link"}
-                    </button>
+                    </Button>
                   </div>
                 );
               })}
@@ -1934,8 +1799,9 @@ export default function Settings() {
                 className="flex items-center justify-between w-full bg-neutral-900/50 hover:bg-neutral-800/70 border border-neutral-700/40 text-neutral-200 py-3 px-4 rounded-xl transition-colors text-sm"
               >
                 <span>Import watch history</span>
-                <span className="text-xs text-neutral-500">
-                  Letterboxd or TV Time →
+                <span className="flex items-center gap-1 text-caption text-neutral-400">
+                  Letterboxd or TV Time
+                  <ChevronRightIcon className="w-3.5 h-3.5" />
                 </span>
               </Link>
               <button
@@ -1944,20 +1810,17 @@ export default function Settings() {
                 className="flex items-center justify-between w-full bg-neutral-900/50 hover:bg-neutral-800/70 disabled:opacity-50 border border-neutral-700/40 text-neutral-200 py-3 px-4 rounded-xl transition-colors text-sm"
               >
                 <span>{exporting ? "Exporting…" : "Export my data"}</span>
-                <span className="text-xs text-neutral-500">ZIP download →</span>
+                <span className="flex items-center gap-1 text-caption text-neutral-400">
+                  ZIP download
+                  <ChevronRightIcon className="w-3.5 h-3.5" />
+                </span>
               </button>
-              <button
-                onClick={handleSignOut}
-                className="w-full bg-neutral-200 hover:bg-neutral-300 text-neutral-800 py-3 rounded-xl font-medium text-sm transition-colors"
-              >
+              <Button className="w-full" onClick={handleSignOut}>
                 Sign out
-              </button>
-              <button
-                onClick={handleDelete}
-                className="w-full bg-error-500/10 hover:bg-error-500/20 text-error-400 border border-error-500/25 py-3 rounded-xl font-medium text-sm transition-colors"
-              >
+              </Button>
+              <Button variant="danger" className="w-full" onClick={handleDelete}>
                 Delete account
-              </button>
+              </Button>
             </div>
           </SectionCard>
         </div>

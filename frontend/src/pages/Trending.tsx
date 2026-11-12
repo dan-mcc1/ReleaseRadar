@@ -1,12 +1,28 @@
 import { useRef, useState, useCallback, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import type { Movie, Show } from "../types/calendar";
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useTrendingMulti, useUpcoming, useAiringToday, useNowPlaying, usePopularMulti, useTopRatedMulti } from "../hooks/api/useSearch";
 import { BASE_IMAGE_URL } from "../constants";
-import MiniWatchButton from "../components/MiniWatchButton";
-import MiniWatchedButton from "../components/MiniWatchedButton";
 import { useBulkWatchStatus } from "../hooks/api/useWatchStatus";
+import { useUpdateWatchStatus } from "../hooks/api/useWatchActions";
+import { TrackingLimitError } from "../hooks/api/errors";
+import { useToast } from "../components/Toast";
+import {
+  BookmarkIcon,
+  ButtonLink,
+  CheckIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  IconButton,
+  PageHeader,
+  PlayIcon,
+  PlusIcon,
+  PosterCard,
+  PosterCardSkeleton,
+  SectionHeader,
+  Segmented,
+  StarIcon,
+} from "../components/ui";
 import type { WatchStatus } from "../components/WatchButton";
 import { useAuthUser } from "../hooks/useAuthUser";
 import { toLocalISODate } from "../utils/date";
@@ -15,10 +31,10 @@ type AnyItem = Movie | Show;
 type TypedItem = AnyItem & { _type: "movie" | "tv" };
 type ContentFilter = "all" | "movie" | "tv";
 
-const FILTER_OPTS: { id: ContentFilter; label: string }[] = [
-  { id: "all", label: "All" },
-  { id: "movie", label: "Movies" },
-  { id: "tv", label: "TV" },
+const FILTER_OPTS: { value: ContentFilter; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "movie", label: "Movies" },
+  { value: "tv", label: "TV" },
 ];
 
 function getTitle(item: AnyItem) {
@@ -36,10 +52,13 @@ function getFormattedDate(item: AnyItem): string {
   });
 }
 
-function splitHeroTitle(title: string) {
-  const words = title.trim().split(" ");
-  if (words.length === 1) return { prefix: "", italic: title };
-  return { prefix: words.slice(0, -1).join(" "), italic: words[words.length - 1] };
+function Rating({ value }: { value: string }) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      <StarIcon className="w-3 h-3 text-warning-400" />
+      {value}
+    </span>
+  );
 }
 
 
@@ -84,37 +103,17 @@ function ScrollRow({
   }
 
   return (
-    <div className="mt-10">
-      {/* Row header */}
-      <div className="flex items-center gap-3 mb-5 flex-wrap">
-        <h2
-          className="font-normal tracking-tight leading-none"
-          style={{ fontFamily: "var(--font-serif)", fontSize: 28 }}
-        >
-          {title}
-        </h2>
-        {subtitle && (
-          <span className="text-[13px] text-neutral-500 hidden sm:inline">{subtitle}</span>
-        )}
-        <div className="flex-1" />
-        {onFilterChange && (
-          <div className="flex items-center gap-0.5 p-0.5 bg-neutral-800/70 rounded-lg border border-neutral-700/50">
-            {FILTER_OPTS.map((opt) => (
-              <button
-                key={opt.id}
-                onClick={() => onFilterChange(opt.id)}
-                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-                  filter === opt.id
-                    ? "bg-neutral-700 text-neutral-100"
-                    : "text-neutral-500 hover:text-neutral-300"
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+    <section className="mt-10">
+      <SectionHeader
+        title={title}
+        note={subtitle}
+        className="mb-5"
+        action={
+          onFilterChange && (
+            <Segmented label="Show" value={filter ?? "all"} onChange={onFilterChange} options={FILTER_OPTS} />
+          )
+        }
+      />
 
       {/* Scroll container with arrows */}
       <div
@@ -137,33 +136,31 @@ function ScrollRow({
         {/* Left arrow */}
         <div
           className={`hidden sm:flex absolute left-0 inset-y-0 mb-2 z-10 items-center pl-1 bg-gradient-to-r from-neutral-950/90 to-transparent transition-opacity duration-200 ${
-            hovered && canLeft ? "opacity-100" : "opacity-0 pointer-events-none"
+            hovered && canLeft ? "opacity-100" : "opacity-0 pointer-events-none focus-within:opacity-100 focus-within:pointer-events-auto"
           }`}
         >
-          <button
+          <IconButton
+            variant="overlay"
+            size="touch"
+            label="Scroll left"
+            icon={<ChevronLeftIcon />}
             onClick={() => scrollBy("left")}
-            className="w-9 h-9 rounded-full bg-neutral-800/90 border border-neutral-700 flex items-center justify-center text-neutral-200 hover:bg-neutral-700 transition-colors shadow-lg"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
+          />
         </div>
 
         {/* Right arrow */}
         <div
           className={`hidden sm:flex absolute right-0 inset-y-0 mb-2 z-10 items-center pr-1 bg-gradient-to-l from-neutral-950/90 to-transparent transition-opacity duration-200 ${
-            hovered && canRight ? "opacity-100" : "opacity-0 pointer-events-none"
+            hovered && canRight ? "opacity-100" : "opacity-0 pointer-events-none focus-within:opacity-100 focus-within:pointer-events-auto"
           }`}
         >
-          <button
+          <IconButton
+            variant="overlay"
+            size="touch"
+            label="Scroll right"
+            icon={<ChevronRightIcon />}
             onClick={() => scrollBy("right")}
-            className="w-9 h-9 rounded-full bg-neutral-800/90 border border-neutral-700 flex items-center justify-center text-neutral-200 hover:bg-neutral-700 transition-colors shadow-lg"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
+          />
         </div>
 
         {/* Scroll track */}
@@ -176,64 +173,98 @@ function ScrollRow({
           {children}
         </div>
       </div>
-    </div>
+    </section>
   );
 }
 
-function PosterCard({
+function TrendingCard({
   item,
-  onClick,
   releaseDate,
   initialStatus,
 }: {
   item: TypedItem;
-  onClick: () => void;
   releaseDate?: string;
   initialStatus?: WatchStatus;
-})
- {
+}) {
   const user = useAuthUser();
+  const toast = useToast();
+  const update = useUpdateWatchStatus();
   const title = getTitle(item);
   const genre = item.genres?.[0]?.name ?? "";
   const rating = item.vote_average ? item.vote_average.toFixed(1) : null;
-  return (
-    <div className="w-[180px] flex-shrink-0 group flex flex-col gap-2">
-      <div className="aspect-[2/3] rounded-xl overflow-hidden bg-neutral-800 cursor-pointer" onClick={onClick}>
-        {item.poster_path ? (
-          <img
-            src={`${BASE_IMAGE_URL}/w342${item.poster_path}`}
-            alt={title}
-            className="w-full h-full object-cover transition-opacity duration-200 group-hover:opacity-80"
+
+  // Undefined while signed out: no buttons.
+  const status = user ? (initialStatus ?? "none") : undefined;
+
+  function setStatus(target: WatchStatus) {
+    if (!status || update.isPending) return;
+    update
+      .mutateAsync({ contentType: item._type, contentId: item.id, currentStatus: status, targetStatus: target })
+      .catch((err) => {
+        if (err instanceof TrackingLimitError) {
+          toast.error("You've hit the free tracking limit. Upgrade to Premium for unlimited tracking.");
+        }
+      });
+  }
+
+  const onWatchlist = status === "Want To Watch";
+  const watched = status === "Watched";
+
+  const actions = status && (
+    <>
+      {status === "Currently Watching" ? (
+        <span
+          role="img"
+          aria-label="Currently watching"
+          title="Currently watching"
+          className="size-touch rounded-full bg-highlight-500 text-neutral-950 flex items-center justify-center"
+        >
+          <PlayIcon className="w-4 h-4 ml-0.5" />
+        </span>
+      ) : (
+        !watched && (
+          <IconButton
+            variant="overlay"
+            size="touch"
+            pressed={onWatchlist}
+            label={onWatchlist ? `Remove ${title} from your watchlist` : `Add ${title} to your watchlist`}
+            title={onWatchlist ? "On your watchlist · click to remove" : "Add to watchlist"}
+            icon={onWatchlist ? <BookmarkIcon filled /> : <PlusIcon />}
+            onClick={() => setStatus(onWatchlist ? "none" : "Want To Watch")}
           />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center p-3 text-center">
-            <span className="text-neutral-600 text-xs leading-tight">{title}</span>
-          </div>
-        )}
-      </div>
-      <div className="flex items-center gap-2">
-        <div className="flex-1 min-w-0">
-          <div
-            className="text-[13.5px] font-semibold text-neutral-100 tracking-tight leading-tight truncate cursor-pointer hover:text-primary-300 transition-colors"
-            onClick={onClick}
-          >
-            {title}
-          </div>
-          <div className="text-[11.5px] text-neutral-500 mt-0.5 truncate">
-            {releaseDate
-              ? [releaseDate, rating ? `★ ${rating}` : null].filter(Boolean).join(" · ")
-              : [genre, rating ? `★ ${rating}` : null].filter(Boolean).join(" · ")}
-          </div>
-        </div>
-        {user && (
-          <div className="flex items-center gap-1">
-            {initialStatus !== "Watched" && (
-              <MiniWatchButton contentType={item._type} contentId={item.id} initialStatus={initialStatus} bulkManaged />
-            )}
-            <MiniWatchedButton contentType={item._type} contentId={item.id} initialStatus={initialStatus} bulkManaged />
-          </div>
-        )}
-      </div>
+        )
+      )}
+      <IconButton
+        variant="overlay"
+        size="touch"
+        pressed={watched}
+        label={watched ? `Mark ${title} unwatched` : `Mark ${title} watched`}
+        title={watched ? "Watched · click to undo" : "Mark watched"}
+        icon={<CheckIcon />}
+        onClick={() => setStatus(watched ? "none" : "Watched")}
+      />
+    </>
+  );
+
+  const lead = releaseDate || genre;
+  const subtitle =
+    lead || rating ? (
+      <>
+        {lead}
+        {lead && rating && " · "}
+        {rating && <Rating value={rating} />}
+      </>
+    ) : undefined;
+
+  return (
+    <div className="w-[180px] flex-shrink-0">
+      <PosterCard
+        to={`/${item._type}/${item.id}`}
+        title={title}
+        posterPath={item.poster_path}
+        subtitle={subtitle}
+        actions={actions || undefined}
+      />
     </div>
   );
 }
@@ -245,10 +276,8 @@ function SkeletonCards() {
   return (
     <>
       {SKELETON_CARDS.map((_, i) => (
-        <div key={i} className="w-[180px] flex-shrink-0 animate-pulse">
-          <div className="aspect-[2/3] rounded-xl bg-neutral-800" />
-          <div className="h-3 bg-neutral-800 rounded mt-2 w-3/4" />
-          <div className="h-2.5 bg-neutral-800 rounded mt-1.5 w-1/2" />
+        <div key={i} className="w-[180px] flex-shrink-0">
+          <PosterCardSkeleton />
         </div>
       ))}
     </>
@@ -263,7 +292,6 @@ function FilteredScrollRow({
   loading,
   bulkStatuses,
   showReleaseDates = false,
-  navigate,
 }: {
   title: string;
   subtitle?: string;
@@ -271,7 +299,6 @@ function FilteredScrollRow({
   loading: boolean;
   bulkStatuses?: Record<string, { status: WatchStatus }>;
   showReleaseDates?: boolean;
-  navigate: (path: string) => void;
 }) {
   const [filter, setFilter] = useState<ContentFilter>("all");
   const filtered = filter === "all" ? items : items.filter((i) => i._type === filter);
@@ -288,10 +315,9 @@ function FilteredScrollRow({
         <SkeletonCards />
       ) : (
         filtered.map((item) => (
-          <PosterCard
+          <TrendingCard
             key={`${item._type}-${item.id}`}
             item={item}
-            onClick={() => navigate(`/${item._type}/${item.id}`)}
             releaseDate={showReleaseDates ? getFormattedDate(item) : undefined}
             initialStatus={bulkStatuses?.[`${item._type}:${item.id}`]?.status}
           />
@@ -303,7 +329,6 @@ function FilteredScrollRow({
 
 export default function Trending() {
   usePageTitle("Discover");
-  const navigate = useNavigate();
   const { data: multiData, isPending: multiLoading } = useTrendingMulti();
   const { data: airingTodayData, isPending: airingTodayLoading } = useAiringToday();
   const { data: nowPlayingData, isPending: nowPlayingLoading } = useNowPlaying();
@@ -353,7 +378,6 @@ export default function Trending() {
   const hero: AnyItem | null = trendingMovies[0] ?? trendingShows[0] ?? null;
   const heroType: "movie" | "tv" = trendingMovies[0] ? "movie" : "tv";
   const heroTitle = hero ? getTitle(hero) : "";
-  const { prefix, italic } = splitHeroTitle(heroTitle);
   const heroBackdrop = hero?.backdrop_path
     ? `${BASE_IMAGE_URL}/w1280${hero.backdrop_path}`
     : null;
@@ -397,11 +421,13 @@ export default function Trending() {
 
   return (
     <div className="w-full px-6 sm:px-10 pt-8 pb-16">
+      <PageHeader title="Discover" className="mb-6" />
+
       {/* Hero */}
       {multiLoading ? (
-        <div className="rounded-2xl bg-neutral-800 animate-pulse" style={{ height: 420 }} />
+        <div className="rounded-surface bg-neutral-800 animate-pulse" style={{ height: 420 }} />
       ) : hero ? (
-        <div data-tour="trending-header" className="relative rounded-2xl overflow-hidden" style={{ height: 420 }}>
+        <div data-tour="trending-header" className="relative rounded-surface overflow-hidden" style={{ height: 420 }}>
           {heroBackdrop ? (
             <img src={heroBackdrop} alt={heroTitle} className="w-full h-full object-cover" />
           ) : (
@@ -412,30 +438,23 @@ export default function Trending() {
             className="absolute inset-y-0 left-10 flex flex-col justify-center text-white"
             style={{ maxWidth: 540 }}
           >
-            <p className="font-mono text-[11px] tracking-[0.15em] uppercase text-white/75 mb-3.5">
-              Spotlight · Trending{heroGenre ? ` · ${heroGenre}` : ""}
-            </p>
-            <h2
-              className="font-normal leading-[0.95] tracking-tight"
-              style={{ fontFamily: "var(--font-serif)", fontSize: 52 }}
-            >
-              {prefix && <>{prefix} </>}
-              <em className="italic">{italic}</em>
-            </h2>
+            <h2 className="text-display font-semibold leading-tight tracking-tight">{heroTitle}</h2>
             {heroOverview && (
-              <p className="text-[14px] text-white/80 mt-4 leading-relaxed line-clamp-2 max-w-md">
+              <p className="text-body text-white/80 mt-4 leading-relaxed line-clamp-2 max-w-md">
                 {heroOverview}
               </p>
             )}
             <div className="flex items-center gap-3 mt-5">
-              <button
-                onClick={() => navigate(`/${heroType}/${hero.id}`)}
-                className="bg-primary-500 hover:bg-primary-400 text-neutral-950 text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
-              >
-                More info →
-              </button>
-              {heroRating && (
-                <span className="text-white/60 text-sm font-mono">★ {heroRating}</span>
+              <ButtonLink variant="primary" to={`/${heroType}/${hero.id}`}>
+                More info
+                <ChevronRightIcon />
+              </ButtonLink>
+              {(heroGenre || heroRating) && (
+                <span className="text-white/70 text-label">
+                  {heroGenre}
+                  {heroGenre && heroRating && " · "}
+                  {heroRating && <Rating value={heroRating} />}
+                </span>
               )}
             </div>
           </div>
@@ -444,11 +463,9 @@ export default function Trending() {
 
       <FilteredScrollRow
         title="Trending this week"
-        subtitle="What people are talking about"
         items={trendingItems}
         loading={multiLoading}
         bulkStatuses={bulkStatuses}
-        navigate={navigate}
       />
 
       <FilteredScrollRow
@@ -458,15 +475,13 @@ export default function Trending() {
         loading={upcomingLoading}
         bulkStatuses={bulkStatuses}
         showReleaseDates
-        navigate={navigate}
       />
 
       <ScrollRow title="Airing today" subtitle="New episodes on TV right now" loading={airingTodayLoading}>
         {airingTodayLoading ? <SkeletonCards /> : airingTodayItems.map((item) => (
-          <PosterCard
+          <TrendingCard
             key={`${item._type}-${item.id}`}
             item={item}
-            onClick={() => navigate(`/${item._type}/${item.id}`)}
             initialStatus={bulkStatuses?.[`${item._type}:${item.id}`]?.status}
           />
         ))}
@@ -474,10 +489,9 @@ export default function Trending() {
 
       <ScrollRow title="In theaters now" subtitle="Currently showing on the big screen" loading={nowPlayingLoading}>
         {nowPlayingLoading ? <SkeletonCards /> : nowPlayingItems.map((item) => (
-          <PosterCard
+          <TrendingCard
             key={`${item._type}-${item.id}`}
             item={item}
-            onClick={() => navigate(`/${item._type}/${item.id}`)}
             initialStatus={bulkStatuses?.[`${item._type}:${item.id}`]?.status}
           />
         ))}
@@ -489,7 +503,6 @@ export default function Trending() {
         items={popularItems}
         loading={popularLoading}
         bulkStatuses={bulkStatuses}
-        navigate={navigate}
       />
 
       <FilteredScrollRow
@@ -498,7 +511,6 @@ export default function Trending() {
         items={topRatedItems}
         loading={topRatedLoading}
         bulkStatuses={bulkStatuses}
-        navigate={navigate}
       />
     </div>
   );

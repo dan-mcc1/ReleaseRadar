@@ -1,14 +1,12 @@
 """
 Tests for app.services.for_you_service.
 
-The service has three layers:
-- _get_seeds_recent / _get_seeds_top_rated  → SQLite-safe DB seed queries
-- _get_excluded                              → SQLite-safe union of user rows
-- _fetch_tmdb_recommendations                → external HTTP, must be mocked
-- get_for_you_recommendations                → end-to-end scoring/ranking
+- seed_weight                  → how much a library title counts (pure)
+- rank                         → scoring stored lists against a library (pure)
+- get_for_you_recommendations  → end to end: library, stored lists, TMDb only
+                                 for titles with no stored list
 
-We mock the TMDb call so no network traffic happens. The internal TTL
-cache is cleared between tests to avoid cross-test leakage.
+TMDb is mocked where title_recs_service calls it, so no network traffic happens.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -16,385 +14,384 @@ from unittest.mock import patch
 
 import pytest
 
+NOW = datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc)
+TMDB_GET = "app.services.title_recs_service.get"
+
+
+def rec(content_id, *, tv=False, **extra):
+    """A TMDb recommendation list item with what For You needs to show it."""
+    item = {"id": content_id, "poster_path": f"/{content_id}.jpg", "popularity": 1.0, **extra}
+    item["name" if tv else "title"] = extra.get("label", f"Title {content_id}")
+    item.pop("label", None)
+    return item
+
+
+def recs_by_path(lists):
+    """A stand-in for the TMDb client: `lists` maps '/movie/550' to its results."""
+    def fake_get(path, params=None):
+        for prefix, results in lists.items():
+            if path == f"{prefix}/recommendations":
+                return {"results": results}
+        return {"results": []}
+    return fake_get
+
 
 @pytest.fixture(autouse=True)
-def _clear_rec_cache():
-    """The module-level TTL caches leak state across tests; flush them each time."""
-    from app.services.for_you_service import (
-        _rec_cache, _rec_cache_lock, _ranked_cache, _ranked_cache_lock,
-    )
-    with _rec_cache_lock:
-        _rec_cache.clear()
-    with _ranked_cache_lock:
-        _ranked_cache.clear()
+def _tmdb_not_paused():
+    """A failed fetch pauses asking TMDb for the whole process; start each test unpaused."""
+    from app.services import for_you_service
+
+    for_you_service._inline_paused_until = 0.0
     yield
-    with _rec_cache_lock:
-        _rec_cache.clear()
-    with _ranked_cache_lock:
-        _ranked_cache.clear()
+    for_you_service._inline_paused_until = 0.0
 
 
 @pytest.fixture
-def seed_user_with_history(db):
+def user(db):
     from app.models.user import User
-    from app.models.watched import Watched
-    from app.models.watchlist import Watchlist
-    from app.models.currently_watching import CurrentlyWatching
 
     db.add(User(id="uid1", username="uid1", email="u@test.com"))
-    db.flush()
-    now = datetime(2024, 5, 1, 12, 0, tzinfo=timezone.utc)
-    # 2 movies watched, 1 watchlist, 1 currently watching
-    db.add(Watched(user_id="uid1", content_type="movie", content_id=550,
-                   rating=8.0, watched_at=now))
-    db.add(Watched(user_id="uid1", content_type="movie", content_id=551,
-                   rating=9.0, watched_at=now - timedelta(days=1)))
-    db.add(Watched(user_id="uid1", content_type="tv", content_id=1396,
-                   rating=None, watched_at=now - timedelta(days=2)))
-    db.add(Watchlist(user_id="uid1", content_type="movie", content_id=600,
-                     added_at=now))
-    db.add(CurrentlyWatching(user_id="uid1", content_type="tv", content_id=700,
-                             added_at=now))
+    db.commit()
+    return "uid1"
+
+
+def watched(db, content_id, *, content_type="movie", rating=None, at=None):
+    from app.models.watched import Watched
+
+    db.add(Watched(user_id="uid1", content_type=content_type, content_id=content_id,
+                   rating=rating, watched_at=at or datetime.now(timezone.utc)))
     db.commit()
 
 
-# ── Seed selection ─────────────────────────────────────────────────────────
+# ── seed_weight ────────────────────────────────────────────────────────────
 
 
-class TestGetSeedsRecent:
-    def test_returns_empty_for_unknown_user(self, db):
-        from app.services.for_you_service import _get_seeds_recent
-        assert _get_seeds_recent(db, "no-such-user") == []
+class TestSeedWeight:
+    def weight(self, list_name, rating=None, at=NOW):
+        from app.services.for_you_service import seed_weight
+        return seed_weight(list_name, rating, at, NOW)
 
-    def test_combines_watched_and_watchlist(self, db, seed_user_with_history):
-        from app.services.for_you_service import _get_seeds_recent
-        seeds = _get_seeds_recent(db, "uid1")
-        # 3 watched + 1 watchlist = 4 unique seeds
-        assert len(seeds) == 4
-        assert ("movie", 550) in seeds
-        assert ("movie", 600) in seeds
-        assert ("tv", 1396) in seeds
+    def test_unrated_watched_title_counts_one(self):
+        assert self.weight("watched") == 1.0
 
-    def test_dedupes_overlap(self, db):
-        """Same (ct, cid) in both lists should appear once."""
-        from app.models.user import User
-        from app.models.watched import Watched
-        from app.models.watchlist import Watchlist
-        from app.services.for_you_service import _get_seeds_recent
+    @pytest.mark.parametrize("rating, expected", [
+        (5.0, 2.0), (3.5, 1.0), (2.0, 0.0), (0.5, 0.0),
+    ])
+    def test_rating_scales_a_watched_title(self, rating, expected):
+        assert self.weight("watched", rating) == pytest.approx(expected)
 
-        db.add(User(id="dup", username="dup", email="d@test.com"))
-        db.flush()
-        now = datetime.now(timezone.utc)
-        db.add(Watched(user_id="dup", content_type="movie", content_id=42,
-                       watched_at=now))
-        db.add(Watchlist(user_id="dup", content_type="movie", content_id=42,
-                         added_at=now))
-        db.commit()
+    def test_watching_counts_more_than_unrated_and_watchlist_less(self):
+        assert self.weight("watching") == 1.2
+        assert self.weight("watchlist") == 0.6
 
-        seeds = _get_seeds_recent(db, "dup")
-        assert seeds == [("movie", 42)]
+    def test_a_year_old_title_counts_half(self):
+        assert self.weight("watched", at=NOW - timedelta(days=365)) == pytest.approx(0.5)
 
+    def test_age_never_takes_a_title_below_a_quarter(self):
+        assert self.weight("watched", at=NOW - timedelta(days=365 * 20)) == 0.25
 
-class TestGetSeedsTopRated:
-    def test_returns_empty_when_no_ratings(self, db):
-        from app.models.user import User
-        from app.models.watched import Watched
-        from app.services.for_you_service import _get_seeds_top_rated
+    def test_no_date_counts_as_old(self):
+        assert self.weight("watching", at=None) == pytest.approx(0.3)
 
-        db.add(User(id="u", username="u", email="u@t.com"))
-        db.flush()
-        # Has watched but rating is None — should be excluded
-        db.add(Watched(user_id="u", content_type="movie", content_id=1,
-                       rating=None, watched_at=datetime.now(timezone.utc)))
-        db.commit()
-        assert _get_seeds_top_rated(db, "u") == []
+    def test_naive_datetime_is_read_as_utc(self):
+        assert self.weight("watched", at=NOW.replace(tzinfo=None)) == 1.0
 
-    def test_orders_by_rating_desc(self, db, seed_user_with_history):
-        from app.services.for_you_service import _get_seeds_top_rated
-        seeds = _get_seeds_top_rated(db, "uid1")
-        # Only 550 + 551 have ratings; 551 (9.0) before 550 (8.0)
-        assert seeds == [("movie", 551), ("movie", 550)]
+    def test_a_date_in_the_future_counts_as_today(self):
+        assert self.weight("watched", at=NOW + timedelta(days=30)) == 1.0
 
 
-class TestGetExcluded:
-    def test_includes_all_three_sources(self, db, seed_user_with_history):
-        from app.services.for_you_service import _get_excluded
-        excluded = _get_excluded(db, "uid1")
-        # Watched (3) + watchlist (1) + currently (1) = 5 entries
-        assert ("movie", 550) in excluded
-        assert ("movie", 600) in excluded  # watchlist
-        assert ("tv", 700) in excluded     # currently watching
-
-    def test_empty_for_unknown_user(self, db):
-        from app.services.for_you_service import _get_excluded
-        assert _get_excluded(db, "no-user") == set()
+# ── rank ───────────────────────────────────────────────────────────────────
 
 
-# ── _fetch_tmdb_recommendations ────────────────────────────────────────────
+def seed(key, weight=1.0, list_name="watched"):
+    from app.services.for_you_service import Seed
+    return Seed(key, weight, list_name)
 
 
-class TestFetchTmdbRecommendations:
-    def test_calls_movie_endpoint(self):
-        from app.services.for_you_service import _fetch_tmdb_recommendations
-        with patch("app.services.for_you_service.get",
-                   return_value={"results": [{"id": 1, "title": "X"}]}) as mock_get:
-            result = _fetch_tmdb_recommendations("movie", 100)
-            assert result == [{"id": 1, "title": "X", "media_type": "movie"}]
-            mock_get.assert_called_once()
-            assert "/movie/100/recommendations" in mock_get.call_args[0][0]
+def library(*seeds):
+    return {s.key: s for s in seeds}
 
-    def test_calls_tv_endpoint(self):
-        from app.services.for_you_service import _fetch_tmdb_recommendations
-        with patch("app.services.for_you_service.get",
-                   return_value={"results": [{"id": 2, "name": "Y"}]}) as mock_get:
-            result = _fetch_tmdb_recommendations("tv", 200)
-            assert result == [{"id": 2, "name": "Y", "media_type": "tv"}]
-            assert "/tv/200/recommendations" in mock_get.call_args[0][0]
 
-    def test_caches_response(self):
-        from app.services.for_you_service import _fetch_tmdb_recommendations
-        with patch("app.services.for_you_service.get",
-                   return_value={"results": [{"id": 1, "title": "X"}]}) as mock_get:
-            _fetch_tmdb_recommendations("movie", 300)
-            _fetch_tmdb_recommendations("movie", 300)
-            assert mock_get.call_count == 1  # second call hit the cache
+A, B, C = ("movie", 1), ("movie", 2), ("tv", 3)
+X, Y, Z = ("movie", 101), ("movie", 102), ("tv", 103)
 
-    def test_exception_returns_empty_list(self):
-        from app.services.for_you_service import _fetch_tmdb_recommendations
-        with patch("app.services.for_you_service.get",
-                   side_effect=Exception("boom")):
-            assert _fetch_tmdb_recommendations("movie", 400) == []
+
+class TestRank:
+    def rank(self, seeds, lists):
+        from app.services.for_you_service import rank
+        return rank(seeds, lists)
+
+    def test_a_pick_two_seeds_agree_on_outranks_one_seeds_top_pick(self):
+        scores, _ = self.rank(library(seed(A), seed(B)), {A: [X, Y], B: [Z, Y]})
+        assert scores[Y] > scores[X]
+        assert scores[Y] > scores[Z]
+
+    def test_score_runs_from_full_weight_at_the_top_of_a_list_to_half_at_the_end(self):
+        recs = [("movie", 100 + i) for i in range(10)]
+        scores, _ = self.rank(library(seed(A, weight=2.0)), {A: recs})
+        assert scores[recs[0]] == pytest.approx(2.0)
+        assert scores[recs[-1]] == pytest.approx(1.1)
+
+    def test_titles_already_in_the_library_are_left_out(self):
+        scores, _ = self.rank(library(seed(A), seed(B)), {A: [B, X]})
+        assert B not in scores
+        assert X in scores
+
+    def test_a_seed_with_no_weight_recommends_nothing(self):
+        scores, because = self.rank(library(seed(A, weight=0.0)), {A: [X]})
+        assert scores == {}
+        assert because == {}
+
+    def test_a_list_for_a_title_outside_the_library_is_ignored(self):
+        scores, _ = self.rank(library(seed(A)), {B: [X]})
+        assert scores == {}
+
+    def test_because_names_the_strongest_two_seeds_strongest_first(self):
+        seeds = library(seed(A, weight=1.0), seed(B, weight=2.0), seed(C, weight=0.5))
+        _, because = self.rank(seeds, {A: [X], B: [X], C: [X]})
+        assert because[X] == [B, A]
+
+    def test_a_watchlist_title_scores_a_pick_but_is_never_the_reason(self):
+        seeds = library(seed(A, list_name="watchlist"), seed(B, list_name="watching"))
+        scores, because = self.rank(seeds, {A: [X, Y], B: [Y]})
+        assert X in scores
+        assert X not in because
+        assert because[Y] == [B]
 
 
 # ── get_for_you_recommendations ────────────────────────────────────────────
 
 
 class TestGetForYouRecommendations:
-    def test_no_seeds_returns_empty_lists(self, db):
+    def get(self, db):
         from app.services.for_you_service import get_for_you_recommendations
-        result = get_for_you_recommendations(db, "no-user")
-        assert result == {"movies": [], "shows": []}
+        return get_for_you_recommendations(db, "uid1")
 
-    def test_combines_recs_from_multiple_seeds(self, db, seed_user_with_history):
-        """Two seeds both recommend the same movie → it ranks high (frequency=2)."""
-        from app.services.for_you_service import get_for_you_recommendations
+    def test_empty_library_returns_empty_lists_without_asking_tmdb(self, db, user):
+        with patch(TMDB_GET) as tmdb:
+            assert self.get(db) == {"movies": [], "shows": [], "seed_count": 0}
+        tmdb.assert_not_called()
 
-        # Different return per seed; movie {id: 9001} appears in both → score boost
-        def fake_get(path, params=None):
-            if "/movie/550" in path:
-                return {"results": [
-                    {"id": 9001, "title": "Top", "popularity": 50},
-                    {"id": 9002, "title": "Other", "popularity": 10},
-                ]}
-            if "/movie/551" in path:
-                return {"results": [
-                    {"id": 9001, "title": "Top", "popularity": 50},
-                ]}
-            return {"results": []}
+    def test_a_pick_recommended_by_two_titles_comes_first(self, db, user):
+        watched(db, 550)
+        watched(db, 551)
+        fake = recs_by_path({
+            "/movie/550": [rec(9002), rec(9001)],
+            "/movie/551": [rec(9003), rec(9001)],
+        })
+        with patch(TMDB_GET, side_effect=fake):
+            result = self.get(db)
 
-        with patch("app.services.for_you_service.get", side_effect=fake_get):
-            result = get_for_you_recommendations(db, "uid1", mode="top_rated")
-
-        # Both seeds recommend 9001; it should be first
         assert result["movies"][0]["id"] == 9001
+        assert {m["id"] for m in result["movies"]} == {9001, 9002, 9003}
         assert result["seed_count"] == 2
 
-    def test_excludes_already_tracked(self, db, seed_user_with_history):
-        """A recommended item the user already has must not appear."""
-        from app.services.for_you_service import get_for_you_recommendations
-
-        # TMDb recommends id=550 (already in watched) and id=999 (new)
-        def fake_get(path, params=None):
-            return {"results": [
-                {"id": 550, "title": "Already watched", "popularity": 100},
-                {"id": 999, "title": "Fresh", "popularity": 20},
-            ]}
-
-        with patch("app.services.for_you_service.get", side_effect=fake_get):
-            result = get_for_you_recommendations(db, "uid1", mode="recent")
-
-        movie_ids = {m["id"] for m in result["movies"]}
-        assert 550 not in movie_ids
-        assert 999 in movie_ids
-
-    def test_splits_movies_and_shows(self, db, seed_user_with_history):
-        from app.services.for_you_service import get_for_you_recommendations
-
-        def fake_get(path, params=None):
-            return {"results": [
-                {"id": 9001, "title": "M", "popularity": 1},        # movie
-                {"id": 9002, "name": "S", "popularity": 1},          # tv
-            ]}
-
-        with patch("app.services.for_you_service.get", side_effect=fake_get):
-            result = get_for_you_recommendations(db, "uid1")
-
-        assert any(m["id"] == 9001 for m in result["movies"])
-        assert any(s["id"] == 9002 for s in result["shows"])
-
-    def test_top_rated_mode_uses_rated_seeds(self, db, seed_user_with_history):
-        """top_rated mode should not include the unrated tv seed (1396)."""
-        from app.services.for_you_service import get_for_you_recommendations
-        seen_paths: list[str] = []
-
-        def fake_get(path, params=None):
-            seen_paths.append(path)
-            return {"results": []}
-
-        with patch("app.services.for_you_service.get", side_effect=fake_get):
-            get_for_you_recommendations(db, "uid1", mode="top_rated")
-
-        # Only the two rated movies should generate requests
-        assert any("/movie/550" in p for p in seen_paths)
-        assert any("/movie/551" in p for p in seen_paths)
-        assert not any("/tv/1396" in p for p in seen_paths)
-
-    def test_skips_items_with_missing_id(self, db, seed_user_with_history):
-        from app.services.for_you_service import get_for_you_recommendations
-
-        def fake_get(path, params=None):
-            return {"results": [
-                {"title": "no id", "popularity": 1},
-                {"id": 12345, "title": "good", "popularity": 1},
-            ]}
-
-        with patch("app.services.for_you_service.get", side_effect=fake_get):
-            result = get_for_you_recommendations(db, "uid1")
-        ids = {m["id"] for m in result["movies"]}
-        assert 12345 in ids
-
-
-# ── Ranked-result cache and seed limit ────────────────────────────────────
-
-
-def _counting_fetch(recs_by_seed):
-    """Stand-in for _fetch_tmdb_recommendations that records each call."""
-    calls = []
-
-    def fetch(content_type, content_id):
-        calls.append((content_type, content_id))
-        return [dict(r) for r in recs_by_seed.get((content_type, content_id), [])]
-
-    return fetch, calls
-
-
-class TestForYouRankedCache:
-    RECS = {("movie", 550): [{"id": 999, "title": "New pick", "popularity": 10},
-                             {"id": 998, "title": "Other pick", "popularity": 5}]}
-
-    def test_repeat_visit_skips_tmdb_entirely(self, db, seed_user_with_history):
-        from app.services.for_you_service import get_for_you_recommendations
-        fetch, calls = _counting_fetch(self.RECS)
-        with patch("app.services.for_you_service._fetch_tmdb_recommendations", side_effect=fetch):
-            first = get_for_you_recommendations(db, "uid1")
-            n = len(calls)
-            second = get_for_you_recommendations(db, "uid1")
-        assert n > 0
-        assert len(calls) == n
-        assert first["movies"] == second["movies"]
-
-    def test_titles_added_since_are_still_excluded(self, db, seed_user_with_history):
+    def test_excludes_titles_already_on_a_list(self, db, user):
         from app.models.watchlist import Watchlist
-        from app.services.for_you_service import get_for_you_recommendations
-        fetch, _ = _counting_fetch(self.RECS)
-        with patch("app.services.for_you_service._fetch_tmdb_recommendations", side_effect=fetch):
-            assert 999 in {m["id"] for m in get_for_you_recommendations(db, "uid1", "top_rated")["movies"]}
-            # Adding to the watchlist changes "recent" seeds but not "top_rated" ones,
-            # so this second call is served from the cache; 999 must still drop out.
-            db.add(Watchlist(user_id="uid1", content_type="movie", content_id=999))
-            db.commit()
-            ids = {m["id"] for m in get_for_you_recommendations(db, "uid1", "top_rated")["movies"]}
-        assert 999 not in ids
-        assert 998 in ids
 
-    def test_new_seed_recomputes(self, db, seed_user_with_history):
-        from datetime import datetime, timezone
+        watched(db, 550)
+        db.add(Watchlist(user_id="uid1", content_type="movie", content_id=600))
+        db.commit()
+        fake = recs_by_path({"/movie/550": [rec(550), rec(600), rec(999)]})
+        with patch(TMDB_GET, side_effect=fake):
+            result = self.get(db)
+
+        assert [m["id"] for m in result["movies"]] == [999]
+
+    def test_splits_movies_and_shows_in_the_shape_the_frontend_reads(self, db, user):
+        watched(db, 550)
+        fake = recs_by_path({"/movie/550": [
+            rec(9001, label="A Film", release_date="2020-01-02", vote_average=7.1,
+                backdrop_path="/b.jpg", genre_ids=[18]),
+            rec(9002, tv=True, label="A Show", first_air_date="2021-03-04"),
+        ]})
+        with patch(TMDB_GET, side_effect=fake):
+            result = self.get(db)
+
+        assert result["movies"] == [{
+            "id": 9001, "media_type": "movie", "title": "A Film", "release_date": "2020-01-02",
+            "poster_path": "/9001.jpg", "backdrop_path": "/b.jpg", "vote_average": 7.1,
+            "popularity": 1.0, "genre_ids": [18], "because": [],
+        }]
+        show = result["shows"][0]
+        assert (show["id"], show["media_type"], show["name"], show["first_air_date"]) == (
+            9002, "tv", "A Show", "2021-03-04"
+        )
+        assert "title" not in show
+
+    def test_because_carries_the_titles_that_led_to_a_pick(self, db, user):
+        from app.models.movie import Movie
+        from app.models.show import Show
+
+        db.add(Movie(id=550, title="Fight Club"))
+        db.add(Show(id=1396, name="Breaking Bad"))
+        watched(db, 550, rating=5.0)
+        watched(db, 1396, content_type="tv")
+        fake = recs_by_path({"/movie/550": [rec(9001)], "/tv/1396": [rec(9001)]})
+        with patch(TMDB_GET, side_effect=fake):
+            result = self.get(db)
+
+        assert result["movies"][0]["because"] == [
+            {"id": 550, "content_type": "movie", "title": "Fight Club"},
+            {"id": 1396, "content_type": "tv", "title": "Breaking Bad"},
+        ]
+
+    def test_a_title_rated_two_stars_is_not_fetched_and_recommends_nothing(self, db, user):
+        watched(db, 550, rating=2.0)
+        with patch(TMDB_GET, side_effect=recs_by_path({"/movie/550": [rec(9001)]})) as tmdb:
+            result = self.get(db)
+
+        tmdb.assert_not_called()
+        assert result == {"movies": [], "shows": [], "seed_count": 1}
+
+    def test_stored_lists_are_reused_so_a_second_load_asks_tmdb_nothing(self, db, user):
+        watched(db, 550)
+        fake = recs_by_path({"/movie/550": [rec(9001)]})
+        with patch(TMDB_GET, side_effect=fake) as tmdb:
+            first = self.get(db)
+            second = self.get(db)
+
+        assert tmdb.call_count == 1
+        assert second == first
+
+    def test_a_load_with_every_list_stored_takes_three_queries(self, db, user):
+        from sqlalchemy import event
+        from app.models.movie import Movie
+
+        db.add(Movie(id=550, title="Fight Club"))
+        watched(db, 550)
+        watched(db, 1396, content_type="tv")
+        fake = recs_by_path({"/movie/550": [rec(9001)], "/tv/1396": [rec(9002, tv=True)]})
+        with patch(TMDB_GET, side_effect=fake):
+            self.get(db)
+
+        statements = []
+        engine = db.get_bind()
+        listener = lambda *args: statements.append(args[2])  # noqa: E731
+        event.listen(engine, "before_cursor_execute", listener)
+        try:
+            # The library with its lists, the picks' display rows, the reasons' titles.
+            result = self.get(db)
+        finally:
+            event.remove(engine, "before_cursor_execute", listener)
+
+        assert len(statements) == 3
+        assert result["movies"][0]["because"][0]["title"] == "Fight Club"
+
+    def test_one_load_fetches_at_most_twenty_missing_lists_heaviest_first(self, db, user):
+        for i in range(25):
+            # Older titles weigh less, so 1000..1019 are the heaviest twenty.
+            watched(db, 1000 + i, at=datetime.now(timezone.utc) - timedelta(days=30 * i))
+        with patch(TMDB_GET, return_value={"results": []}) as tmdb:
+            self.get(db)
+
+        fetched = {call.args[0] for call in tmdb.call_args_list}
+        assert fetched == {f"/movie/{1000 + i}/recommendations" for i in range(20)}
+
+    def test_tmdb_failure_leaves_the_page_empty_and_the_title_due_for_retry(self, db, user):
+        from app.models.title_recs import TitleRecs
+
+        watched(db, 550)
+        with patch(TMDB_GET, side_effect=RuntimeError("boom")):
+            assert self.get(db) == {"movies": [], "shows": [], "seed_count": 1}
+        assert db.query(TitleRecs).count() == 0
+
+    def test_after_a_failed_fetch_page_loads_stop_asking_tmdb_for_a_while(self, db, user):
+        from app.services import for_you_service
+
+        watched(db, 550)
+        with patch(TMDB_GET, side_effect=RuntimeError("boom")) as tmdb:
+            self.get(db)
+            self.get(db)
+        assert tmdb.call_count == 1
+
+        # Once the pause is over the title is fetched and its picks appear.
+        for_you_service._inline_paused_until = 0.0
+        with patch(TMDB_GET, side_effect=recs_by_path({"/movie/550": [rec(9001)]})):
+            assert [m["id"] for m in self.get(db)["movies"]] == [9001]
+
+    def test_a_slow_tmdb_holds_the_page_no_longer_than_the_fetch_window(self, db, user, monkeypatch):
+        import threading
+        from app.services import for_you_service
+
+        monkeypatch.setattr(for_you_service, "_INLINE_FETCH_SECONDS", 0.2)
+        watched(db, 550)
+        watched(db, 551)
+        release = threading.Event()
+
+        def fake_get(path, params=None):
+            if path.startswith("/movie/551/"):
+                release.wait(10)  # TMDb hanging on this one
+            return {"results": [rec(9001 if "/550/" in path else 9002)]}
+
+        try:
+            with patch(TMDB_GET, side_effect=fake_get):
+                result = self.get(db)
+        finally:
+            release.set()
+
+        assert [m["id"] for m in result["movies"]] == [9001]
+        assert for_you_service._inline_paused_until > 0
+
+    def test_a_title_on_two_lists_counts_once_by_the_list_that_says_most(self, db, user):
+        from app.models.watchlist import Watchlist
+        from app.services.title_recs_service import store_recs
+
+        # Rated 2 stars and still on the watchlist: the rating wins, so it recommends nothing.
+        watched(db, 550, rating=2.0)
+        db.add(Watchlist(user_id="uid1", content_type="movie", content_id=550))
+        store_recs(db, {("movie", 550): [rec(9001)]}, datetime.now(timezone.utc))
+        db.commit()
+
+        assert self.get(db) == {"movies": [], "shows": [], "seed_count": 1}
+
+    def test_storing_failure_is_swallowed(self, db, user):
+        watched(db, 550)
+        with patch("app.services.for_you_service.fetch_and_store", side_effect=RuntimeError("db")):
+            assert self.get(db) == {"movies": [], "shows": [], "seed_count": 1}
+
+    def test_popularity_orders_picks_the_library_scores_the_same(self, db, user):
+        watched(db, 550)
+        watched(db, 551)
+        # Same position in two equally weighted single-item lists: a dead heat.
+        now = datetime.now(timezone.utc)
+        from app.services.title_recs_service import store_recs
+        store_recs(db, {
+            ("movie", 550): [rec(9001, popularity=5.0)],
+            ("movie", 551): [rec(9002, popularity=50.0)],
+        }, now)
+        db.commit()
+        # Equal weights need equal watch dates.
         from app.models.watched import Watched
-        from app.services.for_you_service import get_for_you_recommendations
-        fetch, calls = _counting_fetch(self.RECS)
-        with patch("app.services.for_you_service._fetch_tmdb_recommendations", side_effect=fetch):
-            get_for_you_recommendations(db, "uid1")
-            db.add(Watched(user_id="uid1", content_type="movie", content_id=777,
-                           watched_at=datetime(2024, 6, 1, tzinfo=timezone.utc)))
-            db.commit()
-            calls.clear()
-            get_for_you_recommendations(db, "uid1")
-        assert ("movie", 777) in calls
+        db.query(Watched).update({"watched_at": now})
+        db.commit()
 
-    def test_empty_results_are_not_cached(self, db, seed_user_with_history):
-        """A TMDb outage returns [] for every seed; that must not stick for 30 minutes."""
-        from app.services.for_you_service import get_for_you_recommendations
-        fetch, calls = _counting_fetch({})
-        with patch("app.services.for_you_service._fetch_tmdb_recommendations", side_effect=fetch):
-            get_for_you_recommendations(db, "uid1")
-            n = len(calls)
-            get_for_you_recommendations(db, "uid1")
-        assert len(calls) == 2 * n
+        with patch(TMDB_GET) as tmdb:
+            result = self.get(db)
 
+        tmdb.assert_not_called()
+        assert [m["id"] for m in result["movies"]] == [9002, 9001]
 
-class TestSeedLimit:
-    def test_recent_seeds_capped_at_20(self, db):
-        from datetime import datetime, timedelta, timezone
+    def test_returns_at_most_forty_per_type(self, db, user):
+        watched(db, 550)
+        fake = recs_by_path({"/movie/550": [rec(9000 + i) for i in range(60)]})
+        with patch(TMDB_GET, side_effect=fake):
+            result = self.get(db)
+
+        assert [m["id"] for m in result["movies"]] == [9000 + i for i in range(40)]
+
+    def test_another_users_library_does_not_feed_these_picks(self, db, user):
         from app.models.user import User
         from app.models.watched import Watched
-        from app.services.for_you_service import _SOURCE_LIMIT, _get_seeds_recent
 
-        db.add(User(id="busy", username="busy", email="b@test.com"))
-        db.flush()
-        start = datetime(2024, 1, 1, tzinfo=timezone.utc)
-        db.add_all([
-            Watched(user_id="busy", content_type="movie", content_id=5000 + i,
-                    watched_at=start + timedelta(hours=i))
-            for i in range(30)
-        ])
+        db.add(User(id="uid2", username="uid2", email="u2@test.com"))
+        db.add(Watched(user_id="uid2", content_type="movie", content_id=777,
+                       watched_at=datetime.now(timezone.utc)))
         db.commit()
-        seeds = _get_seeds_recent(db, "busy")
-        assert _SOURCE_LIMIT == 20
-        assert len(seeds) == 20
-        # Most recent first
-        assert seeds[0] == ("movie", 5029)
+        watched(db, 550)
+        fake = recs_by_path({"/movie/550": [rec(9001)], "/movie/777": [rec(9002)]})
+        with patch(TMDB_GET, side_effect=fake) as tmdb:
+            result = self.get(db)
 
-
-# ── PG-only paths ──────────────────────────────────────────────────────────
-
-
-@pytest.mark.skip(reason="PG-only syntax — for_you currently has no PG-only paths; placeholder for future")
-class TestForYouPgOnly:
-    def test_placeholder(self):
-        pass
-
-
-class TestFetchConcurrencyIsShared:
-    """Each For You request used to start its own 10-thread pool, so
-    concurrent requests multiplied the threads (and parallel TMDb calls)."""
-
-    def test_concurrent_requests_share_one_bounded_pool(self):
-        import threading
-        import time
-        from unittest.mock import patch
-        from app.services import for_you_service as svc
-
-        lock = threading.Lock()
-        in_flight = {"now": 0, "max": 0}
-
-        def slow_get(path, params=None):
-            with lock:
-                in_flight["now"] += 1
-                in_flight["max"] = max(in_flight["max"], in_flight["now"])
-            time.sleep(0.05)
-            with lock:
-                in_flight["now"] -= 1
-            return {"results": []}
-
-        def request(base):
-            svc._ranked_candidates([("movie", base + i) for i in range(20)])
-
-        with patch.object(svc, "get", side_effect=slow_get):
-            workers = [threading.Thread(target=request, args=(7_100_000 + n * 100,))
-                       for n in range(3)]
-            for w in workers:
-                w.start()
-            for w in workers:
-                w.join()
-
-        assert in_flight["max"] <= svc._MAX_WORKERS
+        assert [m["id"] for m in result["movies"]] == [9001]
+        assert [call.args[0] for call in tmdb.call_args_list] == ["/movie/550/recommendations"]

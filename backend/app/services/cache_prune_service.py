@@ -9,9 +9,9 @@ The previous rule trusted Show/Movie.tracking_count. That counter drifts low
 FK cascades on show.id then deleted users' episode_watched, season_rating and
 finish_by_goal rows. tracking_count is not consulted here.
 
-Every table with a content_id / show_id / movie_id column must appear either
-in REFERENCES or in CACHE_CHILD_TABLES; tests/test_cache_prune.py enforces it
-so a new table can't silently stop protecting its title.
+Every table with a content_id / show_id / movie_id column must appear in
+REFERENCES, CACHE_CHILD_TABLES or INDEPENDENT_TABLES; tests/test_cache_prune.py
+enforces it so a new table can't silently stop protecting its title.
 """
 
 import logging
@@ -48,6 +48,7 @@ from app.models.sent_premiere_alert import SentPremiereAlert
 from app.models.shelf_item import ShelfItem
 from app.models.show import Show
 from app.models.show_video import ShowVideo
+from app.models.title_recs import RecCandidate, TitleRecs
 from app.models.user import User
 from app.models.user_collection_ranking import UserCollectionRanking
 from app.models.watched import Watched
@@ -81,6 +82,12 @@ _CHILDREN: dict[str, tuple[tuple[type, str], ...]] = {
 CACHE_CHILD_TABLES = frozenset(
     model.__tablename__ for children in _CHILDREN.values() for model, _ in children
 )
+
+# Keyed by a title id, but neither a reason to keep a title cached nor deleted
+# with it: stored recommendation lists and the display rows of recommended
+# titles, most of which were never cached here. title_recs_service prunes
+# them itself once nobody tracks the title a list belongs to.
+INDEPENDENT_TABLES = frozenset({TitleRecs.__tablename__, RecCandidate.__tablename__})
 
 
 @dataclass(frozen=True)

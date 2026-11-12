@@ -3,7 +3,8 @@ import { CSS } from "@dnd-kit/utilities";
 import { BASE_IMAGE_URL } from "../constants";
 import type { ShowProgress } from "../hooks/api/useBingePlan";
 import ContentRatingBadge from "./media/ContentRatingBadge";
-import StarIcon from "./icons/StarIcon";
+import { ChevronDoubleUpIcon, ClockIcon, Bars3Icon } from "@heroicons/react/24/outline";
+import { ChevronDownIcon, CloseIcon, IconButton, StarIcon } from "./ui";
 
 function fmtMins(mins: number): string {
   const h = Math.floor(mins / 60);
@@ -75,74 +76,39 @@ export default function WatchlistOrderRow({
     <div
       ref={setNodeRef}
       style={style}
-      className="flex items-center gap-3 bg-neutral-800 border border-neutral-700 rounded-xl px-3 py-3 hover:border-neutral-600 transition-colors"
+      className="flex items-center gap-3 bg-neutral-800 border border-neutral-700 rounded-surface px-3 py-3 hover:border-neutral-600 transition-colors"
     >
       {/* Drag handle */}
       {!isDragDisabled && (
-        <div
+        <IconButton
           {...attributes}
           {...listeners}
-          role="button"
-          tabIndex={0}
-          aria-label="Drag to reorder"
-          className="text-neutral-600 hover:text-neutral-400 cursor-grab active:cursor-grabbing touch-none flex-shrink-0 px-0.5"
-        >
-          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-            <path d="M7 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 14a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
-          </svg>
-        </div>
+          label="Drag to reorder"
+          icon={<Bars3Icon className="w-4 h-4" strokeWidth={2} aria-hidden="true" />}
+          size="sm"
+          className="cursor-grab active:cursor-grabbing touch-none"
+        />
       )}
 
       {/* Rank + arrows */}
       <div className="flex flex-col gap-0.5 items-center flex-shrink-0">
-        <button
-          type="button"
+        <IconButton
+          label="Move up"
+          icon={<ChevronDownIcon className="w-4 h-4 rotate-180" />}
+          size="sm"
           onClick={onMoveUp}
           disabled={isFirst}
-          aria-label="Move up"
-          className="text-neutral-500 hover:text-neutral-300 disabled:opacity-20 disabled:cursor-not-allowed p-0.5 rounded transition-colors"
-        >
-          <svg
-            className="w-3.5 h-3.5"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2.5}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M5 15l7-7 7 7"
-            />
-          </svg>
-        </button>
-        <span
-          aria-label={`Rank ${rank}`}
-          className="text-neutral-500 text-xs font-bold text-center leading-none"
-        >
+        />
+        <span aria-label={`Rank ${rank}`} className="text-neutral-400 text-caption font-semibold text-center leading-none tabular">
           #{rank}
         </span>
-        <button
-          type="button"
+        <IconButton
+          label="Move down"
+          icon={<ChevronDownIcon className="w-4 h-4" />}
+          size="sm"
           onClick={onMoveDown}
           disabled={isLast}
-          aria-label="Move down"
-          className="text-neutral-500 hover:text-neutral-300 disabled:opacity-20 disabled:cursor-not-allowed p-0.5 rounded transition-colors"
-        >
-          <svg
-            className="w-3.5 h-3.5"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2.5}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M19 9l-7 7-7-7"
-            />
-          </svg>
-        </button>
+        />
       </div>
 
       {/* Poster */}
@@ -159,20 +125,8 @@ export default function WatchlistOrderRow({
               className="w-full h-full object-cover"
             />
           ) : (
-            <div className="w-full h-full flex items-center justify-center text-neutral-500">
-              <svg
-                className="w-6 h-6"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={1.5}
-                  d="M15 10l4.553-2.069A1 1 0 0121 8.87v6.26a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-                />
-              </svg>
+            <div className="w-full h-full flex items-center justify-center p-1 text-center text-caption text-neutral-400">
+              {title}
             </div>
           )}
         </div>
@@ -180,24 +134,24 @@ export default function WatchlistOrderRow({
 
       {/* Info */}
       <div className="flex-1 min-w-0 cursor-pointer py-0.5" onClick={onClick}>
-        <p className="text-sm font-semibold text-white truncate mb-1.5">
+        <p className="text-body font-semibold text-white truncate mb-1.5">
           {title}
         </p>
         <div className="flex items-center gap-2 flex-wrap mb-1">
           <span
-            className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${
+            className={`text-caption font-medium px-1.5 py-0.5 rounded-full ${
               contentType === "tv"
                 ? "bg-highlight-600/70 text-highlight-100"
-                : "bg-amber-600/70 text-amber-100"
+                : "bg-warning-600/70 text-warning-100"
             }`}
           >
             {contentType === "tv" ? "TV" : "Movie"}
           </span>
           {certification && <ContentRatingBadge rating={certification} />}
-          {year && <span className="text-xs text-neutral-400">{year}</span>}
+          {year && <span className="text-caption text-neutral-400">{year}</span>}
           {voteAverage != null && voteAverage > 0 && (
-            <span className="flex items-center gap-0.5 text-xs text-warning-400 font-medium">
-              <StarIcon filled className="w-3 h-3" />
+            <span className="flex items-center gap-0.5 text-caption text-warning-400 font-medium">
+              <StarIcon className="w-3 h-3" />
               {voteAverage.toFixed(1)}
             </span>
           )}
@@ -205,7 +159,7 @@ export default function WatchlistOrderRow({
             genres.map((g) => (
               <span
                 key={g.id}
-                className="text-xs text-neutral-500 bg-neutral-700/60 px-1.5 py-0.5 rounded"
+                className="text-caption text-neutral-400 bg-neutral-700/60 px-1.5 py-0.5 rounded"
               >
                 {g.name}
               </span>
@@ -213,13 +167,11 @@ export default function WatchlistOrderRow({
         </div>
         {bingePlan && bingePlan.remaining_episodes > 0 && (
           <div className="flex items-center gap-2 mt-1">
-            <svg className="w-3 h-3 text-primary-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-              <circle cx="12" cy="12" r="10" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2" />
-            </svg>
-            <span className="text-xs text-neutral-400">
+            <ClockIcon className="w-3 h-3 text-neutral-400 flex-shrink-0" strokeWidth={2} aria-hidden="true" />
+            <span className="text-caption text-neutral-400">
               {fmtMins(bingePlan.remaining_minutes)} left
               {bingePlan.completion_estimate && (
-                <span className="text-primary-400"> · {bingePlan.completion_estimate}</span>
+                <span className="text-neutral-300"> · {bingePlan.completion_estimate}</span>
               )}
             </span>
           </div>
@@ -240,50 +192,22 @@ export default function WatchlistOrderRow({
 
       {/* Move to top + Delete */}
       <div className="flex items-center gap-0.5 flex-shrink-0">
-        <button
-          type="button"
+        <IconButton
+          label="Move to top"
+          icon={<ChevronDoubleUpIcon className="w-4 h-4" strokeWidth={2} aria-hidden="true" />}
+          size="sm"
           onClick={onMoveToTop}
           disabled={isFirst}
-          aria-label="Move to top"
-          className="text-neutral-500 hover:text-neutral-300 disabled:opacity-20 disabled:cursor-not-allowed p-1 rounded transition-colors"
-        >
-          <svg
-            className="w-4 h-4"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M5 11l7-7 7 7M5 19l7-7 7 7"
-            />
-          </svg>
-        </button>
-        <button
-          type="button"
+        />
+        <IconButton
+          label="Remove from watchlist"
+          icon={<CloseIcon className="w-4 h-4 text-error-400" />}
+          size="sm"
           onClick={(e) => {
             e.stopPropagation();
             onDelete();
           }}
-          aria-label="Remove from watchlist"
-          className="text-red-500 hover:text-red-400 p-1 rounded transition-colors"
-        >
-          <svg
-            className="w-4 h-4"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M6 18L18 6M6 6l12 12"
-            />
-          </svg>
-        </button>
+        />
       </div>
     </div>
   );

@@ -95,7 +95,7 @@ export default function MediaCard({ item, type, onRemove }: MediaCardProps) {
               className={`text-xs font-medium px-2 py-0.5 rounded-full backdrop-blur-sm ${
                 type === "tv"
                   ? "bg-highlight-600/70 text-highlight-100"
-                  : "bg-amber-600/70 text-amber-100"
+                  : "bg-warning-600/70 text-warning-100"
               }`}
             >
               {type === "tv" ? "TV" : "Movie"}

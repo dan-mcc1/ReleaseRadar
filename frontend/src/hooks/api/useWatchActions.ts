@@ -166,11 +166,64 @@ export function useUpdateWatchStatus() {
   });
 }
 
+function withRating(
+  data: ListData,
+  contentType: "movie" | "tv",
+  contentId: number,
+  rating: number | null,
+): ListData {
+  return {
+    movies:
+      contentType === "movie"
+        ? data.movies.map((m) => (m.id === contentId ? { ...m, user_rating: rating } : m))
+        : data.movies,
+    shows:
+      contentType === "tv"
+        ? data.shows.map((s) => (s.id === contentId ? { ...s, user_rating: rating } : s))
+        : data.shows,
+  };
+}
+
+// The newest rating sent per title ("movie:123"), so only its failure
+// triggers a refetch.
+const latestRating = new Map<string, number>();
+
 export function useRateItem() {
   const user = useAuthUser();
   const queryClient = useQueryClient();
 
   return useMutation({
+    // The watched list shows the new rating at once. On a failure the list
+    // is refetched, unless a newer rating of the same title is on its way:
+    // guessing the old value goes wrong when several are in flight.
+    onMutate: async ({ contentType, contentId, rating }) => {
+      if (!user) return;
+      const watchedKey = queryKeys.watched(user.uid);
+      const itemKey = `${contentType}:${contentId}`;
+      const seq = (latestRating.get(itemKey) ?? 0) + 1;
+      latestRating.set(itemKey, seq);
+      // A refetch in flight would overwrite the new rating with the old one.
+      // It's cancelled here and run again once this settles.
+      const wasFetching = queryClient.isFetching({ queryKey: watchedKey }) > 0;
+      await queryClient.cancelQueries({ queryKey: watchedKey });
+      const data = queryClient.getQueryData<ListData>(watchedKey);
+      if (data) {
+        queryClient.setQueryData<ListData>(
+          watchedKey,
+          withRating(data, contentType, contentId, rating),
+        );
+      }
+      return { seq, itemKey, wasFetching };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (!user || !ctx || latestRating.get(ctx.itemKey) !== ctx.seq) return;
+      queryClient.invalidateQueries({ queryKey: queryKeys.watched(user.uid) });
+    },
+    onSettled: (_data, _err, _vars, ctx) => {
+      if (user && ctx?.wasFetching) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.watched(user.uid) });
+      }
+    },
     mutationFn: async ({
       contentType,
       contentId,
@@ -215,25 +268,7 @@ export function useRateItem() {
           }
         });
 
-      // Patch user_rating on the item inside the watched list.
-      const watchedKey = queryKeys.watched(user.uid);
-      const watchedData = queryClient.getQueryData<ListData>(watchedKey);
-      if (watchedData) {
-        queryClient.setQueryData<ListData>(watchedKey, {
-          movies:
-            contentType === "movie"
-              ? watchedData.movies.map((m) =>
-                  m.id === contentId ? { ...m, user_rating: newRating } : m,
-                )
-              : watchedData.movies,
-          shows:
-            contentType === "tv"
-              ? watchedData.shows.map((s) =>
-                  s.id === contentId ? { ...s, user_rating: newRating } : s,
-                )
-              : watchedData.shows,
-        });
-      }
+      // The watched list already has it, from onMutate.
 
       // Confirm with the server.
       queryClient.invalidateQueries({

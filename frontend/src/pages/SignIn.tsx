@@ -19,6 +19,7 @@ import { apiFetch } from "../utils/apiFetch";
 import { usePageTitle } from "../hooks/usePageTitle";
 import { isAccountRestricted } from "../utils/accountState";
 import { needsEmailVerification } from "../utils/emailVerification";
+import SignUpConsent from "../components/SignUpConsent";
 
 const USERNAME_RE = /^[a-zA-Z0-9_]{3,30}$/;
 
@@ -606,7 +607,7 @@ const SignIn: React.FC = () => {
                     {oauthUsernameChecking
                       ? "Checking availability…"
                       : oauthUsernameAvailable === true
-                        ? "✓ Username available"
+                        ? "Username available"
                         : oauthUsernameAvailable === false
                           ? "✗ Username already taken"
                           : !USERNAME_RE.test(oauthUsername)
@@ -627,6 +628,7 @@ const SignIn: React.FC = () => {
               >
                 {isLoading ? "Saving…" : "Continue"}
               </button>
+              <SignUpConsent lead="By selecting Continue" />
             </form>
           </div>
         </div>
@@ -668,43 +670,11 @@ const SignIn: React.FC = () => {
 
         {/* Headline block */}
         <div className="relative z-10" style={{ maxWidth: 500 }}>
-          <div
-            className="font-mono"
-            style={{
-              fontSize: 10.5,
-              letterSpacing: "0.16em",
-              opacity: 0.6,
-              textTransform: "uppercase",
-              marginBottom: 18,
-            }}
-          >
-            Track what you watch
-          </div>
-
-          <h1
-            className="font-serif"
-            style={{
-              margin: 0,
-              fontWeight: 400,
-              fontSize: 60,
-              lineHeight: 0.97,
-              letterSpacing: "-0.03em",
-            }}
-          >
-            Never miss a{" "}
-            <em style={{ fontStyle: "italic", color: PRIMARY }}>release</em>{" "}
-            again.
+          <h1 className="text-5xl font-semibold tracking-tight leading-[1.05] text-neutral-50 [text-wrap:balance]">
+            Never miss a release again.
           </h1>
 
-          <p
-            style={{
-              fontSize: 15,
-              opacity: 0.75,
-              lineHeight: 1.6,
-              marginTop: 24,
-              maxWidth: 430,
-            }}
-          >
+          <p className="mt-6 max-w-[430px] text-body text-neutral-300">
             One calendar for every show and movie you care about. Synced to your
             streaming services, your friends, and the rest of your life.
           </p>
@@ -855,17 +825,15 @@ const SignIn: React.FC = () => {
               </svg>
               Continue with Facebook
             </button>
+            {/* On either tab, these buttons create the app account for a new
+                user (finishSignIn), so the notice sits with them too. */}
+            <SignUpConsent lead="By continuing with Google, Microsoft or Facebook" />
           </div>
 
           {/* Divider */}
           <div className="flex items-center gap-3 my-6">
             <div className="flex-1 h-px bg-neutral-800" />
-            <span
-              className="font-mono text-neutral-500"
-              style={{ fontSize: 10.5, letterSpacing: "0.12em" }}
-            >
-              OR
-            </span>
+            <span className="text-caption text-neutral-500">or</span>
             <div className="flex-1 h-px bg-neutral-800" />
           </div>
 
@@ -959,7 +927,7 @@ const SignIn: React.FC = () => {
                     {usernameChecking
                       ? "Checking availability…"
                       : usernameAvailable === true
-                        ? "✓ Username available"
+                        ? "Username available"
                         : usernameAvailable === false
                           ? "✗ Username already taken"
                           : !USERNAME_RE.test(username)
@@ -996,9 +964,10 @@ const SignIn: React.FC = () => {
                   ? "Creating account…"
                   : "Signing in…"
                 : isRegistering
-                  ? "Create Account →"
-                  : "Sign in →"}
+                  ? "Create account"
+                  : "Sign in"}
             </button>
+            {isRegistering && <SignUpConsent lead="By selecting Create account" />}
           </form>
         </div>
       </div>

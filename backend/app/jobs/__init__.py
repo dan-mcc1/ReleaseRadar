@@ -43,6 +43,8 @@ SCHEDULES = [
     Schedule("premiere-alerts", "dispatch_premiere_alerts", {}, hourly(0)),
     # Plans the hour's episode pushes; each is a job held until its send time.
     Schedule("episode-alerts", "dispatch_episode_alerts", {}, hourly(0)),
+    # Hourly rather than nightly so a title tracked today feeds For You today.
+    Schedule("title-recs", "refresh_title_recommendations", {}, hourly(0)),
     # Nightly. All at 3am Eastern so Neon wakes once; none depends on another.
     Schedule("show-refresh", "dispatch_show_refreshes", {}, daily("03:00", "America/New_York")),
     Schedule("vote-update", "update_vote_averages", {}, daily("03:00", "America/New_York")),

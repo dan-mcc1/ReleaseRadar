@@ -1,4 +1,5 @@
 import { usePageTitle } from "../hooks/usePageTitle";
+import { PageHeader, SectionHeader } from "../components/ui";
 
 const RULES = [
   {
@@ -45,32 +46,32 @@ const ENFORCEMENT = [
   {
     level: "Warning 2",
     label: "7-day silence",
-    color: "text-amber-400",
-    dot: "bg-amber-400",
+    color: "text-warning-400",
+    dot: "bg-warning-400",
     description:
       "You can still track titles, use your watchlist, and browse the site, but reviews and comments are disabled for 7 days.",
   },
   {
     level: "Warning 3",
     label: "30-day silence",
-    color: "text-orange-400",
-    dot: "bg-orange-400",
+    color: "text-warning-400",
+    dot: "bg-warning-400",
     description:
       "Same restrictions as above, extended to 30 days. This is the final step before permanent action.",
   },
   {
     level: "Warning 4",
     label: "Permanent silence",
-    color: "text-red-400",
-    dot: "bg-red-400",
+    color: "text-error-400",
+    dot: "bg-error-400",
     description:
       "Reviews and comments are permanently disabled. Your account remains active for personal tracking only.",
   },
   {
     level: "Severe violations",
     label: "Immediate ban",
-    color: "text-red-600",
-    dot: "bg-red-600",
+    color: "text-error-600",
+    dot: "bg-error-600",
     description:
       "Harassment, hate speech, spam, or other egregious behavior may result in a full account ban without prior warnings at admin discretion.",
   },
@@ -81,30 +82,22 @@ export default function CommunityGuidelines() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-12">
-      <div className="mb-10">
-        <h1 className="text-3xl font-bold text-white mb-3">
-          Community Guidelines
-        </h1>
-        <p className="text-neutral-400 leading-relaxed">
-          Release Radar is a place for film and TV fans to track what they watch
-          and share their thoughts. To keep it welcoming for everyone, we ask
-          that all members follow these guidelines. Violations are handled
-          consistently through the enforcement ladder below.
-        </p>
-      </div>
+      <PageHeader
+        className="mb-10"
+        title="Community Guidelines"
+        description="Release Radar is a place for film and TV fans to track what they watch and share their thoughts. To keep it welcoming for everyone, we ask that all members follow these guidelines. Violations are handled consistently through the enforcement ladder below."
+      />
 
       {/* Rules */}
       <section className="mb-12">
-        <h2 className="text-lg font-semibold text-white mb-5 uppercase tracking-wide text-sm">
-          The Rules
-        </h2>
-        <div className="space-y-4">
+        <SectionHeader title="The rules" divider className="mb-2" />
+        <div className="divide-y divide-neutral-800">
           {RULES.map((rule, i) => (
             <div
               key={i}
-              className="flex gap-4 p-4 rounded-lg bg-neutral-900 border border-neutral-800"
+              className="flex gap-4 py-4"
             >
-              <span className="text-amber-400 font-bold text-sm mt-0.5 shrink-0 w-5">
+              <span className="text-neutral-500 font-semibold text-label mt-0.5 shrink-0 w-5 tabular">
                 {i + 1}.
               </span>
               <div>
@@ -120,10 +113,8 @@ export default function CommunityGuidelines() {
 
       {/* Enforcement */}
       <section>
-        <h2 className="text-lg font-semibold text-white mb-2 uppercase tracking-wide text-sm">
-          Enforcement
-        </h2>
-        <p className="text-neutral-500 text-sm mb-5">
+        <SectionHeader title="Enforcement" className="mb-2" />
+        <p className="text-neutral-400 text-label mb-5">
           Warnings accumulate on your account. Moderators may also apply any
           level directly for severe violations.
         </p>
@@ -140,7 +131,7 @@ export default function CommunityGuidelines() {
                 </div>
                 <div className="pb-2">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-neutral-500 text-xs">
+                    <span className="text-neutral-400 text-caption">
                       {step.level}
                     </span>
                     <span className={`font-semibold text-sm ${step.color}`}>
@@ -157,7 +148,7 @@ export default function CommunityGuidelines() {
         </div>
       </section>
 
-      <p className="mt-12 text-neutral-600 text-xs">
+      <p className="mt-12 text-neutral-500 text-caption">
         These guidelines may be updated over time. If you have questions or want
         to appeal a moderation decision, contact us through the settings page.
       </p>

@@ -8,6 +8,14 @@ import {
 import { usePageTitle } from "../hooks/usePageTitle";
 import GroupCard from "../components/GroupCard";
 import CreateGroupModal from "../components/CreateGroupModal";
+import {
+  Button,
+  ButtonLink,
+  EmptyState,
+  PageHeader,
+  PlusIcon,
+  SectionHeader,
+} from "../components/ui";
 
 export default function MyGroups() {
   usePageTitle("My Groups");
@@ -17,37 +25,26 @@ export default function MyGroups() {
   const [showCreate, setShowCreate] = useState(false);
 
   return (
-    <div className="pb-24">
-      <div className="px-6 lg:px-10 pt-8 pb-2 flex items-end justify-between gap-4 flex-wrap">
-        <div>
-          <p className="font-mono text-[10px] tracking-[0.14em] text-neutral-500 uppercase mb-2">
-            My communities
-          </p>
-          <h1 className="text-3xl lg:text-4xl font-semibold tracking-tight text-white">
-            My Groups
-          </h1>
-        </div>
-        <div className="flex gap-2">
-          <Link
-            to="/groups"
-            className="text-sm font-medium text-neutral-300 hover:text-white border border-neutral-700 hover:border-neutral-600 px-4 py-2.5 rounded-xl transition-colors"
-          >
-            Browse all
-          </Link>
-          <button
-            onClick={() => setShowCreate(true)}
-            className="text-sm font-semibold bg-primary-600 hover:bg-primary-500 text-white px-4 py-2.5 rounded-xl"
-          >
-            + Create group
-          </button>
-        </div>
-      </div>
+    <div className="w-full px-6 sm:px-10 pt-6 pb-16 flex flex-col gap-6">
+      <PageHeader
+        title="My groups"
+        actions={
+          <>
+            <ButtonLink to="/groups">Browse all</ButtonLink>
+            <Button
+              variant="primary"
+              icon={<PlusIcon className="w-4 h-4" />}
+              onClick={() => setShowCreate(true)}
+            >
+              Create group
+            </Button>
+          </>
+        }
+      />
 
       {invitations.length > 0 && (
-        <div className="px-6 lg:px-10 mt-6">
-          <p className="font-mono text-[10px] tracking-[0.14em] text-neutral-500 uppercase mb-3">
-            Pending invitations ({invitations.length})
-          </p>
+        <section>
+          <SectionHeader title="Pending invitations" note={invitations.length} className="mb-3" />
           <div className="flex flex-col gap-2">
             {invitations.map((inv) => {
               const isResponding =
@@ -55,16 +52,16 @@ export default function MyGroups() {
               return (
                 <div
                   key={inv.id}
-                  className="flex flex-col sm:flex-row sm:items-center gap-3 bg-neutral-900 border border-neutral-800 rounded-2xl p-4"
+                  className="flex flex-col sm:flex-row sm:items-center gap-3 bg-neutral-900 border border-neutral-800 rounded-surface p-4"
                 >
                   <div className="flex-1 min-w-0">
                     <Link
                       to={`/groups/${inv.community.slug}`}
-                      className="text-[15px] font-semibold text-white hover:text-primary-300"
+                      className="text-body font-semibold text-white hover:text-primary-300"
                     >
                       {inv.community.name}
                     </Link>
-                    <p className="text-[12px] text-neutral-500 mt-0.5">
+                    <p className="text-caption text-neutral-500 mt-0.5">
                       Invited by{" "}
                       <span className="text-neutral-300">
                         @{inv.invited_by?.username ?? "someone"}
@@ -74,48 +71,45 @@ export default function MyGroups() {
                       {inv.community.member_count === 1 ? "member" : "members"}
                     </p>
                     {inv.community.description && (
-                      <p className="text-[12.5px] text-neutral-400 mt-1.5 line-clamp-2">
+                      <p className="text-label text-neutral-400 mt-1.5 line-clamp-2">
                         {inv.community.description}
                       </p>
                     )}
                   </div>
                   <div className="flex gap-2 shrink-0">
-                    <button
+                    <Button
+                      variant="primary"
                       onClick={() =>
                         respond.mutate({ invitationId: inv.id, accept: true })
                       }
                       disabled={isResponding}
-                      className="text-[13px] font-semibold bg-primary-600 hover:bg-primary-500 disabled:opacity-50 text-white px-4 py-2 rounded-xl"
                     >
                       Accept
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                       onClick={() =>
                         respond.mutate({ invitationId: inv.id, accept: false })
                       }
                       disabled={isResponding}
-                      className="text-[13px] font-medium text-neutral-300 border border-neutral-700 hover:border-neutral-600 hover:text-white disabled:opacity-50 px-4 py-2 rounded-xl"
                     >
                       Decline
-                    </button>
+                    </Button>
                   </div>
                 </div>
               );
             })}
           </div>
-        </div>
+        </section>
       )}
 
-      <div className="px-6 lg:px-10 mt-6">
+      <div>
         {isLoading ? (
           <p className="text-neutral-500 text-sm">Loading…</p>
         ) : groups.length === 0 ? (
-          <div className="text-center py-16 bg-neutral-900/50 border border-neutral-800 rounded-2xl">
-            <p className="text-neutral-300 font-medium">You haven't joined any groups yet.</p>
-            <Link to="/groups" className="mt-3 inline-block text-sm text-primary-400 hover:text-primary-300">
-              Browse groups →
-            </Link>
-          </div>
+          <EmptyState
+            title="You haven't joined any groups yet"
+            action={<ButtonLink to="/groups" variant="primary">Browse groups</ButtonLink>}
+          />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {groups.map((g) => (

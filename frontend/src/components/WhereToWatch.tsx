@@ -4,6 +4,7 @@ import { getProviderUrl, getProviderDedupeKey } from "../utils/providerUrls";
 import { safeHref } from "../utils/safeHref";
 import { useMyProviderIds } from "../hooks/api/useStreamingServices";
 import { useAuthUser } from "../hooks/useAuthUser";
+import { CheckIcon, SectionHeader } from "./ui";
 
 function deduplicateProviders(list: WatchProvider[]): WatchProvider[] {
   const seen = new Set<string>();
@@ -17,7 +18,7 @@ function deduplicateProviders(list: WatchProvider[]): WatchProvider[] {
 
 // Fixed-width cells so every logo lines up on the same grid whatever the name's length.
 const GRID = "grid grid-cols-[repeat(auto-fill,4.5rem)] gap-x-3 gap-y-4";
-const GROUP_LABEL = "font-mono text-[10px] tracking-[0.15em] text-neutral-500 uppercase mb-2.5";
+const GROUP_LABEL = "text-caption text-neutral-400 mb-2.5";
 
 interface WhereToWatchProps {
   providers: Provider;
@@ -49,19 +50,17 @@ function ProviderCard({
             src={`${BASE_IMAGE_URL}/w154${logoPath}`}
             alt=""
             loading="lazy"
-            className={`block w-full aspect-square rounded-xl transition-all ${owned ? "ring-2 ring-primary-500 ring-offset-2 ring-offset-neutral-950" : ""}`}
+            className={`block w-full aspect-square rounded-control transition-all ${owned ? "ring-2 ring-primary-500 ring-offset-2 ring-offset-neutral-950" : ""}`}
           />
           {owned && (
             <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-primary-500 rounded-full flex items-center justify-center shadow">
-              <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
+              <CheckIcon className="w-3 h-3 text-white" />
             </span>
           )}
         </div>
       )}
       <span
-        className={`text-xs leading-tight text-center line-clamp-2 ${owned ? "text-primary-400 font-medium" : "text-neutral-300"}`}
+        className={`text-caption leading-tight text-center line-clamp-2 ${owned ? "text-primary-400 font-medium" : "text-neutral-300"}`}
       >
         {providerName}
       </span>
@@ -94,7 +93,7 @@ export default function WhereToWatch({ providers, hideTitle = false }: WhereToWa
 
   return (
     <div className={`space-y-5 ${hideTitle ? "mt-3" : "mt-8"}`}>
-      {!hideTitle &&<h2 className="text-xl font-semibold mb-3">Where to Watch</h2>}
+      {!hideTitle && <SectionHeader title="Where to watch" className="mb-3" />}
       {providers.flatrate && (
         <div>
           <h3 className={GROUP_LABEL}>Streaming</h3>
@@ -146,6 +145,18 @@ export default function WhereToWatch({ providers, hideTitle = false }: WhereToWa
           </div>
         </div>
       )}
+
+      <p className="text-caption text-neutral-400">
+        Availability data from{" "}
+        <a
+          href="https://www.justwatch.com"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-neutral-200 hover:text-white transition-colors"
+        >
+          JustWatch
+        </a>
+      </p>
     </div>
   );
 }

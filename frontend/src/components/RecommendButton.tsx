@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useAuthUser } from "../hooks/useAuthUser";
 import { useFriends } from "../hooks/api/useFriends";
 import { useSendRecommendation } from "../hooks/api/useRecommendations";
+import { CheckIcon } from "./ui";
 
 interface Friend {
   friendship_id: number;
@@ -71,7 +72,9 @@ export function RecommendModal({
       >
         {sent ? (
           <div className="text-center py-4">
-            <div className="text-3xl mb-3">✓</div>
+            <div className="mx-auto mb-3 size-12 rounded-full bg-success-500/20 text-success-400 flex items-center justify-center">
+              <CheckIcon className="w-6 h-6" />
+            </div>
             <p className="text-white font-semibold text-lg mb-1">
               Recommendation sent!
             </p>
@@ -96,7 +99,7 @@ export function RecommendModal({
 
             {/* Friend list */}
             <div className="mb-4">
-              <p className="text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-2">
+              <p className="text-caption font-medium text-neutral-400 mb-2">
                 Select a friend
               </p>
               {loadingFriends ? (
@@ -124,7 +127,7 @@ export function RecommendModal({
 
             {/* Optional message */}
             <div className="mb-4">
-              <p className="text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-2">
+              <p className="text-caption font-medium text-neutral-400 mb-2">
                 Message (optional)
               </p>
               <textarea

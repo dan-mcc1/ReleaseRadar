@@ -7,6 +7,16 @@ import {
 } from "../hooks/api/useNews";
 import { usePageTitle } from "../hooks/usePageTitle";
 import { safeHref } from "../utils/safeHref";
+import {
+  Button,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  EmptyState,
+  PageHeader,
+  SearchField,
+  SectionHeader,
+  Segmented,
+} from "../components/ui";
 
 const CATEGORY_TABS: { label: string; value: NewsCategory }[] = [
   { label: "Entertainment", value: "entertainment" },
@@ -69,19 +79,7 @@ function ImageBox({
     <div
       className={`${className} overflow-hidden flex items-center justify-center bg-neutral-800`}
     >
-      <svg
-        className="w-8 h-8 text-neutral-600"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={1.5}
-          d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z"
-        />
-      </svg>
+      <span className="text-caption text-neutral-500">No image</span>
     </div>
   );
 }
@@ -92,7 +90,7 @@ function LeadArticle({ article }: { article: NewsArticle }) {
       href={safeHref(article.url)}
       target="_blank"
       rel="noopener noreferrer"
-      className="group bg-neutral-800/60 border border-white/8 rounded-2xl overflow-hidden flex flex-col cursor-pointer"
+      className="group bg-neutral-800/60 border border-white/8 rounded-surface overflow-hidden flex flex-col cursor-pointer"
     >
       {/* Backdrop */}
       <div
@@ -106,17 +104,9 @@ function LeadArticle({ article }: { article: NewsArticle }) {
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
 
-        {/* Badge */}
-        <div className="absolute top-3.5 left-3.5 font-mono text-[9.5px] tracking-widest bg-black/50 backdrop-blur-sm text-white px-2.5 py-1 rounded uppercase">
-          ◉ Lead
-        </div>
-
         {/* Title overlay */}
         <div className="absolute left-4 right-4 bottom-4 text-white">
-          <h2
-            className="text-2xl leading-tight tracking-tight font-light"
-            style={{ fontFamily: "'Georgia', serif" }}
-          >
+          <h2 className="text-heading leading-tight font-semibold">
             {article.title}
           </h2>
         </div>
@@ -125,11 +115,11 @@ function LeadArticle({ article }: { article: NewsArticle }) {
       {/* Body */}
       <div className="px-5 pt-4 pb-5 flex flex-col gap-3">
         {article.description && (
-          <p className="text-sm leading-relaxed text-neutral-300 line-clamp-2">
+          <p className="text-body leading-relaxed text-neutral-300 line-clamp-2">
             {article.description}
           </p>
         )}
-        <div className="flex items-center gap-3 font-mono text-[10.5px] tracking-widest uppercase text-neutral-500">
+        <div className="flex items-center gap-3 text-caption text-neutral-400">
           <span className="text-neutral-300 font-medium">
             {article.source.name}
           </span>
@@ -157,7 +147,7 @@ function SideArticle({
       style={{ gridTemplateColumns: "110px 1fr" }}
     >
       <div
-        className="relative rounded-xl overflow-hidden shrink-0"
+        className="relative rounded-control overflow-hidden shrink-0"
         style={{ aspectRatio: "4/3" }}
       >
         <ImageBox
@@ -167,18 +157,15 @@ function SideArticle({
         />
       </div>
       <div className="flex flex-col gap-1.5 min-w-0">
-        <h3
-          className="text-[18px] leading-snug tracking-tight font-light text-white group-hover:text-primary-300 transition-colors line-clamp-3"
-          style={{ fontFamily: "'Georgia', serif" }}
-        >
+        <h3 className="text-title leading-snug font-semibold text-white group-hover:text-primary-300 transition-colors line-clamp-3">
           {article.title}
         </h3>
         {article.description && (
-          <p className="text-xs text-neutral-400 leading-relaxed line-clamp-2">
+          <p className="text-caption text-neutral-400 leading-relaxed line-clamp-2">
             {article.description}
           </p>
         )}
-        <div className="font-mono text-[9.5px] tracking-widest uppercase text-neutral-500 mt-auto">
+        <div className="text-caption text-neutral-400 mt-auto">
           <span className="text-neutral-400">{article.source.name}</span>
           {" · "}
           {timeAgo(article.publishedAt)}
@@ -194,7 +181,7 @@ function GridArticle({ article }: { article: NewsArticle }) {
       href={safeHref(article.url)}
       target="_blank"
       rel="noopener noreferrer"
-      className="group bg-neutral-800/60 border border-white/8 rounded-2xl overflow-hidden flex flex-col cursor-pointer hover:border-white/15 transition-colors"
+      className="group bg-neutral-800/60 border border-white/8 rounded-surface overflow-hidden flex flex-col cursor-pointer hover:border-white/15 transition-colors"
     >
       <div className="relative overflow-hidden" style={{ aspectRatio: "16/9" }}>
         <ImageBox
@@ -204,21 +191,18 @@ function GridArticle({ article }: { article: NewsArticle }) {
         />
       </div>
       <div className="p-4 flex flex-col gap-2 flex-1">
-        <div className="font-mono text-[9.5px] tracking-widest uppercase text-neutral-500">
-          <span className="text-neutral-400 font-medium">
+        <div className="text-caption text-neutral-400">
+          <span className="text-neutral-300 font-medium">
             {article.source.name}
           </span>
           {" · "}
           {timeAgo(article.publishedAt)}
         </div>
-        <h3
-          className="text-[17px] leading-snug tracking-tight font-light text-white group-hover:text-primary-300 transition-colors line-clamp-3"
-          style={{ fontFamily: "'Georgia', serif" }}
-        >
+        <h3 className="text-title leading-snug font-semibold text-white group-hover:text-primary-300 transition-colors line-clamp-3">
           {article.title}
         </h3>
         {article.description && (
-          <p className="text-xs text-neutral-400 leading-relaxed line-clamp-2 mt-auto pt-1">
+          <p className="text-caption text-neutral-400 leading-relaxed line-clamp-2 mt-auto pt-1">
             {article.description}
           </p>
         )}
@@ -229,7 +213,7 @@ function GridArticle({ article }: { article: NewsArticle }) {
 
 function LeadSkeleton() {
   return (
-    <div className="bg-neutral-800/60 border border-white/8 rounded-2xl overflow-hidden animate-pulse">
+    <div className="bg-neutral-800/60 border border-white/8 rounded-surface overflow-hidden animate-pulse">
       <div
         className="bg-neutral-700/60"
         style={{ aspectRatio: "4/3", maxHeight: 320 }}
@@ -250,7 +234,7 @@ function SideSkeleton() {
       style={{ gridTemplateColumns: "110px 1fr" }}
     >
       <div
-        className="bg-neutral-700/60 rounded-xl"
+        className="bg-neutral-700/60 rounded-control"
         style={{ aspectRatio: "4/3" }}
       />
       <div className="flex flex-col gap-2">
@@ -264,7 +248,7 @@ function SideSkeleton() {
 
 function GridSkeleton() {
   return (
-    <div className="bg-neutral-800/60 border border-white/8 rounded-2xl overflow-hidden animate-pulse">
+    <div className="bg-neutral-800/60 border border-white/8 rounded-surface overflow-hidden animate-pulse">
       <div className="bg-neutral-700/60" style={{ aspectRatio: "16/9" }} />
       <div className="p-4 flex flex-col gap-2">
         <div className="h-3 bg-neutral-700/60 rounded w-1/3" />
@@ -333,125 +317,61 @@ export default function News() {
 
   return (
     <div className="w-full px-4 sm:px-8 lg:px-10 py-8 pb-20">
-      {/* Header */}
-      <div className="mb-2" data-tour="news-header">
-        <div className="font-mono text-[10px] tracking-widest text-neutral-500 uppercase mb-2">
-          News · {todayLabel()}
-        </div>
-        <h1
-          className="text-4xl sm:text-5xl font-light tracking-tight leading-none"
-          style={{ fontFamily: "'Georgia', serif" }}
-        >
-          What's{" "}
-          <em className="text-primary-400" style={{ fontStyle: "italic" }}>
-            happening
-          </em>
-        </h1>
+      <div data-tour="news-header">
+        <PageHeader title="What's happening" description={todayLabel()} />
       </div>
 
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-3 mt-6 mb-7">
         {/* Category tabs */}
-        <div className="flex bg-neutral-800/80 border border-white/10 rounded-xl p-1 gap-0.5">
-          {CATEGORY_TABS.map((tab) => (
-            <button
-              key={tab.value}
-              onClick={() => setCategory(tab.value)}
-              className={`px-4 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-                activeCategory === tab.value && !activeQ
-                  ? "bg-neutral-700 text-white"
-                  : "text-neutral-400 hover:text-neutral-200"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+        <Segmented
+          label="Category"
+          value={(activeQ ? "" : activeCategory) as NewsCategory}
+          onChange={setCategory}
+          options={CATEGORY_TABS}
+        />
 
         <span className="flex-1" />
 
         {/* Search */}
         <form onSubmit={handleSearch} className="flex items-center gap-2">
-          <div className="relative">
-            <svg
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-500 pointer-events-none"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-              />
-            </svg>
-            <input
-              type="text"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Search news…"
-              className="bg-neutral-800/80 border border-white/10 text-white text-sm rounded-xl pl-9 pr-8 py-2 w-56 focus:outline-none focus:border-white/20 placeholder:text-neutral-500"
-            />
-            {searchInput && (
-              <button
-                type="button"
-                onClick={clearSearch}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white"
-              >
-                <svg
-                  className="w-3.5 h-3.5"
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-              </button>
-            )}
-          </div>
-          <button
-            type="submit"
-            className="px-4 py-2 rounded-xl bg-neutral-700 hover:bg-neutral-600 text-white text-sm font-medium transition-colors"
-          >
-            Search
-          </button>
+          <SearchField
+            label="Search news"
+            placeholder="Search news…"
+            value={searchInput}
+            onChange={setSearchInput}
+            onClear={clearSearch}
+            className="w-56"
+          />
+          <Button type="submit">Search</Button>
         </form>
       </div>
 
       {/* Active search badge */}
       {activeQ && (
         <div className="flex items-center gap-2 mb-6">
-          <span className="font-mono text-[10px] tracking-widest text-neutral-500 uppercase">
-            Results for
-          </span>
-          <span className="text-sm font-medium text-white bg-neutral-800 border border-white/10 px-2.5 py-0.5 rounded-full">
+          <span className="text-label text-neutral-400">Results for</span>
+          <span className="text-body font-medium text-white bg-neutral-800 border border-white/10 px-2.5 py-0.5 rounded-full">
             {activeQ}
           </span>
-          <button
-            onClick={clearSearch}
-            className="text-xs text-neutral-500 hover:text-white transition-colors"
-          >
+          <Button variant="ghost" size="sm" onClick={clearSearch}>
             Clear
-          </button>
+          </Button>
         </div>
       )}
 
       {/* No API key */}
       {noApiKey && (
-        <div className="flex flex-col items-center justify-center py-32 text-center gap-3">
-          <p className="text-neutral-300 font-medium">
-            News API key not configured
-          </p>
-          <p className="text-neutral-500 text-sm max-w-sm">
-            Add a free <code className="text-primary-400">NEWS_API_KEY</code>{" "}
-            from <span className="text-primary-400">newsapi.org</span> to your
-            backend <code>.env</code> to enable this page.
-          </p>
-        </div>
+        <EmptyState
+          title="News API key not configured"
+          description={
+            <>
+              Add a free <code className="text-neutral-200">NEWS_API_KEY</code> from{" "}
+              <span className="text-neutral-200">newsapi.org</span> to your backend{" "}
+              <code>.env</code> to enable this page.
+            </>
+          }
+        />
       )}
 
       {/* Loading skeleton */}
@@ -478,9 +398,7 @@ export default function News() {
 
       {/* No results */}
       {!isPending && !noApiKey && articles.length === 0 && (
-        <div className="flex items-center justify-center py-32">
-          <p className="text-neutral-400">No articles found.</p>
-        </div>
+        <EmptyState title="No articles found" />
       )}
 
       {/* Content */}
@@ -505,16 +423,8 @@ export default function News() {
           {/* More headlines */}
           {gridArticles.length > 0 && (
             <div>
-              <div className="border-t border-white/8 pt-7 mb-6 flex items-baseline gap-4">
-                <span className="font-mono text-[10px] tracking-widest text-neutral-500 uppercase">
-                  Latest
-                </span>
-                <span
-                  className="text-2xl font-light tracking-tight text-white"
-                  style={{ fontFamily: "'Georgia', serif" }}
-                >
-                  More headlines
-                </span>
+              <div className="border-t border-white/8 pt-7 mb-6">
+                <SectionHeader title="More headlines" />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                 {gridArticles.map((a, i) => (
@@ -527,29 +437,29 @@ export default function News() {
           {/* Pagination */}
           {totalPages > 1 && (
             <div className="flex items-center justify-center gap-5 mt-10">
-              <button
+              <Button
+                icon={<ChevronLeftIcon />}
                 onClick={() => goToPage(Math.max(1, page - 1))}
                 disabled={page === 1}
-                className="px-4 py-2 rounded-xl text-sm font-medium bg-neutral-800/80 border border-white/8 text-neutral-300 hover:text-white hover:border-white/15 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               >
-                ← Previous
-              </button>
-              <span className="font-mono text-xs tracking-widest text-neutral-500 uppercase">
+                Previous
+              </Button>
+              <span className="tabular text-label text-neutral-300">
                 Page {page} of {totalPages}
               </span>
-              <button
+              <Button
                 onClick={() => goToPage(Math.min(totalPages, page + 1))}
                 disabled={page === totalPages}
-                className="px-4 py-2 rounded-xl text-sm font-medium bg-neutral-800/80 border border-white/8 text-neutral-300 hover:text-white hover:border-white/15 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               >
-                Next →
-              </button>
+                Next
+                <ChevronRightIcon />
+              </Button>
             </div>
           )}
         </>
       )}
 
-      <p className="text-center text-[11px] text-neutral-600 mt-10 italic">
+      <p className="text-center text-caption text-neutral-500 mt-10">
         Powered by NewsAPI.org
       </p>
     </div>

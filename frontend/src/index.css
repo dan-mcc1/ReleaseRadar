@@ -80,6 +80,7 @@
   --color-primary-700: #047857;
   --color-primary-800: #065f46;
   --color-primary-900: #064e3b;
+  --color-primary-950: #022c22;
 
   /* ── Neutral color scale: Pure Gray (no color tint) ── */
   --color-neutral-50: #fafafa;
@@ -143,7 +144,10 @@
 
   /* ── Accent: Info (Blue) ── */
   --color-info-100: #dbeafe;
+  --color-info-300: #93c5fd;
+  --color-info-400: #60a5fa;
   --color-info-500: #3b82f6;
+  --color-info-600: #2563eb;
   --color-info-700: #1d4ed8;
 
   /* ── Typography ── */
@@ -163,10 +167,63 @@
   --color-highlight-800: #5b21b6;
   --color-highlight-900: #4c1d95;
   --color-highlight-950: #2e1065;
+
+  /* ── Type scale ──
+     The six sizes interface text uses, by role: text-caption, text-label,
+     text-body, text-title, text-heading, text-display. New code uses these
+     instead of text-[13px]-style one-offs. */
+  --text-caption: 0.75rem;
+  --text-caption--line-height: 1rem;
+  --text-label: 0.8125rem;
+  --text-label--line-height: 1.125rem;
+  --text-body: 0.875rem;
+  --text-body--line-height: 1.375rem;
+  --text-title: 1.125rem;
+  --text-title--line-height: 1.5rem;
+  --text-heading: 1.5rem;
+  --text-heading--line-height: 1.875rem;
+  --text-heading--letter-spacing: -0.01em;
+  --text-display: 2.25rem;
+  --text-display--line-height: 2.5rem;
+  --text-display--letter-spacing: -0.025em;
+
+  /* ── Shape ── Controls (buttons, inputs, menus) and surfaces (cards,
+     panels, posters). Pills use rounded-full. */
+  --radius-control: 0.75rem;
+  --radius-surface: 1rem;
+
+  /* ── Control sizes ── h-control is every button, input and select;
+     h-control-sm is for dense rows; size-touch is a 44px hit area for
+     buttons laid over imagery or used on touch. */
+  --spacing-control: 2.5rem;
+  --spacing-control-sm: 2rem;
+  --spacing-touch: 2.75rem;
 }
 
 body {
   overflow-x: hidden;
+  scrollbar-color: var(--color-neutral-700) var(--color-neutral-950);
+}
+
+/* Browser surfaces in the palette, rather than the browser's defaults. */
+@layer base {
+  ::selection {
+    background: color-mix(in oklab, var(--color-primary-500) 40%, transparent);
+    color: var(--color-neutral-50);
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-primary-400);
+    outline-offset: 2px;
+  }
+  input,
+  textarea {
+    caret-color: var(--color-primary-400);
+  }
+  /* Counts, dates, times and ratings line up in columns. */
+  time,
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
 }
 
 /* Poster grid columns from 2xl up: a fixed count per common screen width, so

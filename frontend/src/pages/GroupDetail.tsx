@@ -43,6 +43,26 @@ import ReportModal from "../components/ReportModal";
 import MiniWatchButton from "../components/MiniWatchButton";
 import MiniWatchedButton from "../components/MiniWatchedButton";
 import type { WatchStatus } from "../components/WatchButton";
+import {
+  Button,
+  ButtonLink,
+  CheckIcon,
+  ChevronDownIcon,
+  CloseIcon,
+  EmptyState,
+  IconButton,
+  PageHeader,
+  PlusIcon,
+  PosterCard,
+  SearchField,
+  Segmented,
+  SectionHeader,
+  StarIcon,
+  cx,
+  focusRing,
+} from "../components/ui";
+import { EllipsisHorizontalIcon, HeartIcon as HeartOutlineIcon } from "@heroicons/react/24/outline";
+import { HeartIcon as HeartSolidIcon } from "@heroicons/react/24/solid";
 
 interface UserSearchResult {
   id: string;
@@ -92,13 +112,11 @@ export default function GroupDetail() {
   }
   if (isError || !group) {
     return (
-      <div className="max-w-2xl mx-auto px-4 py-16 text-center">
-        <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-10">
-          <p className="text-neutral-300 font-medium">Group not found.</p>
-          <Link to="/groups" className="mt-2 inline-block text-sm text-primary-400 hover:text-primary-300">
-            Browse groups →
-          </Link>
-        </div>
+      <div className="max-w-2xl mx-auto px-4 py-16">
+        <EmptyState
+          title="Group not found."
+          action={<ButtonLink to="/groups">Browse groups</ButtonLink>}
+        />
       </div>
     );
   }
@@ -122,11 +140,13 @@ export default function GroupDetail() {
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`px-4 py-3 text-sm font-medium border-b-2 -mb-px transition-colors ${
+            className={cx(
+              "px-4 py-3 text-sm font-medium border-b-2 -mb-px transition-colors",
+              focusRing,
               tab === t.id
                 ? "border-primary-500 text-white"
-                : "border-transparent text-neutral-500 hover:text-neutral-200"
-            }`}
+                : "border-transparent text-neutral-400 hover:text-neutral-200",
+            )}
           >
             {t.label}
           </button>
@@ -172,87 +192,81 @@ function GroupHeader({ group }: { group: Community }) {
     >
       <div className="px-6 lg:px-10 pt-10 pb-7 flex items-start gap-6 flex-wrap">
         <div
-          className="w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-bold text-white shrink-0"
+          className="w-16 h-16 rounded-surface flex items-center justify-center text-heading font-bold text-white shrink-0"
           style={{ background: `linear-gradient(135deg, ${color}, ${color}88)` }}
         >
           {group.name[0]?.toUpperCase()}
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-3xl lg:text-4xl font-semibold tracking-tight text-white">
-              {group.name}
-            </h1>
-            {group.visibility === "private" && (
-              <span className="text-[10px] font-bold uppercase tracking-wider bg-neutral-800 text-neutral-400 border border-neutral-700 rounded-full px-2 py-0.5">
-                Private
-              </span>
-            )}
-            {group.is_featured && (
-              <span className="text-[10px] font-bold uppercase tracking-wider bg-amber-400/15 text-amber-400 border border-amber-400/30 rounded-full px-2 py-0.5">
-                Featured
-              </span>
-            )}
-          </div>
+          <PageHeader
+            title={group.name}
+            description={
+              <>
+                <span className="tabular">{group.member_count}</span>{" "}
+                {group.member_count === 1 ? "member" : "members"}
+                {group.visibility === "private" && " · Private"}
+                {group.is_featured && " · Featured"}
+              </>
+            }
+            actions={
+              user && (
+                <>
+                  {isMember ? (
+                    <Button
+                      onClick={() => leave.mutate(group.id)}
+                      disabled={leave.isPending}
+                    >
+                      {leave.isPending ? "Leaving…" : group.viewer_role === "owner" ? "Owner" : "Leave"}
+                    </Button>
+                  ) : (
+                    group.visibility === "public" && (
+                      <Button
+                        variant="primary"
+                        onClick={() => join.mutate(group.id)}
+                        disabled={join.isPending}
+                      >
+                        {join.isPending ? "Joining…" : "Join group"}
+                      </Button>
+                    )
+                  )}
+                  {canReport && (
+                    <div className="relative">
+                      <IconButton
+                        variant="secondary"
+                        shape="square"
+                        label="More actions"
+                        aria-expanded={menuOpen}
+                        icon={<EllipsisHorizontalIcon className="w-5 h-5" strokeWidth={2} aria-hidden="true" />}
+                        onClick={() => setMenuOpen((v) => !v)}
+                      />
+                      {menuOpen && (
+                        <div
+                          className="absolute right-0 mt-1 w-40 bg-neutral-900 border border-neutral-800 rounded-control shadow-xl z-30 overflow-hidden"
+                          onMouseLeave={() => setMenuOpen(false)}
+                        >
+                          <button
+                            onClick={() => {
+                              setMenuOpen(false);
+                              setShowReport(true);
+                            }}
+                            className="w-full text-left px-4 py-2.5 text-sm text-error-400 hover:bg-neutral-800 transition-colors"
+                          >
+                            Report group
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              )
+            }
+          />
           {group.description && (
-            <p className="text-neutral-300 text-[14px] mt-2 max-w-2xl leading-relaxed">
+            <p className="text-neutral-300 text-body mt-3 max-w-2xl leading-relaxed">
               {group.description}
             </p>
           )}
-          <p className="text-[11px] text-neutral-500 mt-3 font-mono tracking-[0.05em]">
-            {group.member_count} {group.member_count === 1 ? "member" : "members"}
-          </p>
         </div>
-        {user && (
-          <div className="shrink-0 flex items-center gap-2">
-            {isMember ? (
-              <button
-                onClick={() => leave.mutate(group.id)}
-                disabled={leave.isPending}
-                className="text-sm font-medium text-neutral-300 hover:text-white border border-neutral-700 hover:border-neutral-600 px-4 py-2 rounded-xl disabled:opacity-50"
-              >
-                {leave.isPending ? "Leaving…" : group.viewer_role === "owner" ? "Owner" : "Leave"}
-              </button>
-            ) : (
-              group.visibility === "public" && (
-                <button
-                  onClick={() => join.mutate(group.id)}
-                  disabled={join.isPending}
-                  className="text-sm font-semibold bg-primary-600 hover:bg-primary-500 text-white px-4 py-2 rounded-xl disabled:opacity-50"
-                >
-                  {join.isPending ? "Joining…" : "Join group"}
-                </button>
-              )
-            )}
-            {canReport && (
-              <div className="relative">
-                <button
-                  onClick={() => setMenuOpen((v) => !v)}
-                  className="w-9 h-9 flex items-center justify-center rounded-xl bg-transparent border border-neutral-700 text-neutral-500 hover:text-neutral-300 hover:border-neutral-600 transition-colors"
-                >
-                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                    <circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" />
-                  </svg>
-                </button>
-                {menuOpen && (
-                  <div
-                    className="absolute right-0 mt-1 w-40 bg-neutral-900 border border-neutral-800 rounded-xl shadow-xl z-30 overflow-hidden"
-                    onMouseLeave={() => setMenuOpen(false)}
-                  >
-                    <button
-                      onClick={() => {
-                        setMenuOpen(false);
-                        setShowReport(true);
-                      }}
-                      className="w-full text-left px-4 py-2.5 text-sm text-error-400 hover:bg-neutral-800 transition-colors"
-                    >
-                      Report group
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
       </div>
       {showReport && (
         <ReportModal
@@ -287,12 +301,11 @@ function DiscussionTab({
         {isLoading ? (
           <p className="text-neutral-500 text-sm">Loading…</p>
         ) : posts.length === 0 ? (
-          <div className="text-center py-12 bg-neutral-900/50 border border-neutral-800 rounded-2xl">
-            <p className="text-neutral-300">No posts yet.</p>
-            {!isMember && (
-              <p className="text-sm text-neutral-500 mt-1">Join the group to start a discussion.</p>
-            )}
-          </div>
+          <EmptyState
+            className="py-12"
+            title="No posts yet."
+            description={!isMember ? "Join the group to start a discussion." : undefined}
+          />
         ) : (
           posts.map((p) => (
             <PostRow
@@ -307,10 +320,8 @@ function DiscussionTab({
           ))
         )}
       </div>
-      <aside className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5 sticky top-24">
-        <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-neutral-500 mb-2">
-          About this group
-        </p>
+      <aside className="sticky top-24">
+        <SectionHeader title="About this group" className="mb-2" />
         <p className="text-sm text-neutral-300">
           {group.description || "No description yet."}
         </p>
@@ -337,13 +348,13 @@ function NewPostBox({ communityId }: { communityId: number }) {
   }
 
   return (
-    <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4">
+    <div className="bg-neutral-900 border border-neutral-800 rounded-surface p-4">
       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         placeholder="Title (optional)"
         maxLength={150}
-        className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm text-white placeholder-neutral-600 outline-none focus:border-neutral-600 mb-2"
+        className="w-full bg-neutral-950 border border-neutral-800 rounded-control px-3 py-2 text-sm text-white placeholder-neutral-600 outline-none focus:border-neutral-600 mb-2"
       />
       <textarea
         value={body}
@@ -351,18 +362,19 @@ function NewPostBox({ communityId }: { communityId: number }) {
         placeholder="Start a discussion…"
         rows={3}
         maxLength={5000}
-        className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm text-white placeholder-neutral-600 outline-none focus:border-neutral-600 resize-none"
+        className="w-full bg-neutral-950 border border-neutral-800 rounded-control px-3 py-2 text-sm text-white placeholder-neutral-600 outline-none focus:border-neutral-600 resize-none"
       />
       {error && <p className="text-error-400 text-xs mt-2">{error}</p>}
       <div className="flex justify-between items-center mt-2">
-        <span className="text-[11px] text-neutral-500">{body.length}/5000</span>
-        <button
+        <span className="text-caption text-neutral-500">{body.length}/5000</span>
+        <Button
+          variant="primary"
+          size="sm"
           onClick={submit}
           disabled={create.isPending || !body.trim()}
-          className="text-sm font-semibold bg-primary-600 hover:bg-primary-500 disabled:opacity-50 text-white px-4 py-1.5 rounded-lg"
         >
           {create.isPending ? "Posting…" : "Post"}
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -370,13 +382,9 @@ function NewPostBox({ communityId }: { communityId: number }) {
 
 function HeartIcon({ filled }: { filled: boolean }) {
   return filled ? (
-    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M12 21s-7-4.5-9.5-9.05C.85 8.62 2.74 5 6.16 5c1.92 0 3.55 1.07 4.34 2.6C11.29 6.07 12.92 5 14.84 5c3.42 0 5.31 3.62 3.66 6.95C19 16.5 12 21 12 21z" />
-    </svg>
+    <HeartSolidIcon className="w-3.5 h-3.5" aria-hidden="true" />
   ) : (
-    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
-    </svg>
+    <HeartOutlineIcon className="w-3.5 h-3.5" strokeWidth={2} aria-hidden="true" />
   );
 }
 
@@ -414,7 +422,7 @@ function PostRow({
   }
 
   return (
-    <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 relative">
+    <div className="bg-neutral-900 border border-neutral-800 rounded-surface p-4 relative">
       <div className="flex items-start gap-3">
         <div className="flex-1 min-w-0">
           {editing ? (
@@ -424,47 +432,49 @@ function PostRow({
                 onChange={(e) => setEditTitle(e.target.value)}
                 placeholder="Title (optional)"
                 maxLength={150}
-                className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm text-white placeholder-neutral-600 outline-none focus:border-neutral-600 mb-2"
+                className="w-full bg-neutral-950 border border-neutral-800 rounded-control px-3 py-2 text-sm text-white placeholder-neutral-600 outline-none focus:border-neutral-600 mb-2"
               />
               <textarea
                 value={editBody}
                 onChange={(e) => setEditBody(e.target.value)}
                 rows={4}
                 maxLength={5000}
-                className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-neutral-600 resize-none"
+                className="w-full bg-neutral-950 border border-neutral-800 rounded-control px-3 py-2 text-sm text-white outline-none focus:border-neutral-600 resize-none"
               />
               <div className="flex justify-end gap-2 mt-2">
-                <button
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={() => {
                     setEditing(false);
                     setEditTitle(post.title ?? "");
                     setEditBody(post.body);
                   }}
-                  className="text-xs text-neutral-400 hover:text-white px-3 py-1.5 rounded-lg"
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
                   onClick={saveEdit}
                   disabled={update.isPending || !editBody.trim()}
-                  className="text-xs font-semibold bg-primary-600 hover:bg-primary-500 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg"
                 >
                   {update.isPending ? "Saving…" : "Save"}
-                </button>
+                </Button>
               </div>
             </>
           ) : (
             <>
               {post.title && (
-                <h3 className="text-[16px] font-semibold text-white mb-1 leading-tight">
+                <h3 className="text-title font-semibold text-white mb-1 leading-tight">
                   {post.title}
                 </h3>
               )}
-              <p className="text-[13px] text-neutral-500 mb-2">
+              <p className="text-label text-neutral-500 mb-2">
                 {authorLabel} · {timeAgo(post.created_at)}
                 {post.edited_at && <span className="text-neutral-600 italic"> · edited</span>}
               </p>
-              <p className="text-[14px] text-neutral-200 whitespace-pre-wrap leading-snug">
+              <p className="text-body text-neutral-200 whitespace-pre-wrap leading-snug">
                 {post.body}
               </p>
             </>
@@ -485,26 +495,27 @@ function PostRow({
               </button>
               <button
                 onClick={onToggle}
-                className="text-xs font-medium text-neutral-400 hover:text-white"
+                aria-expanded={isOpen}
+                className="flex items-center gap-1 text-xs font-medium text-neutral-400 hover:text-white"
               >
-                {post.reply_count} {post.reply_count === 1 ? "reply" : "replies"} {isOpen ? "▲" : "▼"}
+                {post.reply_count} {post.reply_count === 1 ? "reply" : "replies"}
+                <ChevronDownIcon className={cx("w-3.5 h-3.5 transition-transform", isOpen && "rotate-180")} />
               </button>
             </div>
           )}
         </div>
         {!editing && userId && (
           <div className="relative shrink-0">
-            <button
+            <IconButton
+              size="sm"
+              label="Post actions"
+              aria-expanded={menuOpen}
+              icon={<EllipsisHorizontalIcon className="w-4 h-4" strokeWidth={2} aria-hidden="true" />}
               onClick={() => setMenuOpen((v) => !v)}
-              className="w-7 h-7 flex items-center justify-center rounded-lg text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800"
-            >
-              <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-                <circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" />
-              </svg>
-            </button>
+            />
             {menuOpen && (
               <div
-                className="absolute right-0 mt-1 w-36 bg-neutral-900 border border-neutral-800 rounded-xl shadow-xl z-10 overflow-hidden"
+                className="absolute right-0 mt-1 w-36 bg-neutral-900 border border-neutral-800 rounded-control shadow-xl z-10 overflow-hidden"
                 onMouseLeave={() => setMenuOpen(false)}
               >
                 {isAuthor && (
@@ -588,7 +599,7 @@ function ReplyRow({
   return (
     <div className="flex items-start gap-2">
       <div className="flex-1 min-w-0">
-        <p className="text-[12px] text-neutral-500">
+        <p className="text-caption text-neutral-500">
           {author} · {timeAgo(reply.created_at)}
           {reply.edited_at && <span className="text-neutral-600 italic"> · edited</span>}
         </p>
@@ -599,36 +610,38 @@ function ReplyRow({
               onChange={(e) => setEditBody(e.target.value)}
               rows={2}
               maxLength={2000}
-              className="mt-1 w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-[13px] text-white outline-none focus:border-neutral-600 resize-none"
+              className="mt-1 w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-label text-white outline-none focus:border-neutral-600 resize-none"
             />
             <div className="flex justify-end gap-2 mt-1">
-              <button
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => {
                   setEditing(false);
                   setEditBody(reply.body);
                 }}
-                className="text-[11px] text-neutral-400 hover:text-white px-2 py-1 rounded-lg"
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
                 onClick={saveEdit}
                 disabled={update.isPending || !editBody.trim()}
-                className="text-[11px] font-semibold bg-primary-600 hover:bg-primary-500 disabled:opacity-50 text-white px-2 py-1 rounded-lg"
               >
                 Save
-              </button>
+              </Button>
             </div>
           </>
         ) : (
-          <p className="text-[13.5px] text-neutral-200 whitespace-pre-wrap">{reply.body}</p>
+          <p className="text-label text-neutral-200 whitespace-pre-wrap">{reply.body}</p>
         )}
         {!editing && (
           <div className="flex items-center gap-3 mt-1">
             <button
               onClick={() => userId && toggleLike.mutate(reply.id)}
               disabled={!userId}
-              className={`flex items-center gap-1 text-[11px] font-medium transition-colors disabled:cursor-not-allowed ${
+              className={`flex items-center gap-1 text-caption font-medium transition-colors disabled:cursor-not-allowed ${
                 reply.viewer_liked ? "text-error-400" : "text-neutral-500 hover:text-neutral-200"
               }`}
             >
@@ -638,7 +651,7 @@ function ReplyRow({
             {isAuthor && (
               <button
                 onClick={() => setEditing(true)}
-                className="text-[11px] text-neutral-500 hover:text-white"
+                className="text-caption text-neutral-500 hover:text-white"
               >
                 Edit
               </button>
@@ -648,7 +661,7 @@ function ReplyRow({
                 onClick={() => {
                   if (window.confirm("Delete this reply?")) del.mutate(reply.id);
                 }}
-                className="text-[11px] text-neutral-600 hover:text-error-400"
+                className="text-caption text-neutral-600 hover:text-error-400"
               >
                 Delete
               </button>
@@ -656,7 +669,7 @@ function ReplyRow({
             {!isAuthor && userId && (
               <button
                 onClick={() => setShowReport(true)}
-                className="text-[11px] text-neutral-600 hover:text-error-400"
+                className="text-caption text-neutral-600 hover:text-error-400"
               >
                 Report
               </button>
@@ -711,15 +724,16 @@ function PostReplies({
             placeholder="Reply…"
             rows={2}
             maxLength={2000}
-            className="flex-1 bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-[13px] text-white placeholder-neutral-600 outline-none focus:border-neutral-600 resize-none"
+            className="flex-1 bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-label text-white placeholder-neutral-600 outline-none focus:border-neutral-600 resize-none"
           />
-          <button
+          <Button
+            variant="primary"
+            size="sm"
             onClick={submit}
             disabled={addReply.isPending || !body.trim()}
-            className="text-xs font-semibold bg-primary-600 hover:bg-primary-500 disabled:opacity-50 text-white px-3 py-2 rounded-lg"
           >
             Reply
-          </button>
+          </Button>
         </div>
       )}
     </div>
@@ -805,58 +819,42 @@ function TitlesTab({
 
   function renderItem(item: CommunityMediaItem, type: "movie" | "tv") {
     const label = item.title ?? item.name ?? "";
-    const fallback = type === "movie" ? "/movie-icon.png" : "/tv-icon.png";
     const showRemove = editing && canRemoveItem(item);
-    const statusKey = `${type}:${item.content_id}`;
-    const statusEntry = statusMap?.[statusKey];
-    const posterAndTitleLink =
-      type === "movie" ? `/movie/${item.content_id}` : `/tv/${item.content_id}`;
-    const posterEl = (
-      <div
-        className={`aspect-[2/3] rounded-xl overflow-hidden bg-neutral-800 relative ${
-          editing ? "ring-1 ring-neutral-700" : ""
-        }`}
-      >
-        <img
-          src={item.poster_path ? `${BASE_IMAGE_URL}/w342${item.poster_path}` : fallback}
-          alt={label}
-          loading="lazy"
-          className={`w-full h-full object-cover transition-opacity ${
-            editing ? "opacity-70" : "group-hover:opacity-80"
-          }`}
-        />
-        {item.vote_average != null && item.vote_average > 0 && (
-          <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded-md bg-black/70 backdrop-blur-sm text-warning-400 text-[10px] font-semibold leading-none flex items-center gap-0.5">
-            <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-            </svg>
-            {item.vote_average.toFixed(1)}
-          </span>
-        )}
-      </div>
-    );
+    const statusEntry = statusMap?.[`${type}:${item.content_id}`];
     return (
-      <div key={item.id} className="group relative flex flex-col">
-        {editing ? (
-          <div>{posterEl}</div>
-        ) : (
-          <Link to={posterAndTitleLink}>{posterEl}</Link>
-        )}
-        <div className="mt-1.5 flex items-center gap-1.5 min-w-0">
-          {editing ? (
-            <p className="flex-1 min-w-0 text-[12px] font-medium text-neutral-300 truncate">
-              {label}
-            </p>
-          ) : (
-            <Link
-              to={posterAndTitleLink}
-              className="flex-1 min-w-0 text-[12px] font-medium text-neutral-300 truncate hover:text-primary-300 transition-colors"
-            >
-              {label}
-            </Link>
-          )}
-          {!editing && userId && (
-            <div className="flex items-center gap-0.5 shrink-0">
+      <PosterCard
+        key={item.id}
+        to={type === "movie" ? `/movie/${item.content_id}` : `/tv/${item.content_id}`}
+        title={label}
+        posterPath={item.poster_path}
+        corner={
+          item.vote_average != null && item.vote_average > 0 ? (
+            <span className="px-1.5 py-0.5 rounded-md bg-black/70 backdrop-blur-sm text-warning-400 text-caption font-semibold leading-none flex items-center gap-0.5">
+              <StarIcon className="w-3 h-3" />
+              {item.vote_average.toFixed(1)}
+            </span>
+          ) : undefined
+        }
+        actions={
+          showRemove ? (
+            <IconButton
+              variant="overlay"
+              size="sm"
+              label="Remove from group"
+              icon={<CloseIcon className="w-4 h-4" />}
+              onClick={() =>
+                removeMedia.mutate({
+                  mediaId: item.id,
+                  contentType: type,
+                  contentId: item.content_id,
+                })
+              }
+            />
+          ) : undefined
+        }
+        footer={
+          !editing && userId ? (
+            <div className="flex items-center gap-0.5">
               {(statusEntry?.status ?? "none") !== "Watched" && (
                 <MiniWatchButton
                   contentType={type}
@@ -872,47 +870,16 @@ function TitlesTab({
                 bulkManaged
               />
             </div>
-          )}
-        </div>
-        {showRemove && (
-          <button
-            onClick={() =>
-              removeMedia.mutate({
-                mediaId: item.id,
-                contentType: type,
-                contentId: item.content_id,
-              })
-            }
-            className="absolute -top-2 -right-2 w-7 h-7 rounded-full bg-error-600 hover:bg-error-500 text-white flex items-center justify-center shadow-lg ring-2 ring-neutral-950 transition-colors"
-            title="Remove from group"
-            aria-label="Remove from group"
-          >
-            <svg
-              className="w-3.5 h-3.5"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={3}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        )}
-      </div>
+          ) : undefined
+        }
+      />
     );
   }
 
   const editButton = total > 0 && viewerCanRemoveAny && (
-    <button
-      onClick={() => setEditing((v) => !v)}
-      className={`text-[11px] font-semibold uppercase tracking-wider px-2.5 py-1 rounded-md border transition-colors ${
-        editing
-          ? "bg-primary-500/15 text-primary-300 border-primary-500/40 hover:bg-primary-500/25"
-          : "bg-neutral-800 text-neutral-300 border-neutral-700 hover:bg-neutral-700"
-      }`}
-    >
+    <Button size="sm" aria-pressed={editing} onClick={() => setEditing((v) => !v)}>
       {editing ? "Done" : "Edit"}
-    </button>
+    </Button>
   );
 
   const firstSection: "shows" | "movies" | null =
@@ -930,32 +897,28 @@ function TitlesTab({
       {progress && <GroupProgressCard progress={progress} />}
 
       {total === 0 ? (
-        <div className="text-center py-12 bg-neutral-900/50 border border-neutral-800 rounded-2xl">
-          <p className="text-neutral-300 font-medium">No titles attached yet.</p>
-          {isMember ? (
-            canEditMedia ? (
-              <p className="text-sm text-neutral-500 mt-1">
-                Use the search above to add your first title.
-              </p>
-            ) : (
-              <p className="text-sm text-neutral-500 mt-1">
-                Only the owner and admins can add titles to this group.
-              </p>
-            )
-          ) : (
-            <p className="text-sm text-neutral-500 mt-1">Join to start adding titles.</p>
-          )}
-        </div>
+        <EmptyState
+          className="py-12"
+          title="No titles attached yet."
+          description={
+            isMember
+              ? canEditMedia
+                ? "Use the search above to add your first title."
+                : "Only the owner and admins can add titles to this group."
+              : "Join to start adding titles."
+          }
+        />
       ) : (
       <div className="flex flex-col gap-8">
         {shows.length > 0 && (
           <section>
-            <div className="flex items-center justify-between mb-3">
-              <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-neutral-500">
-                TV Shows · {shows.length}
-              </p>
-              {firstSection === "shows" && editButton}
-            </div>
+            <SectionHeader
+              as="h3"
+              title="TV shows"
+              note={String(shows.length)}
+              action={firstSection === "shows" && editButton}
+              className="mb-3"
+            />
             <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 2xl:grid-cols-posters-dense gap-3">
               {shows.map((s) => renderItem(s, "tv"))}
             </div>
@@ -963,12 +926,13 @@ function TitlesTab({
         )}
         {movies.length > 0 && (
           <section>
-            <div className="flex items-center justify-between mb-3">
-              <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-neutral-500">
-                Movies · {movies.length}
-              </p>
-              {firstSection === "movies" && editButton}
-            </div>
+            <SectionHeader
+              as="h3"
+              title="Movies"
+              note={String(movies.length)}
+              action={firstSection === "movies" && editButton}
+              className="mb-3"
+            />
             <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 2xl:grid-cols-posters-dense gap-3">
               {movies.map((m) => renderItem(m, "movie"))}
             </div>
@@ -994,29 +958,26 @@ interface GroupProgress {
 function GroupProgressCard({ progress }: { progress: GroupProgress }) {
   const complete = progress.watched === progress.total;
   return (
-    <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
-      <div className="flex items-center justify-between mb-3">
-        <div className="font-mono text-[10px] tracking-[0.15em] text-neutral-500 uppercase">
-          Your progress
-        </div>
-        {complete && (
-          <span className="text-[10px] font-bold uppercase tracking-wider text-success-400">
-            ★ Complete
-          </span>
-        )}
-      </div>
+    <section>
+      <SectionHeader
+        as="h3"
+        title="Your progress"
+        note={`${progress.pct}%`}
+        action={
+          complete && (
+            <span className="inline-flex items-center gap-1 text-label font-medium text-success-400">
+              <CheckIcon className="w-4 h-4" />
+              Complete
+            </span>
+          )
+        }
+        className="mb-2"
+      />
 
-      <div className="flex items-baseline gap-2 mb-2">
-        <span className="text-3xl font-semibold text-white tabular-nums">
-          {progress.watched}
-        </span>
-        <span className="text-sm text-neutral-500">
-          of {progress.total} watched
-        </span>
-        <span className="ml-auto text-sm font-mono text-neutral-400 tabular-nums">
-          {progress.pct}%
-        </span>
-      </div>
+      <p className="text-body text-neutral-400 mb-2">
+        <span className="tabular font-semibold text-white">{progress.watched}</span> of{" "}
+        {progress.total} watched
+      </p>
 
       <div className="h-1.5 w-full bg-neutral-800 rounded-full overflow-hidden">
         <div
@@ -1027,49 +988,26 @@ function GroupProgressCard({ progress }: { progress: GroupProgress }) {
         />
       </div>
 
-      <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-        <div>
-          <div className="text-[11px] text-neutral-500 font-mono uppercase tracking-wider">
-            Watching
-          </div>
-          <div className="text-sm font-semibold text-primary-300 mt-0.5">
-            {progress.watching}
-          </div>
-        </div>
-        <div>
-          <div className="text-[11px] text-neutral-500 font-mono uppercase tracking-wider">
-            Watchlist
-          </div>
-          <div className="text-sm font-semibold text-neutral-200 mt-0.5">
-            {progress.watchlisted}
-          </div>
-        </div>
-        <div>
-          <div className="text-[11px] text-neutral-500 font-mono uppercase tracking-wider">
-            Untracked
-          </div>
-          <div className="text-sm font-semibold text-neutral-400 mt-0.5">
-            {progress.unseen}
-          </div>
-        </div>
-      </div>
+      <p className="mt-3 text-label text-neutral-400 tabular">
+        {progress.watching} watching · {progress.watchlisted} on watchlist · {progress.unseen} untracked
+      </p>
 
       {complete ? (
-        <p className="mt-3 text-[12.5px] text-success-300 leading-snug">
+        <p className="mt-2 text-label text-success-300 leading-snug">
           Nice — you've watched every title in this group.
         </p>
       ) : progress.watched === 0 ? (
-        <p className="mt-3 text-[12.5px] text-neutral-500 leading-snug">
+        <p className="mt-2 text-label text-neutral-500 leading-snug">
           You haven't watched any titles in this group yet.
         </p>
       ) : (
-        <p className="mt-3 text-[12.5px] text-neutral-500 leading-snug">
+        <p className="mt-2 text-label text-neutral-500 leading-snug">
           {progress.total - progress.watched}{" "}
           {progress.total - progress.watched === 1 ? "title" : "titles"} left to
           go.
         </p>
       )}
-    </div>
+    </section>
   );
 }
 
@@ -1173,33 +1111,15 @@ function GroupTitleSearch({
   }
 
   return (
-    <div className="bg-neutral-900/50 border border-neutral-800 rounded-2xl p-4">
-      <label className="block">
-        <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-neutral-500">
-          Add a title
-        </span>
-        <div className="relative mt-2">
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search movies and shows…"
-            className="w-full bg-neutral-950 border border-neutral-800 rounded-xl pl-9 pr-3 py-2 text-sm text-white placeholder-neutral-600 outline-none focus:border-neutral-600"
-          />
-          <svg
-            className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z"
-            />
-          </svg>
-        </div>
-      </label>
+    <div>
+      <p className="text-label font-medium text-neutral-300 mb-2">Add a title</p>
+      <SearchField
+        value={query}
+        onChange={setQuery}
+        label="Search movies and shows to add"
+        placeholder="Search movies and shows…"
+        className="w-full"
+      />
 
       {debounced && (
         <div className="mt-3">
@@ -1217,7 +1137,7 @@ function GroupTitleSearch({
                 return (
                   <li
                     key={key}
-                    className="flex items-center gap-3 p-2 rounded-xl hover:bg-neutral-800/60 transition-colors"
+                    className="flex items-center gap-3 p-2 rounded-control hover:bg-neutral-800/60 transition-colors"
                   >
                     <div className="w-9 h-12 rounded-md overflow-hidden bg-neutral-800 shrink-0">
                       {row.poster_path ? (
@@ -1230,57 +1150,30 @@ function GroupTitleSearch({
                       ) : null}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-[14px] font-medium text-white truncate">
+                      <p className="text-body font-medium text-white truncate">
                         {row.title}
                       </p>
-                      <p className="text-[11px] text-neutral-500 font-mono">
+                      <p className="text-caption text-neutral-500">
                         {row.type === "movie" ? "Movie" : "TV"}
                         {row.year ? ` · ${row.year}` : ""}
                       </p>
                     </div>
-                    <button
-                      onClick={() => toggle(row)}
+                    <IconButton
+                      variant="secondary"
+                      label={isAdded ? `Remove ${row.title} from this group` : `Add ${row.title} to this group`}
+                      pressed={isAdded}
                       disabled={isPending || mediaId === -1}
-                      title={isAdded ? "Remove from this group" : "Add to this group"}
-                      aria-label={isAdded ? "Remove from this group" : "Add to this group"}
-                      className={`shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-colors disabled:opacity-50 ${
-                        isAdded
-                          ? "bg-primary-500/15 text-primary-300 border border-primary-500/40 hover:bg-error-500/15 hover:text-error-300 hover:border-error-500/40"
-                          : "bg-neutral-800 text-neutral-400 border border-neutral-700 hover:bg-primary-500/15 hover:text-primary-300 hover:border-primary-500/40"
-                      }`}
-                    >
-                      {isPending ? (
-                        <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                      ) : isAdded ? (
-                        <svg
-                          className="w-4 h-4"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth={3}
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="M5 13l4 4L19 7"
-                          />
-                        </svg>
-                      ) : (
-                        <svg
-                          className="w-4 h-4"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth={2.5}
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="M12 5v14M5 12h14"
-                          />
-                        </svg>
-                      )}
-                    </button>
+                      onClick={() => toggle(row)}
+                      icon={
+                        isPending ? (
+                          <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                        ) : isAdded ? (
+                          <CheckIcon className="w-4 h-4" />
+                        ) : (
+                          <PlusIcon className="w-4 h-4" />
+                        )
+                      }
+                    />
                   </li>
                 );
               })}
@@ -1363,19 +1256,19 @@ function MembersTab({
   return (
     <div className="flex flex-col gap-4">
       {isAdmin && group.visibility === "private" && (
-        <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4">
-          <p className="text-[12px] font-medium text-neutral-300 mb-2">
+        <section>
+          <p className="text-label font-medium text-neutral-300 mb-2">
             Invite friends to this group
           </p>
-          <input
+          <SearchField
             value={inviteQuery}
-            onChange={(e) => {
-              setInviteQuery(e.target.value);
+            onChange={(v) => {
+              setInviteQuery(v);
               setInviteError(null);
             }}
+            label="Search your friends"
             placeholder="Search your friends…"
-            // text-base on mobile (>=16px) prevents iOS Safari from auto-zooming on focus
-            className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2.5 text-base sm:text-sm text-white placeholder-neutral-600 outline-none focus:border-neutral-600"
+            className="w-full"
           />
           {debouncedInviteQuery && searchResults.length === 0 && (
             <p className="text-neutral-500 text-xs mt-3">
@@ -1383,7 +1276,7 @@ function MembersTab({
             </p>
           )}
           {searchResults.length > 0 && (
-            <div className="mt-3 flex flex-col gap-1.5">
+            <div className="mt-3 flex flex-col divide-y divide-neutral-800">
               {searchResults.map((u) => {
                 const isMember = memberIds.has(u.id);
                 const isPending = pendingIds.has(u.id) || invitedUsernames.has(u.username);
@@ -1392,37 +1285,39 @@ function MembersTab({
                 return (
                   <div
                     key={u.id}
-                    className="flex items-center gap-3 bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2"
+                    className="flex items-center gap-3 py-2"
                   >
-                    <div className="w-8 h-8 rounded-full bg-neutral-700 flex items-center justify-center text-[12px] font-semibold text-neutral-200 shrink-0">
+                    <div className="w-8 h-8 rounded-full bg-neutral-700 flex items-center justify-center text-caption font-semibold text-neutral-200 shrink-0">
                       {(u.display_name?.[0] ?? u.username[0]).toUpperCase()}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-[13.5px] font-medium text-white truncate">
+                      <div className="text-label font-medium text-white truncate">
                         {u.display_name || `@${u.username}`}
                       </div>
                       {u.display_name && (
-                        <div className="text-[11.5px] text-neutral-500 truncate">
+                        <div className="text-caption text-neutral-500 truncate">
                           @{u.username}
                         </div>
                       )}
                     </div>
                     {isMember ? (
-                      <span className="text-[11px] font-medium text-primary-400 shrink-0">
+                      <span className="text-caption font-medium text-neutral-400 shrink-0">
                         Member
                       </span>
                     ) : isPending ? (
-                      <span className="text-[11px] font-medium text-warning-400 shrink-0">
+                      <span className="text-caption font-medium text-warning-400 shrink-0">
                         Invited
                       </span>
                     ) : (
-                      <button
+                      <Button
+                        variant="primary"
+                        size="sm"
                         onClick={() => sendInvite(u.username)}
                         disabled={isSending}
-                        className="text-[12px] font-semibold bg-primary-600 hover:bg-primary-500 disabled:opacity-50 text-white px-3 py-1 rounded-lg shrink-0"
+                        className="shrink-0"
                       >
                         {isSending ? "…" : "Invite"}
-                      </button>
+                      </Button>
                     )}
                   </div>
                 );
@@ -1433,58 +1328,59 @@ function MembersTab({
 
           {pendingInvites.length > 0 && (
             <div className="mt-4 pt-4 border-t border-neutral-800">
-              <p className="text-[11px] font-medium uppercase tracking-wider text-neutral-500 mb-2">
+              <p className="text-label font-medium text-neutral-300 mb-2">
                 Pending invitations ({pendingInvites.length})
               </p>
               <div className="flex flex-col gap-1.5">
                 {pendingInvites.map((p) => (
                   <div
                     key={p.id}
-                    className="flex items-center gap-3 px-2 py-1.5"
+                    className="flex items-center gap-3 py-1"
                   >
                     <div className="flex-1 min-w-0">
-                      <div className="text-[13px] text-neutral-200 truncate">
+                      <div className="text-label text-neutral-200 truncate">
                         {p.user.display_name || `@${p.user.username}`}
                       </div>
                       {p.user.display_name && (
-                        <div className="text-[11px] text-neutral-500 truncate">
+                        <div className="text-caption text-neutral-500 truncate">
                           @{p.user.username}
                         </div>
                       )}
                     </div>
-                    <button
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => revokeInvite.mutate(p.id)}
                       disabled={revokeInvite.isPending}
-                      className="text-[11px] text-neutral-400 hover:text-error-400 disabled:opacity-50"
                     >
                       Revoke
-                    </button>
+                    </Button>
                   </div>
                 ))}
               </div>
             </div>
           )}
-        </div>
+        </section>
       )}
-      <div className="bg-neutral-900 border border-neutral-800 rounded-2xl divide-y divide-neutral-800">
+      <div className="border-y border-neutral-800 divide-y divide-neutral-800">
         {members.map((m: CommunityMember) => {
           const isSelf = m.user.id === viewerId;
           const label = m.user.display_name || `@${m.user.username}`;
           return (
-            <div key={m.user.id} className="flex items-center gap-3 px-4 py-3">
+            <div key={m.user.id} className="flex items-center gap-3 py-3">
               <div className="w-9 h-9 rounded-full bg-neutral-700 flex items-center justify-center text-sm font-semibold text-neutral-200 shrink-0">
                 {(m.user.display_name?.[0] ?? m.user.username[0]).toUpperCase()}
               </div>
               <Link to={`/user/${m.user.username}`} className="flex-1 min-w-0 hover:text-primary-300">
-                <div className="text-[14px] font-medium text-white truncate">{label}</div>
-                <div className="text-[11.5px] text-neutral-500 truncate">@{m.user.username}</div>
+                <div className="text-body font-medium text-white truncate">{label}</div>
+                <div className="text-caption text-neutral-500 truncate">@{m.user.username}</div>
               </Link>
               <span
-                className={`text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded ${
+                className={`text-caption capitalize px-2 py-0.5 rounded ${
                   m.role === "owner"
-                    ? "bg-amber-500/15 text-amber-400"
+                    ? "bg-warning-500/15 text-warning-400"
                     : m.role === "admin"
-                      ? "bg-primary-500/15 text-primary-400"
+                      ? "bg-neutral-800 text-neutral-300"
                       : "text-neutral-500"
                 }`}
               >
@@ -1492,25 +1388,26 @@ function MembersTab({
               </span>
               {isOwner && !isSelf && m.role !== "owner" && (
                 <div className="flex gap-1 ml-2">
-                  <button
+                  <Button
+                    size="sm"
                     onClick={() =>
                       setRole.mutate({
                         userId: m.user.id,
                         role: m.role === "admin" ? "member" : "admin",
                       })
                     }
-                    className="text-[11px] text-neutral-400 hover:text-white border border-neutral-700 hover:border-neutral-600 px-2 py-0.5 rounded"
                   >
                     {m.role === "admin" ? "Demote" : "Promote"}
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="danger"
+                    size="sm"
                     onClick={() => {
                       if (window.confirm(`Remove ${label} from the group?`)) remove.mutate(m.user.id);
                     }}
-                    className="text-[11px] text-error-400 hover:text-error-300 border border-neutral-700 hover:border-neutral-600 px-2 py-0.5 rounded"
                   >
                     Remove
-                  </button>
+                  </Button>
                 </div>
               )}
             </div>
@@ -1575,46 +1472,40 @@ function SettingsTab({ group, onDeleted }: { group: Community; onDeleted: () => 
   }
 
   return (
-    <div className="max-w-xl bg-neutral-900 border border-neutral-800 rounded-2xl p-5 space-y-5">
+    <div className="max-w-xl space-y-5">
       <label className="block">
-        <span className="text-[12px] text-neutral-400 font-medium">Name</span>
+        <span className="text-caption text-neutral-400 font-medium">Name</span>
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
           maxLength={80}
-          className="mt-1 w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-neutral-600"
+          className="mt-1 w-full bg-neutral-950 border border-neutral-800 rounded-control px-3 py-2.5 text-sm text-white outline-none focus:border-neutral-600"
         />
       </label>
 
       <label className="block">
-        <span className="text-[12px] text-neutral-400 font-medium">Description</span>
+        <span className="text-caption text-neutral-400 font-medium">Description</span>
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           rows={3}
           maxLength={1000}
-          className="mt-1 w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-neutral-600 resize-none"
+          className="mt-1 w-full bg-neutral-950 border border-neutral-800 rounded-control px-3 py-2.5 text-sm text-white outline-none focus:border-neutral-600 resize-none"
         />
       </label>
 
       <div>
-        <span className="text-[12px] text-neutral-400 font-medium block mb-2">Visibility</span>
-        <div className="grid grid-cols-2 gap-2">
-          {(["public", "private"] as const).map((v) => (
-            <button
-              key={v}
-              onClick={() => setVisibility(v)}
-              className={`px-3 py-2 rounded-xl text-sm font-medium border transition-colors ${
-                visibility === v
-                  ? "border-primary-500/50 bg-primary-600/10 text-white"
-                  : "border-neutral-700/50 text-neutral-300 hover:border-neutral-600"
-              }`}
-            >
-              {v === "public" ? "Public" : "Private"}
-            </button>
-          ))}
-        </div>
-        <p className="text-[11px] text-neutral-500 mt-1.5">
+        <span className="text-caption text-neutral-400 font-medium block mb-2">Visibility</span>
+        <Segmented
+          label="Visibility"
+          value={visibility}
+          onChange={setVisibility}
+          options={[
+            { value: "public", label: "Public" },
+            { value: "private", label: "Private" },
+          ]}
+        />
+        <p className="text-caption text-neutral-500 mt-1.5">
           {visibility === "public"
             ? "Anyone can find and join."
             : "Invite-only. Hidden from browse."}
@@ -1622,8 +1513,8 @@ function SettingsTab({ group, onDeleted }: { group: Community; onDeleted: () => 
       </div>
 
       <div>
-        <span className="text-[12px] text-neutral-400 font-medium block mb-2">Member permissions</span>
-        <label className="flex items-start gap-3 p-3 rounded-xl border border-neutral-700/50 hover:border-neutral-600 cursor-pointer transition-colors">
+        <span className="text-caption text-neutral-400 font-medium block mb-2">Member permissions</span>
+        <label className="flex items-start gap-3 p-3 rounded-control border border-neutral-700/50 hover:border-neutral-600 cursor-pointer transition-colors">
           <input
             type="checkbox"
             checked={membersCanEdit}
@@ -1634,7 +1525,7 @@ function SettingsTab({ group, onDeleted }: { group: Community; onDeleted: () => 
             <span className="block text-sm text-white font-medium">
               Allow any member to add or remove titles
             </span>
-            <span className="block text-[11px] text-neutral-500 mt-0.5">
+            <span className="block text-caption text-neutral-500 mt-0.5">
               When off, only the owner and admins can manage the title list. Discussion posts are not affected.
             </span>
           </span>
@@ -1642,18 +1533,22 @@ function SettingsTab({ group, onDeleted }: { group: Community; onDeleted: () => 
       </div>
 
       <div>
-        <span className="text-[12px] text-neutral-400 font-medium block mb-2">Color</span>
+        <span className="text-caption text-neutral-400 font-medium block mb-2">Color</span>
         <div className="flex flex-wrap gap-2">
           {SETTINGS_COLORS.map((c) => (
             <button
               key={c}
               onClick={() => setColor(c)}
+              aria-label={`Color ${c}`}
+              aria-pressed={color === c}
               style={{ backgroundColor: c }}
-              className={`w-7 h-7 rounded-full transition-all ${
+              className={cx(
+                "w-7 h-7 rounded-full transition-all",
+                focusRing,
                 color === c
                   ? "ring-2 ring-white ring-offset-2 ring-offset-neutral-900"
-                  : "opacity-70 hover:opacity-100"
-              }`}
+                  : "opacity-70 hover:opacity-100",
+              )}
             />
           ))}
         </div>
@@ -1661,23 +1556,25 @@ function SettingsTab({ group, onDeleted }: { group: Community; onDeleted: () => 
 
       {error && <p className="text-error-400 text-sm">{error}</p>}
 
-      <button
+      <Button
+        variant="primary"
         onClick={save}
         disabled={!dirty || update.isPending || name.trim().length < 2}
-        className="w-full bg-primary-600 hover:bg-primary-500 disabled:opacity-40 text-white py-2.5 rounded-xl font-medium text-sm"
+        className="w-full"
       >
         {update.isPending ? "Saving…" : saved ? "Saved!" : "Save changes"}
-      </button>
+      </Button>
 
       {isOwner && (
         <div className="pt-4 border-t border-neutral-800">
-          <button
+          <Button
+            variant="danger"
             onClick={handleDelete}
             disabled={del.isPending}
-            className="w-full bg-error-500/10 hover:bg-error-500/20 text-error-400 border border-error-500/25 py-2.5 rounded-xl font-medium text-sm"
+            className="w-full"
           >
             {del.isPending ? "Deleting…" : "Delete group"}
-          </button>
+          </Button>
         </div>
       )}
     </div>

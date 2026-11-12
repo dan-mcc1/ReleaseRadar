@@ -8,7 +8,7 @@ import CastBar from "../components/CastBar";
 import WatchButton from "../components/WatchButton";
 import ReviewsSection from "../components/ReviewsSection";
 import RewatchSection from "../components/RewatchSection";
-import { useAuthUser } from "../hooks/useAuthUser";
+import { useAuthLoading, useAuthUser } from "../hooks/useAuthUser";
 import { useMediaInfo } from "../hooks/useMediaInfo";
 import { usePageTitle } from "../hooks/usePageTitle";
 import RatingsRow from "../components/media/RatingsRow";
@@ -21,7 +21,8 @@ import VideoGallery from "../components/media/VideoGallery";
 import ContentRatingBadge from "../components/media/ContentRatingBadge";
 import { BASE_IMAGE_URL } from "../constants";
 import FriendsActivityWidget from "../components/FriendsActivityWidget";
-import StarIcon from "../components/icons/StarIcon";
+import { ButtonLink, PlusIcon, SectionHeader, StarIcon, buttonClass } from "../components/ui";
+import { RectangleStackIcon } from "@heroicons/react/24/outline";
 
 type FullMovieData = Movie & {
   vote_average?: number;
@@ -94,6 +95,9 @@ export default function MovieInfo() {
     fetchUrl: `/movies/${id}/info`,
   });
   const user = useAuthUser();
+  const authLoading = useAuthLoading();
+  // Only once auth has answered, so signed-in visitors never see it flash.
+  const signedOut = !user && !authLoading;
   usePageTitle(movie?.title);
 
   if (loading)
@@ -170,7 +174,7 @@ export default function MovieInfo() {
 
   const keyFacts = (
     <>
-      <div className="font-mono text-[10px] tracking-[0.15em] text-neutral-500 uppercase mb-3">Key facts</div>
+      <SectionHeader title="Key facts" className="mb-3" />
       <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
         {movie.created_by && movie.created_by.length > 0 && (
           <>
@@ -243,17 +247,17 @@ export default function MovieInfo() {
                 srcSet={`${BASE_IMAGE_URL}/w342${movie.poster_path} 342w, ${BASE_IMAGE_URL}/w500${movie.poster_path} 500w`}
                 sizes="(min-width: 1024px) 280px, 96px"
                 alt={`${movie.title} poster`}
-                className="w-24 lg:w-full rounded-xl shadow-2xl border border-white/10"
+                className="w-24 lg:w-full rounded-surface border border-white/10"
               />
             ) : (
-              <div className="w-24 lg:w-full aspect-[2/3] rounded-xl bg-neutral-800 border border-white/10" />
+              <div className="w-24 lg:w-full aspect-[2/3] rounded-surface bg-neutral-800 border border-white/10" />
             )}
 
             <div className="min-w-0 lg:mt-4">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-neutral-300">
                 {movie.vote_average != null && movie.vote_average > 0 && (
                   <span className="flex items-center gap-1.5">
-                    <StarIcon filled className="w-3.5 h-3.5 text-yellow-400" />
+                    <StarIcon filled className="w-3.5 h-3.5 text-warning-400" />
                     {movie.vote_average.toFixed(1)}
                   </span>
                 )}
@@ -269,8 +273,18 @@ export default function MovieInfo() {
             </div>
           </div>
 
-          {((user && statusReady) || (trailer && !movie.backdrop_path)) && (
+          {((user && statusReady) || signedOut || (trailer && !movie.backdrop_path)) && (
             <div className="flex flex-wrap items-start gap-2">
+              {/* Signed out: the way in is to track it, which needs an account. */}
+              {signedOut && (
+                <ButtonLink
+                  to={`/signIn?next=${encodeURIComponent(`/movie/${movie.id}`)}`}
+                  variant="primary"
+                  icon={<PlusIcon />}
+                >
+                  Track this movie
+                </ButtonLink>
+              )}
               {user && statusReady && (
                 <WatchButton
                   contentType="movie"
@@ -283,6 +297,9 @@ export default function MovieInfo() {
               {/* With no backdrop to sit on, the trailer button goes here. */}
               {trailer && !movie.backdrop_path && <TrailerButton trailerKey={trailer.key} />}
             </div>
+          )}
+          {signedOut && (
+            <p className="-mt-1 text-caption text-neutral-400">Tracking puts its release on your calendar and tells you when it's streaming.</p>
           )}
 
           {user && (
@@ -323,7 +340,7 @@ export default function MovieInfo() {
                 >
                   <div className="space-y-10 min-w-0">
                     {movie.overview && (
-                      <p className="text-[1.25rem] leading-relaxed text-neutral-100 tracking-tight max-w-3xl font-light">
+                      <p className="text-title leading-relaxed text-neutral-100 max-w-3xl">
                         {movie.overview}
                       </p>
                     )}
@@ -337,9 +354,7 @@ export default function MovieInfo() {
 
                   {hasProviders && movie.providers && (
                     <div>
-                      <div className="flex items-baseline gap-3 mb-1 pb-3 border-b border-neutral-800">
-                        <h2 className="text-lg font-semibold tracking-tight">Where to watch</h2>
-                      </div>
+                      <SectionHeader title="Where to watch" divider className="mb-1" />
                       <WhereToWatch providers={movie.providers} hideTitle />
                     </div>
                   )}
@@ -348,16 +363,12 @@ export default function MovieInfo() {
                 {/* Collection */}
                 {movie.belongs_to_collection && (
                   <div>
-                    <div className="flex items-baseline gap-3 mb-4 pb-3 border-b border-neutral-800">
-                      <h2 className="text-lg font-semibold tracking-tight">Part of a collection</h2>
-                    </div>
+                    <SectionHeader title="Part of a collection" divider className="mb-4" />
                     <Link
                       to={`/collection/${movie.belongs_to_collection.id}`}
-                      className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-neutral-800 border border-neutral-700 hover:border-primary-600/50 hover:bg-neutral-700 transition-all duration-150 text-neutral-200 text-sm font-medium"
+                      className={buttonClass("secondary")}
                     >
-                      <svg className="w-4 h-4 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                      </svg>
+                      <RectangleStackIcon className="w-4 h-4 text-neutral-400" strokeWidth={2} aria-hidden="true" />
                       {movie.belongs_to_collection.name}
                     </Link>
                   </div>
@@ -370,9 +381,7 @@ export default function MovieInfo() {
                 {/* Videos */}
                 {(movie.videos?.results?.length ?? 0) >= 2 && (
                   <div>
-                    <div className="flex items-baseline gap-3 mb-4 pb-3 border-b border-neutral-800">
-                      <h2 className="text-lg font-semibold tracking-tight">Trailers &amp; clips</h2>
-                    </div>
+                    <SectionHeader title="Trailers & clips" divider className="mb-4" />
                     <VideoGallery videos={movie.videos.results} hideTitle />
                   </div>
                 )}
@@ -407,7 +416,7 @@ export default function MovieInfo() {
         </div>
 
         {/* Below lg the key facts leave the side panel and sit under the main column. */}
-        <div className="lg:hidden bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
+        <div className="lg:hidden pt-4 border-t border-neutral-800">
           {keyFacts}
         </div>
 
@@ -418,8 +427,8 @@ export default function MovieInfo() {
 
             {/* The TMDb score is beside the title, so this card holds the rest. */}
             {hasOtherRatings && (
-              <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
-                <div className="font-mono text-[10px] tracking-[0.15em] text-neutral-500 uppercase mb-4">More ratings</div>
+              <div>
+                <SectionHeader title="More ratings" className="mb-4" />
                 <RatingsRow
                   externalScores={externalScores}
                   aggRating={aggRating}
@@ -429,8 +438,8 @@ export default function MovieInfo() {
             )}
 
             {recommendations.length > 0 && (
-              <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
-                <div className="font-mono text-[10px] tracking-[0.15em] text-neutral-500 uppercase mb-4">You might also like</div>
+              <div>
+                <SectionHeader title="You might also like" className="mb-4" />
                 <div className="flex flex-col gap-3">
                   {recommendations.slice(0, 8).map((rec) => (
                     <Link

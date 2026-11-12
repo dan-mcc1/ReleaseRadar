@@ -53,7 +53,7 @@ export default function MediaHero({
             </h1>
           )}
           {tagline && (
-            <p className="text-neutral-300 italic text-sm mt-1">{tagline}</p>
+            <p className="text-neutral-300 text-body mt-1">{tagline}</p>
           )}
         </div>
       </div>

@@ -1,7 +1,18 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { isPremiumFeature } from "../../config/features";
 import CalendarSyncModal from "../CalendarSyncModal";
 import ProUpgradeModal from "../ProUpgradeModal";
+import {
+  Button,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  IconButton,
+  PageHeader,
+  Segmented,
+  buttonClass,
+  cx,
+  focusRing,
+} from "../ui";
 import { useUserMe } from "../../hooks/api/useUser";
 import { useCalendarData } from "../../hooks/useCalendarData";
 import { useCurrentlyWatching } from "../../hooks/api/useLists";
@@ -9,8 +20,6 @@ import CalendarMonthGrid from "./CalendarMonthGrid";
 import CalendarTimeline from "./CalendarTimeline";
 import CalendarSideRail from "./CalendarSideRail";
 import ContinueWatchingStrip from "./ContinueWatchingStrip";
-
-type ViewMode = "month" | "week";
 import {
   buildAllItems,
   indexItemsByDate,
@@ -20,7 +29,12 @@ import {
   getWeekDays,
   countUpcomingThisMonth,
   type CurrentlyWatchingIds,
+  type DayItem,
 } from "../../utils/calendarUtils";
+
+type ViewMode = "month" | "week";
+type TypeFilter = "all" | "tv" | "movie";
+type WatchFilter = "all" | "watched" | "unwatched";
 
 const monthNames = [
   "January",
@@ -37,11 +51,121 @@ const monthNames = [
   "December",
 ];
 
+function FiltersMenu({
+  type,
+  onType,
+  watch,
+  onWatch,
+  watchingOnly,
+  onWatchingOnly,
+}: {
+  type: TypeFilter;
+  onType: (value: TypeFilter) => void;
+  watch: WatchFilter;
+  onWatch: (value: WatchFilter) => void;
+  watchingOnly: boolean;
+  onWatchingOnly: (value: boolean) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const active = type !== "all" || watch !== "all" || watchingOnly;
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (!root.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setOpen(false);
+      trigger.current?.focus(); // not left on the menu that just closed
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <div ref={root} className="relative">
+      <button
+        ref={trigger}
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className={cx(buttonClass("secondary"), (open || active) && "border-neutral-500")}
+      >
+        Filters
+        {active && (
+          <>
+            <span className="w-1.5 h-1.5 rounded-full bg-primary-400" aria-hidden="true" />
+            <span className="sr-only">(on)</span>
+          </>
+        )}
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full mt-2 z-20 w-max max-w-[calc(100vw-3rem)] rounded-surface border border-neutral-700 bg-neutral-900 shadow-2xl shadow-black/50 p-4 flex flex-col items-start gap-4">
+          <div>
+            <p className="mb-2 text-caption text-neutral-400">Type</p>
+            <Segmented
+              label="Type"
+              value={type}
+              onChange={onType}
+              options={[
+                { value: "all", label: "All" },
+                { value: "movie", label: "Movies" },
+                { value: "tv", label: "TV" },
+              ]}
+            />
+          </div>
+          <div>
+            <p className="mb-2 text-caption text-neutral-400">Status</p>
+            <Segmented
+              label="Status"
+              value={watch}
+              onChange={onWatch}
+              options={[
+                { value: "all", label: "All" },
+                { value: "unwatched", label: "Unwatched" },
+                { value: "watched", label: "Watched" },
+              ]}
+            />
+          </div>
+          <label className="flex items-center gap-2.5 min-h-10 text-label text-neutral-200 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={watchingOnly}
+              onChange={(e) => onWatchingOnly(e.target.checked)}
+              className="w-4 h-4 accent-primary-500 [color-scheme:dark]"
+            />
+            Only what I'm currently watching
+          </label>
+          {active && (
+            <button
+              type="button"
+              onClick={() => {
+                onType("all");
+                onWatch("all");
+                onWatchingOnly(false);
+              }}
+              className={cx("rounded-sm text-label text-neutral-400 hover:text-neutral-100 transition-colors cursor-pointer", focusRing)}
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function CalendarView() {
   const { data: userMe } = useUserMe();
-  const [watchFilter, setWatchFilter] = useState<
-    "all" | "watched" | "unwatched"
-  >("all");
+  const [watchFilter, setWatchFilter] = useState<WatchFilter>("all");
   const { data: cwData } = useCurrentlyWatching();
   const isPremium =
     userMe?.subscription_tier === "premium" ||
@@ -54,11 +178,10 @@ export default function CalendarView() {
   const [currentYear, setCurrentYear] = useState(today.getFullYear());
   const { shows, movies, isLoading } = useCalendarData(currentYear, currentMonth);
   const [viewMode, setViewMode] = useState<ViewMode>("month");
-  const [filterType, setFilterType] = useState<"all" | "tv" | "movie">("all");
+  const [filterType, setFilterType] = useState<TypeFilter>("all");
   const [currentlyWatchingFilter, setCurrentlyWatchingFilter] = useState(false);
   const [showSyncModal, setShowSyncModal] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
-  const [showFilters, setShowFilters] = useState(false);
 
   // Derivation chain — all useMemo
   const allItems = useMemo(
@@ -103,6 +226,24 @@ export default function CalendarView() {
       ),
     [selectedDate, itemsByDate, filterType, watchFilter, cwIds],
   );
+
+  // The seven days after today that have something on them.
+  const todayKey = today.toDateString();
+  const upcoming = useMemo(() => {
+    const days: DayItem[] = [];
+    for (let offset = 1; offset <= 7; offset++) {
+      const date = new Date(todayKey);
+      date.setDate(date.getDate() + offset);
+      const items = applyFilters(
+        getItemsForDate(itemsByDate, date),
+        filterType,
+        watchFilter,
+        cwIds,
+      );
+      if (items.length > 0) days.push({ date, items });
+    }
+    return days;
+  }, [todayKey, itemsByDate, filterType, watchFilter, cwIds]);
 
   useEffect(() => {
     const rawItems =
@@ -169,11 +310,8 @@ export default function CalendarView() {
     new Date(currentYear, currentMonth, 1).getDay(),
   ).fill(null);
 
-  // CalendarMonthGrid and WeekGrid still expect DayItem for selectedDate comparison
+  // CalendarMonthGrid still expects a DayItem for the selectedDate comparison
   const selectedDayItem = { date: selectedDate, items: selectedDateItems };
-
-  const hasActiveFilters =
-    filterType !== "all" || watchFilter !== "all" || currentlyWatchingFilter;
 
   const goToToday = () => {
     const t = new Date();
@@ -182,304 +320,117 @@ export default function CalendarView() {
     setSelectedDate(t);
   };
 
+  const weekStart = weekDays[0].date;
+  const weekEnd = weekDays[6].date;
+  const heading =
+    viewMode === "month"
+      ? monthNames[currentMonth]
+      : weekStart.getMonth() === weekEnd.getMonth()
+        ? `${monthNames[weekStart.getMonth()]} ${weekStart.getDate()}–${weekEnd.getDate()}`
+        : `${monthNames[weekStart.getMonth()].slice(0, 3)} ${weekStart.getDate()} – ${monthNames[weekEnd.getMonth()].slice(0, 3)} ${weekEnd.getDate()}`;
+  const headingYear = viewMode === "month" ? currentYear : weekEnd.getFullYear();
+  const span = viewMode === "month" ? "month" : "week";
+
   return (
-    <div className="w-full">
-      {/* ── Unified header ── */}
-      <div
-        data-tour="calendar-view"
-        className="px-6 lg:px-10 pt-5 bg-neutral-950"
-      >
-        {/* Row 1: eyebrow */}
-        <p className="font-mono text-sm tracking-[0.12em] uppercase text-neutral-500 mb-3">
-          Your Calendar
-          {viewMode === "month" && upcomingThisMonth > 0 && (
-            <span className="text-neutral-600">
-              {" "}
-              · {upcomingThisMonth} upcoming releases this month
-            </span>
-          )}
-        </p>
-
-        {/* Row 2: Month Year | → | ← Today → | View toggle | Filters */}
-        <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-6 items-center">
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* Month + Year heading */}
-            <h1
-              className="w-full sm:w-auto text-5xl tracking-tight leading-none mr-1"
-              style={{ fontFamily: "var(--font-serif)" }}
-            >
-              {viewMode === "week" ? (
-                <>
-                  {weekDays[0].date.getMonth() === weekDays[6].date.getMonth()
-                    ? `${monthNames[weekDays[0].date.getMonth()]} ${weekDays[0].date.getDate()}–${weekDays[6].date.getDate()}`
-                    : `${monthNames[weekDays[0].date.getMonth()].slice(0, 3)} ${weekDays[0].date.getDate()} – ${monthNames[weekDays[6].date.getMonth()].slice(0, 3)} ${weekDays[6].date.getDate()}`}{" "}
-                  <em
-                    className="text-primary-400"
-                    style={{ fontStyle: "italic" }}
-                  >
-                    {weekDays[6].date.getFullYear()}
-                  </em>
-                </>
-              ) : (
-                <>
-                  {monthNames[currentMonth]}{" "}
-                  <em
-                    className="text-primary-400"
-                    style={{ fontStyle: "italic" }}
-                  >
-                    {currentYear}
-                  </em>
-                </>
-              )}
-            </h1>
-
-            <div className="hidden sm:block flex-1" />
-
-            {/* Controls group: wraps internally but never splits across the month heading */}
-            <div className="flex items-center gap-2 flex-wrap">
-              {/* ← Today → navigation */}
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={handlePrev}
-                  className="h-8 w-8 flex items-center justify-center rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
-                >
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M15 19l-7-7 7-7"
-                    />
-                  </svg>
-                </button>
-                <button
-                  onClick={goToToday}
-                  className="h-8 px-3 text-xs font-semibold rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-200 hover:bg-neutral-800 hover:text-white transition-colors"
-                >
-                  Today
-                </button>
-                <button
-                  onClick={handleNext}
-                  className="h-8 w-8 flex items-center justify-center rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
-                >
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M9 5l7 7-7 7"
-                    />
-                  </svg>
-                </button>
-              </div>
-
-              {/* View mode toggle: Calendar (grid) | Timeline */}
-              <div className="flex items-center bg-neutral-900 border border-neutral-800 rounded-lg p-0.5">
-                {[
-                  { mode: "month" as ViewMode, label: "Calendar" },
-                  { mode: "week" as ViewMode, label: "Timeline" },
-                ].map(({ mode, label }) => (
-                  <button
-                    key={mode}
-                    onClick={() => setViewMode(mode)}
-                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                      viewMode === mode
-                        ? "bg-neutral-700 text-white"
-                        : "text-neutral-400 hover:text-neutral-200"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Filters dropdown */}
-              <div className="relative">
-                <button
-                  onClick={() => setShowFilters((v) => !v)}
-                  className={`flex items-center gap-1.5 h-8 px-3 text-xs font-medium rounded-lg border transition-colors ${
-                    showFilters || hasActiveFilters
-                      ? "bg-neutral-800 border-neutral-700 text-white"
-                      : "bg-neutral-900 border-neutral-800 text-neutral-400 hover:text-neutral-200 hover:border-neutral-700"
-                  }`}
-                >
-                  <svg
-                    className="w-3.5 h-3.5"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M3 4h18M7 8h10M11 12h2"
-                    />
-                  </svg>
-                  Filters
-                  {hasActiveFilters && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-primary-400" />
-                  )}
-                </button>
-
-                {showFilters && (
-                  <div className="absolute right-0 top-full mt-2 z-20 w-56 rounded-xl border border-neutral-700 bg-neutral-900 shadow-2xl p-3 flex flex-col gap-3">
-                    <div>
-                      <p className="font-mono text-[10px] tracking-widest uppercase text-neutral-500 mb-2">
-                        Type
-                      </p>
-                      <div className="flex rounded-lg border border-neutral-700 overflow-hidden">
-                        {(["all", "movie", "tv"] as const).map(
-                          (value, idx, arr) => (
-                            <button
-                              key={value}
-                              onClick={() => setFilterType(value)}
-                              className={`flex-1 py-1.5 text-xs font-medium transition-colors ${
-                                filterType === value
-                                  ? "bg-primary-600 text-white"
-                                  : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700"
-                              } ${idx < arr.length - 1 ? "border-r border-neutral-700" : ""}`}
-                            >
-                              {value === "all"
-                                ? "All"
-                                : value === "movie"
-                                  ? "Movies"
-                                  : "TV"}
-                            </button>
-                          ),
-                        )}
-                      </div>
-                    </div>
-                    <div>
-                      <p className="font-mono text-[10px] tracking-widest uppercase text-neutral-500 mb-2">
-                        Status
-                      </p>
-                      <div className="flex rounded-lg border border-neutral-700 overflow-hidden">
-                        {(["all", "unwatched", "watched"] as const).map(
-                          (value, idx, arr) => (
-                            <button
-                              key={value}
-                              onClick={() => setWatchFilter(value)}
-                              className={`flex-1 py-1.5 text-xs font-medium transition-colors ${
-                                watchFilter === value
-                                  ? "bg-primary-600 text-white"
-                                  : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700"
-                              } ${idx < arr.length - 1 ? "border-r border-neutral-700" : ""}`}
-                            >
-                              {value === "all"
-                                ? "All"
-                                : value === "watched"
-                                  ? "Watched"
-                                  : "Unwatched"}
-                            </button>
-                          ),
-                        )}
-                      </div>
-                    </div>
-                    <div>
-                      <p className="font-mono text-[10px] tracking-widest uppercase text-neutral-500 mb-2">
-                        Show
-                      </p>
-                      <button
-                        onClick={() =>
-                          setCurrentlyWatchingFilter(!currentlyWatchingFilter)
-                        }
-                        className={`w-full flex items-center gap-2 py-1.5 px-3 text-xs font-medium rounded-lg border transition-colors ${
-                          currentlyWatchingFilter
-                            ? "bg-highlight-600 border-highlight-500 text-white"
-                            : "bg-neutral-800 border-neutral-700 text-neutral-300 hover:bg-neutral-700"
-                        }`}
-                      >
-                        <span
-                          className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${currentlyWatchingFilter ? "bg-white animate-pulse" : "bg-neutral-500"}`}
-                        />
-                        Currently Watching only
-                      </button>
-                    </div>
-                    {hasActiveFilters && (
-                      <button
-                        onClick={() => {
-                          setFilterType("all");
-                          setWatchFilter("all");
-                          setCurrentlyWatchingFilter(false);
-                        }}
-                        className="text-xs text-neutral-500 hover:text-neutral-200 transition-colors text-left"
-                      >
-                        Clear filters
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-            {/* end controls group */}
-          </div>
-        </div>
-      </div>
-
-      {/* Continue watching strip — constrained to calendar column width */}
-      <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-6 px-6 lg:px-10 pt-4 pb-3">
-        <ContinueWatchingStrip />
-      </div>
-
-      {/* Main content: calendar grid + side rail */}
-      <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-6 px-6 lg:px-10 py-2 items-start">
-        {/* Calendar grid / week / day */}
-        <div>
-          {viewMode === "month" && (
-            <CalendarMonthGrid
-              days={daysOfMonth}
-              emptyCells={emptyCells}
-              today={today}
-              selectedDate={selectedDayItem}
-              isLoading={isLoading}
-              onSelectDay={(date) => {
-                setSelectedDate(date);
-                setCurrentMonth(date.getMonth());
-                setCurrentYear(date.getFullYear());
-              }}
-            />
-          )}
-
-          {viewMode === "week" && (
-            <CalendarTimeline
-              weekDays={weekDays}
-              today={today}
-              isLoading={isLoading}
-            />
-          )}
-        </div>
-
-        {/* Side rail */}
-        <div>
-          <CalendarSideRail
-            todayItems={applyFilters(
-              getItemsForDate(itemsByDate, today),
-              filterType,
-              watchFilter,
-              cwIds,
-            )}
-            selectedDate={selectedDate}
-            selectedDateItems={selectedDateItems}
-            onResetToToday={goToToday}
-            onSyncCalendar={() =>
-              !isPremiumFeature("icalSync") || isPremium
-                ? setShowSyncModal(true)
-                : setShowUpgradeModal(true)
+    <div className="w-full px-6 sm:px-10 pt-6 pb-16 grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-6 items-start">
+      <div className="min-w-0 flex flex-col gap-5">
+        {/* ── Header ── */}
+        <div data-tour="calendar-view">
+          <PageHeader
+            title={`${heading} ${headingYear}`}
+            description={
+              viewMode === "month" && upcomingThisMonth > 0
+                ? `${upcomingThisMonth} upcoming ${upcomingThisMonth === 1 ? "release" : "releases"} this month`
+                : undefined
+            }
+            actions={
+              <>
+                <div className="flex items-center gap-1.5">
+                  <IconButton
+                    label={`Previous ${span}`}
+                    icon={<ChevronLeftIcon />}
+                    variant="secondary"
+                    shape="square"
+                    onClick={handlePrev}
+                  />
+                  <Button onClick={goToToday}>Today</Button>
+                  <IconButton
+                    label={`Next ${span}`}
+                    icon={<ChevronRightIcon />}
+                    variant="secondary"
+                    shape="square"
+                    onClick={handleNext}
+                  />
+                </div>
+                <Segmented
+                  label="View"
+                  value={viewMode}
+                  onChange={setViewMode}
+                  options={[
+                    { value: "month", label: "Calendar" },
+                    { value: "week", label: "Timeline" },
+                  ]}
+                />
+                <FiltersMenu
+                  type={filterType}
+                  onType={setFilterType}
+                  watch={watchFilter}
+                  onWatch={setWatchFilter}
+                  watchingOnly={currentlyWatchingFilter}
+                  onWatchingOnly={setCurrentlyWatchingFilter}
+                />
+              </>
             }
           />
         </div>
+
+        <ContinueWatchingStrip />
+
+        {viewMode === "month" ? (
+          <CalendarMonthGrid
+            label={`${monthNames[currentMonth]} ${currentYear}`}
+            days={daysOfMonth}
+            emptyCells={emptyCells}
+            today={today}
+            selectedDate={selectedDayItem}
+            isLoading={isLoading}
+            onSelectDay={(date) => {
+              setSelectedDate(date);
+              setCurrentMonth(date.getMonth());
+              setCurrentYear(date.getFullYear());
+            }}
+          />
+        ) : (
+          <CalendarTimeline
+            weekDays={weekDays}
+            today={today}
+            isLoading={isLoading}
+          />
+        )}
       </div>
+
+      <aside aria-label="Today and coming up" className="min-w-0 lg:self-stretch">
+        <CalendarSideRail
+          todayItems={applyFilters(
+            getItemsForDate(itemsByDate, today),
+            filterType,
+            watchFilter,
+            cwIds,
+          )}
+          selectedDate={selectedDate}
+          selectedDateItems={selectedDateItems}
+          onResetToToday={goToToday}
+          onSyncCalendar={() =>
+            !isPremiumFeature("icalSync") || isPremium
+              ? setShowSyncModal(true)
+              : setShowUpgradeModal(true)
+          }
+          upcoming={upcoming}
+          // Only the first load: a far month still loading doesn't hide
+          // today, whose data stays loaded.
+          isLoading={isLoading && allItems.length === 0}
+        />
+      </aside>
 
       <CalendarSyncModal
         isOpen={showSyncModal}

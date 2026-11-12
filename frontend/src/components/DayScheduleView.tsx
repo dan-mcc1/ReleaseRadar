@@ -80,7 +80,7 @@ function TypeBadge({ type }: { type: "tv" | "movie" }) {
       className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
         type === "tv"
           ? "bg-highlight-600/20 text-highlight-400 border border-highlight-600/30"
-          : "bg-amber-600/20 text-amber-400 border border-amber-600/30"
+          : "bg-warning-600/20 text-warning-400 border border-warning-600/30"
       }`}
     >
       {type === "tv" ? "TV" : "Movie"}
@@ -197,7 +197,7 @@ function ItemCard({ item }: ItemCardProps) {
           <div className="absolute inset-0 bg-gradient-to-r from-transparent to-neutral-800/20" />
           {episodeTag && (
             <span
-              className={`absolute bottom-1.5 left-1.5 text-[10px] font-semibold px-1.5 py-0.5 rounded backdrop-blur-sm ${episodeTag.classes}`}
+              className={`absolute bottom-1.5 left-1.5 text-caption font-semibold px-1.5 py-0.5 rounded backdrop-blur-sm ${episodeTag.classes}`}
             >
               {episodeTag.label}
             </span>
@@ -215,7 +215,7 @@ function ItemCard({ item }: ItemCardProps) {
           )}
           {episodeTag && (
             <span
-              className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${episodeTag.classes}`}
+              className={`text-caption font-semibold px-1.5 py-0.5 rounded ${episodeTag.classes}`}
             >
               {episodeTag.label}
             </span>

@@ -1,9 +1,13 @@
 // frontend/src/components/calendar/CalendarDayCell.tsx
-import { useState } from "react";
 import { BASE_IMAGE_URL } from "../../constants";
 import { toLocalISODate } from "../../utils/date";
-import { formatAirTimeToLocal, groupItemsByShow } from "../../utils/calendarUtils";
-import type { CalendarItem, DayItem } from "../../utils/calendarUtils";
+import {
+  episodeCode,
+  episodeTag,
+  formatAirTimeToLocal,
+  groupItemsByShow,
+} from "../../utils/calendarUtils";
+import type { CalendarItem, DayItem, TvItem } from "../../utils/calendarUtils";
 
 interface Props {
   day: DayItem;
@@ -14,72 +18,85 @@ interface Props {
   onSelect: (date: Date) => void;
 }
 
-function CellItem({ item }: { item: CalendarItem }) {
-  const title =
-    "episode_number" in item
-      ? `${item.showData.name} - ${item.name}`
-      : item.title;
-  const airTime =
-    item.type === "tv"
-      ? formatAirTimeToLocal(
-          item.showData.air_time,
-          item.showData.air_timezone,
-          item.air_date,
-        )
-      : null;
+const dayLabelFormatter = new Intl.DateTimeFormat(undefined, {
+  weekday: "long",
+  month: "long",
+  day: "numeric",
+});
+
+/**
+ * One title on a day: a movie, an episode, or several episodes of one show
+ * (counted in the corner). It's a picture only: the day's button covers the
+ * whole cell, and picking the day lists its releases, with their links,
+ * beside the grid.
+ */
+function Tile({ items }: { items: CalendarItem[] }) {
+  const first = items[0];
+  const show = first.showData;
+  const stacked = items.length > 1;
+
+  let name: string;
+  let badge: string;
+  let extra: string | null = null;
+  let time: string | null = null;
+  if (first.type === "movie") {
+    name = first.title;
+    badge = "Movie";
+  } else {
+    const episodes = items as TvItem[];
+    name = first.showData.name;
+    const code = episodeCode(episodes);
+    badge = code ?? `${items.length} episodes`;
+    extra = stacked ? null : (episodeTag(episodes)?.short ?? null);
+    time = formatAirTimeToLocal(
+      first.showData.air_time,
+      first.showData.air_timezone,
+      first.air_date,
+    );
+  }
+
   return (
-    <div className="relative mt-1.5 h-10 sm:h-20 rounded-md overflow-hidden group">
-      {item.showData.backdrop_path && (
-        <img
-          src={`${BASE_IMAGE_URL}/w780${item.showData.backdrop_path}`}
-          alt=""
-          className="absolute inset-0 h-full w-full object-cover"
-        />
-      )}
-      <div className="absolute inset-0 bg-black/55" />
-      <div className="relative z-10 flex h-full items-center justify-center px-1.5">
-        {item.showData.logo_path ? (
+    <div aria-hidden="true" className="relative mt-1.5 h-10 sm:h-[78px] rounded-md sm:rounded-lg">
+      <span className="absolute inset-0 rounded-[inherit] overflow-hidden bg-neutral-800">
+        {show.backdrop_path && (
           <img
-            src={`${BASE_IMAGE_URL}/w300${item.showData.logo_path}`}
-            alt={title}
-            className="max-h-5 sm:max-h-10 object-contain drop-shadow-md"
+            src={`${BASE_IMAGE_URL}/w780${show.backdrop_path}`}
+            alt=""
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+        )}
+        <span className="absolute inset-0 bg-black/45" />
+      </span>
+      <span className="absolute inset-0 flex items-center justify-center px-1.5 sm:px-2 sm:pb-4">
+        {show.logo_path ? (
+          <img
+            src={`${BASE_IMAGE_URL}/w300${show.logo_path}`}
+            alt=""
+            className="max-h-5 sm:max-h-9 max-w-full object-contain drop-shadow-md"
           />
         ) : (
-          <span className="text-white text-[10px] sm:text-xs font-semibold text-center line-clamp-2 drop-shadow leading-tight">
-            {title}
+          <span className="text-white text-caption sm:text-label font-semibold text-center line-clamp-2 leading-tight drop-shadow">
+            {name}
           </span>
         )}
-      </div>
-      {airTime && (
-        <div className="absolute bottom-0.5 right-1 z-10 hidden sm:block text-white/60 text-[7px] font-mono drop-shadow">
-          {airTime}
-        </div>
+      </span>
+      {stacked && (
+        <span className="absolute top-1.5 right-1.5 hidden sm:block rounded px-1.5 py-[3px] bg-black/80 text-caption leading-none font-medium text-white tabular">
+          {items.length} eps
+        </span>
       )}
+      <span className="absolute inset-x-1.5 bottom-1.5 hidden sm:flex items-end justify-between gap-1.5 text-caption leading-none tabular">
+        <span className="min-w-0 truncate rounded px-1.5 py-[3px] bg-black/80 font-mono text-white">
+          {badge}
+          {extra && <span className="hidden @min-[210px]:inline"> · {extra}</span>}
+        </span>
+        {time && (
+          <span className="flex-shrink-0 hidden @min-[150px]:block pb-[3px] text-neutral-100 drop-shadow">
+            {time}
+          </span>
+        )}
+      </span>
     </div>
-  );
-}
-
-function CellShowGroup({ items }: { items: CalendarItem[] }) {
-  const [expanded, setExpanded] = useState(false);
-  const visible = expanded ? items : items.slice(0, 3);
-  const hiddenCount = items.length - 3;
-
-  return (
-    <>
-      {visible.map((item) => (
-        <CellItem key={`${item.type}-${item.id}`} item={item} />
-      ))}
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          setExpanded((v) => !v);
-        }}
-        className="mt-1.5 w-full text-[10px] sm:text-xs font-mono text-neutral-400 hover:text-primary-400 bg-neutral-800/60 hover:bg-neutral-800 rounded-md py-1 cursor-pointer transition-colors"
-      >
-        {expanded ? "Show less" : `+${hiddenCount} more`}
-      </button>
-    </>
   );
 }
 
@@ -91,59 +108,60 @@ export default function CalendarDayCell({
   isLoading,
   onSelect,
 }: Props) {
-  const isoDate = toLocalISODate(day.date);
   const cellItems: CalendarItem[] = day.items ?? [];
+  const groups = groupItemsByShow(cellItems);
+  const count = cellItems.length;
 
   return (
     <div
-      onClick={() => onSelect(day.date)}
-      className={`relative px-1.5 sm:px-2.5 py-2 overflow-y-auto cursor-pointer transition-colors duration-150 ${
-        isCompact ? "min-h-20 sm:min-h-32" : "min-h-32 sm:min-h-48"
+      className={`@container relative px-1 sm:px-2 py-1.5 sm:py-2 transition-colors duration-150 ${
+        isCompact ? "min-h-20 sm:min-h-[156px]" : "min-h-32 sm:min-h-48"
       } ${
         isToday
-          ? "bg-primary-500/8 ring-inset ring-1 ring-primary-500/20"
+          ? "bg-primary-500/[0.13] ring-1 ring-inset ring-primary-500"
           : isSelected
-            ? "bg-neutral-700/60 ring-inset ring-1 ring-primary-500/40"
+            ? "bg-neutral-800 ring-1 ring-inset ring-neutral-500"
             : "bg-neutral-900 hover:bg-neutral-850"
       }`}
     >
-      <time
-        dateTime={isoDate}
-        className={`font-mono text-xs sm:text-sm font-semibold ${
+      {/* The day's button covers the whole cell, tiles included. */}
+      <button
+        type="button"
+        onClick={() => onSelect(day.date)}
+        aria-pressed={isSelected}
+        aria-label={`${dayLabelFormatter.format(day.date)}${
+          count > 0 ? `, ${count} ${count === 1 ? "release" : "releases"}` : ""
+        }`}
+        className={`block cursor-pointer text-label tabular after:absolute after:inset-0 after:z-10 focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:-outline-offset-2 focus-visible:after:outline-primary-400 ${
           isToday
-            ? "text-primary-400"
+            ? "font-semibold text-primary-300"
             : isSelected
-              ? "text-primary-300"
-              : "text-neutral-400"
+              ? "font-medium text-neutral-100"
+              : "font-medium text-neutral-400"
         }`}
       >
-        {day.date.getDate().toString().padStart(2, "0")}
-      </time>
+        <time dateTime={toLocalISODate(day.date)}>
+          {day.date.getDate()}
+        </time>
+        {isToday && <span className="hidden @min-[110px]:inline"> · Today</span>}
+      </button>
 
       {isLoading
         ? Array.from({ length: day.date.getDate() % 3 === 0 ? 2 : 1 }).map(
             (_, idx) => (
               <div
                 key={idx}
-                className="mt-1.5 h-7 sm:h-12 rounded-md bg-neutral-800 animate-pulse"
+                className="mt-1.5 h-10 sm:h-[78px] rounded-md sm:rounded-lg bg-neutral-800 animate-pulse"
               />
             ),
           )
-        : groupItemsByShow(cellItems).map((g) => {
-            if (g.kind === "single") {
-              return (
-                <CellItem key={`${g.item.type}-${g.item.id}`} item={g.item} />
-              );
-            }
-            if (g.items.length <= 3) {
-              return g.items.map((item) => (
-                <CellItem key={`${item.type}-${item.id}`} item={item} />
-              ));
-            }
-            return (
-              <CellShowGroup key={`group-${g.showId}`} items={g.items} />
-            );
-          })}
+        : groups.map((g) =>
+            g.kind === "single" ? (
+              <Tile key={`${g.item.type}-${g.item.id}`} items={[g.item]} />
+            ) : (
+              <Tile key={`show-${g.showId}`} items={g.items} />
+            ),
+          )}
     </div>
   );
 }

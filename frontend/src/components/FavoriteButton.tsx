@@ -59,7 +59,7 @@ export default function FavoriteButton({
         aria-pressed={favorited}
         className={className}
       >
-        {heart(`w-4 h-4 shrink-0 ${favorited ? "text-pink-500" : "text-neutral-400"}`)}
+        {heart(`w-4 h-4 shrink-0 ${favorited ? "text-error-500" : "text-neutral-400"}`)}
         {favorited ? "Favorited" : "Favorite"}
       </button>
     );
@@ -75,7 +75,7 @@ export default function FavoriteButton({
         aria-label={actionLabel}
         className={`inline-flex items-center justify-center w-[38px] h-[38px] rounded-xl border transition-colors ${
           favorited
-            ? "bg-pink-600 hover:bg-pink-500 border-pink-500 text-white"
+            ? "bg-error-600 hover:bg-error-500 border-error-500 text-white"
             : "bg-neutral-800 hover:bg-neutral-700 border-neutral-600 text-neutral-300"
         }`}
       >
@@ -90,7 +90,7 @@ export default function FavoriteButton({
       title={actionLabel}
       className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${
         favorited
-          ? "bg-pink-600 hover:bg-pink-500 text-white"
+          ? "bg-error-600 hover:bg-error-500 text-white"
           : "bg-neutral-700 hover:bg-neutral-600 text-neutral-300"
       }`}
     >

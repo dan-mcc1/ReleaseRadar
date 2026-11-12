@@ -6,6 +6,7 @@ import {
   useSubscription,
   useCreateCheckoutSession,
 } from "../hooks/api/useSubscription";
+import { Button, CheckIcon, CloseIcon, PageHeader, SectionHeader } from "../components/ui";
 
 const FREE_FEATURES = [
   { text: "Track up to 30 titles", included: true },
@@ -65,34 +66,11 @@ const BETA_FAQ = [
   },
 ];
 
-function CheckIcon({ included }: { included: boolean }) {
-  if (included) {
-    return (
-      <svg
-        className="w-4 h-4 shrink-0 text-amber-400"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-        strokeWidth={2.5}
-      >
-        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-      </svg>
-    );
-  }
-  return (
-    <svg
-      className="w-4 h-4 shrink-0 text-neutral-600"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={2.5}
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M6 18L18 6M6 6l12 12"
-      />
-    </svg>
+function FeatureIcon({ included }: { included: boolean }) {
+  return included ? (
+    <CheckIcon className="w-4 h-4 shrink-0 text-neutral-300" />
+  ) : (
+    <CloseIcon className="w-4 h-4 shrink-0 text-neutral-600" />
   );
 }
 
@@ -117,55 +95,30 @@ export default function Pricing() {
 
   return (
     <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 py-12 space-y-12">
-      {/* Hero */}
-      <div className="text-center space-y-4">
-        {CHECKOUT_ENABLED && (
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-amber-500/15 border border-amber-400/30 mb-2">
-            <svg
-              className="w-8 h-8 text-amber-400"
-              viewBox="0 0 24 24"
-              fill="currentColor"
-            >
-              <path d="M2.5 7.5L5 14h14l2.5-6.5L17 10l-5-6-5 6-4.5-2.5zm2.5 8h14v2H5v-2z" />
-            </svg>
-          </div>
-        )}
-        <h1 className="text-4xl font-bold text-white">
-          {CHECKOUT_ENABLED ? "Simple, transparent pricing" : "Free during the beta"}
-        </h1>
-        <p className="text-neutral-400 text-lg max-w-xl mx-auto">
-          {CHECKOUT_ENABLED
+      <PageHeader
+        title={CHECKOUT_ENABLED ? "Simple, transparent pricing" : "Free during the beta"}
+        description={
+          CHECKOUT_ENABLED
             ? "Start free, upgrade when you need more. No hidden fees, cancel any time."
-            : "Every feature is unlocked for everyone while Release Radar is in beta. The plans below are what we're planning for after it. Nothing is for sale yet."}
-        </p>
-      </div>
+            : "Every feature is unlocked for everyone while Release Radar is in beta. The plans below are what we're planning for after it. Nothing is for sale yet."
+        }
+      />
 
-      {!CHECKOUT_ENABLED && (
-        <div className="rounded-xl bg-emerald-950/20 border border-emerald-500/30 px-4 py-3 text-center text-sm text-emerald-300">
-          You're on the beta: everything on this page is included for free
-          right now.
-        </div>
-      )}
-
-      {!CHECKOUT_ENABLED && (
-        <div className="-mb-6 text-xs font-semibold uppercase tracking-widest text-neutral-500">
-          Planned pricing
-        </div>
-      )}
-
-      {/* Pricing cards */}
+      {/* Pricing cards; the description above already says they're planned. */}
+      <div className="flex flex-col gap-4">
+      {!CHECKOUT_ENABLED && <SectionHeader title="Planned pricing" />}
       <div className="grid sm:grid-cols-2 gap-6">
         {/* Free card */}
-        <div className="flex flex-col rounded-2xl bg-neutral-900 border border-neutral-700 p-6">
+        <div className="flex flex-col rounded-surface bg-neutral-900 border border-neutral-700 p-6">
           <div className="mb-6">
-            <div className="text-xs font-semibold uppercase tracking-widest text-neutral-500 mb-2">
+            <div className="text-label font-semibold text-neutral-400 mb-2">
               Free
             </div>
             <div className="flex items-end gap-1">
-              <span className="text-4xl font-bold text-white">$0</span>
-              <span className="text-neutral-500 mb-1">/ month</span>
+              <span className="text-display font-semibold text-white tabular">$0</span>
+              <span className="text-neutral-400 mb-1">/ month</span>
             </div>
-            <p className="text-sm text-neutral-400 mt-2">
+            <p className="text-label text-neutral-400 mt-2">
               Everything you need to get started.
             </p>
           </div>
@@ -174,9 +127,9 @@ export default function Pricing() {
             {FREE_FEATURES.map((f) => (
               <li
                 key={f.text}
-                className={`flex items-start gap-2.5 text-sm ${f.included ? "text-neutral-300" : "text-neutral-600"}`}
+                className={`flex items-start gap-2.5 text-label ${f.included ? "text-neutral-300" : "text-neutral-600"}`}
               >
-                <CheckIcon included={f.included} />
+                <FeatureIcon included={f.included} />
                 {f.text}
               </li>
             ))}
@@ -185,11 +138,11 @@ export default function Pricing() {
           {CHECKOUT_ENABLED && (
             <div className="mt-8">
               {isLoading ? null : isPremium ? (
-                <div className="w-full py-3 px-6 rounded-xl text-sm font-semibold text-center text-neutral-500 border border-neutral-700">
+                <div className="w-full py-3 px-6 rounded-control text-label font-semibold text-center text-neutral-400 border border-neutral-700">
                   Your current plan
                 </div>
               ) : (
-                <div className="w-full py-3 px-6 rounded-xl text-sm font-semibold text-center bg-neutral-800 text-neutral-300 border border-neutral-700">
+                <div className="w-full py-3 px-6 rounded-control text-label font-semibold text-center bg-neutral-800 text-neutral-300 border border-neutral-700">
                   Current plan
                 </div>
               )}
@@ -198,30 +151,24 @@ export default function Pricing() {
         </div>
 
         {/* Premium card */}
-        <div className="flex flex-col rounded-2xl bg-amber-950/20 border border-amber-500/30 p-6 relative overflow-hidden">
-          <div className="absolute top-0 right-0 bg-amber-400/10 border-b border-l border-amber-400/30 px-3 py-1.5 rounded-bl-xl">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400">
-              Premium
-            </span>
-          </div>
-
+        <div className="flex flex-col rounded-surface bg-neutral-900 border border-neutral-500 p-6">
           <div className="mb-6">
-            <div className="text-xs font-semibold uppercase tracking-widest text-amber-500/70 mb-2">
+            <div className="text-label font-semibold text-neutral-300 mb-2">
               Premium
             </div>
             <div className="flex items-end gap-3 flex-wrap">
               <div>
                 <div className="flex items-end gap-1">
-                  <span className="text-4xl font-bold text-white">$4.99</span>
+                  <span className="text-display font-semibold text-white tabular">$4.99</span>
                   <span className="text-neutral-400 mb-1">/ month</span>
                 </div>
               </div>
-              <div className="text-sm text-neutral-400">
+              <div className="text-label text-neutral-400">
                 or <span className="text-white font-semibold">$39.99/year</span>{" "}
-                <span className="text-emerald-400 font-medium">(save 33%)</span>
+                <span className="text-neutral-300 font-medium">(save 33%)</span>
               </div>
             </div>
-            <p className="text-sm text-neutral-400 mt-2">
+            <p className="text-label text-neutral-400 mt-2">
               Unlimited tracking and all premium features.
             </p>
           </div>
@@ -230,9 +177,9 @@ export default function Pricing() {
             {PRO_FEATURES.map((f) => (
               <li
                 key={f.text}
-                className="flex items-start gap-2.5 text-sm text-neutral-200"
+                className="flex items-start gap-2.5 text-label text-neutral-200"
               >
-                <CheckIcon included={f.included} />
+                <FeatureIcon included={f.included} />
                 {f.text}
               </li>
             ))}
@@ -240,42 +187,40 @@ export default function Pricing() {
 
           <div className="mt-8 space-y-3">
             {!CHECKOUT_ENABLED ? (
-              <div className="w-full py-3 px-6 rounded-xl text-sm font-semibold text-center text-neutral-400 border border-neutral-700">
+              <div className="w-full py-3 px-6 rounded-control text-label font-semibold text-center text-neutral-400 border border-neutral-700">
                 Not available yet. Included free during the beta.
               </div>
             ) : isLoading ? null : isPremium ? (
-              <button
-                onClick={() => navigate("/billing")}
-                className="w-full py-3 px-6 rounded-xl font-semibold text-sm bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:bg-amber-500/30 transition-colors"
-              >
+              <Button className="w-full" onClick={() => navigate("/billing")}>
                 Manage subscription
-              </button>
+              </Button>
             ) : (
               <>
-                <button
+                <Button
+                  variant="primary"
+                  className="w-full"
                   onClick={() => handleUpgrade("yearly")}
                   disabled={checkout.isPending}
-                  className="w-full py-3 px-6 rounded-xl font-semibold text-sm bg-amber-500 hover:bg-amber-400 text-black transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {checkout.isPending
                     ? "Redirecting…"
                     : "Upgrade yearly — $39.99/yr"}
-                </button>
-                <button
+                </Button>
+                <Button
+                  className="w-full"
                   onClick={() => handleUpgrade("monthly")}
                   disabled={checkout.isPending}
-                  className="w-full py-3 px-6 rounded-xl font-semibold text-sm bg-amber-500/15 text-amber-400 border border-amber-500/30 hover:bg-amber-500/25 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {checkout.isPending
                     ? "Redirecting…"
                     : "Upgrade monthly — $4.99/mo"}
-                </button>
+                </Button>
                 {checkoutError && (
-                  <p className="text-center text-xs text-red-400">
+                  <p className="text-center text-caption text-error-400">
                     {checkoutError}
                   </p>
                 )}
-                <p className="text-center text-xs text-neutral-500">
+                <p className="text-center text-caption text-neutral-400">
                   7-day free trial · Cancel any time
                 </p>
               </>
@@ -283,20 +228,16 @@ export default function Pricing() {
           </div>
         </div>
       </div>
+      </div>
 
       {/* FAQ */}
-      <div className="space-y-4 max-w-2xl mx-auto">
-        <h2 className="text-xl font-bold text-white text-center">
-          Frequently asked questions
-        </h2>
-        <div className="space-y-3">
+      <div className="max-w-2xl mx-auto">
+        <SectionHeader title="Frequently asked questions" divider />
+        <div className="divide-y divide-neutral-800">
           {(CHECKOUT_ENABLED ? PAID_FAQ : BETA_FAQ).map(({ q, a }) => (
-            <div
-              key={q}
-              className="rounded-xl bg-neutral-900 border border-neutral-800 p-4"
-            >
-              <p className="text-sm font-semibold text-neutral-200 mb-1">{q}</p>
-              <p className="text-sm text-neutral-400">{a}</p>
+            <div key={q} className="py-4">
+              <p className="text-label font-semibold text-neutral-200 mb-1">{q}</p>
+              <p className="text-label text-neutral-400">{a}</p>
             </div>
           ))}
         </div>

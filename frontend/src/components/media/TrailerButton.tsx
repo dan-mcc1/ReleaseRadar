@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
+import { CloseIcon, PlayIcon } from "../ui";
 
 interface Props {
   trailerKey: string;
@@ -29,9 +30,7 @@ function TrailerModal({ trailerKey, onClose }: { trailerKey: string; onClose: ()
           onClick={onClose}
           className="absolute -top-10 right-0 text-neutral-400 hover:text-white transition-colors flex items-center gap-1.5 text-sm"
         >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-          </svg>
+          <CloseIcon />
           Close
         </button>
         <div className="aspect-video rounded-xl overflow-hidden shadow-2xl">
@@ -60,12 +59,10 @@ export default function TrailerButton({ trailerKey, variant = "button" }: Props)
         className={
           overlay
             ? "inline-flex items-center gap-2.5 h-12 pl-4 pr-5 rounded-full bg-neutral-950/70 hover:bg-neutral-950/85 border border-white/25 hover:border-white/45 text-white text-sm font-semibold whitespace-nowrap backdrop-blur-sm transition-colors"
-            : "inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-error-600 hover:bg-error-500 text-white text-sm font-semibold transition-colors"
+            : "inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 border border-neutral-600 text-neutral-100 text-sm font-semibold transition-colors"
         }
       >
-        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-          <path d="M8 5v14l11-7z" />
-        </svg>
+        <PlayIcon />
         {overlay ? "Play trailer" : "Trailer"}
       </button>
       {open && <TrailerModal trailerKey={trailerKey} onClose={() => setOpen(false)} />}

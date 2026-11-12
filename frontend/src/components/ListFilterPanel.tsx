@@ -1,4 +1,5 @@
 import type { Movie, Show } from "../types/calendar";
+import { StarIcon } from "./ui";
 
 export interface ListFilters {
   genres: string[];
@@ -183,7 +184,7 @@ export default function ListFilterPanel({
       {/* Genres */}
       {availableGenres.length > 0 && (
         <div>
-          <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-2">
+          <p className="text-caption font-medium text-neutral-400 mb-2">
             Genre
           </p>
           <div className="flex flex-wrap gap-1.5">
@@ -199,8 +200,8 @@ export default function ListFilterPanel({
       {/* Certifications */}
       {sortedCerts.length > 0 && (
         <div>
-          <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-2">
-            Content Rating
+          <p className="text-caption font-medium text-neutral-400 mb-2">
+            Content rating
           </p>
           <div className="flex flex-wrap gap-1.5">
             {sortedCerts.map((c) => (
@@ -220,7 +221,7 @@ export default function ListFilterPanel({
       <div className="flex flex-wrap gap-x-8 gap-y-4">
         {/* Year range */}
         <div>
-          <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-2">
+          <p className="text-caption font-medium text-neutral-400 mb-2">
             Year
           </p>
           <div className="flex items-center gap-2">
@@ -248,8 +249,8 @@ export default function ListFilterPanel({
 
         {/* TMDB Score */}
         <div>
-          <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-2">
-            TMDB Score
+          <p className="text-caption font-medium text-neutral-400 mb-2">
+            TMDB score
           </p>
           <div className="flex flex-wrap gap-1.5">
             {TMDB_OPTIONS.map((opt) => (
@@ -267,8 +268,8 @@ export default function ListFilterPanel({
         {/* User Rating (Watched only) — multi-select exact match */}
         {showUserRating && (
           <div>
-            <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-2">
-              My Rating
+            <p className="text-caption font-medium text-neutral-400 mb-2">
+              My rating
             </p>
             <div className="flex gap-1.5 flex-wrap">
               {[1, 2, 3, 4, 5].map((s) => (
@@ -277,7 +278,11 @@ export default function ListFilterPanel({
                   active={filters.userRatings.includes(s)}
                   onClick={() => toggleUserRating(s)}
                 >
-                  {"★".repeat(s)}
+                  <span className="inline-flex items-center gap-0.5" role="img" aria-label={`${s} ${s === 1 ? "star" : "stars"}`}>
+                    {Array.from({ length: s }, (_, i) => (
+                      <StarIcon key={i} className="w-3 h-3" />
+                    ))}
+                  </span>
                 </Pill>
               ))}
               <Pill

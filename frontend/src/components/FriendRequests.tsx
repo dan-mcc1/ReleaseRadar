@@ -4,6 +4,7 @@ import {
   useRespondToFriendRequest,
   useCancelFriendRequest,
 } from "../hooks/api/useFriends";
+import { Button } from "./ui";
 
 interface RequestUser {
   id: string;
@@ -78,7 +79,7 @@ export default function FriendRequests({
     <div className="space-y-4">
       {incoming.length > 0 && (
         <div>
-          <h4 className="text-xs uppercase tracking-wider text-neutral-400 mb-2">
+          <h4 className="text-label font-medium text-neutral-400 mb-2">
             Incoming
           </h4>
           <ul className="space-y-2">
@@ -102,20 +103,21 @@ export default function FriendRequests({
                     )}
                   </Link>
                   <div className="flex gap-2">
-                    <button
+                    <Button
+                      variant="primary"
+                      size="sm"
                       onClick={() => respond(req.friendship_id, true)}
                       disabled={respondingId === req.friendship_id}
-                      className="text-sm bg-success-600 hover:bg-success-500 disabled:opacity-50 text-white px-3 py-1 rounded"
                     >
                       Accept
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                      size="sm"
                       onClick={() => respond(req.friendship_id, false)}
                       disabled={respondingId === req.friendship_id}
-                      className="text-sm bg-neutral-600 hover:bg-neutral-500 disabled:opacity-50 text-neutral-200 px-3 py-1 rounded"
                     >
                       Decline
-                    </button>
+                    </Button>
                   </div>
                 </div>
                 {req.message && (
@@ -131,7 +133,7 @@ export default function FriendRequests({
 
       {outgoing.length > 0 && (
         <div>
-          <h4 className="text-xs uppercase tracking-wider text-neutral-400 mb-2">
+          <h4 className="text-label font-medium text-neutral-400 mb-2">
             Sent ({outgoing.length}/25)
           </h4>
           <ul className="space-y-2">
@@ -153,15 +155,16 @@ export default function FriendRequests({
                     <span>@{req.to_user.username}</span>
                   )}
                 </Link>
-                <button
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={() => cancel(req.friendship_id)}
                   disabled={cancellingId === req.friendship_id}
-                  className="text-sm text-neutral-400 hover:text-error-500 disabled:opacity-50"
                 >
                   {cancellingId === req.friendship_id
                     ? "Cancelling…"
                     : "Cancel"}
-                </button>
+                </Button>
               </li>
             ))}
           </ul>

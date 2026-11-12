@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { LockClosedIcon } from "@heroicons/react/24/outline";
 import type { Community } from "../hooks/api/useCommunities";
 
 export default function GroupCard({ c }: { c: Community }) {
@@ -6,7 +7,7 @@ export default function GroupCard({ c }: { c: Community }) {
   return (
     <Link
       to={`/groups/${c.slug}`}
-      className="group flex flex-col rounded-2xl overflow-hidden bg-neutral-900 border border-neutral-800 hover:border-neutral-700 transition-colors"
+      className="group flex flex-col rounded-surface overflow-hidden bg-neutral-900 border border-neutral-800 hover:border-neutral-700 transition-colors"
     >
       <div
         className="h-20 relative"
@@ -15,38 +16,36 @@ export default function GroupCard({ c }: { c: Community }) {
         }}
       >
         {c.is_featured && (
-          <span className="absolute top-2 right-2 text-[9px] font-bold uppercase tracking-wider bg-amber-400/90 text-amber-950 rounded-full px-2 py-0.5">
+          <span className="absolute top-2 right-2 text-caption font-semibold bg-warning-400/90 text-warning-950 rounded-full px-2 py-0.5">
             Featured
           </span>
         )}
         {c.visibility === "private" && (
-          <span className="absolute top-2 left-2 text-[9px] font-bold uppercase tracking-wider bg-black/40 text-white rounded-full px-2 py-0.5 flex items-center gap-1">
-            <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m12 0H4.5v9.75A2.25 2.25 0 006.75 22.5h10.5a2.25 2.25 0 002.25-2.25V10.5z" />
-            </svg>
+          <span className="absolute top-2 left-2 text-caption font-semibold bg-black/40 text-white rounded-full px-2 py-0.5 flex items-center gap-1">
+            <LockClosedIcon className="w-3 h-3" strokeWidth={2.5} aria-hidden="true" />
             Private
           </span>
         )}
       </div>
       <div className="p-4 flex-1">
         <div className="flex items-center gap-2 mb-1">
-          <h3 className="text-[15px] font-semibold text-white group-hover:text-primary-300 transition-colors line-clamp-1">
+          <h3 className="text-body font-semibold text-white group-hover:text-primary-300 transition-colors line-clamp-1">
             {c.name}
           </h3>
           {c.viewer_role && (
-            <span className="text-[9.5px] font-mono uppercase tracking-wider text-primary-400 bg-primary-500/10 px-1.5 py-0.5 rounded">
+            <span className="text-caption text-neutral-300 bg-neutral-800 px-1.5 py-0.5 rounded">
               {c.viewer_role === "owner" ? "Owner" : c.viewer_role === "admin" ? "Admin" : "Joined"}
             </span>
           )}
         </div>
         {c.description ? (
-          <p className="text-[12.5px] text-neutral-400 line-clamp-2 leading-snug">
+          <p className="text-label text-neutral-400 line-clamp-2 leading-snug">
             {c.description}
           </p>
         ) : (
-          <p className="text-[12.5px] text-neutral-600 italic">No description.</p>
+          <p className="text-label text-neutral-500 italic">No description.</p>
         )}
-        <div className="text-[11px] text-neutral-500 mt-2 font-mono tracking-[0.05em]">
+        <div className="text-caption text-neutral-500 mt-2 tabular">
           {c.member_count} {c.member_count === 1 ? "member" : "members"}
         </div>
       </div>

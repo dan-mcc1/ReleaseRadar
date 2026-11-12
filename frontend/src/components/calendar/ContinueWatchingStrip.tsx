@@ -62,9 +62,9 @@ const focusRing =
   "rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500";
 // The two text lines split the poster's height, so each is a full-height
 // target even though the type is small.
-const lineOne = `flex-1 min-h-0 min-w-0 flex items-end pb-0.5 text-[11px] sm:text-[12.5px] font-semibold leading-tight text-neutral-100 hover:text-primary-400 transition-colors ${focusRing}`;
+const lineOne = `flex-1 min-h-0 min-w-0 flex items-end pb-0.5 text-caption sm:text-label font-semibold leading-tight text-neutral-100 hover:text-primary-400 transition-colors ${focusRing}`;
 const lineTwo =
-  "flex-1 min-h-0 min-w-0 flex items-start pt-0.5 text-[10px] sm:text-[11px] leading-tight text-neutral-400";
+  "flex-1 min-h-0 min-w-0 flex items-start pt-0.5 text-caption leading-tight text-neutral-400";
 
 function Poster({ to, path }: { to: string; path: string | null | undefined }) {
   // The title beside it links to the same place, so this one stays out of
@@ -294,7 +294,7 @@ export default function ContinueWatchingStrip() {
   if (total === 0) return (
     <div className="flex items-center bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden">
       <div className="flex-shrink-0 px-4 py-3 border-r border-neutral-800 self-stretch flex items-center">
-        <p className="font-mono text-[10.5px] tracking-[0.1em] uppercase text-neutral-500 leading-tight">
+        <p className="text-caption font-medium text-neutral-400 leading-tight">
           Continue<br />watching
         </p>
       </div>
@@ -327,7 +327,7 @@ export default function ContinueWatchingStrip() {
     <div data-tour="continue-watching" className="flex items-center bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden">
       {/* Label */}
       <div className="flex-shrink-0 px-3 sm:px-4 py-2 sm:py-3 border-r border-neutral-800 self-stretch flex items-center">
-        <p className="font-mono text-[9px] sm:text-[10.5px] tracking-[0.1em] uppercase text-neutral-500 leading-tight">
+        <p className="text-caption font-medium text-neutral-400 leading-tight">
           Continue<br />watching
         </p>
       </div>

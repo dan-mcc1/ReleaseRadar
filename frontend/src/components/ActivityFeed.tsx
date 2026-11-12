@@ -2,6 +2,8 @@ import { useState } from "react";
 import { BASE_IMAGE_URL } from "../constants";
 import { Link } from "react-router-dom";
 import { useFriendsActivity } from "../hooks/api/useActivity";
+import { ChevronDownIcon, focusRing } from "./ui";
+import { UserIcon } from "@heroicons/react/24/solid";
 
 interface ActivityItem {
   id: number;
@@ -43,36 +45,19 @@ export default function ActivityFeed() {
     <div className="border-b border-neutral-700 bg-neutral-800/60">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center gap-2 px-4 sm:px-6 py-3 hover:bg-neutral-700/40 transition-colors"
+        aria-expanded={open}
+        className={`w-full flex items-center gap-2 px-4 sm:px-6 py-3 hover:bg-neutral-700/40 transition-colors ${focusRing}`}
       >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 24 24"
-          fill="currentColor"
-          className="w-3.5 h-3.5 text-primary-400 flex-shrink-0"
-        >
-          <path d="M12 2a5 5 0 110 10A5 5 0 0112 2zm0 12c5.33 0 8 2.67 8 4v2H4v-2c0-1.33 2.67-4 8-4z" />
-        </svg>
-        <h2 className="text-sm font-semibold text-neutral-200 uppercase tracking-wider">
-          Friends' Activity
+        <UserIcon className="w-3.5 h-3.5 text-neutral-400 flex-shrink-0" aria-hidden="true" />
+        <h2 className="text-body font-semibold text-neutral-200">
+          Friends' activity
         </h2>
-        <span className="text-xs text-neutral-500 font-normal normal-case tracking-normal">
-          — {items.length} update{items.length !== 1 ? "s" : ""}
+        <span className="text-caption text-neutral-500">
+          {items.length} update{items.length !== 1 ? "s" : ""}
         </span>
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={2.5}
+        <ChevronDownIcon
           className={`w-4 h-4 ml-auto text-neutral-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            d="M19 9l-7 7-7-7"
-          />
-        </svg>
+        />
       </button>
 
       {open && (
@@ -80,7 +65,7 @@ export default function ActivityFeed() {
           {items.map((item) => (
             <div
               key={item.id}
-              className="flex items-center gap-3 bg-neutral-900/60 border border-neutral-700 rounded-xl p-2.5"
+              className="flex items-center gap-3 bg-neutral-900/60 border border-neutral-700 rounded-control p-2.5"
             >
               {item.content_poster_path ? (
                 <img
@@ -99,7 +84,7 @@ export default function ActivityFeed() {
                   {activityLabel(item.activity_type)}{" "}
                   <Link
                     to={`/${item.content_type === "movie" ? "movie" : "tv"}/${item.content_id}`}
-                    className="font-semibold text-primary-400 hover:underline"
+                    className="font-semibold text-neutral-100 hover:text-primary-300"
                   >
                     {item.content_title ?? "Unknown"}
                   </Link>

@@ -68,7 +68,7 @@ export default function ShelfDetailPage() {
             onClick={() => setActiveTab(tab)}
             className={`px-4 py-2 text-sm font-medium capitalize transition-colors border-b-2 -mb-px ${
               activeTab === tab
-                ? "border-sky-500 text-sky-400"
+                ? "border-info-500 text-info-400"
                 : "border-transparent text-neutral-400 hover:text-neutral-200"
             }`}
           >
@@ -82,7 +82,7 @@ export default function ShelfDetailPage() {
         <>
           {isLoading && (
             <div className="flex justify-center py-12">
-              <div className="w-8 h-8 border-2 border-sky-500 border-t-transparent rounded-full animate-spin" />
+              <div className="w-8 h-8 border-2 border-info-500 border-t-transparent rounded-full animate-spin" />
             </div>
           )}
 

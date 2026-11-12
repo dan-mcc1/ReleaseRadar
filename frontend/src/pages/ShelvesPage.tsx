@@ -1,6 +1,11 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  EllipsisHorizontalIcon,
+  PencilIcon,
+  TrashIcon,
+} from "@heroicons/react/24/outline";
+import {
   useShelves,
   useCreateShelf,
   useDeleteShelf,
@@ -13,6 +18,13 @@ import { useUserMe } from "../hooks/api/useUser";
 import ProUpgradeModal from "../components/ProUpgradeModal";
 import { BASE_IMAGE_URL } from "../constants";
 import { useToast } from "../components/Toast";
+import {
+  BookmarkIcon,
+  Button,
+  IconButton,
+  PageHeader,
+  PlusIcon,
+} from "../components/ui";
 
 const SHELF_COLORS = [
   "#10b981",
@@ -31,7 +43,6 @@ function shelfColor(shelf: Shelf) {
 
 interface ShelfCardProps {
   shelf: Shelf;
-  idx: number;
   color: string;
   isEditing: boolean;
   editName: string;
@@ -48,7 +59,6 @@ interface ShelfCardProps {
 
 function ShelfCard({
   shelf,
-  idx,
   color,
   isEditing,
   editName,
@@ -77,7 +87,7 @@ function ShelfCard({
 
   return (
     <div
-      className="relative flex flex-col gap-3.5 p-5 rounded-2xl bg-neutral-800 border border-neutral-700 hover:border-neutral-600 transition-colors overflow-hidden cursor-pointer"
+      className="relative flex flex-col gap-3.5 p-5 rounded-surface bg-neutral-800 border border-neutral-700 hover:border-neutral-600 transition-colors overflow-hidden cursor-pointer"
       onClick={onClick}
     >
       {/* Color accent bar */}
@@ -91,10 +101,6 @@ function ShelfCard({
       {/* Top row */}
       <div className="flex items-start justify-between pl-2">
         <div className="flex-1 min-w-0">
-          <p className="font-mono text-[10px] tracking-[0.12em] uppercase text-neutral-500 mb-1.5">
-            <span className="mr-2">{String(idx + 1).padStart(2, "0")}</span>
-            Personal shelf
-          </p>
           {isEditing ? (
             <input
               autoFocus
@@ -105,16 +111,16 @@ function ShelfCard({
                 if (e.key === "Escape") onEditCancel();
               }}
               onBlur={onRename}
-              className="text-xl bg-neutral-700 border border-neutral-600 rounded-lg px-2 py-1 text-neutral-100 outline-none focus:border-primary-500 w-full"
+              className="text-title bg-neutral-700 border border-neutral-600 rounded-control px-2 py-1 text-neutral-100 outline-none focus:border-primary-500 w-full"
               onClick={(e) => e.stopPropagation()}
             />
           ) : (
-            <h3 className="text-2xl font-light leading-tight tracking-tight text-neutral-100 truncate">
+            <h3 className="text-heading font-semibold leading-tight text-neutral-100 truncate">
               {shelf.name}
             </h3>
           )}
           {shelf.description && !isEditing && (
-            <p className="text-[12.5px] text-neutral-500 mt-1 leading-snug line-clamp-2">
+            <p className="text-label text-neutral-400 mt-1 leading-snug line-clamp-2">
               {shelf.description}
             </p>
           )}
@@ -122,38 +128,23 @@ function ShelfCard({
 
         {/* 3-dot menu */}
         <div className="relative shrink-0 ml-2" ref={menuRef}>
-          <button
+          <IconButton
+            label="Shelf options"
+            icon={<EllipsisHorizontalIcon className="w-5 h-5" strokeWidth={2} aria-hidden="true" />}
+            size="sm"
             onClick={onMenuOpen}
-            className="w-7 h-7 flex items-center justify-center rounded-lg text-neutral-500 hover:text-neutral-300 hover:bg-neutral-700 transition-colors"
-          >
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-              <circle cx="5" cy="12" r="1.5" />
-              <circle cx="12" cy="12" r="1.5" />
-              <circle cx="19" cy="12" r="1.5" />
-            </svg>
-          </button>
+            aria-expanded={menuOpen}
+          />
           {menuOpen && (
-            <div className="absolute right-0 top-8 z-20 bg-neutral-800 border border-neutral-700 rounded-xl shadow-2xl py-1 min-w-[120px]">
+            <div className="absolute right-0 top-9 z-20 bg-neutral-800 border border-neutral-700 rounded-control shadow-2xl py-1 min-w-[120px]">
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   onStartRename();
                 }}
-                className="w-full text-left px-3 py-2 text-sm text-neutral-300 hover:bg-neutral-700 transition-colors flex items-center gap-2"
+                className="w-full text-left px-3 py-2 text-label text-neutral-300 hover:bg-neutral-700 transition-colors flex items-center gap-2"
               >
-                <svg
-                  className="w-3.5 h-3.5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 012.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-2a2 2 0 01.586-1.414z"
-                  />
-                </svg>
+                <PencilIcon className="w-4 h-4" strokeWidth={2} aria-hidden="true" />
                 Rename
               </button>
               <button
@@ -161,21 +152,9 @@ function ShelfCard({
                   e.stopPropagation();
                   onStartDelete();
                 }}
-                className="w-full text-left px-3 py-2 text-sm text-error-400 hover:bg-neutral-700 transition-colors flex items-center gap-2"
+                className="w-full text-left px-3 py-2 text-label text-error-400 hover:bg-neutral-700 transition-colors flex items-center gap-2"
               >
-                <svg
-                  className="w-3.5 h-3.5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"
-                  />
-                </svg>
+                <TrashIcon className="w-4 h-4" strokeWidth={2} aria-hidden="true" />
                 Delete
               </button>
             </div>
@@ -213,31 +192,14 @@ function ShelfCard({
               className="rounded-md bg-neutral-700 border border-neutral-600 flex items-center justify-center"
               style={{ width: 52, height: 78 }}
             >
-              <svg
-                className="w-5 h-5 text-neutral-600"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={1.5}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M19 3H5a2 2 0 00-2 2v16l7-3.5L17 21V5a2 2 0 00-2-2z"
-                />
-              </svg>
+              <BookmarkIcon className="w-5 h-5 text-neutral-600" />
             </div>
           )}
         </div>
         <div className="flex-1" />
-        <div className="text-right">
-          <div className="text-4xl font-light leading-none text-neutral-100 tracking-tight">
-            {shelf.item_count}
-          </div>
-          <div className="font-mono text-[10px] tracking-[0.08em] text-neutral-500 uppercase mt-0.5">
-            {shelf.item_count === 1 ? "TITLE" : "TITLES"}
-          </div>
-        </div>
+        <p className="text-label text-neutral-400 tabular">
+          {shelf.item_count} {shelf.item_count === 1 ? "title" : "titles"}
+        </p>
       </div>
     </div>
   );
@@ -311,61 +273,23 @@ export default function ShelvesPage() {
   }
 
   return (
-    <div className="w-full px-4 sm:px-6 py-8">
-      {/* Header */}
-      <div className="flex items-end gap-6 mb-6" data-tour="shelves-header">
-        <div>
-          <p className="font-mono text-[11px] tracking-[0.12em] uppercase text-neutral-500 mb-2">
-            Your library · {shelves.length}{" "}
-            {shelves.length === 1 ? "shelf" : "shelves"} · {totalTitles} titles
-          </p>
-          <h1 className="text-4xl font-light leading-none tracking-tight text-neutral-100">
-            Your{" "}
-            <em className="italic text-primary-400 not-italic font-extralight">
-              shelves
-            </em>
-          </h1>
-        </div>
-        <div className="flex-1" />
-        <button
-          onClick={handleNewShelf}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-primary-600 hover:bg-primary-500 text-white rounded-xl transition-colors"
-        >
-          <svg
-            className="w-3.5 h-3.5"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2.5}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M12 4v16m-8-8h16"
-            />
-          </svg>
-          New shelf
-        </button>
+    <div className="w-full px-6 sm:px-10 pt-6 pb-16 flex flex-col gap-6">
+      <div data-tour="shelves-header">
+        <PageHeader
+          title="Your shelves"
+          description={`${shelves.length} ${shelves.length === 1 ? "shelf" : "shelves"} · ${totalTitles} ${totalTitles === 1 ? "title" : "titles"}`}
+          actions={
+            <Button variant="primary" icon={<PlusIcon />} onClick={handleNewShelf}>
+              New shelf
+            </Button>
+          }
+        />
       </div>
 
       {/* Free tier banner — shown once the paywall launches */}
       {CHECKOUT_ENABLED && isPremium === false && (
-        <div className="mb-6 flex items-center gap-3.5 px-4 py-3.5 rounded-2xl border border-neutral-700 bg-primary-600/5 text-sm">
-          <span className="w-7 h-7 rounded-lg bg-primary-600 text-white flex items-center justify-center shrink-0">
-            <svg
-              className="w-3.5 h-3.5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M19 3H5a2 2 0 00-2 2v16l7-3.5L17 21V5a2 2 0 00-2-2z"
-              />
-            </svg>
-          </span>
+        <div className="flex items-center gap-3.5 px-4 py-3.5 rounded-surface border border-neutral-700 text-body">
+          <BookmarkIcon className="w-5 h-5 text-neutral-400 shrink-0" />
           <span className="text-neutral-400">
             <strong className="text-neutral-100 font-semibold">
               {shelves.length} of {FREE_SHELF_LIMIT} shelves used
@@ -373,7 +297,7 @@ export default function ShelvesPage() {
             on the free plan.{" "}
             <button
               onClick={() => setShowUpgradeModal(true)}
-              className="text-primary-400 font-medium hover:text-primary-300 transition-colors"
+              className="text-neutral-100 font-medium underline hover:text-primary-300 transition-colors cursor-pointer"
             >
               Upgrade to Pro
             </button>{" "}
@@ -392,11 +316,10 @@ export default function ShelvesPage() {
       {/* Grid */}
       {!isLoading && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {shelves.map((shelf, idx) => (
+          {shelves.map((shelf) => (
             <ShelfCard
               key={shelf.id}
               shelf={shelf}
-              idx={idx}
               color={shelfColor(shelf)}
               isEditing={editingId === shelf.id}
               editName={editName}
@@ -425,27 +348,15 @@ export default function ShelvesPage() {
           {/* New shelf placeholder */}
           <button
             onClick={handleNewShelf}
-            className="flex flex-col items-center justify-center gap-2.5 min-h-[240px] rounded-2xl border border-dashed border-neutral-700 bg-neutral-900 hover:border-neutral-500 hover:bg-neutral-850 transition-colors cursor-pointer"
+            className="flex flex-col items-center justify-center gap-2.5 min-h-[240px] rounded-surface border border-dashed border-neutral-700 bg-neutral-900 hover:border-neutral-500 hover:bg-neutral-850 transition-colors cursor-pointer"
           >
-            <span className="w-11 h-11 rounded-xl bg-neutral-800 border border-neutral-700 flex items-center justify-center text-neutral-500">
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M12 4v16m-8-8h16"
-                />
-              </svg>
+            <span className="w-11 h-11 rounded-control bg-neutral-800 border border-neutral-700 flex items-center justify-center text-neutral-500">
+              <PlusIcon className="w-5 h-5" />
             </span>
-            <span className="text-xl font-light text-neutral-300">
+            <span className="text-title font-medium text-neutral-300">
               New shelf
             </span>
-            <span className="text-xs text-neutral-500 text-center max-w-[180px] leading-relaxed">
+            <span className="text-caption text-neutral-400 text-center max-w-[180px] leading-relaxed">
               Organize titles by mood, genre, or anything else
             </span>
           </button>
@@ -455,8 +366,8 @@ export default function ShelvesPage() {
       {/* Create modal */}
       {showCreate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-neutral-800 border border-neutral-700 rounded-2xl p-6 max-w-sm w-full mx-4 shadow-2xl">
-            <h2 className="text-lg font-semibold text-neutral-100 mb-4">
+          <div className="bg-neutral-800 border border-neutral-700 rounded-surface p-6 max-w-sm w-full mx-4 shadow-2xl">
+            <h2 className="text-title font-semibold text-neutral-100 mb-4">
               New shelf
             </h2>
             <input
@@ -471,25 +382,25 @@ export default function ShelvesPage() {
                 }
               }}
               placeholder="Shelf name…"
-              className="w-full bg-neutral-700 border border-neutral-600 rounded-xl px-3 py-2.5 text-sm text-neutral-100 placeholder-neutral-500 outline-none focus:border-primary-500 mb-4"
+              className="w-full bg-neutral-700 border border-neutral-600 rounded-control px-3 py-2.5 text-body text-neutral-100 placeholder-neutral-500 outline-none focus:border-primary-500 mb-4"
             />
             <div className="flex gap-3 justify-end">
-              <button
+              <Button
+                variant="ghost"
                 onClick={() => {
                   setShowCreate(false);
                   setNewName("");
                 }}
-                className="px-4 py-2 text-sm text-neutral-400 hover:text-neutral-200 transition-colors"
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="primary"
                 onClick={handleCreate}
                 disabled={!newName.trim() || createShelf.isPending}
-                className="px-4 py-2 text-sm font-semibold bg-primary-600 hover:bg-primary-500 text-white rounded-xl disabled:opacity-50 transition-colors"
               >
                 {createShelf.isPending ? "Creating…" : "Create"}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -498,28 +409,25 @@ export default function ShelvesPage() {
       {/* Delete confirmation modal */}
       {confirmDeleteId !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-neutral-800 border border-neutral-700 rounded-2xl p-6 max-w-sm w-full mx-4 shadow-2xl">
-            <h2 className="text-lg font-bold text-neutral-100 mb-2">
+          <div className="bg-neutral-800 border border-neutral-700 rounded-surface p-6 max-w-sm w-full mx-4 shadow-2xl">
+            <h2 className="text-title font-semibold text-neutral-100 mb-2">
               Delete shelf?
             </h2>
-            <p className="text-sm text-neutral-400 mb-6">
+            <p className="text-body text-neutral-400 mb-6">
               This will permanently delete the shelf and remove all its items.
               This cannot be undone.
             </p>
             <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => setConfirmDeleteId(null)}
-                className="px-4 py-2 text-sm text-neutral-300 hover:text-neutral-100 transition-colors"
-              >
+              <Button variant="ghost" onClick={() => setConfirmDeleteId(null)}>
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="danger"
                 onClick={() => handleDelete(confirmDeleteId)}
                 disabled={deleteShelf.isPending}
-                className="px-4 py-2 text-sm font-semibold bg-error-600 hover:bg-error-500 text-white rounded-xl disabled:opacity-50 transition-colors"
               >
                 {deleteShelf.isPending ? "Deleting…" : "Delete"}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
