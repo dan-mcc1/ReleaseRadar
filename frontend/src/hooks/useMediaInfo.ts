@@ -15,7 +15,9 @@ interface UseMediaInfoOptions {
 export interface UseMediaInfoResult<T> {
   data: T | undefined;
   loading: boolean;
-  error: string | null;
+  /** The thrown error; give it to PageState rather than printing it. */
+  error: Error | null;
+  refetch: () => void;
   initialStatus: WatchStatus | undefined;
   initialRating: number | null | undefined;
   statusReady: boolean;
@@ -69,7 +71,8 @@ export function useMediaInfo<T extends { id: number; external_ids?: { imdb_id?: 
   return {
     data: mediaQuery.data,
     loading: mediaQuery.isPending,
-    error: mediaQuery.error?.message ?? null,
+    error: mediaQuery.error ?? null,
+    refetch: () => void mediaQuery.refetch(),
     initialStatus: statusQuery.data?.status,
     initialRating: statusQuery.data?.rating ?? null,
     statusReady: statusQuery.isFetched || !statusQuery.isLoading,

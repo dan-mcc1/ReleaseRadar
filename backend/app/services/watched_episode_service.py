@@ -2,7 +2,7 @@
 import logging
 from sqlalchemy.orm import Session
 from sqlalchemy import select, exists, union_all, literal, func
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from app.models.episode_watched import EpisodeWatched
 from app.models.episode import Episode
 from app.models.season import Season
@@ -22,6 +22,10 @@ from app.services.currently_watching_service import remove_from_currently_watchi
 from app.services.activity_service import log_activity
 
 logger = logging.getLogger(__name__)
+
+
+class EpisodeNotAiredError(ValueError):
+    """The episode has no air date yet, or airs in the future."""
 
 
 def add_episode_watched(
@@ -169,6 +173,125 @@ def add_season_watched(db: Session, user_id: str, show_id: int, season_number: i
     maybe_auto_complete_show(db, user_id, show_id)
 
     return {"message": f"Season {season_number} marked as watched"}
+
+
+def add_episodes_through(
+    db: Session,
+    user_id: str,
+    show_id: int,
+    season_number: int,
+    episode_number: int,
+):
+    """
+    Mark an episode watched along with every aired episode before it: all of
+    seasons 1..season_number-1 and the target season up to episode_number.
+    Specials (season 0) only catch up within season 0. Episodes with no air
+    date, or one in the future, are skipped. Idempotent.
+    """
+    seasons = [0] if season_number == 0 else list(range(1, season_number + 1))
+    for sn in seasons:
+        # Fast path inside skips seasons already fully cached.
+        sync_season_episodes(db, show_id, sn)
+
+    # A day's grace: the client decides "aired" by its local date, which can
+    # be a day ahead of UTC.
+    today = datetime.now(timezone.utc).date() + timedelta(days=1)
+    target = (
+        db.query(Episode)
+        .filter_by(show_id=show_id, season_number=season_number, episode_number=episode_number)
+        .first()
+    )
+    if target is not None and (target.air_date is None or target.air_date > today):
+        raise EpisodeNotAiredError()
+
+    candidates = (
+        db.query(Episode)
+        .filter(
+            Episode.show_id == show_id,
+            Episode.season_number.in_(seasons),
+            Episode.air_date.isnot(None),
+            Episode.air_date <= today,
+        )
+        .all()
+    )
+    already_watched = {
+        (sn, en)
+        for sn, en in db.query(EpisodeWatched.season_number, EpisodeWatched.episode_number)
+        .filter_by(user_id=user_id, show_id=show_id)
+        .all()
+    }
+    added = 0
+    for ep in candidates:
+        before_target = ep.season_number < season_number or (
+            ep.season_number == season_number and ep.episode_number < episode_number
+        )
+        if not before_target or (ep.season_number, ep.episode_number) in already_watched:
+            continue
+        # ON CONFLICT: the same episode may be marked concurrently.
+        if insert_if_absent(
+            db,
+            EpisodeWatched,
+            {
+                "user_id": user_id,
+                "show_id": show_id,
+                "episode_id": ep.id,
+                "season_number": ep.season_number,
+                "episode_number": ep.episode_number,
+                "watched_at": datetime.now(timezone.utc),
+            },
+            ("user_id", "show_id", "season_number", "episode_number"),
+        ) is not None:
+            added += 1
+    db.commit()
+
+    # The target goes through the single-episode path: it logs the activity
+    # and runs auto-complete once everything is in.
+    if (season_number, episode_number) in already_watched:
+        maybe_auto_complete_show(db, user_id, show_id)
+    else:
+        add_episode_watched(db, user_id, show_id, season_number, episode_number)
+        added += 1
+
+    return {"message": f"Marked {added} episode{'s' if added != 1 else ''} as watched", "added": added}
+
+
+def get_unwatched_gaps(db: Session, user_id: str, show_id: int) -> dict:
+    """
+    For each stored season (specials aside), the first aired episode the user
+    hasn't watched. Seasons with nothing aired left to watch are absent.
+    stored_seasons lists the seasons whose episodes are in the episode table,
+    so the client knows which seasons this answer covers.
+    """
+    # Same day's grace as add_episodes_through.
+    today = datetime.now(timezone.utc).date() + timedelta(days=1)
+    watched = exists().where(
+        EpisodeWatched.user_id == user_id,
+        EpisodeWatched.show_id == show_id,
+        EpisodeWatched.season_number == Episode.season_number,
+        EpisodeWatched.episode_number == Episode.episode_number,
+    )
+    rows = (
+        db.query(Episode.season_number, func.min(Episode.episode_number))
+        .filter(
+            Episode.show_id == show_id,
+            Episode.season_number > 0,
+            Episode.air_date.isnot(None),
+            Episode.air_date <= today,
+            ~watched,
+        )
+        .group_by(Episode.season_number)
+        .all()
+    )
+    stored = (
+        db.query(Episode.season_number)
+        .filter(Episode.show_id == show_id, Episode.season_number > 0)
+        .distinct()
+        .all()
+    )
+    return {
+        "first_unwatched": {str(sn): en for sn, en in rows},
+        "stored_seasons": sorted(sn for (sn,) in stored),
+    }
 
 
 def remove_season_watched(db: Session, user_id: str, show_id: int, season_number: int):

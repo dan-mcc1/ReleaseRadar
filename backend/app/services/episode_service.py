@@ -48,14 +48,35 @@ def _compute_episode_type(
     season_number: int,
     tmdb_type: str | None,
     in_production: bool | None,
+    last_season: int | None = None,
 ) -> str | None:
+    """Tag for an episode. TMDb marks every season's last episode "finale", so
+    only the last season's finale of an ended show is the series finale.
+    Specials (season 0) get no tag."""
+    if season_number == 0:
+        return None
     if episode_number == 1:
         return "show_premiere" if season_number == 1 else "season_premiere"
     if tmdb_type == "finale":
-        return "series_finale" if in_production is False else "season_finale"
+        in_last_season = last_season is None or season_number >= last_season
+        return "series_finale" if in_production is False and in_last_season else "season_finale"
     if tmdb_type == "mid_season":
         return "mid_season"
     return None
+
+
+def _last_season_number(db: Session, show: Show | None) -> int | None:
+    """The show's highest season number. Read from the season table rather
+    than number_of_seasons, which is a count and breaks on shows that number
+    their seasons by year."""
+    if show is None:
+        return None
+    top = (
+        db.query(func.max(Season.season_number))
+        .filter(Season.show_id == show.id, Season.season_number > 0)
+        .scalar()
+    )
+    return top or show.number_of_seasons
 
 
 def ensure_show_in_db(db: Session, show_id: int) -> bool:
@@ -136,6 +157,7 @@ def sync_season_episodes(db: Session, show_id: int, season_number: int):
 
     show = db.query(Show).filter_by(id=show_id).first()
     in_production = show.in_production if show else None
+    last_season = _last_season_number(db, show)
 
     # Fast path: if the Season row's episode_count matches the Episode rows we
     # already have cached, the season is fully synced — skip the TMDB call.
@@ -181,7 +203,7 @@ def sync_season_episodes(db: Session, show_id: int, season_number: int):
                 still_path=ep.get("still_path"),
                 vote_average=ep.get("vote_average"),
                 episode_type=_compute_episode_type(
-                    ep_num, season_number, ep.get("episode_type"), in_production
+                    ep_num, season_number, ep.get("episode_type"), in_production, last_season
                 ),
             )
         )
@@ -209,6 +231,7 @@ def sync_show_episodes(db: Session, show_id: int):
     else:
         n = show.number_of_seasons or 0
         season_numbers = list(range(1, n + 1))
+    last_season = max(season_numbers, default=None)
 
     # Fetch all seasons from TMDB in parallel
     def _fetch_season(sn):
@@ -251,7 +274,8 @@ def sync_show_episodes(db: Session, show_id: int):
                 still_path=ep.get("still_path"),
                 vote_average=ep.get("vote_average"),
                 episode_type=_compute_episode_type(
-                    ep_num, season_number, ep.get("episode_type"), show.in_production
+                    ep_num, season_number, ep.get("episode_type"), show.in_production,
+                    last_season,
                 ),
             )
             db.add(episode)
@@ -340,6 +364,7 @@ def get_or_create_episode(
 
     show = db.query(Show).filter_by(id=show_id).first()
     in_production = show.in_production if show else None
+    last_season = _last_season_number(db, show)
 
     episode = Episode(
         id=ep_id,
@@ -353,7 +378,8 @@ def get_or_create_episode(
         still_path=ep_data.get("still_path"),
         vote_average=ep_data.get("vote_average"),
         episode_type=_compute_episode_type(
-            episode_number, season_number, ep_data.get("episode_type"), in_production
+            episode_number, season_number, ep_data.get("episode_type"), in_production,
+            last_season,
         ),
     )
     db.add(episode)
@@ -464,6 +490,7 @@ def refresh_episodes_for_show(db: Session, show_id: int):
     else:
         n = show.number_of_seasons or 0
         season_numbers = list(range(1, n + 1))
+    last_season = max(season_numbers, default=None)
 
     if not season_numbers:
         return
@@ -538,7 +565,7 @@ def refresh_episodes_for_show(db: Session, show_id: int):
             new_still = ep.get("still_path")
             new_vote = ep.get("vote_average")
             new_type = _compute_episode_type(
-                ep_num, sn, ep.get("episode_type"), show.in_production
+                ep_num, sn, ep.get("episode_type"), show.in_production, last_season
             )
 
             row = existing.get(ep_id) or existing_by_pos.get((sn, ep_num))

@@ -15,6 +15,7 @@ import {
   Card,
   CheckIcon,
   EmptyState,
+  PageState,
   PageHeader,
   PlayIcon,
   PosterCard,
@@ -568,20 +569,21 @@ export default function PersonInfo() {
     data: person,
     isPending: loading,
     error,
+    refetch,
   } = usePersonInfo<FullPersonData>(id);
   usePageTitle(person?.name);
 
-  if (loading)
+  if (loading) return <PageState status="loading" label="Loading…" />;
+  if (error || !person)
     return (
-      <div className="flex items-center justify-center min-h-64">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-neutral-400 text-body">Loading…</p>
-        </div>
-      </div>
+      <PageState
+        status="error"
+        error={error}
+        subject="person"
+        back={{ to: "/search", label: "Search" }}
+        onRetry={() => refetch()}
+      />
     );
-  if (error) return <EmptyState title="Couldn't load this person" description={error?.message} />;
-  if (!person) return <EmptyState title="Person not found" />;
 
   // Keyed so the tab, filter and expanded sections reset when moving to another person.
   return <PersonPage key={person.id} person={person} />;

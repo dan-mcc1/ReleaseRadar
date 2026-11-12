@@ -3,6 +3,7 @@ import { queryKeys } from "./queryKeys";
 import { queryFetch, checkedFetch } from "./queryFetch";
 import { apiFetch } from "../../utils/apiFetch";
 import { useAuthUser } from "../useAuthUser";
+import type { EpisodeGaps } from "../../utils/episodes";
 
 export interface WatchedEpisode {
   season_number: number;
@@ -11,11 +12,13 @@ export interface WatchedEpisode {
   notes: string | null;
 }
 
-interface NextEpisode {
+export interface NextEpisode {
+  finished?: boolean;
   season_number: number;
   episode_number: number;
   name: string;
   still_path: string | null;
+  air_date?: string | null;
 }
 
 export function useEpisodeDetail<T>(
@@ -37,6 +40,17 @@ export function useWatchedEpisodes(showId: number) {
     queryKey: queryKeys.watchedEpisodes(user?.uid ?? "", showId),
     queryFn: ({ signal }) =>
       queryFetch<WatchedEpisode[]>(`/watched-episode/${showId}`, { signal }),
+    enabled: !!user && showId > 0,
+  });
+}
+
+export function useEpisodeGaps(showId: number) {
+  const user = useAuthUser();
+  return useQuery({
+    // Under watchedEpisodes, so every watch/unwatch mutation refreshes it.
+    queryKey: [...queryKeys.watchedEpisodes(user?.uid ?? "", showId), "gaps"],
+    queryFn: ({ signal }) =>
+      queryFetch<EpisodeGaps>(`/watched-episode/${showId}/gaps`, { signal }),
     enabled: !!user && showId > 0,
   });
 }
@@ -168,6 +182,48 @@ export function useToggleSeason() {
         `${endpoint}?show_id=${showId}&season_number=${seasonNumber}`,
         { method },
       );
+    },
+    onSuccess: (_, { showId }) => {
+      if (!user) return;
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.watchedEpisodes(user.uid, showId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.nextEpisode(user.uid, showId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["nextEpisodes", "bulk", user.uid],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["watchStatus", user.uid],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["showProgress", user.uid, showId],
+      });
+    },
+  });
+}
+
+/** Mark an episode and every aired one before it watched, in one request. */
+export function useWatchThrough() {
+  const user = useAuthUser();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      showId,
+      seasonNumber,
+      episodeNumber,
+    }: {
+      showId: number;
+      seasonNumber: number;
+      episodeNumber: number;
+    }) => {
+      const res = await apiFetch(
+        `/watched-episode/through?show_id=${showId}&season_number=${seasonNumber}&episode_number=${episodeNumber}`,
+        { method: "POST" },
+      );
+      if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+      return (await res.json()) as { added: number };
     },
     onSuccess: (_, { showId }) => {
       if (!user) return;

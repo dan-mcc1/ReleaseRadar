@@ -16,3 +16,13 @@ export class PremiumRequiredError extends Error {
     super("This feature requires a Premium subscription.");
   }
 }
+
+/** A non-ok API response. The message is for logs; show people PageState's wording. */
+export class ApiError extends Error {
+  readonly status: number;
+  constructor(status: number, path: string) {
+    super(`API error ${status}: ${path}`);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}

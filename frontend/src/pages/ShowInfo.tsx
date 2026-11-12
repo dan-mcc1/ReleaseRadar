@@ -21,9 +21,11 @@ import ContentRatingBadge from "../components/media/ContentRatingBadge";
 import BingePlanWidget from "../components/BingePlanWidget";
 import RewatchSection from "../components/RewatchSection";
 import EpisodeRatingChart from "../components/EpisodeRatingChart";
+import UpNextCard from "../components/UpNextCard";
 import { BASE_IMAGE_URL } from "../constants";
 import FriendsActivityWidget from "../components/FriendsActivityWidget";
-import { ButtonLink, PlusIcon, SectionHeader, StarIcon } from "../components/ui";
+import { ButtonLink, PageState, PlusIcon, SectionHeader, StarIcon } from "../components/ui";
+import { formatAirDate, isUnaired, seasonLabel } from "../utils/episodes";
 
 type FullShowData = Show & {
   vote_average?: number;
@@ -48,7 +50,44 @@ type FullShowData = Show & {
   content_ratings?: {
     results: { iso_3166_1: string; rating: string }[];
   };
+  next_episode_to_air?: {
+    season_number: number;
+    episode_number: number;
+    name: string;
+    air_date: string | null;
+  } | null;
 };
+
+/**
+ * When a returning show is next on: the scheduled episode if TMDb has one,
+ * otherwise the next season's premiere if it has a date. Null when nothing
+ * is announced.
+ */
+function nextAiring(show: FullShowData): { label: string; value: string } | null {
+  const ep = show.next_episode_to_air;
+  if (ep?.air_date) {
+    const code = `S${ep.season_number} E${ep.episode_number}`;
+    return {
+      label:
+        ep.episode_number !== 1
+          ? "Next episode"
+          : ep.season_number === 1
+            ? "Premieres"
+            : "Next season",
+      value: `${code} · ${formatAirDate(ep.air_date)}`,
+    };
+  }
+  const upcoming = (show.seasons ?? [])
+    .filter((s) => s.season_number > 0 && s.air_date && isUnaired(s.air_date))
+    .sort((a, b) => a.season_number - b.season_number)[0];
+  if (upcoming) {
+    return {
+      label: "Next season",
+      value: `${seasonLabel(upcoming.season_number, upcoming.name)} · ${formatAirDate(upcoming.air_date)}`,
+    };
+  }
+  return null;
+}
 
 const TABS = ["Overview", "Episodes", "Cast", "Reviews"] as const;
 type Tab = (typeof TABS)[number];
@@ -73,6 +112,7 @@ export default function ShowInfo() {
     statusReady,
     externalScores,
     aggRating,
+    refetch,
   } = useMediaInfo<FullShowData>({
     contentType: "tv",
     id,
@@ -84,17 +124,17 @@ export default function ShowInfo() {
   const signedOut = !user && !authLoading;
   usePageMeta({ title: show?.name, description: show?.overview });
 
-  if (loading)
+  if (loading) return <PageState status="loading" label="Loading show…" />;
+  if (error || !show)
     return (
-      <div className="flex items-center justify-center min-h-64">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-neutral-400 text-sm">Loading show info…</p>
-        </div>
-      </div>
+      <PageState
+        status="error"
+        error={error}
+        subject="show"
+        back={{ to: "/search", label: "Search for a show" }}
+        onRetry={refetch}
+      />
     );
-  if (error) return <p className="text-error-400 p-6">{error}</p>;
-  if (!show) return <p className="text-neutral-400 p-6">Show not found.</p>;
 
   const startYear = show.first_air_date
     ? parseLocalDate(show.first_air_date).getFullYear()
@@ -103,6 +143,9 @@ export default function ShowInfo() {
     ? parseLocalDate(show.last_air_date).getFullYear()
     : null;
   const isOngoing = show.status === "Returning Series" || show.in_production;
+  const upcoming = isOngoing ? nextAiring(show) : null;
+  const tracking =
+    !!user && statusReady && initialStatus !== undefined && initialStatus !== "none";
   const yearRange = startYear
     ? isOngoing
       ? `${startYear} – present`
@@ -177,6 +220,14 @@ export default function ShowInfo() {
             <span className="text-neutral-500">Premiered</span>
             <span className="font-medium">
               {formatLocalDate(show.first_air_date, { year: "numeric", month: "short", day: "numeric" })}
+            </span>
+          </>
+        )}
+        {isOngoing && (
+          <>
+            <span className="text-neutral-500">{upcoming?.label ?? "Next episode"}</span>
+            <span className={`font-medium tabular ${upcoming ? "" : "text-neutral-400"}`}>
+              {upcoming?.value ?? "Not announced yet"}
             </span>
           </>
         )}
@@ -335,6 +386,10 @@ export default function ShowInfo() {
                   )}
                 </div>
 
+                {tracking && initialStatus !== "Watched" && (
+                  <UpNextCard showId={show.id} />
+                )}
+
                 {user &&
                   initialStatus !== "none" &&
                   initialStatus !== "Watched" && (
@@ -364,8 +419,15 @@ export default function ShowInfo() {
 
             {activeTab === "Episodes" && (
               <>
+                {tracking && initialStatus !== "Watched" && (
+                  <UpNextCard showId={show.id} />
+                )}
                 {show.seasons && show.seasons.length > 0 ? (
-                  <SeasonInfo showId={show.id} seasons={show.seasons} />
+                  <SeasonInfo
+                    showId={show.id}
+                    seasons={show.seasons}
+                    inProduction={show.in_production}
+                  />
                 ) : (
                   <p className="text-neutral-400">No season info available.</p>
                 )}
