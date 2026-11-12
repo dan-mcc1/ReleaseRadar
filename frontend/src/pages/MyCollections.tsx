@@ -4,6 +4,7 @@ import {
   ButtonLink,
   CheckIcon,
   EmptyState,
+  describeLoadError,
   PageHeader,
   PosterCard,
   SectionHeader,
@@ -146,7 +147,7 @@ export default function MyCollections() {
     return (
       <EmptyState
         title="Couldn't load your collections"
-        description={error.message}
+        description={describeLoadError(error, "page").description}
         action={<Button onClick={() => refetch()}>Try again</Button>}
       />
     );

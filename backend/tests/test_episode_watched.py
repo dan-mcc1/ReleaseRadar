@@ -147,6 +147,45 @@ class TestSeasonWatched:
         assert len(rows) == 2  # No duplicates
 
 
+class TestWatchedThrough:
+    def test_marks_target_and_earlier_episodes(self, client, db, seed_show, seed_users):
+        from app.models.episode_watched import EpisodeWatched
+
+        r = client.post(
+            "/watched-episode/through",
+            params={"show_id": 1396, "season_number": 1, "episode_number": 2},
+        )
+        assert r.status_code == 200
+        assert r.json()["added"] == 2
+        db.expire_all()
+        rows = (
+            db.query(EpisodeWatched)
+            .filter_by(user_id="test-uid-1", show_id=1396, season_number=1)
+            .all()
+        )
+        assert {row.episode_number for row in rows} == {1, 2}
+
+    def test_unaired_target_is_400(self, client, db, seed_show, seed_users):
+        from datetime import date
+        from app.models.episode import Episode
+
+        db.add(Episode(id=62087, show_id=1396, season_number=1, episode_number=3,
+                       name="Future", air_date=date(2099, 1, 1)))
+        db.commit()
+        r = client.post(
+            "/watched-episode/through",
+            params={"show_id": 1396, "season_number": 1, "episode_number": 3},
+        )
+        assert r.status_code == 400
+
+    def test_requires_valid_params(self, client, seed_users):
+        r = client.post(
+            "/watched-episode/through",
+            params={"show_id": 1396, "season_number": -1, "episode_number": 2},
+        )
+        assert r.status_code == 422
+
+
 class TestGetWatchedEpisodes:
     def test_list_all_endpoint_removed(self, client, seed_users):
         """GET /watched-episode (every episode ever watched) was removed; no client used it."""

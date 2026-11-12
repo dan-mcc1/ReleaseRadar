@@ -7,7 +7,9 @@ import { Link } from "react-router-dom";
 import {
   useWatchedEpisodes,
   useToggleEpisode,
+  useEpisodeGaps,
   useToggleSeason,
+  useWatchThrough,
 } from "../hooks/api/useEpisodes";
 import { useNotificationPrefs } from "../hooks/api/useNotifications";
 import {
@@ -19,12 +21,15 @@ import StarRating from "./StarRating";
 import EpisodeRow, { epKey } from "./EpisodeRow";
 import { useToast } from "./Toast";
 import { Button, CheckIcon, ChevronDownIcon, IconButton, SectionHeader } from "./ui";
+import { formatAirDate, hasUnwatchedBefore, seasonLabel } from "../utils/episodes";
 
 type FullSeason = Season & { episodes?: Episode[] };
 
 interface SeasonInfoProps {
   showId: number;
   seasons: Season[];
+  /** For finale tags: a finished show's last finale is the series finale. */
+  inProduction?: boolean | null;
   onEpisodeToggle?: () => void;
 }
 
@@ -32,17 +37,11 @@ function formatSeasonDateRange(
   airDate: string | null | undefined,
   endDate: string | null | undefined,
 ): string {
-  const fmt = (iso: string) =>
-    new Date(iso + "T00:00:00").toLocaleDateString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
   if (airDate && endDate && airDate !== endDate) {
-    return `${fmt(airDate)} – ${fmt(endDate)}`;
+    return `${formatAirDate(airDate)} – ${formatAirDate(endDate)}`;
   }
-  if (airDate) return fmt(airDate);
-  return "No date";
+  if (airDate) return formatAirDate(airDate);
+  return "Dates TBA";
 }
 
 interface SeasonRatingBlockProps {
@@ -92,6 +91,7 @@ const SeasonRatingBlock = memo(function SeasonRatingBlock({
 export default function SeasonInfo({
   showId,
   seasons,
+  inProduction,
   onEpisodeToggle,
 }: SeasonInfoProps) {
   const user = useAuthUser();
@@ -105,6 +105,7 @@ export default function SeasonInfo({
   );
 
   const { data: watchedEpisodesData } = useWatchedEpisodes(showId);
+  const { data: gaps } = useEpisodeGaps(showId);
   const rawEpisodes =
     (watchedEpisodesData as
       | { season_number: number; episode_number: number }[]
@@ -144,6 +145,11 @@ export default function SeasonInfo({
 
   const toggleEpisodeMutation = useToggleEpisode();
   const toggleSeasonMutation = useToggleSeason();
+  const watchThroughMutation = useWatchThrough();
+  const lastSeason = useMemo(
+    () => Math.max(0, ...seasons.map((s) => s.season_number)),
+    [seasons],
+  );
 
   const [togglingEpisodes, setTogglingEpisodes] = useState<Set<string>>(
     new Set(),
@@ -204,6 +210,33 @@ export default function SeasonInfo({
     [user, toggleEpisodeMutation, showId, onEpisodeToggle],
   );
 
+  const watchThrough = useCallback(
+    async (seasonNumber: number, episodeNumber: number) => {
+      if (!user) return;
+      const key = epKey(seasonNumber, episodeNumber);
+      setTogglingEpisodes((prev) => new Set(prev).add(key));
+      try {
+        const { added } = await watchThroughMutation.mutateAsync({
+          showId,
+          seasonNumber,
+          episodeNumber,
+        });
+        toast.success(`Marked ${added} episode${added === 1 ? "" : "s"} watched`);
+        onEpisodeToggle?.();
+      } catch (err) {
+        console.error(err);
+        toast.error("Couldn't mark those episodes. Try again.");
+      } finally {
+        setTogglingEpisodes((prev) => {
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
+      }
+    },
+    [user, watchThroughMutation, showId, onEpisodeToggle, toast],
+  );
+
   const toggleSeasonWatched = useCallback(
     async (season: Season, allWatched: boolean) => {
       if (!user) return;
@@ -262,7 +295,7 @@ export default function SeasonInfo({
                     to={`/tv/${showId}/season/${season.season_number}`}
                     className="font-semibold hover:text-primary-300 transition-colors"
                   >
-                    {season.name}
+                    {seasonLabel(season.season_number, season.name)}
                   </Link>
                   <p className="text-neutral-400 text-sm">
                     {formatSeasonDateRange(season.air_date, season.end_date)} ·{" "}
@@ -321,7 +354,7 @@ export default function SeasonInfo({
                   <SeasonRatingBlock
                     showId={showId}
                     seasonNumber={season.season_number}
-                    enabled={isLoggedIn && allWatched}
+                    enabled={isLoggedIn && allWatched && season.season_number > 0}
                   />
                 </div>
               </div>
@@ -366,6 +399,20 @@ export default function SeasonInfo({
                               isLoggedIn={isLoggedIn}
                               hideOverview={hideOverview}
                               onToggle={toggleEpisodeWatched}
+                              inProduction={inProduction}
+                              lastSeason={lastSeason}
+                              canWatchThrough={
+                                isLoggedIn &&
+                                hasUnwatchedBefore(
+                                  ep,
+                                  expandedSeason.episodes ?? [],
+                                  (sn, en) => watchedEpisodes.has(epKey(sn, en)),
+                                  seasons,
+                                  watchedCountBySeason,
+                                  gaps,
+                                )
+                              }
+                              onWatchThrough={watchThrough}
                             />
                           );
                         })}

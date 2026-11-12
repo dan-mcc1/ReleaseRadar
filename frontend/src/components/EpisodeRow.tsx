@@ -1,46 +1,50 @@
 import { memo, useState } from "react";
 import { Link } from "react-router-dom";
 import { BASE_IMAGE_URL } from "../constants";
-import { ExclamationTriangleIcon } from "@heroicons/react/24/outline";
+import { ChevronDoubleUpIcon, ExclamationTriangleIcon } from "@heroicons/react/24/outline";
 import { CheckIcon, IconButton } from "./ui";
 import type { Episode } from "../types/calendar";
+import {
+  episodeKind,
+  formatAirDate,
+  formatRuntime,
+  isUnaired,
+  type EpisodeKind,
+} from "../utils/episodes";
+
+const TAGS: Record<EpisodeKind, { label: string; classes: string }> = {
+  show_premiere: {
+    label: "Series Premiere",
+    classes: "bg-highlight-600/20 text-highlight-300 border border-highlight-500/40",
+  },
+  season_premiere: {
+    label: "Season Premiere",
+    classes: "bg-primary-600/20 text-primary-300 border border-primary-500/40",
+  },
+  season_finale: {
+    label: "Season Finale",
+    classes: "bg-warning-600/20 text-warning-300 border border-warning-500/40",
+  },
+  series_finale: {
+    label: "Series Finale",
+    classes: "bg-error-700/20 text-error-300 border border-error-500/40",
+  },
+  mid_season: {
+    label: "Mid-Season Finale",
+    classes: "bg-warning-600/20 text-warning-300 border border-warning-500/40",
+  },
+};
 
 export function getEpisodeTag(
-  episodeType: string | null | undefined,
+  kind: EpisodeKind | null,
 ): { label: string; classes: string } | null {
-  switch (episodeType) {
-    case "show_premiere":
-      return {
-        label: "Series Premiere",
-        classes:
-          "bg-highlight-600/20 text-highlight-300 border border-highlight-500/40",
-      };
-    case "season_premiere":
-      return {
-        label: "Season Premiere",
-        classes:
-          "bg-primary-600/20 text-primary-300 border border-primary-500/40",
-      };
-    case "season_finale":
-      return {
-        label: "Season Finale",
-        classes:
-          "bg-warning-600/20 text-warning-300 border border-warning-500/40",
-      };
-    case "series_finale":
-      return {
-        label: "Series Finale",
-        classes: "bg-error-700/20 text-error-300 border border-error-500/40",
-      };
-    case "mid_season":
-      return {
-        label: "Mid-Season Finale",
-        classes:
-          "bg-warning-600/20 text-warning-300 border border-warning-500/40",
-      };
-    default:
-      return null;
-  }
+  return kind ? TAGS[kind] : null;
+}
+
+/** "Airs Nov 20, 2026" or "Unaired"; null once it has aired. */
+export function unairedLabel(airDate: string | null | undefined): string | null {
+  if (!isUnaired(airDate)) return null;
+  return airDate ? `Airs ${formatAirDate(airDate)}` : "Unaired";
 }
 
 interface EpisodeRowProps {
@@ -51,6 +55,13 @@ interface EpisodeRowProps {
   isLoggedIn: boolean;
   hideOverview: boolean;
   onToggle: (seasonNumber: number, episodeNumber: number) => void;
+  /** For the finale tag: series finale only when the show has ended... */
+  inProduction?: boolean | null;
+  /** ...and this is its last season. */
+  lastSeason?: number | null;
+  /** Show "Mark watched up to here": earlier aired episodes are still unwatched. */
+  canWatchThrough?: boolean;
+  onWatchThrough?: (seasonNumber: number, episodeNumber: number) => void;
 }
 
 const EpisodeRow = memo(function EpisodeRow({
@@ -61,9 +72,24 @@ const EpisodeRow = memo(function EpisodeRow({
   isLoggedIn,
   hideOverview,
   onToggle,
+  inProduction,
+  lastSeason,
+  canWatchThrough = false,
+  onWatchThrough,
 }: EpisodeRowProps) {
   const [revealed, setRevealed] = useState(false);
   const overviewHidden = hideOverview && !revealed && !!ep.overview;
+  const tag = getEpisodeTag(
+    episodeKind(ep.season_number, ep.episode_number, ep.episode_type, inProduction, lastSeason),
+  );
+  const unaired = unairedLabel(ep.air_date);
+  const details = [
+    ep.air_date ? formatAirDate(ep.air_date) : "Air date TBA",
+    ep.runtime ? formatRuntime(ep.runtime) : null,
+  ].filter(Boolean).join(" · ");
+  // Unaired episodes can't be marked, but one marked earlier can be unmarked.
+  const toggleDisabled = toggling || (!!unaired && !watched);
+
   return (
     <div className="flex gap-3 items-start">
       <Link
@@ -75,18 +101,15 @@ const EpisodeRow = memo(function EpisodeRow({
             <img
               src={`${BASE_IMAGE_URL}/w500${ep.still_path}`}
               alt={ep.name}
-              className="w-28 sm:w-40 h-auto rounded-control object-cover"
+              className={`w-28 sm:w-40 h-auto rounded-control object-cover ${unaired ? "opacity-60" : ""}`}
             />
-            {(() => {
-              const tag = getEpisodeTag(ep.episode_type);
-              return tag ? (
-                <span
-                  className={`absolute bottom-1.5 left-1.5 text-caption font-semibold px-1.5 py-0.5 rounded backdrop-blur-sm ${tag.classes}`}
-                >
-                  {tag.label}
-                </span>
-              ) : null;
-            })()}
+            {tag && (
+              <span
+                className={`absolute bottom-1.5 left-1.5 text-caption font-semibold px-1.5 py-0.5 rounded backdrop-blur-sm ${tag.classes}`}
+              >
+                {tag.label}
+              </span>
+            )}
           </div>
         ) : null}
         <div className="flex-1 min-w-0">
@@ -94,33 +117,18 @@ const EpisodeRow = memo(function EpisodeRow({
             <p className="font-medium text-neutral-100 hover:text-primary-300 transition-colors">
               {ep.episode_number}. {ep.name}
             </p>
-            {(() => {
-              const tag = getEpisodeTag(ep.episode_type);
-              return tag ? (
-                <span className={`text-caption font-semibold px-1.5 py-0.5 rounded ${tag.classes}`}>
-                  {tag.label}
-                </span>
-              ) : null;
-            })()}
-          </div>
-          <p className="text-neutral-400 text-sm">
-            {ep.air_date
-              ? new Date(ep.air_date + "T00:00:00").toLocaleDateString(undefined, {
-                  year: "numeric",
-                  month: "long",
-                  day: "numeric",
-                })
-              : "N/A"}{" "}
-            | Runtime:{" "}
-            {ep.runtime ? (
-              <>
-                {Math.floor(ep.runtime / 60) > 0 && `${Math.floor(ep.runtime / 60)}h `}
-                {ep.runtime % 60 > 0 && `${ep.runtime % 60}m`}
-              </>
-            ) : (
-              "N/A"
+            {tag && (
+              <span className={`text-caption font-semibold px-1.5 py-0.5 rounded ${tag.classes}`}>
+                {tag.label}
+              </span>
             )}
-          </p>
+            {unaired && (
+              <span className="text-caption font-semibold px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-300 border border-neutral-700">
+                {unaired}
+              </span>
+            )}
+          </div>
+          <p className="text-neutral-400 text-sm tabular">{details}</p>
           {overviewHidden ? (
             <button
               onClick={(e) => {
@@ -139,25 +147,41 @@ const EpisodeRow = memo(function EpisodeRow({
         </div>
       </Link>
       {isLoggedIn && (
-        <IconButton
-          label={watched ? "Mark as unwatched" : "Mark as watched"}
-          size="sm"
-          pressed={watched}
-          variant="secondary"
-          onClick={() => onToggle(ep.season_number, ep.episode_number)}
-          disabled={toggling}
-          className="mt-0.5"
-          icon={
-            toggling ? (
-              <span
-                className="w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin"
-                aria-hidden="true"
-              />
-            ) : (
-              <CheckIcon />
-            )
-          }
-        />
+        <div className="flex items-center gap-1.5 mt-0.5">
+          {canWatchThrough && !watched && !unaired && onWatchThrough && (
+            <IconButton
+              label="Mark watched up to here"
+              size="sm"
+              onClick={() => onWatchThrough(ep.season_number, ep.episode_number)}
+              disabled={toggling}
+              icon={<ChevronDoubleUpIcon className="w-4 h-4" aria-hidden="true" />}
+            />
+          )}
+          <IconButton
+            label={
+              watched
+                ? "Mark as unwatched"
+                : unaired
+                  ? "Can't mark an episode that hasn't aired"
+                  : "Mark as watched"
+            }
+            size="sm"
+            pressed={watched}
+            variant="secondary"
+            onClick={() => onToggle(ep.season_number, ep.episode_number)}
+            disabled={toggleDisabled}
+            icon={
+              toggling ? (
+                <span
+                  className="w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin"
+                  aria-hidden="true"
+                />
+              ) : (
+                <CheckIcon />
+              )
+            }
+          />
+        </div>
       )}
     </div>
   );

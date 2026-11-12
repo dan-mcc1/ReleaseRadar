@@ -40,6 +40,43 @@ class TestComputeEpisodeType:
         from app.services.episode_service import _compute_episode_type
         assert _compute_episode_type(10, 5, "finale", False) == "series_finale"
 
+    def test_earlier_finale_of_ended_show_is_season_finale(self):
+        from app.services.episode_service import _compute_episode_type
+        assert _compute_episode_type(10, 2, "finale", False, last_season=5) == "season_finale"
+        assert _compute_episode_type(10, 5, "finale", False, last_season=5) == "series_finale"
+
+    def test_specials_get_no_tag(self):
+        from app.services.episode_service import _compute_episode_type
+        assert _compute_episode_type(1, 0, None, None) is None
+        assert _compute_episode_type(3, 0, "finale", False, last_season=5) is None
+
+    def test_last_season_number_reads_season_table(self, db):
+        """Year-numbered seasons: the top season number, not the season count."""
+        from app.models.season import Season
+        from app.models.show import Show
+        from app.services.episode_service import _last_season_number
+
+        show = Show(id=4100, name="Yearly", number_of_seasons=2)
+        db.add(show)
+        db.flush()
+        db.add_all([
+            Season(id=41000, show_id=4100, season_number=0, episode_count=1),
+            Season(id=41001, show_id=4100, season_number=2019, episode_count=6),
+            Season(id=41002, show_id=4100, season_number=2020, episode_count=6),
+        ])
+        db.commit()
+        assert _last_season_number(db, show) == 2020
+
+    def test_last_season_number_falls_back_to_count(self, db):
+        from app.models.show import Show
+        from app.services.episode_service import _last_season_number
+
+        show = Show(id=4101, name="No seasons stored", number_of_seasons=3)
+        db.add(show)
+        db.commit()
+        assert _last_season_number(db, show) == 3
+        assert _last_season_number(db, None) is None
+
     def test_mid_season_type(self):
         from app.services.episode_service import _compute_episode_type
         assert _compute_episode_type(8, 1, "mid_season", True) == "mid_season"

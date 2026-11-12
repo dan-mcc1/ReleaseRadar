@@ -221,6 +221,141 @@ class TestSeasonWatched:
         ).count() == 0
 
 
+# ── add_episodes_through ────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def seed_show_two_seasons(db, seed_user):
+    """Two seasons plus a special; S2E3 hasn't aired and S2E4 has no date."""
+    from app.models.show import Show
+    from app.models.season import Season
+    from app.models.episode import Episode
+
+    show = Show(
+        id=2003, name="Two Seasons", status="Returning Series",
+        first_air_date=date(2020, 1, 1), number_of_seasons=2,
+        number_of_episodes=6, in_production=True, tracking_count=1,
+        vote_average=8.0,
+    )
+    db.add(show)
+    db.flush()
+    db.add_all([
+        Season(id=10030, show_id=2003, season_number=0, episode_count=1),
+        Season(id=10031, show_id=2003, season_number=1, episode_count=2),
+        Season(id=10032, show_id=2003, season_number=2, episode_count=4),
+    ])
+    db.add_all([
+        Episode(id=20300, show_id=2003, season_number=0, episode_number=1,
+                name="Special", air_date=date(2020, 6, 1)),
+        Episode(id=20311, show_id=2003, season_number=1, episode_number=1,
+                name="S1E1", air_date=date(2020, 1, 1)),
+        Episode(id=20312, show_id=2003, season_number=1, episode_number=2,
+                name="S1E2", air_date=date(2020, 1, 8)),
+        Episode(id=20321, show_id=2003, season_number=2, episode_number=1,
+                name="S2E1", air_date=date(2021, 1, 1)),
+        Episode(id=20322, show_id=2003, season_number=2, episode_number=2,
+                name="S2E2", air_date=date(2021, 1, 8)),
+        Episode(id=20323, show_id=2003, season_number=2, episode_number=3,
+                name="S2E3", air_date=date(2099, 1, 1)),
+        Episode(id=20324, show_id=2003, season_number=2, episode_number=4,
+                name="S2E4", air_date=None),
+    ])
+    db.commit()
+    return show
+
+
+def _watched_keys(db, show_id):
+    from app.models.episode_watched import EpisodeWatched
+    return {
+        (w.season_number, w.episode_number)
+        for w in db.query(EpisodeWatched).filter_by(user_id="test-uid-1", show_id=show_id)
+    }
+
+
+class TestAddEpisodesThrough:
+    def test_marks_earlier_seasons_and_episodes(self, db, seed_show_two_seasons):
+        from app.services.watched_episode_service import add_episodes_through
+
+        with patch("app.services.watched_episode_service.sync_season_episodes"), \
+             patch("app.services.watched_episode_service.ensure_show_in_db"):
+            result = add_episodes_through(db, "test-uid-1", 2003, 2, 2)
+
+        assert _watched_keys(db, 2003) == {(1, 1), (1, 2), (2, 1), (2, 2)}
+        assert result["added"] == 4
+
+    def test_skips_specials(self, db, seed_show_two_seasons):
+        from app.services.watched_episode_service import add_episodes_through
+
+        with patch("app.services.watched_episode_service.sync_season_episodes"), \
+             patch("app.services.watched_episode_service.ensure_show_in_db"):
+            add_episodes_through(db, "test-uid-1", 2003, 2, 1)
+
+        assert (0, 1) not in _watched_keys(db, 2003)
+
+    @pytest.mark.parametrize("episode_number", [3, 4])  # future date, no date
+    def test_refuses_unaired_target(self, db, seed_show_two_seasons, episode_number):
+        from app.services.watched_episode_service import (
+            EpisodeNotAiredError, add_episodes_through,
+        )
+
+        with patch("app.services.watched_episode_service.sync_season_episodes"), \
+             patch("app.services.watched_episode_service.ensure_show_in_db"), \
+             pytest.raises(EpisodeNotAiredError):
+            add_episodes_through(db, "test-uid-1", 2003, 2, episode_number)
+
+        assert _watched_keys(db, 2003) == set()
+
+    def test_idempotent_and_counts_only_new(self, db, seed_show_two_seasons):
+        from app.services.watched_episode_service import (
+            add_episode_watched, add_episodes_through,
+        )
+
+        with patch("app.services.watched_episode_service.sync_season_episodes"), \
+             patch("app.services.watched_episode_service.ensure_show_in_db"):
+            add_episode_watched(db, "test-uid-1", 2003, 1, 1)
+            first = add_episodes_through(db, "test-uid-1", 2003, 1, 2)
+            second = add_episodes_through(db, "test-uid-1", 2003, 1, 2)
+
+        assert first["added"] == 1
+        assert second["added"] == 0
+        assert _watched_keys(db, 2003) == {(1, 1), (1, 2)}
+
+    def test_specials_stay_in_season_zero(self, db, seed_show_two_seasons):
+        from app.services.watched_episode_service import add_episodes_through
+
+        with patch("app.services.watched_episode_service.sync_season_episodes"), \
+             patch("app.services.watched_episode_service.ensure_show_in_db"):
+            add_episodes_through(db, "test-uid-1", 2003, 0, 1)
+
+        assert _watched_keys(db, 2003) == {(0, 1)}
+
+
+class TestUnwatchedGaps:
+    def test_first_aired_unwatched_per_season(self, db, seed_show_two_seasons):
+        from app.services.watched_episode_service import (
+            add_episode_watched, get_unwatched_gaps,
+        )
+
+        with patch("app.services.watched_episode_service.ensure_show_in_db"):
+            add_episode_watched(db, "test-uid-1", 2003, 1, 1)
+            add_episode_watched(db, "test-uid-1", 2003, 2, 1)
+            add_episode_watched(db, "test-uid-1", 2003, 2, 2)
+
+        out = get_unwatched_gaps(db, "test-uid-1", 2003)
+        # S2E3 is in the future and S2E4 has no date, so season 2 is caught
+        # up; specials never count.
+        assert out == {"first_unwatched": {"1": 2}, "stored_seasons": [1, 2]}
+
+    def test_other_users_watches_dont_count(self, db, seed_show_two_seasons):
+        from app.services.watched_episode_service import (
+            add_episode_watched, get_unwatched_gaps,
+        )
+
+        with patch("app.services.watched_episode_service.ensure_show_in_db"):
+            add_episode_watched(db, "someone-else", 2003, 1, 1)
+        assert get_unwatched_gaps(db, "test-uid-1", 2003)["first_unwatched"] == {"1": 1, "2": 1}
+
+
 # ── get_next_unwatched_episode ──────────────────────────────────────────────
 
 

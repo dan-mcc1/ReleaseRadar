@@ -1,5 +1,5 @@
 import { apiFetch } from "../../utils/apiFetch";
-import { TrackingLimitError } from "./errors";
+import { ApiError, TrackingLimitError } from "./errors";
 
 /**
  * Thin wrapper around apiFetch for use as a TanStack Query `queryFn`.
@@ -11,7 +11,7 @@ export async function queryFetch<T = unknown>(
 ): Promise<T> {
   const res = await apiFetch(path, options);
   if (!res.ok) {
-    throw new Error(`API error ${res.status}: ${path}`);
+    throw new ApiError(res.status, path);
   }
   return res.json() as Promise<T>;
 }

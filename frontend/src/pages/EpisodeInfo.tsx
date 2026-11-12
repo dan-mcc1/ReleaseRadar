@@ -11,7 +11,7 @@ import {
   useAnnotateEpisode,
 } from "../hooks/api/useEpisodes";
 import { useNotificationPrefs } from "../hooks/api/useNotifications";
-import { useAuthUser } from "../hooks/useAuthUser";
+import { useAuthLoading, useAuthUser } from "../hooks/useAuthUser";
 import { ExclamationTriangleIcon } from "@heroicons/react/24/outline";
 import {
   Button,
@@ -20,12 +20,21 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   PageHeader,
+  PageState,
   PlusIcon,
   SectionHeader,
   StarIcon,
   cx,
   focusRing,
 } from "../components/ui";
+import { unairedLabel } from "../components/EpisodeRow";
+import {
+  episodeKind,
+  formatAirDate,
+  formatRuntime,
+  seasonLabel,
+  type EpisodeKind,
+} from "../utils/episodes";
 
 interface CastMember {
   id: number;
@@ -71,39 +80,13 @@ interface AdjacentEpisode {
   still_path: string | null;
 }
 
-function getEpisodeTag(
-  episodeNumber: number,
-  episodeType: string | null | undefined,
-  inProduction: boolean | null | undefined,
-): { label: string; bg: string; color: string } | null {
-  if (episodeNumber === 1) {
-    return { label: "Season Premiere", bg: "bg-primary-500/15", color: "text-primary-400" };
-  }
-  if (episodeType === "finale") {
-    if (inProduction === false) {
-      return { label: "Series Finale", bg: "bg-error-500/15", color: "text-error-400" };
-    }
-    return { label: "Season Finale", bg: "bg-warning-500/15", color: "text-warning-400" };
-  }
-  if (episodeType === "mid_season") {
-    return { label: "Mid-Season Finale", bg: "bg-warning-500/15", color: "text-warning-400" };
-  }
-  return null;
-}
-
-function formatRuntime(minutes: number) {
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  return h > 0 ? `${h}h ${m > 0 ? `${m}m` : ""}`.trim() : `${m}m`;
-}
-
-function formatAirDate(dateStr: string) {
-  return new Date(dateStr + "T00:00:00").toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
+const EPISODE_TAGS: Record<EpisodeKind, { label: string; bg: string; color: string }> = {
+  show_premiere: { label: "Series Premiere", bg: "bg-highlight-500/15", color: "text-highlight-400" },
+  season_premiere: { label: "Season Premiere", bg: "bg-primary-500/15", color: "text-primary-400" },
+  season_finale: { label: "Season Finale", bg: "bg-warning-500/15", color: "text-warning-400" },
+  series_finale: { label: "Series Finale", bg: "bg-error-500/15", color: "text-error-400" },
+  mid_season: { label: "Mid-Season Finale", bg: "bg-warning-500/15", color: "text-warning-400" },
+};
 
 export default function EpisodeInfo() {
   const { showId, season, episode } = useParams<{
@@ -120,7 +103,11 @@ export default function EpisodeInfo() {
     enabled: !!showId && !!season && !!episode,
   });
 
-  const showQuery = useQuery<{ name: string; in_production: boolean | null }>({
+  const showQuery = useQuery<{
+    name: string;
+    in_production: boolean | null;
+    seasons?: { season_number: number }[];
+  }>({
     queryKey: queryKeys.mediaDetail("tv", showId ?? ""),
     queryFn: () => queryFetch(`/tv/${showId}`),
     enabled: !!showId,
@@ -154,6 +141,9 @@ export default function EpisodeInfo() {
   const data = episodeQuery.data;
   const showName = showQuery.data?.name ?? null;
   const showInProduction = showQuery.data?.in_production ?? null;
+  const lastSeason = showQuery.data?.seasons?.length
+    ? Math.max(...showQuery.data.seasons.map((s) => s.season_number))
+    : null;
 
   const watchedEntry =
     watchedEpisodesQuery.data?.find(
@@ -167,6 +157,9 @@ export default function EpisodeInfo() {
   // episode of this show, this episode is unwatched, and falls strictly after
   // their last-watched position.
   const user = useAuthUser();
+  const authLoading = useAuthLoading();
+  // Only once auth has answered, so signed-in visitors never see it flash.
+  const signedOut = !user && !authLoading;
   const { data: prefs } = useNotificationPrefs();
   const hideSpoilers = prefs?.hide_spoilers ?? true;
   const lastWatched = (watchedEpisodesQuery.data ?? []).reduce<
@@ -237,25 +230,18 @@ export default function EpisodeInfo() {
   }
 
   if (episodeQuery.isPending) {
-    return (
-      <div className="flex items-center justify-center py-32">
-        <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return <PageState status="loading" label="Loading episode…" />;
   }
 
   if (episodeQuery.isError || !data) {
     return (
-      <div className="w-full max-w-3xl mx-auto px-6 py-16 text-center">
-        <p className="text-error-400 text-title">
-          {episodeQuery.error?.message ?? "Episode not found."}
-        </p>
-        {showId && (
-          <ButtonLink to={`/tv/${showId}`} icon={<ChevronLeftIcon />} className="mt-4">
-            Back to show
-          </ButtonLink>
-        )}
-      </div>
+      <PageState
+        status="error"
+        error={episodeQuery.error}
+        subject="episode"
+        back={showId ? { to: `/tv/${showId}`, label: "Back to show" } : undefined}
+        onRetry={() => episodeQuery.refetch()}
+      />
     );
   }
 
@@ -271,11 +257,15 @@ export default function EpisodeInfo() {
     ? `${BASE_IMAGE_URL}/w1280${data.still_path}`
     : null;
 
-  const episodeTag = getEpisodeTag(
+  const kind = episodeKind(
+    data.season_number,
     data.episode_number,
     data.episode_type,
     showInProduction,
+    lastSeason,
   );
+  const episodeTag = kind ? EPISODE_TAGS[kind] : null;
+  const unaired = unairedLabel(data.air_date);
 
   const seasonCode = `S${data.season_number}`;
   const episodeCode = `E${data.episode_number}`;
@@ -300,7 +290,7 @@ export default function EpisodeInfo() {
           to={`/tv/${showId}/season/${data.season_number}`}
           className="text-neutral-400 hover:text-neutral-200 transition-colors"
         >
-          Season {data.season_number}
+          {seasonLabel(data.season_number)}
         </Link>
         <span className="text-neutral-500">/</span>
         <span className="text-neutral-200 font-medium">
@@ -352,10 +342,16 @@ export default function EpisodeInfo() {
                 {formatRuntime(data.runtime)}
               </span>
             )}
-            {data.air_date && (
-              <span className="text-caption text-neutral-500">
-                · {formatAirDate(data.air_date)}
+            {unaired ? (
+              <span className="px-2.5 py-1 text-caption font-semibold bg-neutral-800 text-neutral-200 border border-neutral-700 rounded-md">
+                {unaired}
               </span>
+            ) : (
+              data.air_date && (
+                <span className="text-caption text-neutral-500">
+                  · {formatAirDate(data.air_date)}
+                </span>
+              )
             )}
           </div>
 
@@ -364,7 +360,21 @@ export default function EpisodeInfo() {
 
         {/* Watched panel */}
         <div className="flex flex-col gap-2">
-          {isWatched ? (
+          {signedOut ? (
+            <>
+              <ButtonLink
+                to={`/signIn?next=${encodeURIComponent(`/tv/${showId}/episode/${season}/${episode}`)}`}
+                variant="primary"
+                icon={<PlusIcon />}
+                className="w-full"
+              >
+                Sign in to track
+              </ButtonLink>
+              <div className="text-caption text-neutral-400">
+                Keep track of what you've watched and what airs next.
+              </div>
+            </>
+          ) : !user ? null : isWatched ? (
             <>
               <div className="flex items-center gap-2 text-label font-semibold text-neutral-100">
                 <CheckIcon className="w-4 h-4 text-primary-400" />
@@ -386,13 +396,15 @@ export default function EpisodeInfo() {
                 variant="primary"
                 icon={<PlusIcon />}
                 onClick={toggleWatched}
-                disabled={toggleEpisode.isPending}
+                disabled={toggleEpisode.isPending || !!unaired}
                 loading={toggleEpisode.isPending}
                 className="w-full"
               >
                 Mark as watched
               </Button>
-              <div className="text-caption text-neutral-400">Logs to your activity</div>
+              <div className="text-caption text-neutral-400">
+                {unaired ? "You can mark it once it airs" : "Logs to your activity"}
+              </div>
             </>
           )}
         </div>

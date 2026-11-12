@@ -13,6 +13,7 @@ import {
   Card,
   CheckIcon,
   EmptyState,
+  PageState,
   IconButton,
   SectionHeader,
   StarIcon,
@@ -173,17 +174,16 @@ export default function CollectionInfo() {
     };
   }, [user, sortedParts, statusMap, today]);
 
-  if (loading)
-    return (
-      <div className="flex items-center justify-center min-h-64">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-neutral-400 text-body">Loading collection…</p>
-        </div>
-      </div>
-    );
+  if (loading) return <PageState status="loading" label="Loading collection…" />;
   if (error && !isNotFoundError(error))
-    return <EmptyState title="Couldn't load this collection" description={error.message} />;
+    return (
+      <PageState
+        status="error"
+        error={error}
+        subject="collection"
+        back={{ to: "/collections", label: "Browse collections" }}
+      />
+    );
   if (!rawCollection)
     return (
       <EmptyState

@@ -21,7 +21,7 @@ import VideoGallery from "../components/media/VideoGallery";
 import ContentRatingBadge from "../components/media/ContentRatingBadge";
 import { BASE_IMAGE_URL } from "../constants";
 import FriendsActivityWidget from "../components/FriendsActivityWidget";
-import { ButtonLink, PlusIcon, SectionHeader, StarIcon, buttonClass } from "../components/ui";
+import { ButtonLink, PageState, PlusIcon, SectionHeader, StarIcon, buttonClass } from "../components/ui";
 import { RectangleStackIcon } from "@heroicons/react/24/outline";
 
 type FullMovieData = Movie & {
@@ -33,12 +33,6 @@ type FullMovieData = Movie & {
     poster_path: string | null;
     backdrop_path: string | null;
   } | null;
-  created_by: {
-    id: number;
-    credit_id: string;
-    name: string;
-    profile_path: string | null;
-  }[];
   credits: {
     cast: {
       id: number;
@@ -46,6 +40,7 @@ type FullMovieData = Movie & {
       profile_path: string | null;
       character: string;
     }[];
+    crew?: { id: number; name: string; job: string }[];
   };
   external_ids: MediaExternalIds;
   recommendations: { results: Movie[] };
@@ -89,6 +84,7 @@ export default function MovieInfo() {
     statusReady,
     externalScores,
     aggRating,
+    refetch,
   } = useMediaInfo<FullMovieData>({
     contentType: "movie",
     id,
@@ -100,17 +96,17 @@ export default function MovieInfo() {
   const signedOut = !user && !authLoading;
   usePageMeta({ title: movie?.title, description: movie?.overview });
 
-  if (loading)
+  if (loading) return <PageState status="loading" label="Loading movie…" />;
+  if (error || !movie)
     return (
-      <div className="flex items-center justify-center min-h-64">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-neutral-400 text-sm">Loading movie info…</p>
-        </div>
-      </div>
+      <PageState
+        status="error"
+        error={error}
+        subject="movie"
+        back={{ to: "/search", label: "Search for a movie" }}
+        onRetry={refetch}
+      />
     );
-  if (error) return <p className="text-error-400 p-6">{error}</p>;
-  if (!movie) return <p className="text-neutral-400 p-6">Movie not found.</p>;
 
   const releaseYear = movie.release_date
     ? new Date(movie.release_date + "T00:00:00").getFullYear()
@@ -140,6 +136,15 @@ export default function MovieInfo() {
   })();
 
   const topGenres = movie.genres?.slice(0, 3).map((g) => g.name) ?? [];
+
+  // A person can be credited as Director more than once (e.g. per segment).
+  const directors = [
+    ...new Map(
+      (movie.credits?.crew ?? [])
+        .filter((c) => c.job === "Director")
+        .map((c) => [c.id, c.name]),
+    ).entries(),
+  ].map(([id, name]) => ({ id, name }));
 
   const hasOtherRatings = Boolean(
     externalScores?.imdb ||
@@ -176,17 +181,29 @@ export default function MovieInfo() {
     <>
       <SectionHeader title="Key facts" className="mb-3" />
       <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
-        {movie.created_by && movie.created_by.length > 0 && (
+        {directors.length > 0 && (
           <>
-            <span className="text-neutral-500">Director</span>
-            <span className="font-medium">{movie.created_by.map((m) => m.name).join(", ")}</span>
+            <span className="text-neutral-500">{directors.length > 1 ? "Directors" : "Director"}</span>
+            <span className="font-medium">
+              {directors.map((d, i) => (
+                <span key={d.id}>
+                  {i > 0 && ", "}
+                  <Link
+                    to={`/person/${d.id}`}
+                    className="hover:text-primary-300 underline-offset-2 hover:underline transition-colors"
+                  >
+                    {d.name}
+                  </Link>
+                </span>
+              ))}
+            </span>
           </>
         )}
         <span className="text-neutral-500">Status</span>
         <span className="font-medium">{movie.status}</span>
         {movie.release_date && (
           <>
-            <span className="text-neutral-500">Released</span>
+            <span className="text-neutral-500">{movieHasReleased ? "Released" : "Releases"}</span>
             <span className="font-medium">
               {formatLocalDate(movie.release_date, { year: "numeric", month: "short", day: "numeric" })}
             </span>

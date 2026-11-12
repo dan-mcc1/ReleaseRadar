@@ -10,6 +10,9 @@ from app.services.watched_episode_service import (
     get_next_unwatched_episode,
     get_next_unwatched_episodes_bulk,
     add_season_watched,
+    add_episodes_through,
+    get_unwatched_gaps,
+    EpisodeNotAiredError,
     remove_season_watched,
 )
 from app.dependencies.auth import get_current_user
@@ -40,6 +43,25 @@ def add_episode(
     uid: str = Depends(get_current_user),
 ):
     result = add_episode_watched(db, uid, show_id, season_number, episode_number)
+    invalidate_stats_cache(uid)
+    return result
+
+
+# Mark an episode and every aired episode before it as watched
+@router.post("/through", dependencies=[Depends(track_budget)])
+@limiter.limit("30/minute")
+def add_through_episode(
+    request: Request,
+    show_id: int = Query(..., ge=1, le=MAX_ID),
+    season_number: int = Query(..., ge=0, le=MAX_SEASON_EPISODE_NUMBER),
+    episode_number: int = Query(..., ge=0, le=MAX_SEASON_EPISODE_NUMBER),
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    try:
+        result = add_episodes_through(db, uid, show_id, season_number, episode_number)
+    except EpisodeNotAiredError:
+        raise HTTPException(status_code=400, detail="That episode hasn't aired yet.")
     invalidate_stats_cache(uid)
     return result
 
@@ -103,6 +125,16 @@ def get_watched_episodes_for_show(
     uid: str = Depends(get_current_user),
 ):
     return get_watched_episodes_by_show(db, uid, show_id)
+
+
+# First aired, unwatched episode of each season (for "Mark watched up to here")
+@router.get("/{show_id}/gaps")
+def get_episode_gaps(
+    show_id: int,
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    return get_unwatched_gaps(db, uid, show_id)
 
 
 # Get the next unwatched episode for a show

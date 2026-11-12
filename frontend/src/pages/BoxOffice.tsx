@@ -9,6 +9,7 @@ import {
   ChevronRightIcon,
   Chip,
   EmptyState,
+  describeLoadError,
   PageHeader,
   Segmented,
   selectClass,
@@ -171,7 +172,7 @@ export default function BoxOffice() {
 
       {/* Error */}
       {!loading && error && (
-        <EmptyState title="Couldn't load box office data" description={error?.message} />
+        <EmptyState title="Couldn't load box office data" description={describeLoadError(error, "data").description} />
       )}
 
       {/* Empty */}

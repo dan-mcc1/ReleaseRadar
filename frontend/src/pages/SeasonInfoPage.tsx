@@ -7,8 +7,10 @@ import { queryFetch } from "../hooks/api/queryFetch";
 import { useAuthUser } from "../hooks/useAuthUser";
 import {
   useWatchedEpisodes,
+  useEpisodeGaps,
   useToggleEpisode,
   useToggleSeason,
+  useWatchThrough,
 } from "../hooks/api/useEpisodes";
 import { useNotificationPrefs } from "../hooks/api/useNotifications";
 import {
@@ -20,8 +22,19 @@ import {
 import EpisodeRow, { epKey } from "../components/EpisodeRow";
 import StarRating from "../components/StarRating";
 import { useToast } from "../components/Toast";
-import { Button, ButtonLink, CheckIcon, ChevronLeftIcon, PageHeader, SectionHeader } from "../components/ui";
+import {
+  Button,
+  CheckIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  PageHeader,
+  PageState,
+  SectionHeader,
+  cx,
+  focusRing,
+} from "../components/ui";
 import type { Episode } from "../types/calendar";
+import { formatAirDate, hasUnwatchedBefore, seasonLabel } from "../utils/episodes";
 
 interface TmdbSeason {
   id: number;
@@ -36,15 +49,12 @@ interface TmdbSeason {
 interface ShowSummary {
   id: number;
   name: string;
+  in_production?: boolean | null;
+  seasons?: { season_number: number; name?: string | null; episode_count: number }[];
 }
 
 function formatDate(iso: string | null | undefined): string | null {
-  if (!iso) return null;
-  return new Date(iso + "T00:00:00").toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
+  return iso ? formatAirDate(iso) : null;
 }
 
 export default function SeasonInfoPage() {
@@ -53,7 +63,10 @@ export default function SeasonInfoPage() {
     seasonNumber: string;
   }>();
   const showIdNum = Number(showId ?? 0);
-  const seasonNum = Number(seasonNumber ?? 0);
+  const seasonNum = Number(seasonNumber ?? "");
+  // Season 0 is Specials, so 0 is a real season.
+  const validParams =
+    showIdNum > 0 && Number.isInteger(seasonNum) && seasonNum >= 0;
 
   const user = useAuthUser();
   const isLoggedIn = !!user;
@@ -73,26 +86,29 @@ export default function SeasonInfoPage() {
         `/tv/${showIdNum}/season/${seasonNum}/info`,
         { signal },
       ),
-    enabled: showIdNum > 0 && seasonNum > 0,
+    enabled: validParams,
   });
 
   usePageTitle(
     showQuery.data
-      ? `${showQuery.data.name} · Season ${seasonNum}`
+      ? `${showQuery.data.name} · ${seasonLabel(seasonNum, seasonQuery.data?.name)}`
       : "Season",
   );
 
   const { data: watchedEpisodesData } = useWatchedEpisodes(showIdNum);
+  const { data: gaps } = useEpisodeGaps(showIdNum);
   const rawWatched =
     (watchedEpisodesData as
       | { season_number: number; episode_number: number }[]
       | undefined) ?? [];
 
-  const { watchedSet, lastWatched } = useMemo(() => {
+  const { watchedSet, lastWatched, watchedCountBySeason } = useMemo(() => {
     const set = new Set<string>();
+    const counts = new Map<number, number>();
     let last: { s: number; e: number } | null = null;
     for (const e of rawWatched) {
       set.add(epKey(e.season_number, e.episode_number));
+      counts.set(e.season_number, (counts.get(e.season_number) ?? 0) + 1);
       if (
         !last ||
         e.season_number > last.s ||
@@ -101,8 +117,26 @@ export default function SeasonInfoPage() {
         last = { s: e.season_number, e: e.episode_number };
       }
     }
-    return { watchedSet: set, lastWatched: last };
+    return { watchedSet: set, lastWatched: last, watchedCountBySeason: counts };
   }, [rawWatched]);
+
+  // Seasons in order, for the previous/next links and the series-finale tag.
+  const showSeasons = useMemo(
+    () =>
+      [...(showQuery.data?.seasons ?? [])].sort(
+        (a, b) => a.season_number - b.season_number,
+      ),
+    [showQuery.data?.seasons],
+  );
+  const seasonIndex = showSeasons.findIndex((s) => s.season_number === seasonNum);
+  const prevSeason = seasonIndex > 0 ? showSeasons[seasonIndex - 1] : null;
+  const nextSeason =
+    seasonIndex >= 0 && seasonIndex < showSeasons.length - 1
+      ? showSeasons[seasonIndex + 1]
+      : null;
+  const lastSeason = showSeasons.length
+    ? showSeasons[showSeasons.length - 1].season_number
+    : null;
 
   const { data: prefs } = useNotificationPrefs();
   const hideSpoilers = prefs?.hide_spoilers ?? true;
@@ -141,6 +175,7 @@ export default function SeasonInfoPage() {
 
   const toggleEpisodeMutation = useToggleEpisode();
   const toggleSeasonMutation = useToggleSeason();
+  const watchThroughMutation = useWatchThrough();
   const [togglingEpisodes, setTogglingEpisodes] = useState<Set<string>>(
     new Set(),
   );
@@ -171,6 +206,32 @@ export default function SeasonInfoPage() {
       }
     },
     [user, toggleEpisodeMutation, showIdNum],
+  );
+
+  const onWatchThrough = useCallback(
+    async (sn: number, en: number) => {
+      if (!user) return;
+      const key = epKey(sn, en);
+      setTogglingEpisodes((prev) => new Set(prev).add(key));
+      try {
+        const { added } = await watchThroughMutation.mutateAsync({
+          showId: showIdNum,
+          seasonNumber: sn,
+          episodeNumber: en,
+        });
+        toast.success(`Marked ${added} episode${added === 1 ? "" : "s"} watched`);
+      } catch (err) {
+        console.error(err);
+        toast.error("Couldn't mark those episodes. Try again.");
+      } finally {
+        setTogglingEpisodes((prev) => {
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
+      }
+    },
+    [user, watchThroughMutation, showIdNum, toast],
   );
 
   const onToggleSeason = useCallback(async () => {
@@ -213,26 +274,26 @@ export default function SeasonInfoPage() {
     }
   };
 
+  const backToShow =
+    showIdNum > 0 ? { to: `/tv/${showIdNum}`, label: "Back to show" } : undefined;
+
+  if (!validParams) {
+    return <PageState status="error" subject="season" back={backToShow} />;
+  }
+
   if (seasonQuery.isPending) {
-    return (
-      <div className="flex items-center justify-center py-32">
-        <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return <PageState status="loading" label="Loading season…" />;
   }
 
   if (seasonQuery.isError || !seasonQuery.data) {
     return (
-      <div className="w-full max-w-3xl mx-auto px-6 py-16 text-center">
-        <p className="text-error-400 text-title">
-          {seasonQuery.error?.message ?? "Season not found."}
-        </p>
-        {showIdNum > 0 && (
-          <ButtonLink to={`/tv/${showIdNum}`} icon={<ChevronLeftIcon />} className="mt-4">
-            Back to show
-          </ButtonLink>
-        )}
-      </div>
+      <PageState
+        status="error"
+        error={seasonQuery.error}
+        subject="season"
+        back={backToShow}
+        onRetry={() => seasonQuery.refetch()}
+      />
     );
   }
 
@@ -242,7 +303,7 @@ export default function SeasonInfoPage() {
   const dateRange =
     startStr && endStr && startStr !== endStr
       ? `${startStr} – ${endStr}`
-      : startStr ?? "No date";
+      : startStr ?? "Dates TBA";
 
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100">
@@ -260,7 +321,7 @@ export default function SeasonInfoPage() {
           </>
         )}
         <span className="text-neutral-200 font-medium">
-          {season.name || `Season ${season.season_number}`}
+          {seasonLabel(season.season_number, season.name)}
         </span>
       </div>
 
@@ -275,7 +336,7 @@ export default function SeasonInfoPage() {
         )}
         <div className="flex-1 min-w-0">
           <PageHeader
-            title={season.name || `Season ${season.season_number}`}
+            title={seasonLabel(season.season_number, season.name)}
             description={`${dateRange} · ${totalCount} episode${totalCount === 1 ? "" : "s"}`}
             className="mb-3"
           />
@@ -303,8 +364,8 @@ export default function SeasonInfoPage() {
             </div>
           )}
 
-          {/* Rating */}
-          {(isLoggedIn || (aggregate && aggregate.count > 0)) && (
+          {/* Rating. Specials can't be rated: ratings are per numbered season. */}
+          {seasonNum > 0 && (isLoggedIn || (aggregate && aggregate.count > 0)) && (
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-4">
               {isLoggedIn && (
                 <div className="flex items-center gap-2">
@@ -361,12 +422,71 @@ export default function SeasonInfoPage() {
                   isLoggedIn={isLoggedIn}
                   hideOverview={hideOverview}
                   onToggle={onToggleEpisode}
+                  inProduction={showQuery.data?.in_production}
+                  lastSeason={lastSeason}
+                  canWatchThrough={
+                    isLoggedIn &&
+                    hasUnwatchedBefore(
+                      ep,
+                      episodes,
+                      (sn, en) => watchedSet.has(epKey(sn, en)),
+                      showSeasons,
+                      watchedCountBySeason,
+                      gaps,
+                    )
+                  }
+                  onWatchThrough={onWatchThrough}
                 />
               );
             })}
           </div>
         )}
       </div>
+
+      {/* Previous / next season */}
+      {(prevSeason || nextSeason) && (
+        <nav aria-label="Seasons" className="px-6 md:px-10 pb-10">
+          <div className="h-px w-full bg-neutral-800 mb-5" />
+          <div className="grid grid-cols-2 gap-3.5">
+            {prevSeason ? (
+              <Link
+                to={`/tv/${showIdNum}/season/${prevSeason.season_number}`}
+                className={cx(
+                  "flex items-center gap-4 p-4 rounded-surface border bg-neutral-900 border-neutral-800 hover:border-neutral-600 transition-colors",
+                  focusRing,
+                )}
+              >
+                <ChevronLeftIcon className="w-4 h-4 text-neutral-400 flex-shrink-0" />
+                <div className="min-w-0">
+                  <div className="text-caption text-neutral-400 mb-1">Previous season</div>
+                  <div className="text-title text-neutral-200 truncate">
+                    {seasonLabel(prevSeason.season_number, prevSeason.name)}
+                  </div>
+                </div>
+              </Link>
+            ) : (
+              <span />
+            )}
+            {nextSeason && (
+              <Link
+                to={`/tv/${showIdNum}/season/${nextSeason.season_number}`}
+                className={cx(
+                  "flex items-center gap-4 p-4 rounded-surface border bg-neutral-900 border-neutral-800 hover:border-neutral-600 text-right justify-end transition-colors",
+                  focusRing,
+                )}
+              >
+                <div className="min-w-0">
+                  <div className="text-caption text-neutral-400 mb-1">Next season</div>
+                  <div className="text-title text-neutral-200 truncate">
+                    {seasonLabel(nextSeason.season_number, nextSeason.name)}
+                  </div>
+                </div>
+                <ChevronRightIcon className="w-4 h-4 text-neutral-400 flex-shrink-0" />
+              </Link>
+            )}
+          </div>
+        </nav>
+      )}
     </div>
   );
 }
