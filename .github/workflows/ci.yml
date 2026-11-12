@@ -88,6 +88,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run lint
+      - run: npm run lint:design
       - run: npm test
       # Type-check and production build. VITE_* values are only inlined, so
       # the build needs no real config.

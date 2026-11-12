@@ -18,9 +18,11 @@ def create_user(
     username: str = None,
     avatar_key: str = None,
     display_name: str | None = None,
+    terms_version: str | None = None,
 ):
     """
-    Create a user in the database if they don't exist.
+    Create a user in the database if they don't exist. An existing account is
+    returned as is: its recorded Terms acceptance is never overwritten.
     """
     existing = db.query(User).filter_by(id=user_id).first()
     if existing:
@@ -35,6 +37,8 @@ def create_user(
         display_name=cleaned_display,
         created_at=datetime.now(timezone.utc),
         avatar_key=avatar_key,
+        terms_accepted_at=datetime.now(timezone.utc) if terms_version else None,
+        terms_version=terms_version,
     )
     db.add(db_user)
     db.commit()

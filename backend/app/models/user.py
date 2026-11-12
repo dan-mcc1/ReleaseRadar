@@ -22,7 +22,7 @@ class User(Base):
         String, default="friends_only", nullable=False, server_default="friends_only"
     )
     avatar_key = Column(String, nullable=True)
-    bio = Column(String, nullable=True)
+    bio = Column(Text, nullable=True)
     subscription_tier = Column(String, default="free", server_default="free", nullable=False)
     notify_new_seasons = Column(Boolean, default=True, server_default="true", nullable=False)
     notify_streaming_changes = Column(Boolean, default=True, server_default="true", nullable=False)
@@ -44,6 +44,10 @@ class User(Base):
     ical_token_version = Column(Integer, default=1, server_default="1", nullable=False)
     sync_token_version = Column(Integer, default=0, server_default="0", nullable=False)
     last_digest_sent_at = Column(Date, nullable=True)
+    # When this account agreed to the Terms of Service and Privacy Policy, and
+    # which version (app.config.legal.TERMS_VERSION). Set once, at sign-up.
+    terms_accepted_at = Column(DateTime(timezone=True), nullable=True)
+    terms_version = Column(String, nullable=True)
 
     # Push notifications (iOS APNs via FCM)
     push_notifications_enabled = Column(

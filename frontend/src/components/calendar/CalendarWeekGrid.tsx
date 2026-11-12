@@ -38,7 +38,7 @@ export default function CalendarWeekGrid({
               className={`flex flex-col items-center py-3 border-r border-neutral-700 last:border-r-0 ${isToday ? "bg-primary-600/20" : ""}`}
             >
               <span
-                className={`text-xs uppercase tracking-wide font-medium ${isToday ? "text-primary-400" : "text-neutral-500"}`}
+                className={`text-caption font-medium ${isToday ? "text-primary-400" : "text-neutral-500"}`}
               >
                 {DAY_NAMES[i][0]}
                 {DAY_NAMES[i][1]}

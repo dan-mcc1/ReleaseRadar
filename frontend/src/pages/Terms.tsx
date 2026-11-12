@@ -2,6 +2,8 @@ import { Link } from "react-router-dom";
 import { usePageMeta } from "../hooks/usePageMeta";
 import { PageHeader } from "../components/ui";
 
+// Each account records the Terms version it agreed to. When these Terms change,
+// update backend/app/config/legal.py TERMS_VERSION ("2026-06-02") to match.
 const EFFECTIVE_DATE = "June 2, 2026";
 
 const SECTIONS = [
