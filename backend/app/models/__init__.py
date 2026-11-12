@@ -41,6 +41,7 @@ from app.models.shelf_item import ShelfItem  # noqa: F401
 from app.models.show import Show  # noqa: F401
 from app.models.show_video import ShowVideo  # noqa: F401
 from app.models.subscription import Subscription  # noqa: F401
+from app.models.title_recs import RecCandidate, TitleRecs  # noqa: F401
 from app.models.user import User  # noqa: F401
 from app.models.user_collection_ranking import UserCollectionRanking  # noqa: F401
 from app.models.user_streaming_service import UserStreamingService  # noqa: F401

@@ -1,21 +1,38 @@
-import { useState, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { Show, Movie } from "../types/calendar";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { BASE_IMAGE_URL } from "../constants";
-import VirtualGrid from "../components/VirtualGrid";
+import { useSearchParams } from "react-router-dom";
+import VirtualSections, { type GridSection } from "../components/VirtualSections";
+import { POSTER_COLS, type ColBreakpoint } from "../components/VirtualGrid";
 import ListFilterPanel, {
   DEFAULT_FILTERS,
   type ListFilters,
   countActiveFilters,
   applyFilters,
 } from "../components/ListFilterPanel";
+import {
+  Button,
+  ButtonLink,
+  CloseIcon,
+  EmptyState,
+  IconButton,
+  PageHeader,
+  PosterCard,
+  PosterCardSkeleton,
+  SearchField,
+  Segmented,
+  StarIcon,
+  cx,
+  focusRing,
+  selectClass,
+} from "../components/ui";
+import { useToast } from "../components/Toast";
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useWatched, useRemoveFromList } from "../hooks/api/useLists";
+import { useRateItem } from "../hooks/api/useWatchActions";
 import { useMyProviderIds } from "../hooks/api/useStreamingServices";
 
 type TabType = "all" | "movies" | "tv";
 type SortType =
-  | "default"
   | "watched_desc"
   | "watched_asc"
   | "title_asc"
@@ -30,26 +47,48 @@ type SortType =
 
 type CombinedItem = (Movie | Show) & { _contentType: "movie" | "tv" };
 
+// The poster tiers from 1536px up; below that, fewer and wider cards so the
+// stars and the date still fit under each poster.
+const WATCHED_COLS: ColBreakpoint[] = [
+  ...POSTER_COLS.filter((bp) => bp.minWidth >= 1536),
+  { minWidth: 1280, cols: 8 },
+  { minWidth: 1024, cols: 7 },
+  { minWidth: 768, cols: 5 },
+  { minWidth: 480, cols: 4 },
+  { minWidth: 0, cols: 3 },
+];
+
 function getTitle(item: Movie | Show) {
   return "title" in item ? item.title : item.name;
 }
 
 function getDate(item: Movie | Show): string {
-  return (
-    ("release_date" in item ? item.release_date : item.first_air_date) ?? ""
-  );
+  return ("release_date" in item ? item.release_date : item.first_air_date) ?? "";
 }
 
-function applySort<T extends Movie | Show>(items: T[], sort: SortType): T[] {
+function itemKey(item: CombinedItem): string {
+  return `${item._contentType}-${item.id}`;
+}
+
+/** Unrated last, whichever way the ratings run. */
+function byRating(a: CombinedItem, b: CombinedItem, dir: 1 | -1): number {
+  const ra = a.user_rating ?? null;
+  const rb = b.user_rating ?? null;
+  if (ra === null && rb === null) return 0;
+  if (ra === null) return 1;
+  if (rb === null) return -1;
+  return (ra - rb) * dir;
+}
+
+function applySort(items: CombinedItem[], sort: SortType): CombinedItem[] {
   const sorted = [...items];
   switch (sort) {
+    // Undated last either way, where "Date unknown" is drawn.
     case "watched_desc":
-      return sorted.sort((a, b) =>
-        (b.watched_at ?? "").localeCompare(a.watched_at ?? ""),
-      );
+      return sorted.sort((a, b) => (b.watched_at ?? "").localeCompare(a.watched_at ?? ""));
     case "watched_asc":
       return sorted.sort((a, b) =>
-        (a.watched_at ?? "").localeCompare(b.watched_at ?? ""),
+        (a.watched_at ?? "￿").localeCompare(b.watched_at ?? "￿"),
       );
     case "title_asc":
       return sorted.sort((a, b) => getTitle(a).localeCompare(getTitle(b)));
@@ -62,124 +101,212 @@ function applySort<T extends Movie | Show>(items: T[], sort: SortType): T[] {
     case "popularity_desc":
       return sorted.sort((a, b) => (b.popularity ?? 0) - (a.popularity ?? 0));
     case "rating_desc":
-      return sorted.sort((a, b) => {
-        const ra = a.user_rating ?? null;
-        const rb = b.user_rating ?? null;
-        if (ra === null && rb === null) return 0;
-        if (ra === null) return 1;
-        if (rb === null) return -1;
-        return rb - ra;
-      });
+      return sorted.sort((a, b) => byRating(a, b, -1));
     case "rating_asc":
-      return sorted.sort((a, b) => {
-        const ra = a.user_rating ?? null;
-        const rb = b.user_rating ?? null;
-        if (ra === null && rb === null) return 0;
-        if (ra === null) return 1;
-        if (rb === null) return -1;
-        return ra - rb;
-      });
+      return sorted.sort((a, b) => byRating(a, b, 1));
     case "tmdb_rating_desc":
-      return sorted.sort(
-        (a, b) => (b.vote_average ?? 0) - (a.vote_average ?? 0),
-      );
+      return sorted.sort((a, b) => (b.vote_average ?? 0) - (a.vote_average ?? 0));
     case "tmdb_rating_asc":
-      return sorted.sort(
-        (a, b) => (a.vote_average ?? 0) - (b.vote_average ?? 0),
-      );
-    default:
-      return sorted;
+      return sorted.sort((a, b) => (a.vote_average ?? 0) - (b.vote_average ?? 0));
   }
+}
+
+const monthFormatter = new Intl.DateTimeFormat(undefined, { month: "long", year: "numeric" });
+const dayFormatter = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
+const fullDateFormatter = new Intl.DateTimeFormat(undefined, {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+});
+
+/**
+ * When a title was marked watched, on the viewer's calendar. Imports that
+ * only had a date store it as midnight UTC, which west of UTC is the evening
+ * before; those are read as that calendar date instead.
+ */
+function watchedDate(iso: string): Date {
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})T00:00:00(?:\.0+)?(?:Z|\+00:00)$/.exec(iso);
+  if (dateOnly) return new Date(+dateOnly[1], +dateOnly[2] - 1, +dateOnly[3]);
+  return new Date(iso);
+}
+
+function plural(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
+/** Items in watch order, under a heading per month watched. */
+function byMonthWatched(items: CombinedItem[]): GridSection<CombinedItem>[] {
+  const sections: GridSection<CombinedItem>[] = [];
+  const undated: CombinedItem[] = [];
+  for (const item of items) {
+    if (!item.watched_at) {
+      undated.push(item);
+      continue;
+    }
+    const date = watchedDate(item.watched_at);
+    const key = `${date.getFullYear()}-${date.getMonth()}`;
+    const last = sections[sections.length - 1];
+    if (last?.key === key) last.items.push(item);
+    else sections.push({ key, title: monthFormatter.format(date), items: [item] });
+  }
+  if (undated.length > 0) sections.push({ key: "undated", title: "Date unknown", items: undated });
+  for (const s of sections) s.note = plural(s.items.length, "title");
+  return sections;
+}
+
+/**
+ * Five stars, each a button: pointing previews, clicking rates, and clicking
+ * the current rating clears it. One tab stop per card; the arrow keys move
+ * between the stars. Unrated titles say "Rate" beside them.
+ */
+function RatingStars({
+  title,
+  rating,
+  onRate,
+}: {
+  title: string;
+  rating: number | null;
+  onRate: (rating: number | null) => void;
+}) {
+  const [preview, setPreview] = useState<number | null>(null);
+  const shown = preview ?? rating ?? 0;
+  const tabStop = rating ?? 1;
+
+  function onKeyDown(e: React.KeyboardEvent<HTMLButtonElement>, n: number) {
+    const next =
+      e.key === "ArrowRight" || e.key === "ArrowUp"
+        ? Math.min(5, n + 1)
+        : e.key === "ArrowLeft" || e.key === "ArrowDown"
+          ? Math.max(1, n - 1)
+          : e.key === "Home"
+            ? 1
+            : e.key === "End"
+              ? 5
+              : null;
+    if (next === null) return;
+    e.preventDefault();
+    const target = e.currentTarget.parentElement?.children[next - 1];
+    if (target instanceof HTMLElement) target.focus();
+  }
+
+  return (
+    <div
+      role="group"
+      aria-label={rating ? `Your rating for ${title}: ${rating} of 5` : `Rate ${title}`}
+      className="flex items-center h-11 -my-2.5"
+      onPointerLeave={() => setPreview(null)}
+    >
+      {[1, 2, 3, 4, 5].map((n) => (
+        <button
+          key={n}
+          type="button"
+          tabIndex={n === tabStop ? 0 : -1}
+          aria-pressed={rating === n}
+          aria-label={rating === n ? `Clear your ${n}-star rating` : `${n} of 5`}
+          // Touch has no hover, and a tap's preview would never be cleared.
+          onPointerEnter={(e) => e.pointerType === "mouse" && setPreview(n)}
+          onKeyDown={(e) => onKeyDown(e, n)}
+          onClick={() => {
+            setPreview(null);
+            onRate(rating === n ? null : n);
+          }}
+          className={cx("h-11 w-[17px] flex items-center justify-center rounded-sm cursor-pointer", focusRing)}
+        >
+          <StarIcon
+            filled={n <= shown}
+            className={`w-[15px] h-[15px] ${
+              n <= shown
+                ? preview !== null
+                  ? "text-warning-300"
+                  : "text-warning-400"
+                : "text-neutral-600"
+            }`}
+          />
+        </button>
+      ))}
+      {rating == null && preview == null && (
+        <span className="hidden @min-[150px]:inline ml-1.5 text-caption font-medium text-neutral-400">
+          Rate
+        </span>
+      )}
+    </div>
+  );
 }
 
 function WatchedCard({
   item,
-  onNavigate,
+  onRate,
   onRemove,
 }: {
   item: CombinedItem;
-  onNavigate: () => void;
+  onRate: (rating: number | null) => void;
   onRemove: () => void;
 }) {
   const title = getTitle(item);
-  const userRating = item.user_rating;
+  const to = `/${item._contentType === "movie" ? "movie" : "tv"}/${item.id}`;
+  let watchedOn: string | null = null;
+  if (item.watched_at) {
+    const date = watchedDate(item.watched_at);
+    watchedOn = (
+      date.getFullYear() === new Date().getFullYear() ? dayFormatter : fullDateFormatter
+    ).format(date);
+  }
 
   return (
-    <div className="flex flex-col gap-2 group/card w-full">
-      <div className="relative cursor-pointer" onClick={onNavigate}>
-        <div className="aspect-[2/3] rounded-xl overflow-hidden bg-neutral-800">
-          {item.poster_path ? (
-            <img
-              src={`${BASE_IMAGE_URL}/w342${item.poster_path}`}
-              alt={title}
-              width={342}
-              height={513}
-              loading="lazy"
-              className="w-full h-full object-cover transition-opacity duration-200 group-hover/card:opacity-85"
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center p-3 text-center">
-              <span className="text-neutral-600 text-xs leading-tight">
-                {title}
-              </span>
-            </div>
+    <PosterCard
+      to={to}
+      title={title}
+      posterPath={item.poster_path}
+      className="group/card"
+      corner={
+        <IconButton
+          label={`Remove ${title} from watched`}
+          icon={<CloseIcon className="w-3.5 h-3.5" />}
+          variant="overlay"
+          size="sm"
+          onClick={onRemove}
+          className="opacity-0 group-hover/card:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
+        />
+      }
+      footer={
+        <div className="flex flex-wrap items-center justify-between gap-x-2 min-h-6">
+          <RatingStars title={title} rating={item.user_rating ?? null} onRate={onRate} />
+          {watchedOn && (
+            <time className="text-caption text-neutral-400 whitespace-nowrap">{watchedOn}</time>
           )}
         </div>
+      }
+    />
+  );
+}
 
-        {/* User rating badge */}
-        {userRating != null && (
-          <div className="absolute top-2 right-2 min-w-[1.5rem] h-6 px-1.5 rounded-full bg-primary-500 text-neutral-950 flex items-center justify-center shadow-lg text-[11px] font-bold leading-none">
-            {userRating}
-          </div>
-        )}
-
-        {/* Remove button */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove();
-          }}
-          title="Remove from watched"
-          className="absolute top-2 left-2 w-6 h-6 rounded-full bg-black/70 text-neutral-400 flex items-center justify-center opacity-0 group-hover/card:opacity-100 transition-opacity hover:text-white hover:bg-black/90"
-        >
-          <svg
-            className="w-3 h-3"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2.5}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M6 18L18 6M6 6l12 12"
-            />
-          </svg>
-        </button>
+function Stat({ value, label, accent }: { value: string; label: string; accent?: boolean }) {
+  return (
+    <div>
+      <div className={cx("text-heading font-semibold tabular", accent ? "text-warning-400" : "text-neutral-100")}>
+        {value}
       </div>
-
-      <div>
-        <p className="text-[13.5px] font-semibold text-neutral-100 leading-tight tracking-tight truncate">
-          {title}
-        </p>
-      </div>
+      <div className="mt-0.5 text-label text-neutral-400">{label}</div>
     </div>
   );
 }
 
 export default function Watched() {
   usePageTitle("Watched");
-  const navigate = useNavigate();
   const { data, isLoading } = useWatched();
   const removeFromList = useRemoveFromList();
+  const { mutateAsync: rateAsync } = useRateItem();
+  const toast = useToast();
   const myProviderIds = useMyProviderIds();
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeTab = (searchParams.get("tab") as TabType) ?? "all";
+  const tabParam = searchParams.get("tab");
+  const activeTab: TabType = tabParam === "movies" || tabParam === "tv" ? tabParam : "all";
   function setActiveTab(tab: TabType) {
     setSearchParams(
       (p) => {
-        p.set("tab", tab);
-        return p;
+        const next = new URLSearchParams(p);
+        next.set("tab", tab);
+        return next;
       },
       { replace: true },
     );
@@ -188,320 +315,282 @@ export default function Watched() {
   const [sort, setSort] = useState<SortType>("watched_desc");
   const [filters, setFilters] = useState<ListFilters>(DEFAULT_FILTERS);
   const [showFilters, setShowFilters] = useState(false);
+  const [unratedOnly, setUnratedOnly] = useState(false);
+  // Titles rated while "unrated only" is on stay put until it's turned off,
+  // so the grid doesn't shift under the pointer mid-sweep.
+  const [ratedHere, setRatedHere] = useState<ReadonlySet<string>>(new Set());
 
-  const results = data ?? { movies: [], shows: [] };
+  const results = useMemo(() => data ?? { movies: [], shows: [] }, [data]);
+  const allItems: CombinedItem[] = useMemo(
+    () => [
+      ...results.movies.map((m) => ({ ...m, _contentType: "movie" as const })),
+      ...results.shows.map((s) => ({ ...s, _contentType: "tv" as const })),
+    ],
+    [results],
+  );
 
   const availableGenres = useMemo(() => {
     const set = new Set<string>();
-    [...results.movies, ...results.shows].forEach((item) =>
-      (item.genres ?? []).forEach((g) => set.add(g.name)),
-    );
+    allItems.forEach((item) => (item.genres ?? []).forEach((g) => set.add(g.name)));
     return [...set].sort();
-  }, [results.movies, results.shows]);
+  }, [allItems]);
 
   const availableCertifications = useMemo(() => {
     const set = new Set<string>();
-    [...results.movies, ...results.shows].forEach((item) => {
+    allItems.forEach((item) => {
       if (item.certification) set.add(item.certification);
     });
     return [...set];
-  }, [results.movies, results.shows]);
+  }, [allItems]);
+
+  const stats = useMemo(() => {
+    const ratings = allItems
+      .map((i) => i.user_rating)
+      .filter((r): r is number => r != null);
+    const average = ratings.length
+      ? ratings.reduce((sum, r) => sum + r, 0) / ratings.length
+      : null;
+    return { rated: ratings.length, unrated: allItems.length - ratings.length, average };
+  }, [allItems]);
 
   const activeFilterCount = countActiveFilters(filters);
+  const totalCount = allItems.length;
 
-  function onRemove(type: "tv" | "movie", content_id: number) {
-    removeFromList.mutate({
-      list: "watched",
-      contentType: type,
-      contentId: content_id,
-    });
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    let items = allItems;
+    if (activeTab === "movies") items = items.filter((i) => i._contentType === "movie");
+    if (activeTab === "tv") items = items.filter((i) => i._contentType === "tv");
+    if (q) items = items.filter((i) => getTitle(i).toLowerCase().includes(q));
+    let filtered = applyFilters(
+      unratedOnly ? items.filter((i) => i.user_rating == null) : items,
+      filters,
+      myProviderIds,
+    );
+    if (unratedOnly && ratedHere.size > 0) {
+      // Their new rating no longer counts against them, here or in the
+      // panel's rating filter.
+      filtered = [
+        ...filtered,
+        ...applyFilters(
+          items.filter((i) => i.user_rating != null && ratedHere.has(itemKey(i))),
+          { ...filters, userRatings: [] },
+          myProviderIds,
+        ),
+      ];
+    }
+    return applySort(filtered, sort);
+  }, [allItems, activeTab, query, unratedOnly, ratedHere, filters, myProviderIds, sort]);
+
+  const sections = useMemo(
+    () =>
+      sort === "watched_desc" || sort === "watched_asc"
+        ? byMonthWatched(shown)
+        : [{ key: "all", items: shown }],
+    [shown, sort],
+  );
+
+  function toggleUnratedOnly() {
+    setUnratedOnly((v) => !v);
+    setRatedHere(new Set());
   }
 
-  const totalCount = results.movies.length + results.shows.length;
-  const q = query.toLowerCase();
-
-  const filteredMovies = applySort(
-    applyFilters(
-      results.movies.filter((m) => m.title.toLowerCase().includes(q)),
-      filters,
-      myProviderIds,
-    ),
-    sort,
-  );
-  const filteredShows = applySort(
-    applyFilters(
-      results.shows.filter((s) => s.name.toLowerCase().includes(q)),
-      filters,
-      myProviderIds,
-    ),
-    sort,
+  const rate = useCallback(
+    (item: CombinedItem, rating: number | null) => {
+      if (unratedOnly) setRatedHere((prev) => new Set(prev).add(itemKey(item)));
+      // mutateAsync, not mutate's onError, which only fires for the latest call.
+      rateAsync({ contentType: item._contentType, contentId: item.id, rating })
+        .catch(() => toast.error(`Couldn't save your rating for ${getTitle(item)}. Try again.`));
+    },
+    [unratedOnly, rateAsync, toast],
   );
 
-  const gridItems: CombinedItem[] = useMemo(() => {
-    switch (activeTab) {
-      case "movies":
-        return filteredMovies.map((m) => ({
-          ...m,
-          _contentType: "movie" as const,
-        }));
-      case "tv":
-        return filteredShows.map((s) => ({
-          ...s,
-          _contentType: "tv" as const,
-        }));
-      case "all":
-      default:
-        return [
-          ...filteredMovies.map((m) => ({
-            ...m,
-            _contentType: "movie" as const,
-          })),
-          ...filteredShows.map((s) => ({ ...s, _contentType: "tv" as const })),
-        ];
-    }
-  }, [activeTab, filteredMovies, filteredShows]);
+  const renderItem = useCallback(
+    (item: CombinedItem) => (
+      <WatchedCard
+        item={item}
+        onRate={(rating) => rate(item, rating)}
+        onRemove={() =>
+          removeFromList.mutate({
+            list: "watched",
+            contentType: item._contentType,
+            contentId: item.id,
+          })
+        }
+      />
+    ),
+    [rate, removeFromList],
+  );
 
-  const tabs: { id: TabType; label: string; count: number }[] = [
-    { id: "all", label: "All", count: totalCount },
-    { id: "movies", label: "Movies", count: results.movies.length },
-    { id: "tv", label: "TV Shows", count: results.shows.length },
+  const tabs: { value: TabType; label: string; count: number }[] = [
+    { value: "all", label: "All", count: totalCount },
+    { value: "movies", label: "Movies", count: results.movies.length },
+    { value: "tv", label: "TV shows", count: results.shows.length },
   ];
 
-  const hasResults = gridItems.length > 0;
-
   return (
-    <div className="w-full px-6 sm:px-10 pt-8 pb-16">
-      {/* Header */}
-      <div>
-        <p className="font-mono text-[11px] tracking-[0.12em] uppercase text-neutral-500">
-          {totalCount} title{totalCount !== 1 ? "s" : ""} watched
-        </p>
-        <div className="flex items-baseline gap-4 mt-2 flex-wrap">
-          <h1
-            className="w-full sm:w-auto text-4xl font-normal leading-tight tracking-tight"
-            style={{ fontFamily: "var(--font-serif)" }}
-          >
-            Already{" "}
-            <em className="text-primary-400" style={{ fontStyle: "italic" }}>
-              watched
-            </em>
-          </h1>
-          <div className="flex-1 hidden sm:block" />
-          <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto sm:justify-end">
-            <button
-              onClick={() => setShowFilters((v) => !v)}
-              className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors ${
-                showFilters || activeFilterCount > 0
-                  ? "bg-primary-600/20 border-primary-600/40 text-primary-300"
-                  : "bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-neutral-200 hover:border-neutral-600"
-              }`}
-            >
-              <svg
-                className="w-3.5 h-3.5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
+    <div className="w-full px-6 sm:px-10 pt-6 pb-16 flex flex-col gap-6">
+      <PageHeader
+        title="Watched"
+        description={isLoading ? undefined : `${plural(totalCount, "title")} you've finished`}
+        actions={
+          totalCount > 0 && (
+            <>
+              <Button
+                onClick={() => setShowFilters((v) => !v)}
+                aria-expanded={showFilters}
+                className={showFilters || activeFilterCount > 0 ? "border-primary-500/60 text-primary-200" : undefined}
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z"
-                />
-              </svg>
-              Filters
-              {activeFilterCount > 0 && (
-                <span className="bg-primary-600 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center leading-none">
-                  {activeFilterCount}
-                </span>
+                Filters
+                {activeFilterCount > 0 && (
+                  <span className="min-w-5 h-5 px-1 rounded-full bg-primary-500 text-neutral-950 text-caption font-semibold flex items-center justify-center">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </Button>
+              <label htmlFor="watched-sort" className="sr-only">
+                Sort
+              </label>
+              <select
+                id="watched-sort"
+                value={sort}
+                onChange={(e) => setSort(e.target.value as SortType)}
+                className={selectClass}
+              >
+                <option value="watched_desc">Recently watched</option>
+                <option value="watched_asc">Watched longest ago</option>
+                <option value="rating_desc">My rating: high to low</option>
+                <option value="rating_asc">My rating: low to high</option>
+                <option value="title_asc">Title: A to Z</option>
+                <option value="title_desc">Title: Z to A</option>
+                <option value="date_desc">Release date: newest</option>
+                <option value="date_asc">Release date: oldest</option>
+                <option value="popularity_desc">Most popular</option>
+                <option value="tmdb_rating_desc">TMDb rating: high to low</option>
+                <option value="tmdb_rating_asc">TMDb rating: low to high</option>
+              </select>
+            </>
+          )
+        }
+      />
+
+      {showFilters && totalCount > 0 && (
+        <ListFilterPanel
+          filters={filters}
+          onChange={setFilters}
+          availableGenres={availableGenres}
+          availableCertifications={availableCertifications}
+          hasMyServices={myProviderIds.size > 0}
+          showUserRating
+        />
+      )}
+
+      {/* ── Summary ── */}
+      {totalCount > 0 && (
+        <section
+          aria-label="Summary"
+          className="flex flex-wrap items-center gap-x-14 gap-y-4 px-6 py-4 bg-neutral-900 border border-neutral-800 rounded-surface"
+        >
+          <Stat value={String(totalCount)} label="Watched" />
+          <Stat value={String(stats.rated)} label="Rated" />
+          <Stat
+            value={stats.average === null ? "—" : `★ ${stats.average.toFixed(1)}`}
+            label="Your average"
+            accent={stats.average !== null}
+          />
+          <div className="sm:ml-auto flex flex-wrap items-center gap-4">
+            <p className="text-body text-neutral-300">
+              {stats.unrated === 0 ? (
+                "Every title has a rating."
+              ) : (
+                <>
+                  <strong className="font-semibold text-neutral-100">{stats.unrated}</strong>{" "}
+                  {stats.unrated === 1 ? "title has" : "titles have"} no rating yet.
+                </>
               )}
-            </button>
-            <select
-              value={sort}
-              onChange={(e) => setSort(e.target.value as SortType)}
-              className="text-sm bg-neutral-800 border border-neutral-700 text-neutral-300 rounded-lg px-3 py-1.5 focus:outline-none focus:border-neutral-500 max-w-[160px] sm:max-w-none"
-            >
-              <option value="watched_desc">Recently Watched</option>
-              <option value="watched_asc">Oldest Watched</option>
-              <option value="title_asc">Title: A → Z</option>
-              <option value="title_desc">Title: Z → A</option>
-              <option value="date_desc">Release Date: Newest</option>
-              <option value="date_asc">Release Date: Oldest</option>
-              <option value="popularity_desc">Most Popular</option>
-              <option value="rating_desc">My Rating: High → Low</option>
-              <option value="rating_asc">My Rating: Low → High</option>
-              <option value="tmdb_rating_desc">TMDB Rating: High → Low</option>
-              <option value="tmdb_rating_asc">TMDB Rating: Low → High</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Tabs */}
-        <div className="flex gap-0 border-b border-neutral-800 mt-6">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`px-3.5 py-3 text-sm font-medium inline-flex items-center gap-1.5 border-b-2 -mb-px transition-colors ${
-                activeTab === tab.id
-                  ? "border-primary-500 text-neutral-100"
-                  : "border-transparent text-neutral-500 hover:text-neutral-300"
-              }`}
-            >
-              {tab.label}
-              <span className="font-mono text-[10.5px] text-neutral-500 leading-none translate-y-px">
-                {tab.count}
-              </span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Search + filter panel */}
-      {!isLoading && totalCount > 0 && (
-        <div className="mt-4 space-y-3">
-          <div className="relative max-w-xs">
-            <svg
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-500"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-              />
-            </svg>
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search…"
-              className="w-full bg-neutral-800/60 border border-neutral-700 text-neutral-200 placeholder-neutral-600 rounded-lg pl-8 pr-8 py-1.5 text-sm focus:outline-none focus:border-neutral-500"
-            />
-            {query && (
-              <button
-                onClick={() => setQuery("")}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-300"
+            </p>
+            {(stats.unrated > 0 || unratedOnly) && (
+              <Button
+                variant={unratedOnly ? "primary" : "secondary"}
+                onClick={toggleUnratedOnly}
+                aria-pressed={unratedOnly}
               >
-                <svg
-                  className="w-3.5 h-3.5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
+                Show unrated only
+              </Button>
             )}
           </div>
-          {showFilters && (
-            <ListFilterPanel
-              filters={filters}
-              onChange={setFilters}
-              availableGenres={availableGenres}
-              availableCertifications={availableCertifications}
-              hasMyServices={myProviderIds.size > 0}
-              showUserRating
-            />
-          )}
+        </section>
+      )}
+
+      {/* ── Type and search ── */}
+      {totalCount > 0 && (
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+          <Segmented
+            label="Type"
+            value={activeTab}
+            onChange={setActiveTab}
+            options={tabs.map((t) => ({
+              value: t.value,
+              label: (
+                <>
+                  {t.label}
+                  <span className="ml-1.5 tabular text-neutral-500">{t.count}</span>
+                </>
+              ),
+            }))}
+          />
+          <SearchField value={query} onChange={setQuery} label="Search watched titles" />
         </div>
       )}
 
-      {/* Loading skeleton */}
-      {isLoading && (
-        <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 2xl:grid-cols-posters gap-3 mt-8">
-          {Array.from({ length: 12 }).map((_, i) => (
-            <div key={i} className="flex flex-col gap-2 animate-pulse">
-              <div className="aspect-[2/3] rounded-xl bg-neutral-800" />
-              <div className="h-3 bg-neutral-800 rounded w-3/4" />
-            </div>
+      {/* ── Content ── */}
+      {isLoading ? (
+        <div
+          className="grid grid-cols-3 min-[480px]:grid-cols-4 md:grid-cols-5 lg:grid-cols-7 xl:grid-cols-8 2xl:grid-cols-posters gap-x-4 gap-y-6"
+          aria-hidden="true"
+        >
+          {Array.from({ length: 16 }).map((_, i) => (
+            <PosterCardSkeleton key={i} />
           ))}
         </div>
-      )}
-
-      {/* Empty watched list */}
-      {!isLoading && totalCount === 0 && (
-        <div className="flex flex-col items-center justify-center py-24 text-center mt-8">
-          <div className="w-16 h-16 rounded-full bg-neutral-800 border border-neutral-700 flex items-center justify-center mb-4">
-            <svg
-              className="w-8 h-8 text-neutral-500"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-          </div>
-          <h3 className="text-neutral-300 font-medium mb-1">
-            Nothing watched yet
-          </h3>
-          <p className="text-neutral-500 text-sm mb-4">
-            Find something to watch and mark it as watched from its detail page
-          </p>
-          <button
-            onClick={() => navigate("/trending")}
-            className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-medium px-5 py-2 rounded-lg transition-colors"
-          >
-            Browse Trending
-          </button>
-        </div>
-      )}
-
-      {/* No results */}
-      {!isLoading && totalCount > 0 && !hasResults && (
-        <div className="flex flex-col items-center justify-center py-24 text-center mt-8">
-          <p className="text-neutral-400 font-medium mb-1">
-            {activeFilterCount > 0
-              ? "No results match your filters"
-              : `No results for "${query}"`}
-          </p>
-          {activeFilterCount > 0 ? (
-            <button
-              onClick={() => setFilters(DEFAULT_FILTERS)}
-              className="text-primary-400 hover:text-primary-300 text-sm mt-1 transition-colors"
-            >
-              Clear filters
-            </button>
-          ) : (
-            <p className="text-neutral-500 text-sm">
-              Try a different search term
-            </p>
-          )}
-        </div>
-      )}
-
-      {/* Poster grid */}
-      {!isLoading && hasResults && (
-        <VirtualGrid
-          items={gridItems}
-          className="mt-8"
-          colGap={12}
-          rowGap={20}
-          renderItem={(item) => (
-            <WatchedCard
-              key={`${item._contentType}-${item.id}`}
-              item={item}
-              onNavigate={() =>
-                navigate(
-                  `/${item._contentType === "movie" ? "movie" : "tv"}/${item.id}`,
-                )
-              }
-              onRemove={() => onRemove(item._contentType, item.id)}
-            />
-          )}
+      ) : totalCount === 0 ? (
+        <EmptyState
+          title="Nothing watched yet"
+          description="Mark something watched from its page and it lands here, ready to rate."
+          action={
+            <ButtonLink to="/trending" variant="primary">
+              Browse trending
+            </ButtonLink>
+          }
+        />
+      ) : shown.length === 0 ? (
+        <EmptyState
+          title={
+            query.trim()
+              ? `Nothing watched matches “${query.trim()}”`
+              : unratedOnly && activeFilterCount === 0
+                ? "Nothing left to rate here"
+                : "Nothing matches these filters"
+          }
+          action={
+            <>
+              {query.trim() && <Button onClick={() => setQuery("")}>Clear search</Button>}
+              {activeFilterCount > 0 && (
+                <Button onClick={() => setFilters(DEFAULT_FILTERS)}>Clear filters</Button>
+              )}
+              {unratedOnly && <Button onClick={toggleUnratedOnly}>Show rated titles too</Button>}
+            </>
+          }
+        />
+      ) : (
+        <VirtualSections
+          sections={sections}
+          itemKey={itemKey}
+          renderItem={renderItem}
+          colBreakpoints={WATCHED_COLS}
+          colGap={16}
+          rowGap={24}
+          captionHeight={50}
         />
       )}
     </div>

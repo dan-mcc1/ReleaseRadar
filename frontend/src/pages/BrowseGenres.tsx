@@ -1,399 +1,338 @@
-import { useSearchParams, Link } from "react-router-dom";
+import { useEffect, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import { usePageTitle } from "../hooks/usePageTitle";
-import { useGenres, useGenreResults } from "../hooks/api/useSearch";
-import { BASE_IMAGE_URL } from "../constants";
-import { parseLocalDate } from "../utils/date";
-import type { Movie, Show } from "../types/calendar";
-import MiniWatchButton from "../components/MiniWatchButton";
-import MiniWatchedButton from "../components/MiniWatchedButton";
-import StarIcon from "../components/icons/StarIcon";
+import { useBrowsePage, useGenres } from "../hooks/api/useSearch";
 import { useBulkWatchStatus } from "../hooks/api/useWatchStatus";
-import type { WatchStatus } from "../components/WatchButton";
+import { useUpdateWatchStatus } from "../hooks/api/useWatchActions";
+import { TrackingLimitError } from "../hooks/api/errors";
 import { useAuthUser } from "../hooks/useAuthUser";
+import {
+  BookmarkIcon,
+  Button,
+  CheckIcon,
+  Chip,
+  EmptyState,
+  IconButton,
+  PageHeader,
+  PlayIcon,
+  PlusIcon,
+  PosterCard,
+  PosterCardSkeleton,
+  SectionHeader,
+  Segmented,
+} from "../components/ui";
+import { useToast } from "../components/Toast";
+import type { Movie, Show } from "../types/calendar";
+import type { WatchStatus } from "../components/WatchButton";
 
-type ActiveTab = "movie" | "tv";
+type MediaType = "movie" | "tv";
+type Item = (Movie | Show) & { genre_ids?: number[] };
 
-const HUE_BY_GENRE: Record<number, number> = {
-  18: 28,
-  28: 14,
-  35: 90,
-  878: 220,
-  14: 285,
-  9648: 195,
-  27: 0,
-  53: 250,
-  99: 230,
-  36: 38,
-  80: 8,
-  16: 180,
-  12: 50,
-  10402: 340,
-  10751: 50,
-  10749: 340,
-  10752: 200,
-  37: 24,
-  10770: 160,
+
+// A dot per genre, so the chips scan by colour as well as name. Movie and TV
+// ids overlap where TMDb shares the genre.
+const GENRE_DOTS: Record<number, string> = {
+  28: "#f87171", // Action
+  12: "#fb923c", // Adventure
+  10759: "#fb923c", // Action & Adventure
+  16: "#facc15", // Animation
+  35: "#a3e635", // Comedy
+  80: "#94a3b8", // Crime
+  99: "#2dd4bf", // Documentary
+  18: "#60a5fa", // Drama
+  10751: "#fdba74", // Family
+  10762: "#fde047", // Kids
+  14: "#c084fc", // Fantasy
+  10765: "#a78bfa", // Sci-Fi & Fantasy
+  36: "#d6b98c", // History
+  27: "#ef4444", // Horror
+  10402: "#f472b6", // Music
+  9648: "#818cf8", // Mystery
+  10763: "#cbd5e1", // News
+  10764: "#fbbf24", // Reality
+  10749: "#fb7185", // Romance
+  10766: "#f9a8d4", // Soap
+  878: "#22d3ee", // Science Fiction
+  10767: "#5eead4", // Talk
+  10770: "#a8a29e", // TV Movie
+  53: "#e879f9", // Thriller
+  10752: "#84cc16", // War
+  10768: "#84cc16", // War & Politics
+  37: "#d97706", // Western
 };
 
-function PosterCard({
+function titleOf(item: Item): string {
+  return "title" in item ? item.title : item.name;
+}
+
+function BrowseCard({
   item,
   type,
-  initialStatus,
+  status,
+  detail,
 }: {
-  item: Movie | Show;
-  type: ActiveTab;
-  initialStatus?: WatchStatus;
+  item: Item;
+  type: MediaType;
+  /** Undefined while signed out or still loading: no buttons. */
+  status: WatchStatus | undefined;
+  /** "Mystery · ★ 8.1" */
+  detail: string;
 }) {
-  const user = useAuthUser();
-  const title = type === "tv" ? (item as Show).name : (item as Movie).title;
-  const date =
-    type === "tv"
-      ? (item as Show).first_air_date
-      : (item as Movie).release_date;
-  const year = date ? parseLocalDate(date).getFullYear() : null;
-  const href = type === "movie" ? `/movie/${item.id}` : `/tv/${item.id}`;
+  const toast = useToast();
+  const update = useUpdateWatchStatus();
+  const title = titleOf(item);
+
+  function setStatus(target: WatchStatus) {
+    if (!status || update.isPending) return;
+    update
+      .mutateAsync({ contentType: type, contentId: item.id, currentStatus: status, targetStatus: target })
+      .catch((err) =>
+        toast.error(
+          err instanceof TrackingLimitError
+            ? "You've hit the free tracking limit. Upgrade to Premium for unlimited tracking."
+            : `Couldn't update ${title}. Try again.`,
+        ),
+      );
+  }
+
+  const onWatchlist = status === "Want To Watch";
+  const watched = status === "Watched";
+
+  // Always the same two places: your list on the left, watched on the right.
+  const actions = status && (
+    <>
+      {status === "Currently Watching" ? (
+        <span
+          role="img"
+          aria-label="Currently watching"
+          title="Currently watching"
+          className="size-touch rounded-full bg-highlight-500 text-neutral-950 flex items-center justify-center"
+        >
+          <PlayIcon className="w-4 h-4 ml-0.5" />
+        </span>
+      ) : (
+        !watched && (
+          <IconButton
+            variant="overlay"
+            size="touch"
+            pressed={onWatchlist}
+            label={onWatchlist ? `Remove ${title} from your watchlist` : `Add ${title} to your watchlist`}
+            title={onWatchlist ? "On your watchlist · click to remove" : "Add to watchlist"}
+            icon={onWatchlist ? <BookmarkIcon filled /> : <PlusIcon />}
+            onClick={() => setStatus(onWatchlist ? "none" : "Want To Watch")}
+          />
+        )
+      )}
+      <IconButton
+        variant="overlay"
+        size="touch"
+        pressed={watched}
+        label={watched ? `Mark ${title} unwatched` : `Mark ${title} watched`}
+        title={watched ? "Watched · click to undo" : "Mark watched"}
+        icon={<CheckIcon />}
+        onClick={() => setStatus(watched ? "none" : "Watched")}
+      />
+    </>
+  );
 
   return (
-    <div className="group flex flex-col gap-2">
-      <Link
-        to={href}
-        className="block relative aspect-[2/3] rounded-lg overflow-hidden bg-neutral-800 border border-neutral-700/50 group-hover:border-neutral-600 transition-colors"
-      >
-        {item.poster_path ? (
-          <img
-            src={`${BASE_IMAGE_URL}/w342${item.poster_path}`}
-            alt={title}
-            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-          />
-        ) : (
-          <div className="h-full w-full flex items-center justify-center">
-            <svg
-              className="w-10 h-10 text-neutral-600"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1}
-                d="M15 10l4.553-2.069A1 1 0 0121 8.87v6.26a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-              />
-            </svg>
-          </div>
-        )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-      </Link>
-      <div className="flex items-center gap-2">
-        <div className="flex-1 min-w-0">
-          <Link
-            to={href}
-            className="block text-sm font-semibold text-neutral-100 line-clamp-1 hover:text-primary-300 transition-colors leading-tight"
-          >
-            {title}
-          </Link>
-          <div className="flex items-center gap-1.5 mt-1">
-            {year && <span className="text-xs text-neutral-500">{year}</span>}
-            {item.vote_average != null && item.vote_average > 0 && (
-              <>
-                <span className="text-neutral-700 text-xs">·</span>
-                <span className="flex items-center gap-0.5 text-xs text-warning-400 font-medium">
-                  <StarIcon filled className="w-2.5 h-2.5" />
-                  {item.vote_average.toFixed(1)}
-                </span>
-              </>
-            )}
-          </div>
-        </div>
-        {user && (
-          <div className="flex items-center gap-1">
-            {initialStatus !== "Watched" && (
-              <MiniWatchButton
-                contentType={type === "tv" ? "tv" : "movie"}
-                contentId={item.id}
-                initialStatus={initialStatus}
-                bulkManaged
-              />
-            )}
-            <MiniWatchedButton
-              contentType={type === "tv" ? "tv" : "movie"}
-              contentId={item.id}
-              initialStatus={initialStatus}
-              bulkManaged
-            />
-          </div>
-        )}
-      </div>
-    </div>
+    <PosterCard
+      to={`/${type}/${item.id}`}
+      title={title}
+      posterPath={item.poster_path}
+      subtitle={detail || undefined}
+      actions={actions || undefined}
+    />
   );
 }
 
+const GRID =
+  "grid grid-cols-2 min-[480px]:grid-cols-3 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-posters gap-x-4 gap-y-6";
+
 export default function BrowseGenres() {
   usePageTitle("Browse");
+  const user = useAuthUser();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const activeTab = (searchParams.get("type") as ActiveTab) ?? "movie";
-  const selectedGenreId = searchParams.get("genre")
-    ? Number(searchParams.get("genre"))
-    : null;
-  const page = Number(searchParams.get("page") ?? "1");
+  const type: MediaType = searchParams.get("type") === "tv" ? "tv" : "movie";
+  // A page past the end is sent back to the last one, below.
+  const page = Math.min(500, Math.max(1, Math.trunc(Number(searchParams.get("page"))) || 1));
 
   const { data: genreList } = useGenres();
-  const genres = genreList ?? { movie: [], tv: [] };
+  const genres = genreList?.[type] ?? [];
+  // A genre this type doesn't have (an old link, a movie genre on TV) is
+  // treated as no genre; until the list loads, the link is trusted.
+  const rawGenre = Math.trunc(Number(searchParams.get("genre"))) || null;
+  const genreId =
+    rawGenre !== null && (!genreList || genres.some((g) => g.id === rawGenre)) ? rawGenre : null;
+  const genre = genres.find((g) => g.id === genreId);
+  const genreNames = new Map(genres.map((g) => [g.id, g.name]));
 
-  const { data: genreData, isFetching: loading } = useGenreResults(
-    activeTab,
-    selectedGenreId ?? 0,
-    page,
-    !!selectedGenreId,
+  // "All" is TMDb's trending list; a genre is its most popular titles.
+  const active = useBrowsePage(type, genreId, page);
+  const items = active.items as Item[];
+  const totalPages = active.totalPages;
+
+  const { data: statuses } = useBulkWatchStatus(
+    items.map((i) => ({ content_type: type, content_id: i.id })),
   );
 
-  const totalPages = genreData?.total_pages ?? 1;
-  const rawItems = [...(genreData?.movies ?? []), ...(genreData?.shows ?? [])];
+  // Set by Previous/Next: once the new page renders, focus its heading and,
+  // if it's scrolled out of view, scroll it back.
+  const resultsTop = useRef<HTMLElement>(null);
+  const pagerMove = useRef<{ scroll: boolean } | null>(null);
 
-  const bulkItems = rawItems.map((item) => ({
-    content_type: activeTab === "tv" ? "tv" : "movie",
-    content_id: item.id,
-  }));
-  const { data: bulkStatuses } = useBulkWatchStatus(bulkItems);
-
-  const genrePills = genres[activeTab];
-  const selectedGenre = genrePills.find((g) => g.id === selectedGenreId);
-  const hue = selectedGenreId ? (HUE_BY_GENRE[selectedGenreId] ?? 200) : 200;
-
-  function setParam(updates: Record<string, string>) {
+  function update(
+    next: { type?: MediaType; genre?: number | null; page?: number },
+    replace = false,
+  ) {
+    if (next.page === undefined) pagerMove.current = null;
     setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      Object.entries(updates).forEach(([k, v]) => next.set(k, v));
-      return next;
-    });
+      const params = new URLSearchParams(prev);
+      if (next.type) params.set("type", next.type);
+      if (next.genre !== undefined) {
+        if (next.genre === null) params.delete("genre");
+        else params.set("genre", String(next.genre));
+      }
+      params.set("page", String(next.page ?? 1));
+      return params;
+    }, { replace });
   }
 
-  const pageStart = (page - 1) * 20 + 1;
-  const pageEnd = Math.min(page * 20, totalPages * 20);
+  function changeType(next: MediaType) {
+    // Keep the genre when the other side has it too (Comedy, Drama, ...).
+    const keep =
+      genreId !== null && (!genreList || genreList[next].some((g) => g.id === genreId));
+    update({ type: next, genre: keep ? genreId : null });
+  }
+
+  // Waits for the new page to render: scrolling earlier gets undone by the
+  // browser's scroll anchoring when the titles replace the placeholders.
+  function goToPage(next: number) {
+    const top = resultsTop.current?.getBoundingClientRect().top ?? 0;
+    pagerMove.current = { scroll: top < 80 }; // under the nav bar, or above it
+    update({ page: next });
+  }
+  useEffect(() => {
+    const move = pagerMove.current;
+    if (active.isPending || !move) return;
+    pagerMove.current = null;
+    if (move.scroll) resultsTop.current?.scrollIntoView({ block: "start" });
+    document.getElementById("browse-heading")?.focus({ preventScroll: true });
+  }, [active.isPending, page]);
+
+  // A page past the end (an old link): go to the last one.
+  useEffect(() => {
+    if (!active.isPending && !active.isError && page > totalPages) {
+      update({ page: totalPages }, true);
+    }
+  });
+
+  function detailFor(item: Item): string {
+    // The genre you're browsing goes without saying; name another one.
+    const ids = item.genre_ids ?? [];
+    const other = ids.find((id) => id !== genreId && genreNames.has(id)) ?? ids[0];
+    const parts = [genreNames.get(other ?? -1)];
+    if (item.vote_average) parts.push(`★ ${item.vote_average.toFixed(1)}`);
+    return parts.filter(Boolean).join(" · ");
+  }
+
+  const noun = type === "movie" ? "movies" : "TV shows";
+  const heading = genre ? `${genre.name} ${noun}` : `Trending ${noun} this week`;
+  const note = genre ? "most popular first" : "all genres";
 
   return (
-    <div className="min-h-full">
-      {/* Page header */}
-      <div className="px-6 sm:px-10 pt-7 pb-4">
-        <div className="text-[11px] font-mono tracking-widest text-neutral-500 uppercase mb-2">
-          Discover · Browse by genre
-        </div>
-        <h1
-          className="text-[2.6rem] font-light tracking-tight text-neutral-100 leading-none"
-          style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
-        >
-          Find your next <em className="italic text-primary-400">watch</em>
-        </h1>
-      </div>
+    <div className="w-full px-6 sm:px-10 pt-6 pb-16 flex flex-col gap-6">
+      <PageHeader
+        title="Browse"
+        description="What's trending, or the most popular titles in a genre."
+        actions={
+          <Segmented
+            label="Type"
+            value={type}
+            onChange={changeType}
+            options={[
+              { value: "movie", label: "Movies" },
+              { value: "tv", label: "TV shows" },
+            ]}
+          />
+        }
+      />
 
-      {/* Type toggle */}
-      <div className="px-6 sm:px-10 pb-4">
-        <div className="flex bg-neutral-800 border border-neutral-700 rounded-xl p-1 w-fit">
-          {(
-            [
-              ["Movies", "movie"],
-              ["TV Shows", "tv"],
-            ] as const
-          ).map(([label, val]) => (
-            <button
-              key={val}
-              onClick={() => setSearchParams({ type: val, page: "1" })}
-              className={`px-4 py-1.5 text-sm font-medium rounded-lg transition-all ${
-                activeTab === val
-                  ? "bg-neutral-700 text-neutral-100 shadow-sm"
-                  : "text-neutral-400 hover:text-neutral-200"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Genre pills */}
-      <div className="px-6 sm:px-10 pb-6">
-        <div className="flex gap-1.5 flex-wrap">
-          {genrePills.map((g) => {
-            const on = g.id === selectedGenreId;
-            return (
-              <button
-                key={g.id}
-                onClick={() =>
-                  setSearchParams({
-                    type: activeTab,
-                    ...(selectedGenreId === g.id
-                      ? {}
-                      : { genre: String(g.id) }),
-                    page: "1",
-                  })
-                }
-                className={`px-3.5 py-1.5 text-xs font-medium rounded-full border transition-all ${
-                  on
-                    ? "bg-primary-600/20 border-primary-500/50 text-primary-300"
-                    : "bg-neutral-800 border-neutral-700 text-neutral-400 hover:border-neutral-500 hover:text-neutral-200"
-                }`}
-              >
-                {g.name}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Genre brand strip */}
-      {selectedGenre && !loading && rawItems.length > 0 && (
-        <div className="px-6 sm:px-10 pb-6">
-          <div
-            className="relative h-28 sm:h-32 rounded-2xl overflow-hidden"
-            style={{
-              background: `linear-gradient(110deg, hsl(${hue}, 45%, 22%) 0%, hsl(${hue}, 30%, 13%) 60%, hsl(${hue}, 18%, 8%) 100%)`,
-            }}
+      {/* ── Genres ── */}
+      {/* One scrolling row on phones, where wrapped chips would fill the screen. */}
+      <div
+        role="group"
+        aria-label="Genre"
+        className="flex flex-wrap gap-2 max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:-mx-6 max-sm:px-6 max-sm:py-1 [scrollbar-width:none] *:shrink-0"
+      >
+        <Chip pressed={genreId === null} onClick={() => update({ genre: null })}>
+          All
+        </Chip>
+        {genres.map((g) => (
+          <Chip
+            key={g.id}
+            dot={GENRE_DOTS[g.id]}
+            pressed={g.id === genreId}
+            onClick={() => update({ genre: g.id === genreId ? null : g.id })}
           >
-            {/* Decorative posters — hidden below sm */}
-            <div className="max-sm:hidden flex absolute right-8 top-1/2 -translate-y-1/2 gap-2.5">
-              {rawItems.slice(0, 3).map((item, i) => {
-                const poster = item.poster_path;
-                return poster ? (
-                  <div
-                    key={item.id}
-                    className="w-[58px] h-[87px] rounded-md overflow-hidden shadow-2xl shadow-black/70 flex-shrink-0"
-                    style={{
-                      transform: `translateY(${i === 1 ? -10 : 6}px)`,
-                    }}
-                  >
-                    <img
-                      src={`${BASE_IMAGE_URL}/w185${poster}`}
-                      alt=""
-                      className="h-full w-full object-cover"
-                    />
-                  </div>
-                ) : null;
-              })}
-            </div>
+            {g.name}
+          </Chip>
+        ))}
+      </div>
 
-            {/* Text */}
-            <div className="absolute left-5 sm:left-7 top-0 bottom-0 flex flex-col justify-center text-white sm:pr-[220px]">
-              <div className="text-[10px] font-mono tracking-[0.15em] opacity-55 uppercase mb-1.5 sm:mb-2">
-                Now browsing
-              </div>
-              <h2
-                className="text-[1.75rem] sm:text-[2.4rem] font-light leading-none tracking-tight truncate"
-                style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
-              >
-                {selectedGenre.name}
-              </h2>
-              <div className="text-xs opacity-65 mt-1.5 sm:mt-2">
-                Page {page} of {totalPages} · sorted by popularity
-              </div>
-            </div>
+      {/* ── Results ── */}
+      <section ref={resultsTop} aria-labelledby="browse-heading" className="scroll-mt-20">
+        <SectionHeader id="browse-heading" title={heading} note={note} divider className="mb-4" />
+        <p className="sr-only" aria-live="polite">
+          {active.isPending ? "Loading" : `Page ${page} of ${totalPages}`}
+        </p>
+
+        {active.isPending ? (
+          <div className={GRID} aria-hidden="true">
+            {Array.from({ length: 36 }).map((_, i) => (
+              <PosterCardSkeleton key={i} />
+            ))}
           </div>
-        </div>
-      )}
-
-      {/* Result toolbar */}
-      {selectedGenre && !loading && rawItems.length > 0 && (
-        <div className="px-6 sm:px-10 pb-4 flex items-center">
-          <span className="text-[11px] font-mono tracking-wider text-neutral-500 uppercase">
-            Showing {pageStart}–{pageEnd}
-          </span>
-        </div>
-      )}
-
-      {/* Loading */}
-      {loading && (
-        <div className="flex items-center justify-center py-20">
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
-            <p className="text-neutral-400 text-sm">Loading…</p>
+        ) : active.isError ? (
+          <EmptyState
+            title="Couldn't load these titles"
+            description="TMDb didn't answer. It's usually back in a moment."
+            action={<Button onClick={() => active.refetch()}>Try again</Button>}
+          />
+        ) : items.length === 0 ? (
+          <EmptyState title="Nothing here yet" description="Try another genre." />
+        ) : (
+          <div className={GRID}>
+            {items.map((item) => (
+              <BrowseCard
+                key={item.id}
+                item={item}
+                type={type}
+                status={user ? statuses?.[`${type}:${item.id}`]?.status : undefined}
+                detail={detailFor(item)}
+              />
+            ))}
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Empty prompt */}
-      {!loading && !selectedGenreId && (
-        <div className="flex flex-col items-center justify-center py-20 text-center">
-          <p className="text-neutral-400">
-            Select a genre above to browse titles
-          </p>
-        </div>
-      )}
-
-      {!loading && selectedGenreId && rawItems.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-20 text-center">
-          <p className="text-neutral-300 font-medium mb-1">No results found</p>
-          <p className="text-neutral-500 text-sm">Try a different genre</p>
-        </div>
-      )}
-
-      {/* Poster grid */}
-      {!loading && rawItems.length > 0 && (
-        <div className="px-6 sm:px-10 pb-8 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 lg:grid-cols-8 2xl:grid-cols-posters gap-4">
-          {rawItems.map((item) => (
-            <PosterCard
-              key={item.id}
-              item={item as Movie | Show}
-              type={activeTab}
-              initialStatus={
-                bulkStatuses?.[
-                  `${activeTab === "tv" ? "tv" : "movie"}:${item.id}`
-                ]?.status
-              }
-            />
-          ))}
-        </div>
-      )}
-
-      {/* Pagination */}
-      {!loading && selectedGenreId && totalPages > 1 && (
-        <div className="px-6 sm:px-10 pb-10 flex items-center justify-center gap-4">
-          <button
-            onClick={() => setParam({ page: String(Math.max(1, page - 1)) })}
-            disabled={page === 1}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-medium text-neutral-400 hover:text-neutral-200 bg-neutral-800 hover:bg-neutral-750 border border-neutral-700 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-          >
-            <svg
-              className="w-3 h-3"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2}
+        {(totalPages > 1 || page > 1) && (
+          <nav aria-label="Pages" className="mt-8 flex items-center justify-center gap-3">
+            <Button onClick={() => goToPage(page - 1)} disabled={page <= 1}>
+              Previous
+            </Button>
+            <span className="tabular text-label text-neutral-300">
+              Page {page} of {totalPages}
+            </span>
+            <Button
+              onClick={() => goToPage(page + 1)}
+              disabled={page >= totalPages || active.isError}
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M15 19l-7-7 7-7"
-              />
-            </svg>
-            Previous
-          </button>
-          <span className="font-mono text-xs text-neutral-500 tracking-wider">
-            Page {page} of {totalPages}
-          </span>
-          <button
-            onClick={() =>
-              setParam({ page: String(Math.min(totalPages, page + 1)) })
-            }
-            disabled={page === totalPages}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-medium text-neutral-400 hover:text-neutral-200 bg-neutral-800 hover:bg-neutral-750 border border-neutral-700 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-          >
-            Next
-            <svg
-              className="w-3 h-3"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M9 5l7 7-7 7"
-              />
-            </svg>
-          </button>
-        </div>
-      )}
+              Next
+            </Button>
+          </nav>
+        )}
+      </section>
     </div>
   );
 }

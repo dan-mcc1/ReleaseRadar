@@ -70,6 +70,60 @@ export function groupItemsByShow(items: CalendarItem[]): ItemGroup[] {
   return groups;
 }
 
+export type TvItem = Extract<CalendarItem, { type: "tv" }>;
+
+/** The day an item is on the calendar: air date or release date. */
+export function itemDate(item: CalendarItem): string {
+  return item.type === "tv" ? item.air_date : item.release_date;
+}
+
+/** TMDb names an untitled episode "Episode 5", which only repeats the code. */
+export function episodeTitle(name: string | null | undefined): string | null {
+  const trimmed = name?.trim();
+  return trimmed && !/^episode \d+$/i.test(trimmed) ? trimmed : null;
+}
+
+/**
+ * "S2 E5" for one episode. For several of one show: "S3 E1–E3" when they run
+ * together, "S3" when they only share a season, null when they don't.
+ */
+export function episodeCode(items: TvItem[]): string | null {
+  if (items.length === 0) return null;
+  const season = items[0].season_number;
+  if (items.some((i) => i.season_number !== season)) return null;
+  const numbers = items.map((i) => i.episode_number).sort((a, b) => a - b);
+  const first = numbers[0];
+  const last = numbers[numbers.length - 1];
+  if (numbers.length === 1) return `S${season} E${first}`;
+  return last - first === numbers.length - 1
+    ? `S${season} E${first}–E${last}`
+    : `S${season}`;
+}
+
+export interface EpisodeTag {
+  label: string;
+  /** For places with no room: "Premiere", "Finale". */
+  short: string;
+  tone: "premiere" | "finale" | "end";
+}
+
+const EPISODE_TAGS: Record<string, EpisodeTag> = {
+  show_premiere: { label: "Series premiere", short: "Premiere", tone: "premiere" },
+  season_premiere: { label: "Season premiere", short: "Premiere", tone: "premiere" },
+  mid_season: { label: "Mid-season finale", short: "Finale", tone: "finale" },
+  season_finale: { label: "Season finale", short: "Finale", tone: "finale" },
+  series_finale: { label: "Series finale", short: "Finale", tone: "end" },
+};
+
+/** The premiere or finale among these episodes, if there is one. */
+export function episodeTag(items: TvItem[]): EpisodeTag | null {
+  for (const item of items) {
+    const tag = EPISODE_TAGS[item.episode_type];
+    if (tag) return tag;
+  }
+  return null;
+}
+
 // Items keyed by "YYYY-MM-DD" (episode air date / movie release date), built
 // once per data change so each calendar day is a lookup instead of a scan.
 export type ItemsByDate = Map<string, CalendarItem[]>;

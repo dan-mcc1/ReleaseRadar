@@ -125,9 +125,9 @@ def _ids(db, model):
 class TestReferenceClassification:
     def test_every_table_pointing_at_titles_is_classified(self):
         """A new table with a content_id/show_id/movie_id column must be added
-        either as a reference (protects the title) or as cached data that is
-        deleted with it. Otherwise its rows could silently stop protecting
-        their title."""
+        as a reference (protects the title), as cached data that is deleted
+        with it, or as independent of the title cache. Otherwise its rows
+        could silently stop protecting their title."""
         import app.models  # noqa: F401 — registers every model
 
         pointing = {
@@ -138,6 +138,7 @@ class TestReferenceClassification:
         classified = (
             cache_prune_service.reference_tables()
             | cache_prune_service.CACHE_CHILD_TABLES
+            | cache_prune_service.INDEPENDENT_TABLES
         )
         assert pointing - classified == set()
 

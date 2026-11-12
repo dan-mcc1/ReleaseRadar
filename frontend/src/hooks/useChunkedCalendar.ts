@@ -8,7 +8,7 @@ import {
 import type { ShowWithCalendar, Movie } from "../types/calendar";
 import { apiFetch } from "../utils/apiFetch";
 import { toLocalISODate } from "../utils/date";
-import { calendarPersister, savePersistedQuery } from "../queryPersistence";
+import { savedQueryPersister, savePersistedQuery } from "../queryPersistence";
 
 // Calendar data loads in 6-month chunks, each its own query. Invalidating the
 // calendar refetches every loaded chunk at its own range, so months the user
@@ -123,7 +123,7 @@ export function useChunkedCalendar(
         staleTime: 5 * 60 * 1000,
         // Restores the chunk from IndexedDB on its first fetch and saves it
         // after each one.
-        persister: persist ? calendarPersister : undefined,
+        persister: persist ? savedQueryPersister : undefined,
       };
     }),
     combine: combineChunks, // module-level, so stable: results are memoized

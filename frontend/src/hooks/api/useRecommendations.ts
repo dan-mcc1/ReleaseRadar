@@ -2,6 +2,7 @@
 import { queryKeys } from "./queryKeys";
 import { queryFetch, checkedFetch } from "./queryFetch";
 import { useAuthUser } from "../useAuthUser";
+import { savedQueryPersister } from "../../queryPersistence";
 import type { Movie, Show } from "../../types/calendar";
 
 interface ForYouData {
@@ -10,23 +11,17 @@ interface ForYouData {
   seed_count: number;
 }
 
-export function useForYou(mode: string) {
+export function useForYou() {
   const user = useAuthUser();
   return useQuery({
-    queryKey: queryKeys.forYou(user?.uid ?? "", mode),
+    queryKey: queryKeys.forYou(user?.uid ?? ""),
     queryFn: ({ signal }) =>
-      queryFetch<ForYouData>(`/recommendations/for-you?mode=${mode}`, { signal }),
+      queryFetch<ForYouData>("/recommendations/for-you", { signal }),
     enabled: !!user,
-  });
-}
-
-export function useForYouPreview() {
-  const user = useAuthUser();
-  return useQuery({
-    queryKey: queryKeys.forYou(user?.uid ?? "", "default"),
-    queryFn: ({ signal }) =>
-      queryFetch<{ movies: Movie[]; shows: Show[] }>("/recommendations/for-you", { signal }),
-    enabled: !!user,
+    // A reload or new visit draws the picks saved in IndexedDB at once.
+    // Never fresh, so a saved copy is always refreshed behind what's shown.
+    staleTime: 0,
+    persister: savedQueryPersister,
   });
 }
 

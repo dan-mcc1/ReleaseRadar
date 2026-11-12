@@ -162,6 +162,12 @@ class TestSchedules:
 
         assert Schedule("episode-alerts", "dispatch_episode_alerts", {}, hourly(0)) in SCHEDULES
 
+    def test_title_recommendations_are_refreshed_every_hour(self):
+        from durable_queue.scheduler import hourly
+        from app.jobs import SCHEDULES, Schedule
+
+        assert Schedule("title-recs", "refresh_title_recommendations", {}, hourly(0)) in SCHEDULES
+
 
 class TestStartJobQueue:
     def test_registers_every_schedule_then_starts_the_runner(self):
@@ -548,6 +554,7 @@ class TestDailyJobs:
     @pytest.mark.parametrize("module_name, job, service", [
         ("billing", "reconcile_subscriptions", "reconcile_stripe_subscriptions"),
         ("catalog", "sync_collections", "daily_refresh"),
+        ("catalog", "refresh_title_recommendations", "refresh_title_recs"),
     ])
     def test_runs_its_service_with_a_session(self, module_name, job, service):
         import importlib
@@ -562,6 +569,7 @@ class TestDailyJobs:
 
     @pytest.mark.parametrize("task, ceiling", [
         ("sync_collections", 3600),
+        ("refresh_title_recommendations", 1800),
         ("refresh_streaming", 1800),
         ("refresh_trailer_videos", 1800),
         ("reconcile_subscriptions", None),

@@ -65,7 +65,7 @@ export const queryKeys = {
   usernameAvailable: (username: string) => ["user", "checkUsername", username] as const,
 
   // Recommendations
-  forYou: (uid: string, mode: string) => ["recommendations", "forYou", uid, mode] as const,
+  forYou: (uid: string) => ["recommendations", "forYou", uid] as const,
   recommendationsInbox: (uid: string) => ["recommendations", "inbox", uid] as const,
   unreadRecCount: (uid: string) => ["recommendations", "unreadCount", uid] as const,
 
