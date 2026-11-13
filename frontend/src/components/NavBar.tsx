@@ -99,6 +99,7 @@ const librarySections: NavSection[] = [
       { name: "Watchlist", href: "/watchlist" },
       { name: "Watched", href: "/watched" },
       { name: "For You", href: "/for-you" },
+      { name: "My services", href: "/services" },
     ],
   },
   {

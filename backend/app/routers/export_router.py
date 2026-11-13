@@ -348,13 +348,18 @@ def export_zip(
     ]
 
     # ── profile JSON ──────────────────────────────────────────────────────────
-    streaming_services = [
-        name
-        for (name,) in db.query(Provider.name)
+    service_rows = (
+        db.query(Provider.name, UserStreamingService.paused_at)
         .join(UserStreamingService, UserStreamingService.provider_id == Provider.id)
         .filter(UserStreamingService.user_id == uid)
         .order_by(Provider.name)
         .all()
+    )
+    streaming_services = [name for name, _ in service_rows]
+    paused_streaming_services = [
+        {"name": name, "paused_at": paused_at.isoformat()}
+        for name, paused_at in service_rows
+        if paused_at is not None
     ]
     profile = {
         "username": user.username,
@@ -380,6 +385,7 @@ def export_zip(
         "digest_hour": user.digest_hour,
         "digest_timezone": user.digest_timezone,
         "streaming_services": streaming_services,
+        "paused_streaming_services": paused_streaming_services,
         "exported_at": datetime.now(timezone.utc).isoformat(),
     }
 

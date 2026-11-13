@@ -41,6 +41,8 @@ SCHEDULES = [
     # digest_hour to 6 hours after); the job's key stops a second that day.
     Schedule("digests", "dispatch_digests", {}, hourly(0)),
     Schedule("premiere-alerts", "dispatch_premiere_alerts", {}, hourly(0)),
+    # Paused services with something from the user's list premiering soon.
+    Schedule("resume-reminders", "dispatch_resume_reminders", {}, hourly(0)),
     # Plans the hour's episode pushes; each is a job held until its send time.
     Schedule("episode-alerts", "dispatch_episode_alerts", {}, hourly(0)),
     # Hourly rather than nightly so a title tracked today feeds For You today.

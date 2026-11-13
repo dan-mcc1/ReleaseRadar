@@ -10,6 +10,7 @@ import { useNavigate, Link, useLocation } from "react-router-dom";
 import { DocumentDuplicateIcon, LockClosedIcon } from "@heroicons/react/24/outline";
 import {
   Button,
+  ButtonLink,
   CheckIcon,
   ChevronDownIcon,
   ChevronRightIcon,
@@ -52,7 +53,6 @@ import {
 } from "../hooks/api/useWatchlistNotify";
 import { useShelves, useToggleShelfNotify } from "../hooks/api/useShelves";
 import ProUpgradeModal from "../components/ProUpgradeModal";
-import StreamingOptimizer from "../components/StreamingOptimizer";
 import {
   useAllProviders,
   useMyStreamingServices,
@@ -1442,12 +1442,15 @@ export default function Settings() {
                 </div>
               </div>
 
-              {/* Optimizer */}
-              <div>
-                <p className="text-caption text-neutral-400 font-medium mb-3">
-                  Watchlist optimizer
+              {/* What each service is worth now lives on My services. */}
+              <div className="rounded-control border border-neutral-800 bg-neutral-900/60 p-4 flex flex-wrap items-center justify-between gap-3">
+                <p className="text-body text-neutral-300">
+                  See what's coming to each service, which ones you're not using, and which
+                  services cover the rest of your list.
                 </p>
-                <StreamingOptimizer />
+                <ButtonLink to="/services" size="sm">
+                  Open My services
+                </ButtonLink>
               </div>
             </div>
           </SectionCard>

@@ -36,6 +36,7 @@ const ActivityFeedPage = lazy(() => import("./pages/ActivityFeedPage"));
 const FriendsPage = lazy(() => import("./pages/FriendsPage"));
 const EpisodeInfo = lazy(() => import("./pages/EpisodeInfo"));
 const SeasonInfoPage = lazy(() => import("./pages/SeasonInfoPage"));
+const ServicesPage = lazy(() => import("./pages/ServicesPage"));
 const BoxOffice = lazy(() => import("./pages/BoxOffice"));
 const CollectionInfo = lazy(() => import("./pages/CollectionInfo"));
 const BrowseCollections = lazy(() => import("./pages/BrowseCollections"));
@@ -174,6 +175,14 @@ function App() {
           <Route path="/person/:id" element={<PersonInfo />} />
           <Route path="/watched" element={<Watched />} />
           <Route path="/watchlist" element={<Watchlist />} />
+          <Route
+            path="/services"
+            element={
+              <ProtectedRoute>
+                <ServicesPage />
+              </ProtectedRoute>
+            }
+          />
           <Route path="/trending" element={<Trending />} />
           <Route path="/browse-genres" element={<BrowseGenres />} />
           <Route path="/profile" element={<ProfilePage />} />

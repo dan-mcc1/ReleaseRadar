@@ -34,6 +34,7 @@ export function useMyProviderIds(): Set<number> {
 
 const SERVICES_KEY = ["streaming", "services"];
 const OPTIMIZER_KEY = ["streaming", "optimizer"];
+const OVERVIEW_KEY = ["streaming", "overview"];
 
 let optimizerRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -42,6 +43,7 @@ function scheduleOptimizerRefresh(qc: ReturnType<typeof useQueryClient>) {
   optimizerRefreshTimer = setTimeout(() => {
     optimizerRefreshTimer = null;
     qc.invalidateQueries({ queryKey: OPTIMIZER_KEY });
+    qc.invalidateQueries({ queryKey: OVERVIEW_KEY });
   }, 500);
 }
 
@@ -141,5 +143,89 @@ export function useRemoveStreamingService() {
       qc.invalidateQueries({ queryKey: SERVICES_KEY });
       scheduleOptimizerRefresh(qc);
     },
+  });
+}
+
+// ── My services ─────────────────────────────────────────────────────────────
+
+export type ReleaseKind = "series_premiere" | "season_premiere" | "episode" | "movie";
+
+export interface ServiceRelease {
+  content_type: "tv" | "movie";
+  id: number;
+  title: string | null;
+  poster_path: string | null;
+  /** YYYY-MM-DD */
+  date: string;
+  kind: ReleaseKind;
+  season_number: number | null;
+  episode_number: number | null;
+}
+
+export interface ServiceTitle {
+  content_type: "tv" | "movie";
+  id: number;
+  title: string;
+  poster_path: string | null;
+}
+
+export type ServiceVerdict = "keep" | "pause" | "paused";
+
+export interface ServiceOverview {
+  id: number;
+  name: string;
+  logo_path: string | null;
+  paused_at: string | null;
+  verdict: ServiceVerdict;
+  upcoming: ServiceRelease[];
+  upcoming_count: number;
+  next_release: ServiceRelease | null;
+  /** The next premiere or movie: what a paused service's reminder is about. */
+  next_premiere: ServiceRelease | null;
+  ready_now: { count: number; items: ServiceTitle[] };
+  last_used: { at: string; content_type: "tv" | "movie"; id: number; title: string } | null;
+}
+
+export interface ServicesOverview {
+  lookahead_days: number;
+  recent_use_days: number;
+  services: ServiceOverview[];
+}
+
+export interface PopularTitle extends ServiceTitle {
+  year: string | null;
+  vote_average: number | null;
+}
+
+export function useServicesOverview() {
+  const user = useAuthUser();
+  return useQuery<ServicesOverview>({
+    queryKey: OVERVIEW_KEY,
+    queryFn: ({ signal }) => queryFetch<ServicesOverview>("/streaming/overview", { signal }),
+    enabled: !!user,
+    staleTime: 1000 * 60 * 5,
+  });
+}
+
+export function useServicePopular(providerId: number, enabled: boolean) {
+  const user = useAuthUser();
+  return useQuery<PopularTitle[]>({
+    queryKey: ["streaming", "popular", providerId],
+    queryFn: ({ signal }) =>
+      queryFetch<PopularTitle[]>(`/streaming/services/${providerId}/popular`, { signal }),
+    enabled: !!user && enabled,
+    staleTime: 1000 * 60 * 60,
+  });
+}
+
+/** Pause or resume a service. Pausing only drives ReleaseRadar's reminders. */
+export function useSetServicePaused() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ providerId, paused }: { providerId: number; paused: boolean }) =>
+      checkedFetch(`/streaming/services/${providerId}/pause`, {
+        method: paused ? "POST" : "DELETE",
+      }),
+    onSettled: () => qc.invalidateQueries({ queryKey: OVERVIEW_KEY }),
   });
 }

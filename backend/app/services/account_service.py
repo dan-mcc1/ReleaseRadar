@@ -34,6 +34,7 @@ from app.models.rewatch import Rewatch
 from app.models.season_rating import SeasonRating
 from app.models.sent_episode_alert import SentEpisodeAlert
 from app.models.sent_premiere_alert import SentPremiereAlert
+from app.models.sent_resume_reminder import SentResumeReminder
 from app.models.shelf import Shelf
 from app.models.shelf_item import ShelfItem
 from app.models.subscription import Subscription
@@ -176,6 +177,7 @@ def delete_user_data(db: Session, user_id: str) -> None:
     purge(UserStreamingService, UserStreamingService.user_id == user_id)
     purge(DeviceToken, DeviceToken.user_id == user_id)
     purge(SentPremiereAlert, SentPremiereAlert.user_id == user_id)
+    purge(SentResumeReminder, SentResumeReminder.user_id == user_id)
     purge(SentEpisodeAlert, SentEpisodeAlert.user_id == user_id)
     purge(Subscription, Subscription.user_id == user_id)
     purge(Appeal, Appeal.user_id == user_id)
