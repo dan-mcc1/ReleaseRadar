@@ -67,6 +67,7 @@ from app.routers import (
     moderation,
     export_router,
     streaming,
+    households,
     watch_status,
     feedback,
 )
@@ -294,6 +295,7 @@ app.include_router(import_router.router, prefix="/import", tags=["import"])
 app.include_router(moderation.router, prefix="/moderation", tags=["moderation"])
 app.include_router(export_router.router, prefix="/export", tags=["export"])
 app.include_router(streaming.router, prefix="/streaming", tags=["streaming"])
+app.include_router(households.router, prefix="/households", tags=["households"])
 app.include_router(watch_status.router, prefix="/watch-status", tags=["watch-status"])
 app.include_router(feedback.router, tags=["feedback"])
 

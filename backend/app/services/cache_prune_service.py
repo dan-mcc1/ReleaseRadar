@@ -46,6 +46,7 @@ from app.models.season_rating import SeasonRating
 from app.models.sent_episode_alert import SentEpisodeAlert
 from app.models.sent_premiere_alert import SentPremiereAlert
 from app.models.sent_resume_reminder import SentResumeReminder
+from app.models.household import HouseholdItem
 from app.models.shelf_item import ShelfItem
 from app.models.show import Show
 from app.models.show_video import ShowVideo
@@ -120,6 +121,7 @@ _SHARED = (
     Reference(Activity, "activity feed"),
     Reference(Notification, "inbox notifications"),
     Reference(CommunityMedia, "group media", user_column="added_by"),
+    Reference(HouseholdItem, "household lists", user_column="added_by"),
 )
 
 REFERENCES: dict[str, tuple[Reference, ...]] = {

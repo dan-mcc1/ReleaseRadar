@@ -37,6 +37,8 @@ const FriendsPage = lazy(() => import("./pages/FriendsPage"));
 const EpisodeInfo = lazy(() => import("./pages/EpisodeInfo"));
 const SeasonInfoPage = lazy(() => import("./pages/SeasonInfoPage"));
 const ServicesPage = lazy(() => import("./pages/ServicesPage"));
+const HouseholdsPage = lazy(() => import("./pages/HouseholdsPage"));
+const HouseholdPage = lazy(() => import("./pages/HouseholdPage"));
 const BoxOffice = lazy(() => import("./pages/BoxOffice"));
 const CollectionInfo = lazy(() => import("./pages/CollectionInfo"));
 const BrowseCollections = lazy(() => import("./pages/BrowseCollections"));
@@ -180,6 +182,22 @@ function App() {
             element={
               <ProtectedRoute>
                 <ServicesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/households"
+            element={
+              <ProtectedRoute>
+                <HouseholdsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/households/:id"
+            element={
+              <ProtectedRoute>
+                <HouseholdPage />
               </ProtectedRoute>
             }
           />

@@ -26,7 +26,8 @@ logger = logging.getLogger(__name__)
 
 
 def add_to_watched(
-    db: Session, user_id: str, content_type: str, content_id: int, rating: float = None, commit: bool = True
+    db: Session, user_id: str, content_type: str, content_id: int, rating: float = None, commit: bool = True,
+    logged_by: str | None = None,
 ):
     """
     Mark a movie or show as watched.
@@ -63,10 +64,12 @@ def add_to_watched(
 
     if content_type == "movie":
         media = ensure_movie_stub_in_db(db, content_id)
-        log_activity(db, user_id, "watched", content_type, content_id, media.title or None, media.poster_path)
+        log_activity(db, user_id, "watched", content_type, content_id, media.title or None, media.poster_path,
+                     logged_by=logged_by)
     elif content_type == "tv":
         media = ensure_show_stub_in_db(db, content_id)
-        log_activity(db, user_id, "watched", content_type, content_id, media.name or None, media.poster_path)
+        log_activity(db, user_id, "watched", content_type, content_id, media.name or None, media.poster_path,
+                     logged_by=logged_by)
     else:
         log_activity(db, user_id, "watched", content_type, content_id, None, None)
     recount_tracking(db, content_type, [content_id])

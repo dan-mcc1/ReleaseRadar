@@ -28,6 +28,7 @@ import {
   focusRing,
 } from "../components/ui";
 import { unairedLabel } from "../components/EpisodeRow";
+import WatchedTogetherButton from "../components/WatchedTogetherButton";
 import {
   episodeKind,
   formatAirDate,
@@ -406,6 +407,18 @@ export default function EpisodeInfo() {
                 {unaired ? "You can mark it once it airs" : "Logs to your activity"}
               </div>
             </>
+          )}
+          {user && !unaired && (
+            <WatchedTogetherButton
+              target={{
+                contentType: "tv",
+                contentId: Number(showId),
+                seasonNumber: data.season_number,
+                episodeNumber: data.episode_number,
+                label: `${seasonCode} E${data.episode_number}: ${data.name}`,
+              }}
+              className="w-full"
+            />
           )}
         </div>
       </div>

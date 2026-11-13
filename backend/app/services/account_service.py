@@ -35,6 +35,8 @@ from app.models.season_rating import SeasonRating
 from app.models.sent_episode_alert import SentEpisodeAlert
 from app.models.sent_premiere_alert import SentPremiereAlert
 from app.models.sent_resume_reminder import SentResumeReminder
+from app.models.household import Household, HouseholdInvite, HouseholdItem
+from app.services.household_service import remove_user_everywhere
 from app.models.shelf import Shelf
 from app.models.shelf_item import ShelfItem
 from app.models.subscription import Subscription
@@ -138,7 +140,14 @@ def delete_user_data(db: Session, user_id: str) -> None:
     purge(CommunityPost, CommunityPost.user_id == user_id)
     purge(CommunityInvitation, CommunityInvitation.user_id == user_id)
     purge(CommunityMember, CommunityMember.user_id == user_id)
+    # Households: leave each one (ownership passes on, empty ones go), then
+    # null out what they added or sent.
+    remove_user_everywhere(db, user_id)
     for model, column in (
+        (Household, Household.created_by),
+        (HouseholdItem, HouseholdItem.added_by),
+        (HouseholdInvite, HouseholdInvite.invited_by),
+        (Activity, Activity.logged_by),
         (Community, Community.created_by),
         (CommunityMedia, CommunityMedia.added_by),
         (CommunityInvitation, CommunityInvitation.invited_by),

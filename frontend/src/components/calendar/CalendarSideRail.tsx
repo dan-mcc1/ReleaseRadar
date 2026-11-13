@@ -624,6 +624,7 @@ interface ActivityItem {
   content_poster_path: string | null;
   rating?: number | null;
   created_at: string;
+  logged_by_username?: string | null;
 }
 
 const ACTIVITY_VERBS: Record<ActivityType, string> = {
@@ -714,6 +715,7 @@ function FriendActivityCard() {
                 <p className={SUB}>
                   {item.rating != null && `Rated it ${item.rating} of 5 · `}
                   {timeAgo(item.created_at)}
+                  {item.logged_by_username && ` · logged by ${item.logged_by_username}`}
                 </p>
               </div>
             </div>

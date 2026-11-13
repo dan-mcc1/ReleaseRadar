@@ -35,9 +35,11 @@ def add_episode_watched(
     season_number: int,
     episode_number: int,
     rating: float = None,
+    logged_by: str | None = None,
 ):
     """
-    Mark an episode as watched.
+    Mark an episode as watched. logged_by is the housemate who logged it for
+    this user, if one did.
     Ensures the episode row exists in the episode table (fetching from TMDB
     if needed) and links episode_watched to it via episode_id.
     After recording the episode, auto-moves the show to Watched if all episodes
@@ -99,7 +101,12 @@ def add_episode_watched(
         show.poster_path if show else None,
         season_number=season_number,
         episode_number=episode_number,
+        logged_by=logged_by,
     )
+    # log_activity only flushes, and auto-complete doesn't always commit, so
+    # without this the activity row was dropped when the request's session
+    # closed and episode watches never reached anyone's feed.
+    db.commit()
     maybe_auto_complete_show(db, user_id, show_id)
 
     return entry

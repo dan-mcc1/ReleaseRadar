@@ -29,6 +29,7 @@ from app.models.show import Show
 from app.models.user import User
 from app.models.user_collection_ranking import UserCollectionRanking
 from app.models.user_streaming_service import UserStreamingService
+from app.models.household import Household, HouseholdItem, HouseholdMember
 from app.models.watched import Watched
 from app.models.watchlist import Watchlist
 
@@ -347,6 +348,39 @@ def export_zip(
         for collection_id, name, movie_id, rank, updated_at in ranking_query
     ]
 
+    # Households the user is in, and the titles they put on shared lists.
+    household_rows = []
+    household_item_rows = []
+    memberships = (
+        db.query(Household, HouseholdMember.role, HouseholdMember.joined_at)
+        .join(HouseholdMember, HouseholdMember.household_id == Household.id)
+        .filter(HouseholdMember.user_id == uid)
+        .order_by(Household.name)
+        .all()
+    )
+    for household, role, joined_at in memberships:
+        household_rows.append({
+            "household": household.name,
+            "role": role,
+            "joined_at": joined_at.date() if joined_at else "",
+        })
+    added_items = (
+        db.query(Household.name, HouseholdItem.content_type, HouseholdItem.content_id, HouseholdItem.added_at)
+        .join(Household, Household.id == HouseholdItem.household_id)
+        .filter(HouseholdItem.added_by == uid)
+        .order_by(Household.name, HouseholdItem.added_at)
+        .all()
+    )
+    item_titles = _build_title_lookup(db, added_items)
+    for name, ct, cid, added_at in added_items:
+        household_item_rows.append({
+            "household": name,
+            "type": ct,
+            "title": item_titles.get((ct, cid), str(cid)),
+            "tmdb_id": cid,
+            "added_at": added_at.date() if added_at else "",
+        })
+
     # ── profile JSON ──────────────────────────────────────────────────────────
     service_rows = (
         db.query(Provider.name, UserStreamingService.paused_at)
@@ -399,6 +433,8 @@ def export_zip(
         zf.writestr("shelves.csv", _csv_bytes(shelf_rows, ["shelf", "type", "title", "tmdb_id", "added_at"]))
         zf.writestr("currently_watching.csv", _csv_bytes(currently_watching_rows, ["type", "title", "tmdb_id", "added_at"]))
         zf.writestr("episodes_watched.csv", _csv_bytes(episode_rows, ["show_title", "show_tmdb_id", "season", "episode", "episode_title", "rating", "watched_at"]))
+        zf.writestr("households.csv", _csv_bytes(household_rows, ["household", "role", "joined_at"]))
+        zf.writestr("household_list_added.csv", _csv_bytes(household_item_rows, ["household", "type", "title", "tmdb_id", "added_at"]))
         zf.writestr("favorites.csv", _csv_bytes(favorite_rows, ["type", "title", "tmdb_id", "added_at"]))
         zf.writestr("season_ratings.csv", _csv_bytes(season_rating_rows, ["show_title", "show_tmdb_id", "season", "rating", "rated_at"]))
         zf.writestr("goals.csv", _csv_bytes(goal_rows, ["show_title", "show_tmdb_id", "target_date"]))

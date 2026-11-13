@@ -31,6 +31,7 @@ def log_activity(
     rating: float = None,
     season_number: int = None,
     episode_number: int = None,
+    logged_by: str | None = None,
 ):
     if activity_type == "episode_watched":
         # Partial unique index excludes episode_watched rows; keep old path.
@@ -52,6 +53,7 @@ def log_activity(
             rating=rating,
             season_number=season_number,
             episode_number=episode_number,
+            logged_by=logged_by,
         ))
         db.flush()
         return
@@ -76,6 +78,7 @@ def log_activity(
         rating=rating,
         season_number=season_number,
         episode_number=episode_number,
+        logged_by=logged_by,
     )
     stmt = stmt.on_conflict_do_update(
         index_elements=["user_id", "activity_type", "content_type", "content_id"],
@@ -86,6 +89,7 @@ def log_activity(
             content_title=stmt.excluded.content_title,
             content_poster_path=stmt.excluded.content_poster_path,
             rating=stmt.excluded.rating,
+            logged_by=stmt.excluded.logged_by,
             created_at=func.now(),
         ),
     )
@@ -98,6 +102,7 @@ def _serialize_activity(
     username: str,
     display_name: str | None = None,
     media_fallback: dict[tuple[str, int], tuple[str | None, str | None]] | None = None,
+    logged_by_names: dict[str, str | None] | None = None,
 ) -> dict:
     title = a.content_title
     poster = a.content_poster_path
@@ -121,7 +126,23 @@ def _serialize_activity(
         "season_number": a.season_number,
         "episode_number": a.episode_number,
         "created_at": a.created_at.isoformat() if a.created_at else None,
+        # Who logged it, when a housemate did it for this user.
+        "logged_by_username": (logged_by_names or {}).get(a.logged_by) if a.logged_by else None,
     }
+
+
+def _logged_by_names(db: Session, rows, viewer: str, viewer_friends=()) -> dict[str, str | None]:
+    """Usernames of housemates who logged these rows, but only where the
+    viewer would know them: it's the viewer's own entry, the viewer logged
+    it, or the logger is the viewer's friend."""
+    known = {viewer, *viewer_friends}
+    ids = {
+        a.logged_by for a, *_ in rows
+        if a.logged_by and (a.user_id == viewer or a.logged_by in known)
+    }
+    if not ids:
+        return {}
+    return {uid: name for uid, name in db.query(User.id, User.username).filter(User.id.in_(ids))}
 
 
 def _build_media_fallback(
@@ -204,7 +225,8 @@ def get_my_activity(db: Session, user_id: str, limit: int = 50) -> list:
         .all()
     )
     fallback = _build_media_fallback(db, rows)
-    return [_serialize_activity(a, username, display_name, fallback) for a, username, display_name in rows]
+    names = _logged_by_names(db, rows, user_id)
+    return [_serialize_activity(a, username, display_name, fallback, names) for a, username, display_name in rows]
 
 
 def get_activity_feed(db: Session, user_id: str, limit: int = 50) -> list:
@@ -224,7 +246,8 @@ def get_activity_feed(db: Session, user_id: str, limit: int = 50) -> list:
     )
 
     fallback = _build_media_fallback(db, rows)
-    return [_serialize_activity(a, username, display_name, fallback) for a, username, display_name in rows]
+    names = _logged_by_names(db, rows, user_id, friend_ids)
+    return [_serialize_activity(a, username, display_name, fallback, names) for a, username, display_name in rows]
 
 
 def get_friends_activity(db: Session, user_id: str, limit: int = 30) -> list:
@@ -244,7 +267,8 @@ def get_friends_activity(db: Session, user_id: str, limit: int = 30) -> list:
     )
 
     fallback = _build_media_fallback(db, rows)
-    return [_serialize_activity(a, username, display_name, fallback) for a, username, display_name in rows]
+    names = _logged_by_names(db, rows, user_id, friend_ids)
+    return [_serialize_activity(a, username, display_name, fallback, names) for a, username, display_name in rows]
 
 
 def lift_expired_moderation(db: Session) -> None:

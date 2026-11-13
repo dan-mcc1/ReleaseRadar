@@ -49,6 +49,7 @@ interface ActivityItem {
   season_number: number | null;
   episode_number: number | null;
   created_at: string;
+  logged_by_username?: string | null;
 }
 
 interface RecommendationItem {
@@ -282,6 +283,7 @@ function ActivityCard({
       {/* Row 3: timestamp */}
       <time dateTime={item.created_at} className="text-caption text-neutral-500">
         {timeAgo(item.created_at)}
+        {item.logged_by_username && ` · logged by ${item.logged_by_username}`}
       </time>
     </div>
   );
