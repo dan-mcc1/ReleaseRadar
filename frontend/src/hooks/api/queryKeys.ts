@@ -138,6 +138,8 @@ export const queryKeys = {
   householdProgress: (uid: string, id: number) => ["households", uid, "progress", id] as const,
   householdInvitable: (uid: string, id: number) => ["households", uid, "invitable", id] as const,
   householdRecommendations: (uid: string, id: number) => ["households", uid, "recommendations", id] as const,
+  householdPicks: (uid: string, id: number, filters: readonly unknown[]) =>
+    ["households", uid, "picks", id, ...filters] as const,
   householdsContaining: (uid: string, contentType: string, contentId: number) =>
     ["households", uid, "containing", contentType, contentId] as const,
 

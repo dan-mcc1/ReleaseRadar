@@ -498,3 +498,160 @@ class TestRecommendations:
 
         hid = _create(client)
         assert make_client("test-uid-3").get(f"/households/{hid}/recommendations").status_code == 404
+
+
+class TestPicks:
+    @pytest.fixture
+    def tonight(self, client, client2, db, people, five_episode_show):
+        """alice is on episode 2 of Shared Show, bob on 4 (runtime 30 min).
+        Both have Movie 40 (PG, 100 min, on Netflix, which alice pays for) on
+        their watchlists. Movie 41 (R) is on the shared list. Both watched
+        Movie 42, which is also on the shared list."""
+        from app.models.episode import Episode
+        from app.models.household import HouseholdItem
+        from app.models.movie import Movie
+        from app.models.provider import MovieProvider, Provider
+        from app.models.user_streaming_service import UserStreamingService
+        from app.models.watched import Watched
+        from app.models.watchlist import Watchlist
+
+        hid = _create(client)
+        _join(client, client2, hid)
+        _watch(db, ALICE, 1, 2)
+        _watch(db, BOB, 1, 2, 3, 4)
+        db.query(Episode).filter_by(show_id=500).update({"runtime": 30})
+        db.add_all([
+            Movie(id=40, title="Family Movie", certification="PG", runtime=100),
+            Movie(id=41, title="Grown-up Movie", certification="R", runtime=120),
+            Movie(id=42, title="Seen It", certification="PG", runtime=90),
+            Provider(id=8, name="Netflix"),
+        ])
+        db.flush()
+        db.add_all([
+            MovieProvider(movie_id=40, provider_id=8, flatrate=True),
+            UserStreamingService(user_id=ALICE, provider_id=8),
+            Watchlist(user_id=ALICE, content_type="movie", content_id=40),
+            Watchlist(user_id=BOB, content_type="movie", content_id=40),
+            Watched(user_id=ALICE, content_type="movie", content_id=42),
+            Watched(user_id=BOB, content_type="movie", content_id=42),
+            HouseholdItem(household_id=hid, content_type="movie", content_id=41, added_by=BOB),
+            HouseholdItem(household_id=hid, content_type="movie", content_id=42, added_by=ALICE),
+        ])
+        db.commit()
+        return hid
+
+    def _picks(self, client, hid, **params):
+        r = client.get(f"/households/{hid}/picks", params=params)
+        assert r.status_code == 200, r.text
+        return r.json()["picks"]
+
+    def test_ranked_with_reasons(self, client, tonight):
+        picks = self._picks(client, tonight)
+        assert [p["title"] for p in picks] == ["Shared Show", "Grown-up Movie", "Family Movie"]
+        show = picks[0]
+        assert show["episode"]["episode_number"] == 3  # where alice is
+        assert show["reasons"][0]["type"] == "next_episode"
+        assert set(show["reasons"][0]["user_ids"]) == {ALICE, BOB}
+        assert picks[1]["reasons"] == [{"type": "shared_list", "user_id": BOB}]
+        assert picks[2]["reasons"][0]["type"] == "want"
+        assert picks[2]["services"] == [{"id": 8, "name": "Netflix"}]
+
+    def test_seen_by_everyone_is_left_out(self, client, tonight):
+        assert "Seen It" not in [p["title"] for p in self._picks(client, tonight)]
+
+    def test_time_filters(self, client, tonight):
+        assert [p["title"] for p in self._picks(client, tonight, time="movie")] == ["Grown-up Movie", "Family Movie"]
+        assert [p["title"] for p in self._picks(client, tonight, time="short")] == ["Shared Show"]
+
+    def test_kid_friendly(self, client, tonight):
+        # The show has no rating stored, so it can't be promised as kid-friendly.
+        assert [p["title"] for p in self._picks(client, tonight, kids="true")] == ["Family Movie"]
+
+    def test_on_our_services(self, client, tonight):
+        assert [p["title"] for p in self._picks(client, tonight, services="true")] == ["Family Movie"]
+
+    def test_just_one_person_watching(self, client, tonight):
+        picks = self._picks(client, tonight, present=ALICE)
+        titles = [p["title"] for p in picks]
+        # One person can't share a want; the shared list still counts.
+        assert "Family Movie" not in titles
+        assert "Grown-up Movie" in titles
+
+    def test_present_must_be_members(self, client, tonight):
+        r = client.get(f"/households/{tonight}/picks", params={"present": CAROL})
+        assert r.status_code == 422
+
+    def test_outsiders_get_404(self, client, tonight):
+        from tests.conftest import make_client
+        assert make_client(CAROL).get(f"/households/{tonight}/picks").status_code == 404
+
+
+class TestPicksReviewFixes:
+    def _hid(self, client, client2):
+        hid = _create(client)
+        _join(client, client2, hid)
+        return hid
+
+    def test_no_s1e1_when_someone_has_started(self, client, client2, db, people, five_episode_show):
+        from app.models.watchlist import Watchlist
+
+        hid = self._hid(client, client2)
+        _watch(db, BOB, 1, 2, 3)  # only bob has started; it's not shared
+        db.add_all([
+            Watchlist(user_id=ALICE, content_type="tv", content_id=500),
+            Watchlist(user_id=BOB, content_type="tv", content_id=500),
+        ])
+        db.commit()
+        pick = next(p for p in client.get(f"/households/{hid}/picks").json()["picks"] if p["id"] == 500)
+        assert pick["episode"] is None
+
+    def test_s1e1_for_an_unstarted_show(self, client, client2, db, people, five_episode_show):
+        hid = self._hid(client, client2)
+        client.post(f"/households/{hid}/items", json={"content_type": "tv", "content_id": 500})
+        pick = next(p for p in client.get(f"/households/{hid}/picks").json()["picks"] if p["id"] == 500)
+        assert (pick["episode"]["season_number"], pick["episode"]["episode_number"]) == (1, 1)
+
+    def test_no_s1e1_before_it_airs(self, client, client2, db, people, five_episode_show):
+        from app.models.episode import Episode
+
+        hid = self._hid(client, client2)
+        db.query(Episode).filter_by(show_id=500, episode_number=1).update(
+            {"air_date": date.today() + timedelta(days=10)}
+        )
+        db.commit()
+        client.post(f"/households/{hid}/items", json={"content_type": "tv", "content_id": 500})
+        pick = next(p for p in client.get(f"/households/{hid}/picks").json()["picks"] if p["id"] == 500)
+        assert pick["episode"] is None
+
+    def test_present_is_deduplicated(self, client, client2, people):
+        hid = self._hid(client, client2)
+        r = client.get(f"/households/{hid}/picks", params={"present": f"{ALICE},{ALICE}"})
+        assert r.json()["present"] == [ALICE]
+
+
+class TestPicksNeverWaitOnTmdb:
+    def test_missing_lists_are_fetched_after_the_response(self, client, client2, db, people):
+        from unittest.mock import patch
+        from app.models.show import Show
+        from app.models.watched import Watched
+        from app.services import household_picks, household_recs
+
+        hid = _create(client)
+        _join(client, client2, hid)
+        # Both watched a show that has no stored recommendation list.
+        db.add(Show(id=600, name="No list yet"))
+        db.add_all([
+            Watched(user_id=ALICE, content_type="tv", content_id=600),
+            Watched(user_id=BOB, content_type="tv", content_id=600),
+        ])
+        db.commit()
+
+        with patch.object(household_recs, "fetch_and_store") as fetch:
+            household_picks.household_picks(db, ALICE, hid)
+            fetch.assert_not_called()  # the request itself never waits on TMDb
+            r = client.get(f"/households/{hid}/picks")
+        assert r.status_code == 200
+        assert "missing" not in r.json()
+        # ...but the route queued it for after the response.
+        assert fetch.call_count == 1
+        assert ("tv", 600) in fetch.call_args.args[1]

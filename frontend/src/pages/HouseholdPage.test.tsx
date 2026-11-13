@@ -5,6 +5,7 @@ import HouseholdPage from "./HouseholdPage";
 import {
   useHousehold,
   useHouseholdInvitable,
+  useHouseholdPicks,
   useHouseholdProgress,
   useHouseholdRecommendations,
   type HouseholdDetail,
@@ -29,6 +30,7 @@ vi.mock("../hooks/api/useHouseholds", async (orig) => {
     useAddHouseholdItem: () => ({ mutate: addMutate, isPending: false }),
     useHouseholdInvitable: vi.fn(),
     useHouseholdRecommendations: vi.fn(),
+    useHouseholdPicks: vi.fn(),
     useCancelHouseholdInvite: idle,
   };
 });
@@ -83,6 +85,12 @@ function renderPage(path = "/households/3?tab=progress") {
     isPending: false,
     isError: false,
   } as never);
+  vi.mocked(useHouseholdPicks).mockReturnValue({
+    data: { present: ["u1", "u2"], picks: [] },
+    isPending: false,
+    error: null,
+    refetch: vi.fn(),
+  } as never);
   vi.mocked(useHouseholdRecommendations).mockReturnValue({
     data: {
       shows: [{
@@ -125,9 +133,15 @@ describe("HouseholdPage", () => {
     expect(body.target).toMatchObject({ contentType: "tv", contentId: 9, seasonNumber: 2, episodeNumber: 4 });
   });
 
-  it("starts on the shared list and shows owner controls", () => {
+  it("starts on Tonight and shows owner controls", () => {
     renderPage("/households/3");
     expect(screen.getByRole("button", { name: "Delete household" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Who is watching?" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Tonight" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("keeps the shared list on ?tab=together", () => {
+    renderPage("/households/3?tab=together");
     expect(screen.getByText("Nothing on the list yet")).toBeInTheDocument();
   });
 

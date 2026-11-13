@@ -1,8 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "./queryKeys";
 import { queryFetch } from "./queryFetch";
 import { apiFetch } from "../../utils/apiFetch";
 import { useAuthUser } from "../useAuthUser";
+import { SHOWN_PICKS, filterPicks } from "../../utils/households";
 
 export type HouseholdRole = "owner" | "member";
 export type MemberStatus = "Want To Watch" | "Currently Watching" | "Watched";
@@ -139,6 +140,43 @@ export interface HouseholdRecommendations {
   shared_count: number;
 }
 
+export type PickTime = "any" | "short" | "hour" | "movie";
+
+export type PickReasonItem =
+  | { type: "next_episode"; user_ids: string[] }
+  | { type: "shared_list"; user_id: string | null }
+  | { type: "want"; user_ids: string[] }
+  /** basis: "watched" (you watched `because` together) or "lists" (it's on your lists). */
+  | { type: "recommended"; because: string | null; basis?: "watched" | "lists" | null };
+
+export interface TonightPick {
+  content_type: "tv" | "movie";
+  id: number;
+  title: string;
+  poster_path: string | null;
+  year: number | null;
+  /** Minutes: the episode's for a show, the movie's for a movie. */
+  runtime: number | null;
+  certification: string | null;
+  episode: { season_number: number; episode_number: number; name: string | null } | null;
+  /** Services tonight's people pay for that carry it. */
+  services: { id: number; name: string }[];
+  reasons: PickReasonItem[];
+  score: number;
+}
+
+export interface PicksResponse {
+  present: string[];
+  picks: TonightPick[];
+}
+
+export interface PicksFilters {
+  present: string[];
+  time: PickTime;
+  services: boolean;
+  kids: boolean;
+}
+
 export interface LogRequest {
   householdId: number;
   userIds: string[];
@@ -224,6 +262,26 @@ export function useHouseholdRecommendations(id: number, enabled = true) {
       queryFetch<HouseholdRecommendations>(`/households/${id}/recommendations`, { signal }),
     enabled: !!user && id > 0 && enabled,
     staleTime: 1000 * 60 * 5,
+  });
+}
+
+/** Ranked picks for tonight: what the people present could watch together. */
+/**
+ * Tonight's picks. One request per set of people watching (cached, so going
+ * back to a set you had is instant); the time, services and kid-friendly
+ * filters run here, on the already-loaded list, so toggling them is instant.
+ */
+export function useHouseholdPicks(id: number, filters: PicksFilters) {
+  const user = useAuthUser();
+  const present = filters.present.join(",");
+  return useQuery<PicksResponse, Error, PicksResponse>({
+    queryKey: queryKeys.householdPicks(user?.uid ?? "", id, [present]),
+    queryFn: ({ signal }) =>
+      queryFetch<PicksResponse>(`/households/${id}/picks?present=${encodeURIComponent(present)}`, { signal }),
+    select: (data) => ({ ...data, picks: filterPicks(data.picks, filters).slice(0, SHOWN_PICKS) }),
+    enabled: !!user && id > 0 && filters.present.length > 0,
+    placeholderData: keepPreviousData,
+    staleTime: 1000 * 60 * 2,
   });
 }
 

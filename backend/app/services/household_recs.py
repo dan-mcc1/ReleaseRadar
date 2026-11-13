@@ -11,39 +11,45 @@ Reuses For You's machinery: each title's stored recommendation list
 """
 from __future__ import annotations
 
+import logging
 from collections import defaultdict
 from datetime import datetime, timezone
 
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
+from app.db.session import SessionLocal
 from app.models.household import HouseholdItem
 from app.models.title_recs import TitleRecs
 from app.services.for_you_service import (
-    Seed,
     _candidates,
-    _fill_missing,
     _library,
     _seed_titles,
     _serialize,
 )
 from app.services.household_service import _member_ids, _membership
-from app.services.title_recs_service import ORIGIN_TMDB, Key
+from app.services.title_recs_service import ORIGIN_TMDB, Key, fetch_and_store
+
+logger = logging.getLogger(__name__)
 
 SHARED_BONUS = 2.0      # a title two of you have counts double, on top of both weights
 SOLO_FACTOR = 0.25      # one person's title still counts, a little
 SHARED_LIST_WEIGHT = 1.0
 RETURN_LIMIT = 20       # per type
+MISSING_LIMIT = 20      # titles without a stored list fetched after a response
 BECAUSE_LIMIT = 2
 
 REASON_WATCHED = "watched"   # two or more of you watched it / are watching it
 REASON_LISTS = "lists"       # on the shared list, or on more than one person's lists
 
 
-def household_recommendations(db: Session, uid: str, hid: int) -> dict:
+def household_recommendations(
+    db: Session, uid: str, hid: int, only: list[str] | None = None
+) -> dict:
     _membership(db, hid, uid)
     now = datetime.now(timezone.utc)
-    uids = _member_ids(db, hid)
+    # only: just the members watching tonight (household picks).
+    uids = [m for m in _member_ids(db, hid) if only is None or m in only]
 
     holders: dict[Key, list[Seed]] = defaultdict(list)
     lists: dict[Key, list[Key]] = {}
@@ -73,7 +79,7 @@ def household_recommendations(db: Session, uid: str, hid: int) -> dict:
         reasons.setdefault(key, REASON_LISTS)
 
     if not weights:
-        return {"movies": [], "shows": [], "shared_count": 0}
+        return {"movies": [], "shows": [], "shared_count": 0, "missing": []}
 
     # Shared-list titles nobody has on their own lists have no list loaded yet.
     extra = [k for k in shared_list if k not in lists]
@@ -84,8 +90,13 @@ def household_recommendations(db: Session, uid: str, hid: int) -> dict:
         ):
             if recs is not None:
                 lists[(ct, cid)] = [(rt, rid) for rt, rid in recs]
-    # Lists for the heaviest titles that have none stored, a few at a time.
-    _fill_missing(db, {k: Seed(k, w, "watched") for k, w in weights.items()}, lists, now)
+    # Titles with no stored list don't hold the page up: the caller fetches
+    # the heaviest few after responding, so the next load has them.
+    missing = sorted(
+        (k for k, w in weights.items() if w > 0 and k not in lists),
+        key=lambda k: weights[k],
+        reverse=True,
+    )[:MISSING_LIMIT]
 
     exclude = set(holders) | shared_list
     scores: dict[Key, float] = defaultdict(float)
@@ -137,4 +148,23 @@ def household_recommendations(db: Session, uid: str, hid: int) -> dict:
         # How many titles the household shares: 0 means picks come only
         # from each person's own library.
         "shared_count": len(reasons),
+        # Popped by the routes and fetched in the background.
+        "missing": missing,
     }
+
+
+def fetch_missing_lists_bg(keys: list[Key]) -> None:
+    """Fetch and store recommendation lists after a response has gone out.
+    Opens its own session; failures only mean the next load waits for the
+    hourly refresh instead."""
+    if not keys:
+        return
+    db = SessionLocal()
+    try:
+        fetch_and_store(db, keys, datetime.now(timezone.utc), timeout=10.0)
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("household recs: background fetch of %d lists failed", len(keys))
+    finally:
+        db.close()

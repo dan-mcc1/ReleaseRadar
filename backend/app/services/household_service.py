@@ -517,7 +517,9 @@ def containing(db: Session, uid: str, content_type: str, content_id: int) -> lis
 # ── Progress on shared shows ────────────────────────────────────────────────
 
 
-def progress(db: Session, uid: str, hid: int, today: date | None = None) -> dict:
+def progress(
+    db: Session, uid: str, hid: int, today: date | None = None, only: list[str] | None = None
+) -> dict:
     """
     Shows at least two members have started (or one has, if it's on the
     shared list), with each member's furthest-watched episode and next one,
@@ -526,7 +528,8 @@ def progress(db: Session, uid: str, hid: int, today: date | None = None) -> dict
     """
     _membership(db, hid, uid)
     today = today or date.today()
-    uids = _member_ids(db, hid)
+    # only: just the members watching tonight (household picks).
+    uids = [m for m in _member_ids(db, hid) if only is None or m in only]
 
     shared = {
         cid for (cid,) in db.query(HouseholdItem.content_id)

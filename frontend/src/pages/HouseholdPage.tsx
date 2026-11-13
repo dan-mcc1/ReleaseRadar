@@ -19,6 +19,7 @@ import {
 } from "../hooks/api/useHouseholds";
 import MemberAvatar from "../components/MemberAvatar";
 import HouseholdInvitePicker from "../components/HouseholdInvitePicker";
+import HouseholdTonight from "../components/HouseholdTonight";
 import HouseholdPicks from "../components/HouseholdPicks";
 import WatchedTogetherModal, { type LogTarget } from "../components/WatchedTogetherModal";
 import { useToast } from "../components/Toast";
@@ -37,8 +38,8 @@ import {
 } from "../components/ui";
 import { NAME_MAX, episodeCode, inputClass, personName } from "../utils/households";
 
-type Tab = "together" | "progress" | "members";
-const TABS: Tab[] = ["together", "progress", "members"];
+type Tab = "tonight" | "together" | "progress" | "members";
+const TABS: Tab[] = ["tonight", "together", "progress", "members"];
 
 type Namer = (userId: string) => string;
 
@@ -322,7 +323,7 @@ export default function HouseholdPage() {
   usePageTitle(h?.name ?? "Household");
 
   const requested = searchParams.get("tab") as Tab | null;
-  const tab: Tab = requested && TABS.includes(requested) ? requested : "together";
+  const tab: Tab = requested && TABS.includes(requested) ? requested : "tonight";
   const setTab = (t: Tab) =>
     setSearchParams(
       (p) => {
@@ -448,6 +449,7 @@ export default function HouseholdPage() {
         value={tab}
         onChange={setTab}
         options={[
+          { value: "tonight", label: "Tonight" },
           { value: "together", label: "Watch together" },
           { value: "progress", label: "Progress" },
           { value: "members", label: "Members" },
@@ -455,6 +457,7 @@ export default function HouseholdPage() {
         className="mb-6"
       />
 
+      {tab === "tonight" && <HouseholdTonight h={h} />}
       {tab === "together" && <TogetherTab h={h} nameOf={nameOf} />}
       {tab === "progress" && <ProgressTab id={h.id} nameOf={nameOf} onLog={onLog} />}
       {tab === "members" && <MembersTab h={h} uid={uid} nameOf={nameOf} />}

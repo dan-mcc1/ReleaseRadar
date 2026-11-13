@@ -25,10 +25,12 @@ interface Props {
   target: LogTarget;
   /** Fixes the household (no picker), e.g. from a household's own page. */
   householdId?: number;
+  /** Starts with only these members checked; everyone is checked when omitted. */
+  presentUserIds?: string[];
 }
 
 /** Log one watch for everyone who was in the room. */
-export default function WatchedTogetherModal({ open, onClose, target, householdId }: Props) {
+export default function WatchedTogetherModal({ open, onClose, target, householdId, presentUserIds }: Props) {
   const user = useAuthUser();
   const toast = useToast();
   const { data } = useHouseholds();
@@ -41,13 +43,17 @@ export default function WatchedTogetherModal({ open, onClose, target, householdI
 
   const activeId = householdId ?? pickedId ?? households[0]?.id;
   const household = households.find((h) => h.id === activeId);
-  const skipped = (activeId !== undefined && unchecked[activeId]) || [];
+  const skipped =
+    (activeId !== undefined && unchecked[activeId]) ||
+    (presentUserIds
+      ? (household?.members ?? []).map((m) => m.user_id).filter((u) => !presentUserIds.includes(u))
+      : []);
   const selected = household?.members.filter((m) => !skipped.includes(m.user_id)) ?? [];
 
   const toggle = (userId: string) => {
     if (activeId === undefined) return;
     setUnchecked((prev) => {
-      const cur = prev[activeId] ?? [];
+      const cur = prev[activeId] ?? skipped;
       return {
         ...prev,
         [activeId]: cur.includes(userId) ? cur.filter((u) => u !== userId) : [...cur, userId],

@@ -33,3 +33,39 @@ export function pickReason(
   }
   return `Because ${seed.title} is on your lists`;
 }
+
+/** How many of tonight's picks are shown after filtering. */
+export const SHOWN_PICKS = 30;
+
+const TIME_LIMITS = { short: 35, hour: 70 } as const;
+const KID_RATINGS = new Set(["G", "PG", "TV-Y", "TV-Y7", "TV-Y7-FV", "TV-G", "TV-PG"]);
+
+interface FilterablePick {
+  content_type: "tv" | "movie";
+  runtime: number | null;
+  certification: string | null;
+  services: unknown[];
+}
+
+/**
+ * Tonight's filters, on the client. Same rules as the server's
+ * household_picks._passes: an episode up to ~35 / ~70 minutes (unknown
+ * runtime passes), movies only, on a service someone watching pays for, and
+ * kid-friendly by US rating (unknown rating or services never pass, since
+ * those are promises).
+ */
+export function filterPicks<T extends FilterablePick>(
+  picks: T[],
+  { time, services, kids }: { time: "any" | "short" | "hour" | "movie"; services: boolean; kids: boolean },
+): T[] {
+  return picks.filter((p) => {
+    if (time === "movie" && p.content_type !== "movie") return false;
+    if (time === "short" || time === "hour") {
+      if (p.content_type === "movie") return false;
+      if (p.runtime !== null && p.runtime > TIME_LIMITS[time]) return false;
+    }
+    if (services && p.services.length === 0) return false;
+    if (kids && !KID_RATINGS.has(p.certification ?? "")) return false;
+    return true;
+  });
+}
