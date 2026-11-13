@@ -140,6 +140,7 @@ export const queryKeys = {
   householdRecommendations: (uid: string, id: number) => ["households", uid, "recommendations", id] as const,
   householdPicks: (uid: string, id: number, filters: readonly unknown[]) =>
     ["households", uid, "picks", id, ...filters] as const,
+  householdSession: (uid: string, id: number) => ["households", uid, "session", id] as const,
   householdsContaining: (uid: string, contentType: string, contentId: number) =>
     ["households", uid, "containing", contentType, contentId] as const,
 

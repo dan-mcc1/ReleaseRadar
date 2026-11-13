@@ -655,3 +655,170 @@ class TestPicksNeverWaitOnTmdb:
         # ...but the route queued it for after the response.
         assert fetch.call_count == 1
         assert ("tv", 600) in fetch.call_args.args[1]
+
+
+class TestSwipeSessions:
+    @pytest.fixture
+    def swipe_world(self, client, client2, db, people):
+        """alice and bob both want movies 70 and 71 (on their watchlists)."""
+        from app.models.movie import Movie
+        from app.models.watchlist import Watchlist
+
+        hid = _create(client)
+        _join(client, client2, hid)
+        db.add_all([Movie(id=70, title="Seventy", runtime=100), Movie(id=71, title="Seventy-one", runtime=100)])
+        db.flush()
+        for uid in (ALICE, BOB):
+            for mid in (70, 71):
+                db.add(Watchlist(user_id=uid, content_type="movie", content_id=mid))
+        db.commit()
+        return hid
+
+    def _start(self, client, hid, present=(ALICE, BOB), **filters):
+        return client.post(f"/households/{hid}/sessions", json={"present": list(present), **filters})
+
+    def _vote(self, c, hid, sid, mid, yes=True):
+        return c.post(f"/households/{hid}/sessions/{sid}/votes",
+                      json={"content_type": "movie", "content_id": mid, "vote": yes})
+
+    def test_nothing_revealed_until_everyone_is_done(self, client, client2, swipe_world):
+        from unittest.mock import patch
+        from app.services import household_sessions
+
+        r = self._start(client, swipe_world)
+        assert r.status_code == 201, r.text
+        s = r.json()
+        assert {c["id"] for c in s["candidates"]} == {70, 71}
+        assert set(s["participants"]) == {ALICE, BOB}
+
+        with patch.object(household_sessions, "publish") as publish:
+            self._vote(client, swipe_world, s["id"], 70)
+            self._vote(client, swipe_world, s["id"], 71)
+            mid = self._vote(client2, swipe_world, s["id"], 70).json()
+            # bob has one card left: no tallies, no matches, no announcement.
+            assert (mid["finished"], mid["results"], mid["matches"]) == (False, None, [])
+            assert {c.args[1]["event"] for c in publish.call_args_list} == {"vote"}
+            done = self._vote(client2, swipe_world, s["id"], 71, yes=False).json()
+
+        assert done["finished"] is True
+        assert [(c["id"], c["yes"], c["of"]) for c in done["results"]] == [(70, 2, 2), (71, 1, 2)]
+        assert [m["id"] for m in done["matches"]] == [70]
+        finished = [c for c in publish.call_args_list if c.args[1]["event"] == "finished"]
+        assert {c.args[0] for c in finished} == {ALICE, BOB}  # once, to each member
+
+    def test_results_after_a_change_of_mind(self, client, client2, swipe_world):
+        sid = self._start(client, swipe_world).json()["id"]
+        for c in (client, client2):
+            self._vote(c, swipe_world, sid, 70)
+            self._vote(c, swipe_world, sid, 71, yes=False)
+        assert [m["id"] for m in client.get(f"/households/{swipe_world}/sessions/current").json()["matches"]] == [70]
+        out = self._vote(client2, swipe_world, sid, 70, yes=False).json()
+        assert out["matches"] == []
+        assert [(c["id"], c["yes"]) for c in out["results"]] == [(70, 1)]
+
+    def test_round_size(self, client, swipe_world):
+        assert self._start(client, swipe_world, size=2).status_code == 422
+        assert self._start(client, swipe_world, size=16).status_code == 422
+        assert self._start(client, swipe_world, size=5).status_code == 201
+
+    def test_everyone_sees_the_session_and_their_own_votes(self, client, client2, swipe_world):
+        sid = self._start(client, swipe_world).json()["id"]
+        self._vote(client, swipe_world, sid, 70)
+        mine = client.get(f"/households/{swipe_world}/sessions/current").json()
+        theirs = client2.get(f"/households/{swipe_world}/sessions/current").json()
+        assert mine["my_votes"] == {"movie:70": True}
+        assert theirs["my_votes"] == {}
+        assert theirs["progress"] == {ALICE: 1, BOB: 0}
+
+    def test_pick_closes_it(self, client, client2, swipe_world):
+        sid = self._start(client, swipe_world).json()["id"]
+        r = client2.post(f"/households/{swipe_world}/sessions/{sid}/pick", json={"content_type": "movie", "content_id": 70})
+        assert r.json()["status"] == "picked"
+        # Everyone sees what was picked, but nobody can keep voting.
+        shown = client.get(f"/households/{swipe_world}/sessions/current").json()
+        assert (shown["status"], shown["picked"]) == ("picked", {"content_type": "movie", "id": 70})
+        assert self._vote(client, swipe_world, sid, 71).status_code == 409
+        # A new round replaces it.
+        new = self._start(client, swipe_world).json()
+        assert client.get(f"/households/{swipe_world}/sessions/current").json()["id"] == new["id"]
+
+    def test_starting_again_ends_the_old_one(self, client, swipe_world):
+        first = self._start(client, swipe_world).json()["id"]
+        second = self._start(client, swipe_world).json()["id"]
+        assert first != second
+        assert client.get(f"/households/{swipe_world}/sessions/current").json()["id"] == second
+        assert self._vote(client, swipe_world, first, 70).status_code == 409
+
+    def test_expired_sessions_are_gone(self, client, db, swipe_world):
+        from datetime import datetime, timezone
+        from app.models.household import HouseholdSession
+
+        sid = self._start(client, swipe_world).json()["id"]
+        db.query(HouseholdSession).filter_by(id=sid).update({"expires_at": datetime(2020, 1, 1, tzinfo=timezone.utc)})
+        db.commit()
+        assert client.get(f"/households/{swipe_world}/sessions/current").json() is None
+
+    def test_rules(self, client, client2, db, swipe_world):
+        from app.models.household import HouseholdMember
+        from app.models.user import User
+
+        # You must be in it, and it takes two.
+        assert self._start(client, swipe_world, present=(BOB,)).status_code == 422
+        assert self._start(client, swipe_world, present=(ALICE,)).status_code == 422
+        # Filters that leave nothing.
+        assert self._start(client, swipe_world, time="short").status_code == 422
+        # A member who isn't swiping can't vote.
+        db.add(User(id="dee", username="dee", email="dee@t.com"))
+        db.flush()
+        db.add(HouseholdMember(household_id=swipe_world, user_id="dee"))
+        db.commit()
+        sid = self._start(client, swipe_world).json()["id"]
+        from tests.conftest import make_client
+        assert self._vote(make_client("dee"), swipe_world, sid, 70).status_code == 403
+        # Outsiders see nothing.
+        assert make_client(CAROL).get(f"/households/{swipe_world}/sessions/current").status_code == 404
+
+    def test_only_titles_in_the_session(self, client, swipe_world):
+        sid = self._start(client, swipe_world).json()["id"]
+        assert self._vote(client, swipe_world, sid, 999).status_code == 404
+
+    def test_deleting_the_household_removes_sessions(self, client, client2, db, swipe_world):
+        from app.models.household import HouseholdSession, HouseholdSessionVote
+
+        sid = self._start(client, swipe_world).json()["id"]
+        self._vote(client, swipe_world, sid, 70)
+        client.delete(f"/households/{swipe_world}")
+        db.expire_all()
+        assert db.query(HouseholdSession).count() == 0
+        assert db.query(HouseholdSessionVote).count() == 0
+
+    def test_someone_leaving_doesnt_hold_up_the_round(self, client, client2, db, swipe_world):
+        from app.models.household import HouseholdMember
+        from app.models.user import User
+
+        # A third person joins, everyone starts swiping, then they leave.
+        db.add(User(id="dee", username="dee", email="dee@t.com"))
+        db.flush()
+        db.add(HouseholdMember(household_id=swipe_world, user_id="dee"))
+        db.commit()
+        sid = self._start(client, swipe_world, present=(ALICE, BOB, "dee")).json()["id"]
+        db.query(HouseholdMember).filter_by(household_id=swipe_world, user_id="dee").delete()
+        db.commit()
+        for c in (client, client2):
+            self._vote(c, swipe_world, sid, 70)
+            out = self._vote(c, swipe_world, sid, 71, yes=False).json()
+        assert out["finished"] is True
+        assert [m["id"] for m in out["matches"]] == [70]
+        assert set(out["participants"]) == {ALICE, BOB}
+
+    def test_finished_is_announced_once(self, client, client2, swipe_world):
+        from unittest.mock import patch
+        from app.services import household_sessions
+
+        sid = self._start(client, swipe_world).json()["id"]
+        for c in (client, client2):
+            self._vote(c, swipe_world, sid, 70)
+            self._vote(c, swipe_world, sid, 71)
+        with patch.object(household_sessions, "publish") as publish:
+            self._vote(client2, swipe_world, sid, 71, yes=False)
+        assert {c.args[1]["event"] for c in publish.call_args_list} == {"vote"}

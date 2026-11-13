@@ -9,7 +9,7 @@ from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.schemas.common import MAX_ID, MAX_SEASON_EPISODE_NUMBER
 from app.services import household_picks as household_picks_svc
-from app.services import household_recs, household_service as svc
+from app.services import household_recs, household_service as svc, household_sessions
 from app.services.household_service import HouseholdError
 from app.services.nav_counts import notify_counts_changed
 from app.services.stats_service import invalidate_stats_cache
@@ -130,6 +130,66 @@ def household_picks(
     result = _run(household_picks_svc.household_picks, db, uid, hid, who, time, services, kids)
     background_tasks.add_task(household_recs.fetch_missing_lists_bg, result.pop("missing", []))
     return result
+
+
+class SessionBody(BaseModel):
+    present: list[str] = Field(..., min_length=1, max_length=svc.MAX_MEMBERS)
+    time: str = Field("any", pattern="^(any|short|hour|movie)$")
+    services: bool = False
+    kids: bool = False
+    size: int = Field(household_sessions.DEFAULT_SIZE, ge=household_sessions.MIN_SIZE, le=household_sessions.MAX_SIZE)
+
+
+class SwipeBody(BaseModel):
+    content_type: str = Field(..., pattern="^(tv|movie)$")
+    content_id: int = Field(..., ge=1, le=MAX_ID)
+    vote: bool
+
+
+class TitleRef(BaseModel):
+    content_type: str = Field(..., pattern="^(tv|movie)$")
+    content_id: int = Field(..., ge=1, le=MAX_ID)
+
+
+@router.get("/{hid}/sessions/current")
+def current_session(hid: int, db: Session = Depends(get_db), uid: str = Depends(get_current_user)):
+    """The household's open swipe session, or null."""
+    return _run(household_sessions.current, db, uid, hid)
+
+
+@router.post("/{hid}/sessions", status_code=201)
+@limiter.limit("10/minute")
+def start_session(
+    request: Request, hid: int, body: SessionBody,
+    db: Session = Depends(get_db), uid: str = Depends(get_current_user),
+):
+    """Start swiping: snapshot tonight's picks for the people watching."""
+    return _run(
+        household_sessions.start, db, uid, hid, body.present, body.time, body.services, body.kids, body.size
+    )
+
+
+@router.post("/{hid}/sessions/{sid}/votes")
+@limiter.limit("120/minute")
+def swipe(
+    request: Request, hid: int, sid: int, body: SwipeBody,
+    db: Session = Depends(get_db), uid: str = Depends(get_current_user),
+):
+    return _run(household_sessions.vote, db, uid, hid, sid, body.content_type, body.content_id, body.vote)
+
+
+@router.post("/{hid}/sessions/{sid}/pick")
+def pick_from_session(
+    hid: int, sid: int, body: TitleRef,
+    db: Session = Depends(get_db), uid: str = Depends(get_current_user),
+):
+    return _run(household_sessions.pick, db, uid, hid, sid, body.content_type, body.content_id)
+
+
+@router.post("/{hid}/sessions/{sid}/end")
+def end_session(hid: int, sid: int, db: Session = Depends(get_db), uid: str = Depends(get_current_user)):
+    _run(household_sessions.end, db, uid, hid, sid)
+    return {"ok": True}
 
 
 @router.patch("/{hid}")

@@ -165,6 +165,41 @@ export interface TonightPick {
   score: number;
 }
 
+/** A title in a swipe session: a pick without its score. */
+export type Candidate = Omit<TonightPick, "score">;
+
+export interface SwipeSession {
+  id: number;
+  household_id: number;
+  created_by: string | null;
+  participants: string[];
+  status: "open" | "picked" | "ended";
+  expires_at: string;
+  picked: { content_type: "tv" | "movie"; id: number } | null;
+  candidates: Candidate[];
+  /** Keyed `${content_type}:${id}`. */
+  my_votes: Record<string, boolean>;
+  /** Swipes so far, per participant. */
+  progress: Record<string, number>;
+  /** Everyone still taking part has swiped every card. */
+  finished: boolean;
+  /** Titles anyone said yes to, most yeses first. Null until the round is finished. */
+  results: SwipeResultItem[] | null;
+  /** Titles everyone said yes to. Empty until the round is finished. */
+  matches: SwipeResultItem[];
+}
+
+/** A title in the results: how many of the `of` people said yes. */
+export interface SwipeResultItem extends Candidate {
+  yes: number;
+  of: number;
+}
+
+/** A swipe's answer is the session as it now stands. */
+export type SwipeResult = SwipeSession;
+
+export const voteKey = (c: { content_type: string; id: number }) => `${c.content_type}:${c.id}`;
+
 export interface PicksResponse {
   present: string[];
   picks: TonightPick[];
@@ -282,6 +317,29 @@ export function useHouseholdPicks(id: number, filters: PicksFilters) {
     enabled: !!user && id > 0 && filters.present.length > 0,
     placeholderData: keepPreviousData,
     staleTime: 1000 * 60 * 2,
+  });
+}
+
+/** The household's current swipe session, or null. Live events keep it fresh; polling is the backup. */
+// Swipes whose vote hasn't been saved yet. While any are, nothing replaces
+// the session in the cache with server data: a refresh that read the server
+// before the newest vote was saved would bring back the card just swiped.
+// The last swipe to finish refreshes once, with every vote in.
+let swipesInFlight = 0;
+
+/** True while a swipe is still being saved (polling and live events wait). */
+export function swipeInFlight(): boolean {
+  return swipesInFlight > 0;
+}
+
+export function useHouseholdSession(id: number) {
+  const user = useAuthUser();
+  return useQuery<SwipeSession | null>({
+    queryKey: queryKeys.householdSession(user?.uid ?? "", id),
+    queryFn: ({ signal }) => queryFetch<SwipeSession | null>(`/households/${id}/sessions/current`, { signal }),
+    enabled: !!user && id > 0,
+    // A backup to the live events, paused while a swipe is being saved.
+    refetchInterval: (query) => (query.state.data?.status === "open" && !swipeInFlight() ? 5000 : false),
   });
 }
 
@@ -438,5 +496,107 @@ export function useLogForHousehold() {
       qc.invalidateQueries({ queryKey: ["nextEpisodes", "bulk", uid] });
       qc.invalidateQueries({ queryKey: ["showProgress", uid, vars.contentId] });
     },
+  });
+}
+
+// ── Swipe sessions ──────────────────────────────────────────────────────────
+
+export interface StartSessionRequest {
+  householdId: number;
+  present: string[];
+  time: PickTime;
+  services: boolean;
+  kids: boolean;
+  /** Cards in the round (the server allows 3-15; default 10). */
+  size?: number;
+}
+
+export function useStartSession() {
+  const invalidate = useInvalidateHouseholds();
+  return useMutation({
+    mutationFn: ({ householdId, ...body }: StartSessionRequest) =>
+      send<SwipeSession>(`/households/${householdId}/sessions`, "POST", body),
+    onSettled: invalidate,
+  });
+}
+
+export interface SwipeRequest {
+  householdId: number;
+  sessionId: number;
+  contentType: "tv" | "movie";
+  contentId: number;
+  vote: boolean;
+}
+
+/** Say yes or no to a title. The vote shows at once and rolls back if the server refuses it. */
+export function useSwipe() {
+  const qc = useQueryClient();
+  const user = useAuthUser();
+  const uid = user?.uid ?? "";
+  return useMutation({
+    mutationFn: ({ householdId, sessionId, contentType, contentId, vote }: SwipeRequest) =>
+      send<SwipeResult>(`/households/${householdId}/sessions/${sessionId}/votes`, "POST", {
+        content_type: contentType,
+        content_id: contentId,
+        vote,
+      }),
+    onMutate: async (vars) => {
+      swipesInFlight += 1;
+      const key = queryKeys.householdSession(uid, vars.householdId);
+      const voteId = `${vars.contentType}:${vars.contentId}`;
+      // Drop any refresh already on its way: it predates this vote.
+      await qc.cancelQueries({ queryKey: key });
+      const before = qc.getQueryData<SwipeSession | null>(key)?.my_votes[voteId];
+      qc.setQueryData<SwipeSession | null>(key, (old) => {
+        if (!old) return old;
+        const my_votes = { ...old.my_votes, [voteId]: vars.vote };
+        return { ...old, my_votes, progress: { ...old.progress, [uid]: Object.keys(my_votes).length } };
+      });
+      return { key, voteId, before };
+    },
+    onError: (_err, _vars, ctx) => {
+      // Undo just this vote, leaving any swipes made since in place.
+      if (!ctx) return;
+      qc.setQueryData<SwipeSession | null>(ctx.key, (old) => {
+        if (!old) return old;
+        const my_votes = { ...old.my_votes };
+        if (ctx.before === undefined) delete my_votes[ctx.voteId];
+        else my_votes[ctx.voteId] = ctx.before;
+        return { ...old, my_votes, progress: { ...old.progress, [uid]: Object.keys(my_votes).length } };
+      });
+    },
+    onSettled: (_data, _err, vars) => {
+      swipesInFlight = Math.max(0, swipesInFlight - 1);
+      // Only the last swipe to finish refreshes, once every vote is saved.
+      if (swipesInFlight === 0) {
+        qc.invalidateQueries({ queryKey: queryKeys.householdSession(uid, vars.householdId) });
+      }
+    },
+  });
+}
+
+export function usePickFromSession() {
+  const invalidate = useInvalidateHouseholds();
+  return useMutation({
+    mutationFn: ({
+      householdId,
+      sessionId,
+      contentType,
+      contentId,
+    }: Omit<SwipeRequest, "vote">) =>
+      send<SwipeSession>(`/households/${householdId}/sessions/${sessionId}/pick`, "POST", {
+        content_type: contentType,
+        content_id: contentId,
+      }),
+    onSettled: invalidate,
+  });
+}
+
+export function useEndSession() {
+  const invalidate = useInvalidateHouseholds();
+  return useMutation({
+    mutationFn: ({ householdId, sessionId }: { householdId: number; sessionId: number }) =>
+      send(`/households/${householdId}/sessions/${sessionId}/end`, "POST"),
+    onSettled: invalidate,
   });
 }

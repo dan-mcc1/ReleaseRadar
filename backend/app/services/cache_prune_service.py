@@ -46,7 +46,7 @@ from app.models.season_rating import SeasonRating
 from app.models.sent_episode_alert import SentEpisodeAlert
 from app.models.sent_premiere_alert import SentPremiereAlert
 from app.models.sent_resume_reminder import SentResumeReminder
-from app.models.household import HouseholdItem
+from app.models.household import HouseholdItem, HouseholdSessionVote
 from app.models.shelf_item import ShelfItem
 from app.models.show import Show
 from app.models.show_video import ShowVideo
@@ -95,6 +95,8 @@ INDEPENDENT_TABLES = frozenset({
     TitleRecs.__tablename__,
     RecCandidate.__tablename__,
     SentResumeReminder.__tablename__,
+    # Swipe votes: a closed session's history, never a reason to keep a title.
+    HouseholdSessionVote.__tablename__,
 })
 
 

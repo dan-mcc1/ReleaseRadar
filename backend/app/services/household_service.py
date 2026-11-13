@@ -23,7 +23,14 @@ from sqlalchemy.orm import Session
 from app.models.currently_watching import CurrentlyWatching
 from app.models.episode import Episode
 from app.models.episode_watched import EpisodeWatched
-from app.models.household import Household, HouseholdInvite, HouseholdItem, HouseholdMember
+from app.models.household import (
+    Household,
+    HouseholdInvite,
+    HouseholdItem,
+    HouseholdMember,
+    HouseholdSession,
+    HouseholdSessionVote,
+)
 from app.models.movie import Movie
 from app.models.provider import Provider
 from app.models.show import Show
@@ -182,7 +189,12 @@ def _delete_household(db: Session, hid: int) -> list[str]:
         .filter(HouseholdInvite.household_id == hid, HouseholdInvite.status == "pending")
     ]
     # Explicit rather than relying on ON DELETE CASCADE, like account deletion.
-    for model in (HouseholdItem, HouseholdInvite, HouseholdMember):
+    session_ids = [sid for (sid,) in db.query(HouseholdSession.id).filter(HouseholdSession.household_id == hid)]
+    if session_ids:
+        db.query(HouseholdSessionVote).filter(HouseholdSessionVote.session_id.in_(session_ids)).delete(
+            synchronize_session=False
+        )
+    for model in (HouseholdSession, HouseholdItem, HouseholdInvite, HouseholdMember):
         db.query(model).filter(model.household_id == hid).delete(synchronize_session=False)
     db.query(Household).filter(Household.id == hid).delete(synchronize_session=False)
     return invitees
@@ -222,6 +234,10 @@ def _leave(db: Session, row: HouseholdMember) -> list[str]:
 def remove_user_everywhere(db: Session, uid: str) -> None:
     """For account deletion: leave every household (handing ownership on or
     deleting empty ones) and drop the user's invites. Doesn't commit."""
+    db.query(HouseholdSessionVote).filter(HouseholdSessionVote.user_id == uid).delete(synchronize_session=False)
+    db.query(HouseholdSession).filter(HouseholdSession.created_by == uid).update(
+        {HouseholdSession.created_by: None}, synchronize_session=False
+    )
     for row in db.query(HouseholdMember).filter(HouseholdMember.user_id == uid).all():
         _leave(db, row)
     db.query(HouseholdInvite).filter(HouseholdInvite.user_id == uid).delete(synchronize_session=False)

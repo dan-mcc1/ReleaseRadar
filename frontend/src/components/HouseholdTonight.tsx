@@ -7,7 +7,6 @@ import {
   useAddHouseholdItem,
   useHouseholdPicks,
   type HouseholdDetail,
-  type PickReasonItem,
   type PickTime,
   type TonightPick,
 } from "../hooks/api/useHouseholds";
@@ -15,10 +14,11 @@ import { useToast } from "./Toast";
 import MemberAvatar from "./MemberAvatar";
 import WatchedTogetherModal, { type LogTarget } from "./WatchedTogetherModal";
 import { Button, Card, Chip, EmptyState, IconButton, PageState, PlusIcon, Segmented, cx } from "./ui";
+import HouseholdSwipe from "./HouseholdSwipe";
+import { describe, reasonText, type Namer } from "./tonightText";
 import { episodeCode, personName } from "../utils/households";
 
-type Mode = "ranked" | "surprise";
-type Namer = (userId: string) => string;
+type Mode = "ranked" | "surprise" | "swipe";
 
 const SURPRISE_POOL = 10;
 
@@ -30,71 +30,6 @@ const TIME_OPTIONS: { value: PickTime; label: string }[] = [
 ];
 
 const pickKey = (p: TonightPick) => `${p.content_type}-${p.id}`;
-
-/** "1h 45m", "1h", "45m" */
-function formatRuntime(minutes: number): string {
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  if (h === 0) return `${m}m`;
-  return m === 0 ? `${h}h` : `${h}h ${m}m`;
-}
-
-/** "You, Sam and Jo"; the current user comes first. */
-function joinNames(ids: string[], nameOf: Namer, uid: string | undefined): string {
-  const sorted = [...ids].sort((a, b) => Number(b === uid) - Number(a === uid));
-  const names = sorted.map(nameOf);
-  if (names.length <= 1) return names[0] ?? "";
-  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
-}
-
-function reasonText(
-  reason: PickReasonItem,
-  present: string[],
-  nameOf: Namer,
-  uid: string | undefined,
-): string {
-  switch (reason.type) {
-    case "next_episode": {
-      const everyone = present.length > 2 && present.every((u) => reason.user_ids.includes(u));
-      if (everyone) return "Next episode for all of you";
-      const names = joinNames(reason.user_ids, nameOf, uid);
-      return `Next episode for ${names.replace(/^You\b/, "you")}`;
-    }
-    case "shared_list": {
-      const by = reason.user_id && reason.user_id !== uid ? ` · added by ${nameOf(reason.user_id)}` : "";
-      return `On your Watch together list${by}`;
-    }
-    case "want": {
-      if (reason.user_ids.length > 2) return "All of you want to watch this";
-      if (reason.user_ids.length === 1) {
-        const id = reason.user_ids[0];
-        return id === uid ? "You want to watch this" : `${nameOf(id)} wants to watch this`;
-      }
-      return `${joinNames(reason.user_ids, nameOf, uid)} both want to watch this`;
-    }
-    case "recommended": {
-      if (!reason.because) return "Recommended for you";
-      if (reason.basis === "lists") return `Because ${reason.because} is on your lists`;
-      const who = present.length > 2 ? "all" : present.length === 2 ? "both" : null;
-      return `Because you ${who ? `${who} ` : ""}watched ${reason.because}`;
-    }
-  }
-}
-
-function describe(pick: TonightPick): { label: string; runtime: string | null } {
-  if (pick.content_type === "movie") {
-    return { label: "Movie", runtime: pick.runtime ? formatRuntime(pick.runtime) : null };
-  }
-  const runtime = pick.runtime ? `${pick.runtime} min` : null;
-  const ep = pick.episode;
-  if (!ep) return { label: "Series", runtime };
-  const unstarted =
-    ep.season_number === 1 &&
-    ep.episode_number === 1 &&
-    !pick.reasons.some((r) => r.type === "next_episode");
-  if (unstarted) return { label: "Start S1 E1", runtime };
-  return { label: ep.name ? `${episodeCode(ep)} · ${ep.name}` : episodeCode(ep), runtime };
-}
 
 interface CardProps {
   pick: TonightPick;
@@ -264,7 +199,11 @@ export default function HouseholdTonight({ h }: { h: HouseholdDetail }) {
   const cardProps = { present, nameOf, uid, householdId: h.id, onLog, stale: isPlaceholderData };
 
   let body;
-  if (isPending) {
+  if (mode === "swipe") {
+    body = (
+      <HouseholdSwipe h={h} present={present} time={time} services={services} kids={kids} nameOf={nameOf} uid={uid} />
+    );
+  } else if (isPending) {
     body = <PageState status="loading" label="Finding picks…" />;
   } else if (error || !data) {
     body = <PageState status="error" error={error} subject="picks" onRetry={() => refetch()} />;
@@ -335,6 +274,7 @@ export default function HouseholdTonight({ h }: { h: HouseholdDetail }) {
           options={[
             { value: "ranked", label: "Ranked" },
             { value: "surprise", label: "Surprise me" },
+            { value: "swipe", label: "Swipe together" },
           ]}
           className="sm:ml-auto"
         />
