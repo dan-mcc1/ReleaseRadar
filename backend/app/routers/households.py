@@ -1,6 +1,6 @@
 """Households: shared Watch together lists, progress on shared shows, and
 logging a watch for everyone in the room. Rules live in household_service."""
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -8,6 +8,7 @@ from app.core.limiter import limiter, track_budget
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.schemas.common import MAX_ID, MAX_SEASON_EPISODE_NUMBER
+from app.services import household_picks as household_picks_svc
 from app.services import household_recs, household_service as svc
 from app.services.household_service import HouseholdError
 from app.services.nav_counts import notify_counts_changed
@@ -100,9 +101,35 @@ def invitable_friends(hid: int, db: Session = Depends(get_db), uid: str = Depend
 
 
 @router.get("/{hid}/recommendations")
-def household_recommendations(hid: int, db: Session = Depends(get_db), uid: str = Depends(get_current_user)):
-    """Picks for the household, from what its members share."""
-    return _run(household_recs.household_recommendations, db, uid, hid)
+def household_recommendations(
+    hid: int, background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db), uid: str = Depends(get_current_user),
+):
+    """Picks for the household, from what its members share. Never waits on
+    TMDb: titles with no stored list are fetched after the response."""
+    result = _run(household_recs.household_recommendations, db, uid, hid)
+    background_tasks.add_task(household_recs.fetch_missing_lists_bg, result.pop("missing", []))
+    return result
+
+
+@router.get("/{hid}/picks")
+@limiter.limit("60/minute")
+def household_picks(
+    request: Request,
+    hid: int,
+    background_tasks: BackgroundTasks,
+    present: str | None = Query(None, max_length=1000, description="Comma-separated user ids watching tonight"),
+    time: str = Query("any", pattern="^(any|short|hour|movie)$"),
+    services: bool = Query(False),
+    kids: bool = Query(False),
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    """What should we watch? Ranked picks for the people watching tonight."""
+    who = [p for p in (present or "").split(",") if p] or None
+    result = _run(household_picks_svc.household_picks, db, uid, hid, who, time, services, kids)
+    background_tasks.add_task(household_recs.fetch_missing_lists_bg, result.pop("missing", []))
+    return result
 
 
 @router.patch("/{hid}")
