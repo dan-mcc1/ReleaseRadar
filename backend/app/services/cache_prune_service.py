@@ -45,6 +45,7 @@ from app.models.season import Season
 from app.models.season_rating import SeasonRating
 from app.models.sent_episode_alert import SentEpisodeAlert
 from app.models.sent_premiere_alert import SentPremiereAlert
+from app.models.sent_resume_reminder import SentResumeReminder
 from app.models.shelf_item import ShelfItem
 from app.models.show import Show
 from app.models.show_video import ShowVideo
@@ -86,8 +87,14 @@ CACHE_CHILD_TABLES = frozenset(
 # Keyed by a title id, but neither a reason to keep a title cached nor deleted
 # with it: stored recommendation lists and the display rows of recommended
 # titles, most of which were never cached here. title_recs_service prunes
-# them itself once nobody tracks the title a list belongs to.
-INDEPENDENT_TABLES = frozenset({TitleRecs.__tablename__, RecCandidate.__tablename__})
+# them itself once nobody tracks the title a list belongs to. Sent resume
+# reminders outlive a pruned title on purpose: if it's cached again, the
+# record still stops the same reminder going out twice.
+INDEPENDENT_TABLES = frozenset({
+    TitleRecs.__tablename__,
+    RecCandidate.__tablename__,
+    SentResumeReminder.__tablename__,
+})
 
 
 @dataclass(frozen=True)

@@ -700,6 +700,101 @@ def send_streaming_alert_email(
                idempotency_key=idempotency_key)
 
 
+def _resume_label(a: dict) -> str:
+    kind = a.get("kind")
+    if kind == "series_premiere":
+        return "Series premiere"
+    if kind == "season_premiere":
+        return f"Season {a.get('season_number')} premiere"
+    return "New movie"
+
+
+def resume_reminder_push_text(a: dict) -> tuple[str, str]:
+    """Title and body for one resume reminder push."""
+    when = "today" if a["days_away"] == 0 else (
+        "tomorrow" if a["days_away"] == 1 else f"on {_format_date(a['date'])}"
+    )
+    return (
+        f"Time to resume {a['provider_name']}?",
+        f"{a['title']}: {_resume_label(a).lower()} {when}.",
+    )
+
+
+def send_resume_reminder_email(
+    to_email: str,
+    username: str,
+    alerts: list,
+    uid: str = "",
+    idempotency_key: str | None = None,
+):
+    """
+    Remind a user that something from their lists lands soon on a service
+    they marked as paused. Each alert dict has: provider_name, title,
+    content_type, id, poster_path, date, kind, season_number, days_away.
+    """
+    if not alerts:
+        return
+
+    by_service: dict[str, list] = {}
+    for a in alerts:
+        by_service.setdefault(a["provider_name"], []).append(a)
+
+    def _card(a: dict) -> str:
+        content_url = f"{settings.FRONTEND_URL}/{a['content_type']}/{a['id']}"
+        has_poster = bool(a.get("poster_path"))
+        poster_inner = _poster_img(a.get("poster_path"), a["title"] or "", content_url)
+        poster = (
+            f'<div style="flex-shrink:0;margin-right:16px;">{poster_inner}</div>'
+            if has_poster
+            else ""
+        )
+        layout_style = "display:flex;align-items:flex-start;" if has_poster else ""
+        return f"""
+<div style="{layout_style}background:#1a1a1a;border:1px solid #262626;
+            border-radius:12px;padding:16px;margin-bottom:8px;">
+  {poster}
+  <div style="flex:1;">
+    <a href="{content_url}" style="color:#f5f5f5;font-size:15px;font-weight:600;
+       text-decoration:none;display:block;margin-bottom:4px;line-height:1.3;">{escape(a["title"] or "")}</a>
+    <p style="margin:0 0 2px;color:#10b981;font-size:13px;font-weight:500;">{escape(_resume_label(a))}</p>
+    <p style="margin:0;color:#737373;font-size:12px;">{_format_date(a["date"])}</p>
+  </div>
+</div>"""
+
+    sections = "".join(
+        f"""
+<p style="margin:20px 0 8px;color:#d97706;font-size:11px;font-weight:700;
+          text-transform:uppercase;letter-spacing:1px;">On {escape(name)}</p>
+{"".join(_card(a) for a in items)}"""
+        for name, items in by_service.items()
+    )
+
+    names = list(by_service)
+    service_text = names[0] if len(names) == 1 else ", ".join(names[:-1]) + f" and {names[-1]}"
+    subject = f"Time to resume {service_text}? — Release Radar"
+
+    body = f"""
+<h2 style="margin:0 0 6px;color:#f5f5f5;font-size:22px;font-weight:700;letter-spacing:-0.3px;">
+  Hi {escape(username) or 'there'} 👋
+</h2>
+<p style="margin:0 0 24px;color:#737373;font-size:14px;line-height:1.6;">
+  You marked {escape(service_text)} as paused. Something from your list lands there
+  in the next week, so you may want to resume your subscription:
+</p>
+{sections}
+<div style="text-align:center;margin-top:28px;">
+  <a href="{settings.FRONTEND_URL}/services"
+     style="display:inline-block;background:linear-gradient(135deg,#10b981,#059669);
+            color:#ffffff;font-weight:600;font-size:14px;padding:13px 32px;
+            border-radius:99px;text-decoration:none;letter-spacing:0.2px;">
+    See my services
+  </a>
+</div>"""
+
+    send_email(to_email, subject, _email_wrapper(body, uid), uid=uid,
+               idempotency_key=idempotency_key)
+
+
 def send_trailer_alert_email(
     to_email: str,
     username: str,

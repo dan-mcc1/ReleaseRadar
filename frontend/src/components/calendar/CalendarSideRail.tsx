@@ -28,6 +28,7 @@ import type {
   EpisodeTag,
   TvItem,
 } from "../../utils/calendarUtils";
+import ServicesHint from "./ServicesHint";
 
 interface Props {
   todayItems: CalendarItem[];
@@ -786,6 +787,8 @@ export default function CalendarSideRail({
       </section>
 
       {upcoming && !isLoading && <UpcomingCard days={upcoming} />}
+
+      {showExtras && <ServicesHint />}
 
       {showExtras && <FriendActivityCard />}
 

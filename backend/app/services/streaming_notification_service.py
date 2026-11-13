@@ -13,6 +13,7 @@ from app.models.movie import Movie
 from app.models.provider import MovieProvider, Provider, ShowProvider
 from app.models.show import Show
 from app.models.user import User
+from app.models.watched import Watched
 from app.models.watchlist import Watchlist
 from app.services.email_service import send_streaming_alert_email
 from app.services.provider_utils import (
@@ -184,6 +185,16 @@ def refresh_streaming_providers(db: Session) -> None:
         tracked.add((row.content_id, row.content_type))
     for row in db.query(CurrentlyWatching.content_id, CurrentlyWatching.content_type).distinct():
         tracked.add((row.content_id, row.content_type))
+    # Finished shows still in production: "My services" shows where their
+    # next season lands. Their trackers get no change alerts (_alerts_by_user
+    # only alerts Watchlist and Currently Watching), just fresh provider data.
+    for (show_id,) in (
+        db.query(Watched.content_id)
+        .join(Show, Show.id == Watched.content_id)
+        .filter(Watched.content_type == "tv", Show.in_production == True)  # noqa: E712
+        .distinct()
+    ):
+        tracked.add((show_id, "tv"))
 
     if not tracked:
         return

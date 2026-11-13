@@ -1,7 +1,7 @@
 """
-The daily digest and season-premiere alerts. Each hour a dispatcher queues
-one job per user who's due, keyed by user and day, and each job sends at
-most once for that day.
+The daily digest, season-premiere alerts and paused-service resume reminders.
+Each hour a dispatcher queues one job per user who's due, keyed by user and
+day, and each job sends at most once for that day.
 """
 import logging
 from datetime import date, datetime, timezone
@@ -9,10 +9,12 @@ from datetime import date, datetime, timezone
 from durable_queue.sqlalchemy import enqueue_many
 
 from app.config import features
-from app.config.features import PREMIUM_TIERS
+from app.config.features import PREMIUM_TIERS, tier_has_premium
 from app.db.session import SessionLocal
+from app.db.upsert import insert_if_absent
 from app.jobs.base import logged_task
 from app.models.sent_premiere_alert import SentPremiereAlert
+from app.models.sent_resume_reminder import SentResumeReminder
 from app.models.user import User
 from app.services.digest_service import (
     _build_items_for_window,
@@ -23,7 +25,12 @@ from app.services.digest_service import (
     premiere_eligible,
     premiere_push_text,
 )
-from app.services.email_service import send_notification_email, send_season_premiere_email
+from app.services.email_service import (
+    resume_reminder_push_text,
+    send_notification_email,
+    send_resume_reminder_email,
+    send_season_premiere_email,
+)
 from app.services.episode_alert_service import (
     LATE_GRACE_SECONDS,
     PlannedAlert,
@@ -32,6 +39,7 @@ from app.services.episode_alert_service import (
     send_planned_alert,
 )
 from app.services.push_service import push_notification, tmdb_poster_url
+from app.services.service_planner import pending_resume_reminders, users_with_paused_services
 
 logger = logging.getLogger(__name__)
 
@@ -247,5 +255,106 @@ def dispatch_episode_alerts() -> None:
         )
         db.commit()
         logger.info("episode alerts: queued %d push(es)", len(alerts))
+    finally:
+        db.close()
+
+
+def _resume_reminder_eligible(user) -> bool:
+    """Resume reminders follow the user's streaming-change alert settings,
+    premium gate included (everyone passes it during the open beta)."""
+    if not tier_has_premium(user.subscription_tier) or not user.notify_streaming_changes:
+        return False
+    return bool(
+        (user.email_notifications and user.email)
+        or (user.push_notifications_enabled and user.push_notify_streaming_changes)
+    )
+
+
+@logged_task
+def dispatch_resume_reminders() -> None:
+    """Queue send_resume_reminders for every user with a paused service whose
+    digest window is now. Keyed by user and day."""
+    now = datetime.now(timezone.utc)
+    db = SessionLocal()
+    try:
+        ids = users_with_paused_services(db)
+        users = db.query(User).filter(User.id.in_(ids)).all() if ids else []
+        due = []
+        for user in users:
+            day = due_date(user, now)
+            if day is not None and _resume_reminder_eligible(user):
+                due.append((user.id, day.isoformat()))
+        enqueue_many(
+            db,
+            "send_resume_reminders",
+            [{"user_id": user_id, "alert_date": day} for user_id, day in due],
+            idempotency_keys=[f"resume:{user_id}:{day}" for user_id, day in due],
+        )
+        db.commit()
+        logger.info("resume reminders: queued %d user(s)", len(due))
+    finally:
+        db.close()
+
+
+@logged_task
+def send_resume_reminders(user_id: str, alert_date: str) -> None:
+    """
+    Email a user's pending resume reminders, record them, then push them.
+    Same order as send_premiere_alerts: the email's Resend key makes a retry
+    before the record safe, and pushes only go out for reminders this run
+    recorded, so a crash after recording loses them rather than doubling.
+    """
+    db = SessionLocal()
+    try:
+        user = db.get(User, user_id)
+        if user is None or not _resume_reminder_eligible(user):
+            return
+        day = date.fromisoformat(alert_date)
+        alerts = pending_resume_reminders(db, user.id, day)
+        if not alerts:
+            return
+        if user.email_notifications and user.email:
+            send_resume_reminder_email(
+                user.email,
+                user.username or "",
+                alerts,
+                uid=user.id,
+                idempotency_key=f"resume:{user.id}:{alert_date}",
+            )
+        recorded = []
+        for alert in alerts:
+            if insert_if_absent(
+                db,
+                SentResumeReminder,
+                {
+                    "user_id": user.id,
+                    "provider_id": alert["provider_id"],
+                    "content_type": alert["content_type"],
+                    "content_id": alert["id"],
+                    "release_date": date.fromisoformat(alert["date"]),
+                },
+                ("user_id", "provider_id", "content_type", "content_id", "release_date"),
+            ) is not None:
+                recorded.append(alert)
+        db.commit()
+        if user.push_notifications_enabled and user.push_notify_streaming_changes:
+            for alert in recorded:
+                title, body = resume_reminder_push_text(alert)
+                try:
+                    push_notification(
+                        db,
+                        user.id,
+                        type="streaming_change",
+                        title=title,
+                        body=body,
+                        content_type=alert["content_type"],
+                        content_id=alert["id"],
+                        image_url=tmdb_poster_url(alert.get("poster_path")),
+                    )
+                except Exception:
+                    logger.exception(
+                        "resume reminders: push failed for user %s %s %s",
+                        user.id, alert["content_type"], alert["id"],
+                    )
     finally:
         db.close()

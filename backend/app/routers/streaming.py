@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
@@ -10,7 +12,16 @@ from app.models.show import Show
 from app.models.movie import Movie
 from app.services.provider_utils import canonical_provider_id, canonical_provider_name, is_canonical, all_ids_for_service
 from app.core.http_cache import STATIC_CACHE
+from app.core.limiter import limiter
+from app.models.user import User
+from app.services.digest_service import local_today
+from app.services.service_planner import (
+    build_service_overview,
+    popular_on_service,
+    set_service_paused,
+)
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -296,4 +307,58 @@ def remove_service(
         .delete(synchronize_session=False)
     )
     db.commit()
+    return {"ok": True}
+
+
+@router.get("/overview")
+def services_overview(
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user),
+):
+    """Per saved service: what from the user's lists lands on it in the next
+    three months, what's ready now, when they last used it, and a verdict."""
+    user = db.get(User, user_id)
+    today = local_today(user) if user else None
+    if today is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return build_service_overview(db, user_id, today)
+
+
+@router.get("/services/{provider_id}/popular")
+@limiter.limit("30/minute")
+def service_popular(
+    request: Request,
+    provider_id: int,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user),
+):
+    """Popular titles on a service that aren't on the user's lists."""
+    try:
+        return popular_on_service(db, user_id, provider_id)
+    except LookupError:
+        raise HTTPException(status_code=404, detail="You haven't added this service")
+    except Exception:
+        logger.exception("streaming: popular titles failed for provider %s", provider_id)
+        raise HTTPException(status_code=502, detail="Couldn't load popular titles")
+
+
+@router.post("/services/{provider_id}/pause")
+def pause_service(
+    provider_id: int,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user),
+):
+    if not set_service_paused(db, user_id, provider_id, paused=True):
+        raise HTTPException(status_code=404, detail="You haven't added this service")
+    return {"ok": True}
+
+
+@router.delete("/services/{provider_id}/pause")
+def resume_service(
+    provider_id: int,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user),
+):
+    if not set_service_paused(db, user_id, provider_id, paused=False):
+        raise HTTPException(status_code=404, detail="You haven't added this service")
     return {"ok": True}

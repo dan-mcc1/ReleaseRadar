@@ -489,6 +489,39 @@ class TestRefreshStreamingProviders:
             svc.refresh_streaming_providers(db)
             mock_fetch.assert_not_called()
 
+    def test_watched_shows_in_production_are_refreshed_silently(self, db):
+        """My services needs fresh providers for finished shows still in
+        production; their trackers get no change alert for them."""
+        from app.models.provider import Provider
+        from app.models.show import Show
+        from app.models.watched import Watched
+        from app.services import streaming_notification_service as svc
+
+        _seed_user(db, uid="u1")
+        _seed_show(db, sid=300, name="Returning")
+        _seed_show(db, sid=301, name="Ended")
+        db.query(Show).filter_by(id=300).update({"in_production": True})
+        db.query(Show).filter_by(id=301).update({"in_production": False})
+        db.add_all([
+            Provider(id=15, name="Hulu"),
+            Watched(user_id="u1", content_type="tv", content_id=300),
+            Watched(user_id="u1", content_type="tv", content_id=301),
+        ])
+        db.commit()
+
+        fetched = []
+
+        def fake_fetch(content_id, content_type):
+            fetched.append((content_id, content_type))
+            return _us(flatrate=[(15, "Hulu")])
+
+        with patch.object(svc, "_fetch_fresh_us_providers", side_effect=fake_fetch), \
+             patch.object(svc, "enqueue_many") as enqueue:
+            svc.refresh_streaming_providers(db)
+
+        assert fetched == [(300, "tv")]
+        assert enqueue.call_args.args[2] == []  # no alerts queued
+
     def test_no_changes_does_not_query_users(self, db):
         from app.services import streaming_notification_service as svc
 
