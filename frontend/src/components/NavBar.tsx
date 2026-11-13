@@ -16,7 +16,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { auth } from "../firebase";
 import { API_URL, BASE_IMAGE_URL, getAvatarColor } from "../constants";
 import { apiFetch } from "../utils/apiFetch";
-import { useNavCounts, useNavAvatar } from "../hooks/api/useNavCounts";
+import { useNavCounts, useNavAvatar, type NavCounts } from "../hooks/api/useNavCounts";
 import { queryKeys } from "../hooks/api/queryKeys";
 import { useUserMe } from "../hooks/api/useUser";
 import { useSearch } from "../hooks/api/useSearch";
@@ -100,6 +100,7 @@ const librarySections: NavSection[] = [
       { name: "Watched", href: "/watched" },
       { name: "For You", href: "/for-you" },
       { name: "My services", href: "/services" },
+      { name: "Households", href: "/households" },
     ],
   },
   {
@@ -769,12 +770,16 @@ export default function NavBar() {
   const avatarColor = getAvatarColor(avatarKey);
   const pendingRequests = navCounts?.pendingRequests ?? 0;
   const unreadRecs = navCounts?.unreadRecs ?? 0;
+  const householdInvites = navCounts?.householdInvites ?? 0;
   // const showUpgradeCta = user && userMe?.subscription_tier === "free";
   const showUpgradeCta = false;
 
   void unreadRecs;
   const socialBadges: Record<string, number> = {
     "/friends": pendingRequests,
+  };
+  const libraryBadges: Record<string, number> = {
+    "/households": householdInvites,
   };
 
   const connectSSE = useCallback(
@@ -833,18 +838,21 @@ export default function NavBar() {
             type: string;
             pending_requests?: number;
             unread_recs?: number;
+            household_invites?: number;
           } = JSON.parse(e.data);
           if (data.type === "counts_update") {
             queryClient.setQueryData(
               queryKeys.navCounts(uid),
               (
                 old:
-                  | { pendingRequests: number; unreadRecs: number }
+                  | NavCounts
                   | undefined,
               ) => ({
                 pendingRequests:
                   data.pending_requests ?? old?.pendingRequests ?? 0,
                 unreadRecs: data.unread_recs ?? old?.unreadRecs ?? 0,
+                householdInvites:
+                  data.household_invites ?? old?.householdInvites ?? 0,
               }),
             );
             queryClient.invalidateQueries({
@@ -852,6 +860,12 @@ export default function NavBar() {
             });
             queryClient.invalidateQueries({
               queryKey: queryKeys.friendRequestsIncoming(uid),
+            });
+            // A new or withdrawn household invite: refresh the list page too
+            // (just the list, not every household's detail).
+            queryClient.invalidateQueries({
+              queryKey: queryKeys.households(uid),
+              exact: true,
             });
           }
         } catch {
@@ -1002,6 +1016,7 @@ export default function NavBar() {
               <NavDropdown
                 label="My Library"
                 sections={librarySections}
+                badges={libraryBadges}
                 currentPath={location.pathname}
               />
             )}
@@ -1278,7 +1293,10 @@ export default function NavBar() {
                 onClick={() => setMobileLibraryOpen((o) => !o)}
                 className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-body font-medium text-neutral-400 hover:bg-neutral-900 hover:text-white transition-colors"
               >
-                My Library
+                <span className="flex items-center gap-1">
+                  My Library
+                  {householdInvites > 0 && <Badge count={householdInvites} />}
+                </span>
                 <svg
                   className={`w-4 h-4 opacity-50 transition-transform duration-200 ${mobileLibraryOpen ? "rotate-180" : ""}`}
                   fill="none"
@@ -1316,10 +1334,13 @@ export default function NavBar() {
                             location.pathname === item.href
                               ? "bg-neutral-800 text-white"
                               : "text-neutral-400 hover:bg-neutral-900 hover:text-white",
-                            "block rounded-lg px-3 py-2 text-label font-medium transition-colors",
+                            "flex items-center justify-between rounded-lg px-3 py-2 text-label font-medium transition-colors",
                           )}
                         >
                           {item.name}
+                          {(libraryBadges[item.href] ?? 0) > 0 && (
+                            <Badge count={libraryBadges[item.href]} />
+                          )}
                         </DisclosureButton>
                       ))}
                     </div>

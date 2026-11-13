@@ -44,6 +44,19 @@ class TestEpisodeWatchedAdd:
         assert row is not None
 
 
+def test_episode_activity_is_committed(client, seed_show, seed_users):
+    """The episode_watched activity row survives the request (it used to be
+    flushed but never committed, so feeds never showed episode watches)."""
+    from app.models.activity import Activity
+    from tests.conftest import TestingSessionLocal
+
+    client.post("/watched-episode/add", params={"show_id": 1396, "season_number": 1, "episode_number": 1})
+    with TestingSessionLocal() as fresh:
+        assert fresh.query(Activity).filter_by(
+            user_id="test-uid-1", activity_type="episode_watched"
+        ).count() == 1
+
+
 class TestEpisodeWatchedRemove:
     def test_remove_episode(self, client, seed_show, seed_users):
         client.post(

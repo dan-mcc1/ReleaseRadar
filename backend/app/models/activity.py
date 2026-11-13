@@ -17,6 +17,8 @@ class Activity(Base):
     rating = Column(Float, nullable=True)          # for 'rated' events
     season_number = Column(Integer, nullable=True)  # for 'episode_watched' events
     episode_number = Column(Integer, nullable=True) # for 'episode_watched' events
+    # Set when a housemate logged this for the user ("logged by Sam").
+    logged_by = Column(String, ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (

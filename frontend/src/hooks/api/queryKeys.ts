@@ -132,6 +132,15 @@ export const queryKeys = {
   itemGroupMembership: (uid: string, contentType: string, contentId: number) =>
     ["communities", "itemMembership", uid, contentType, contentId] as const,
 
+  // Households
+  households: (uid: string) => ["households", uid] as const,
+  household: (uid: string, id: number) => ["households", uid, "detail", id] as const,
+  householdProgress: (uid: string, id: number) => ["households", uid, "progress", id] as const,
+  householdInvitable: (uid: string, id: number) => ["households", uid, "invitable", id] as const,
+  householdRecommendations: (uid: string, id: number) => ["households", uid, "recommendations", id] as const,
+  householdsContaining: (uid: string, contentType: string, contentId: number) =>
+    ["households", uid, "containing", contentType, contentId] as const,
+
   // News
   news: (category: string, page: number, q: string) =>
     ["news", category, page, q] as const,

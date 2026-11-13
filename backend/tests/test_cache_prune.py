@@ -23,6 +23,7 @@ from app.models.episode_watched import EpisodeWatched
 from app.models.favorite import Favorite
 from app.models.finish_by_goal import FinishByGoal
 from app.models.genre import MovieGenre, ShowGenre
+from app.models.household import HouseholdItem
 from app.models.movie import Movie
 from app.models.movie_video import MovieVideo
 from app.models.notification import Notification
@@ -77,6 +78,9 @@ TV_REFERENCES = {
     "community_media": lambda cid: CommunityMedia(
         community_id=1, content_type="tv", content_id=cid, added_by="u1"
     ),
+    "household_item": lambda cid: HouseholdItem(
+        household_id=1, content_type="tv", content_id=cid, added_by="u1"
+    ),
     "episode_watched": lambda sid: EpisodeWatched(
         user_id="u1", show_id=sid, season_number=1, episode_number=1
     ),
@@ -104,6 +108,9 @@ MOVIE_REFERENCES = {
     ),
     "community_media": lambda cid: CommunityMedia(
         community_id=1, content_type="movie", content_id=cid, added_by="u1"
+    ),
+    "household_item": lambda cid: HouseholdItem(
+        household_id=1, content_type="movie", content_id=cid, added_by="u1"
     ),
     "collection_movie": lambda mid: CollectionMovie(
         collection_id=1, movie_id=mid, sort_order=0

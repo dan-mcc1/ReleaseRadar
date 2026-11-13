@@ -22,6 +22,12 @@ from app.models.feedback import Feedback  # noqa: F401
 from app.models.finish_by_goal import FinishByGoal  # noqa: F401
 from app.models.friendship import Friendship  # noqa: F401
 from app.models.genre import Genre  # noqa: F401
+from app.models.household import (  # noqa: F401
+    Household,
+    HouseholdInvite,
+    HouseholdItem,
+    HouseholdMember,
+)
 from app.models.movie import Movie  # noqa: F401
 from app.models.movie_video import MovieVideo  # noqa: F401
 from app.models.notification import Notification  # noqa: F401

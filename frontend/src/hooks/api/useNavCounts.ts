@@ -3,9 +3,10 @@ import { queryKeys } from "./queryKeys";
 import { queryFetch } from "./queryFetch";
 import { useAuthUser } from "../useAuthUser";
 
-interface NavCounts {
+export interface NavCounts {
   pendingRequests: number;
   unreadRecs: number;
+  householdInvites: number;
 }
 
 export function useNavCounts() {
@@ -13,13 +14,15 @@ export function useNavCounts() {
   return useQuery({
     queryKey: queryKeys.navCounts(user?.uid ?? ""),
     queryFn: async ({ signal }): Promise<NavCounts> => {
-      const [incomingRes, unreadRes] = await Promise.all([
+      const [incomingRes, unreadRes, householdRes] = await Promise.all([
         queryFetch<{ count: number }>("/friends/requests/incoming/count", { signal }),
         queryFetch<{ count: number }>("/recommendations/unread-count", { signal }),
+        queryFetch<{ count: number }>("/households/invites/count", { signal }),
       ]);
       return {
         pendingRequests: incomingRes.count,
         unreadRecs: unreadRes.count,
+        householdInvites: householdRes.count,
       };
     },
     enabled: !!user,

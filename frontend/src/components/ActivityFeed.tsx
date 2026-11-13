@@ -16,6 +16,7 @@ interface ActivityItem {
   content_title: string | null;
   content_poster_path: string | null;
   created_at: string;
+  logged_by_username?: string | null;
 }
 
 function activityLabel(type: ActivityItem["activity_type"]) {
@@ -91,6 +92,7 @@ export default function ActivityFeed() {
                 </p>
                 <p className="text-xs text-neutral-500 mt-0.5">
                   {timeAgo(item.created_at)}
+                  {item.logged_by_username && ` · logged by ${item.logged_by_username}`}
                 </p>
               </div>
             </div>

@@ -4,6 +4,7 @@ import { Popover, PopoverButton, PopoverPanel } from "@headlessui/react";
 import { ShareIcon, UserPlusIcon } from "@heroicons/react/24/outline";
 import { BookmarkIcon, ChevronDownIcon } from "../ui";
 import AddToGroupModal from "../AddToGroupModal";
+import AddToHouseholdButton from "../AddToHouseholdButton";
 import FavoriteButton from "../FavoriteButton";
 import ProUpgradeModal from "../ProUpgradeModal";
 import { RecommendModal } from "../RecommendButton";
@@ -79,6 +80,8 @@ export default function MediaActionList({ contentType, contentId, title }: Props
             </PopoverPanel>
           </Popover>
         )}
+
+        <AddToHouseholdButton contentType={contentType} contentId={contentId} className={rowClass} />
 
         <button onClick={() => setDialog("group")} className={rowClass}>
           <UserPlusIcon className="w-4 h-4 shrink-0 text-neutral-400" strokeWidth={2} aria-hidden="true" />

@@ -6,6 +6,7 @@ import { Link } from "react-router-dom";
 import WhereToWatch from "../components/WhereToWatch";
 import CastBar from "../components/CastBar";
 import WatchButton from "../components/WatchButton";
+import WatchedTogetherButton from "../components/WatchedTogetherButton";
 import ReviewsSection from "../components/ReviewsSection";
 import RewatchSection from "../components/RewatchSection";
 import { useAuthLoading, useAuthUser } from "../hooks/useAuthUser";
@@ -309,6 +310,11 @@ export default function MovieInfo() {
                   initialStatus={initialStatus}
                   initialRating={initialRating}
                   skipNotifyPrompt={movieHasReleased}
+                />
+              )}
+              {user && statusReady && movieHasReleased && (
+                <WatchedTogetherButton
+                  target={{ contentType: "movie", contentId: movie.id, label: movie.title }}
                 />
               )}
               {/* With no backdrop to sit on, the trailer button goes here. */}

@@ -21,6 +21,7 @@ import {
 } from "../hooks/api/useSeasonRating";
 import EpisodeRow, { epKey } from "../components/EpisodeRow";
 import StarRating from "../components/StarRating";
+import WatchedTogetherButton from "../components/WatchedTogetherButton";
 import { useToast } from "../components/Toast";
 import {
   Button,
@@ -361,6 +362,15 @@ export default function SeasonInfoPage() {
               >
                 {allWatched ? "Watched" : "Mark season watched"}
               </Button>
+              <WatchedTogetherButton
+                size="sm"
+                target={{
+                  contentType: "tv",
+                  contentId: showIdNum,
+                  seasonNumber: seasonNum,
+                  label: `${showQuery.data?.name ?? "Show"} · ${seasonLabel(seasonNum, season.name)}`,
+                }}
+              />
             </div>
           )}
 

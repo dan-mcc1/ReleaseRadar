@@ -26,6 +26,7 @@ COVERED = {
     ("POST", "/watched-episode/add"),
     ("POST", "/watched-episode/season/add"),
     ("POST", "/watched-episode/through"),
+    ("POST", "/households/{hid}/log"),
     ("POST", "/shelf/{shelf_id}/items"),
     ("POST", "/rewatch/add"),
     ("POST", "/favorites/add"),
