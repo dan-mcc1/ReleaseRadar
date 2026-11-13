@@ -27,6 +27,8 @@ from app.models.household import (  # noqa: F401
     HouseholdInvite,
     HouseholdItem,
     HouseholdMember,
+    HouseholdSession,
+    HouseholdSessionVote,
 )
 from app.models.movie import Movie  # noqa: F401
 from app.models.movie_video import MovieVideo  # noqa: F401

@@ -18,6 +18,7 @@ import { API_URL, BASE_IMAGE_URL, getAvatarColor } from "../constants";
 import { apiFetch } from "../utils/apiFetch";
 import { useNavCounts, useNavAvatar, type NavCounts } from "../hooks/api/useNavCounts";
 import { queryKeys } from "../hooks/api/queryKeys";
+import { swipeInFlight } from "../hooks/api/useHouseholds";
 import { useUserMe } from "../hooks/api/useUser";
 import { useSearch } from "../hooks/api/useSearch";
 import {
@@ -839,7 +840,18 @@ export default function NavBar() {
             pending_requests?: number;
             unread_recs?: number;
             household_invites?: number;
+            household_id?: number;
+            event?: string;
           } = JSON.parse(e.data);
+          if (data.type === "household_session" && typeof data.household_id === "number") {
+            // While one of your swipes is still saving, the swipe refreshes
+            // when it finishes; refreshing now could bring a swiped card back.
+            if (!swipeInFlight()) {
+              queryClient.invalidateQueries({
+                queryKey: queryKeys.householdSession(uid, data.household_id),
+              });
+            }
+          }
           if (data.type === "counts_update") {
             queryClient.setQueryData(
               queryKeys.navCounts(uid),
