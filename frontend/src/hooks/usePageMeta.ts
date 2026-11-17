@@ -55,16 +55,25 @@ function apply(title: string, description: string, canonical: string | null) {
  * Sets the page title (like usePageTitle) plus the meta description,
  * og:/twitter: title and description, and the canonical URL
  * (https://releaseradar.co + current pathname). Defaults come back when the
- * page unmounts. A missing description keeps the site default.
+ * page unmounts. A missing description keeps the site default. `fullTitle`
+ * replaces the whole title, with no " — Release Radar" suffix.
  */
-export function usePageMeta({ title, description }: { title?: string | null; description?: string | null }) {
+export function usePageMeta({
+  title,
+  fullTitle: fullTitleOverride,
+  description,
+}: {
+  title?: string | null;
+  fullTitle?: string;
+  description?: string | null;
+}) {
   const { pathname } = useLocation();
-  usePageTitle(title);
+  usePageTitle(fullTitleOverride ?? title, !!fullTitleOverride);
 
   useEffect(() => {
-    const fullTitle = title ? `${title} — ${DEFAULT_TITLE}` : DEFAULT_TITLE;
+    const fullTitle = fullTitleOverride ?? (title ? `${title} — ${DEFAULT_TITLE}` : DEFAULT_TITLE);
     const desc = description ? trimDescription(description) : DEFAULT_DESCRIPTION;
     apply(fullTitle, desc, `${SITE_URL}${pathname === "/" ? "/" : pathname.replace(/\/+$/, "")}`);
     return () => apply(DEFAULT_TITLE, DEFAULT_DESCRIPTION, null);
-  }, [title, description, pathname]);
+  }, [title, fullTitleOverride, description, pathname]);
 }

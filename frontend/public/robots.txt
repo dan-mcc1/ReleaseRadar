@@ -18,5 +18,7 @@ Disallow: /for-you
 Disallow: /search
 Disallow: /signIn
 Disallow: /unsubscribe
+Disallow: /households
+Disallow: /services
 
 Sitemap: https://releaseradar.co/sitemap.xml

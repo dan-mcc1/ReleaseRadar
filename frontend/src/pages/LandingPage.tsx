@@ -11,6 +11,8 @@ import { ButtonLink } from "../components/ui";
 
 export default function LandingPage() {
   usePageMeta({
+    // Spells out what the site is: "Release Radar" alone is read as Spotify's playlist.
+    fullTitle: "Release Radar — TV Show & Movie Release Calendar",
     description:
       "Track the shows and movies you follow. Release Radar builds your release calendar and alerts from them and keeps your lists up to date, down to the episode. Free during the beta.",
   });
